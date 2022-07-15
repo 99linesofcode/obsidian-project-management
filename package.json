@@ -2,7 +2,8 @@
   "name": "node-skeleton",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "build/index.mjs",
+  "type": "module",
   "scripts": {
     "dev": "npx tsc -w",
     "build": "npx tsc",

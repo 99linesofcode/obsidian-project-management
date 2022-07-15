@@ -1,11 +1,10 @@
 {
   "extends": "@tsconfig/node16/tsconfig.json",
   "compilerOptions": {
+    "outDir": "build",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "rootDir": "src",
-    "target": "esnext",
-    "lib": [
-      "esnext"
-    ],
-    "outDir": "build"
+    "target": "ESNext",
   }
 }
