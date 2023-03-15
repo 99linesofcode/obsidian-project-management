@@ -13,11 +13,11 @@
   "author": "Jordy Schreuders <99linesofcode@gmail.com>",
   "license": "MIT",
   "devDependencies": {
-    "@tsconfig/node16": "^1.0.3",
-    "@types/node": "^18.0.4",
-    "@typescript-eslint/eslint-plugin": "^5.30.6",
-    "@typescript-eslint/parser": "^5.30.6",
-    "eslint": "^8.19.0",
-    "typescript": "^4.7.4"
+    "@tsconfig/node-lts-strictest-esm": "^18.12.1",
+    "@types/node": "^18.15.3",
+    "@typescript-eslint/eslint-plugin": "^5.55.0",
+    "@typescript-eslint/parser": "^5.55.0",
+    "eslint": "^8.36.0",
+    "typescript": "^4.9.5"
   }
 }
