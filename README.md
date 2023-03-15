@@ -11,3 +11,9 @@ npm run build -- --watch
 ```bash
 node --watch build/index.mjs
 ```
+
+Run your tests:
+
+```bash
+npm run test
+```
