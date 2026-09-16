@@ -2,23 +2,34 @@
   "name": "node-skeleton",
   "version": "1.0.0",
   "description": "",
-  "main": "build/index.mjs",
   "type": "module",
+  "main": "build/index.mjs",
+  "files": [
+    "build"
+  ],
   "scripts": {
-    "dev": "npx tsc -w",
-    "build": "npx tsc",
-    "test": "vitest"
+    "dev": "tsc -w",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "audit": "pnpm audit"
   },
   "keywords": [],
   "author": "Jordy Schreuders <99linesofcode@gmail.com>",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
-    "@tsconfig/node-lts-strictest-esm": "^18.12.1",
-    "@types/node": "^18.15.3",
-    "@typescript-eslint/eslint-plugin": "^5.55.0",
-    "@typescript-eslint/parser": "^5.55.0",
-    "eslint": "^8.36.0",
-    "typescript": "^4.9.5",
-    "vitest": "^0.29.2"
+    "@tsconfig/node22": "^22.0.6",
+    "@types/node": "^22",
+    "eslint": "^10",
+    "eslint-config-prettier": "^10",
+    "prettier": "^3",
+    "typescript": "^5",
+    "typescript-eslint": "^8",
+    "vitest": "^5"
   }
 }
