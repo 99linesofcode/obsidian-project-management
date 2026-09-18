@@ -1,10 +1,12 @@
-# node-skeleton
+# Project Management
 
-The starting point for my Node.js/TypeScript packages. It builds on
-[git-skeleton](https://github.com/99linesofcode/git-skeleton) for the shared
-configuration (`.editorconfig`, `.prettierrc`, `.gitignore`, `.ignore`) and
-adds the Node/TypeScript toolchain: TypeScript (ESM, NodeNext), vitest, and
-eslint with prettier.
+An Obsidian plugin that syncs vault project management with GitHub Projects —
+the vault is the system of record.
+
+Built on [node-skeleton](https://github.com/99linesofcode/node-skeleton) for
+the shared configuration (`.editorconfig`, `.prettierrc`, `.gitignore`,
+`.ignore`) and the Node/TypeScript toolchain (TypeScript, vitest, eslint with
+prettier), with bun as the package manager and esbuild for the plugin bundle.
 
 ## How to use
 
@@ -21,15 +23,23 @@ repo's override where it differs from the shared default.
 ## Commands
 
 ```bash
-pnpm install      # install dependencies
-pnpm build        # compile TypeScript to build/
-pnpm dev          # watch and recompile on change
-pnpm test         # run the test suite once
-pnpm test:watch   # run the test suite in watch mode
-pnpm lint         # eslint (flat config + prettier)
-pnpm typecheck    # type-check without emitting
-pnpm audit        # check dependencies for known vulnerabilities
+bun install      # install dependencies
+bun run build    # bundle the plugin to main.js (minified)
+bun run dev      # watch and rebuild on change (with sourcemaps)
+bun test         # run the test suite once
+bun test:watch   # run the test suite in watch mode
+bun run lint     # eslint (flat config + prettier)
+bun run typecheck # type-check without emitting
+bun run audit    # check dependencies for known vulnerabilities
 ```
+
+## Development
+
+- `bun run build` produces `main.js` at the repo root.
+- To load the plugin in a scratch dev vault, copy `main.js` and
+  `manifest.json` into `<vault>/.obsidian/plugins/project-management/`, then
+  enable the plugin in Obsidian's community plugins settings.
+- Never develop in your main vault — always use a scratch dev vault.
 
 ## Contributing
 
