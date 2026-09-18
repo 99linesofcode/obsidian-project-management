@@ -1,20 +1,17 @@
 {
-  "name": "node-skeleton",
-  "version": "1.0.0",
-  "description": "",
+  "name": "obsidian-project-management",
+  "version": "0.1.0",
+  "description": "Sync vault projects with GitHub Projects — the vault is the system of record.",
   "type": "module",
-  "main": "build/index.mjs",
-  "files": [
-    "build"
-  ],
+  "main": "main.js",
   "scripts": {
-    "dev": "tsc -w",
-    "build": "tsc -p tsconfig.build.json",
+    "dev": "bun run scripts/build.mjs --watch",
+    "build": "bun run scripts/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "audit": "pnpm audit"
+    "audit": "bun audit"
   },
   "keywords": [],
   "author": "Jordy Schreuders <99linesofcode@gmail.com>",
@@ -22,9 +19,13 @@
   "engines": {
     "node": ">=22"
   },
+  "dependencies": {
+    "obsidian": "^1.9.0"
+  },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.6",
     "@types/node": "^22",
+    "esbuild": "^0.24.0",
     "eslint": "^10",
     "eslint-config-prettier": "^10",
     "prettier": "^3",

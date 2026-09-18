@@ -22,6 +22,8 @@ npm-debug.log
 
 # build output
 /dist
+/main.js
+/main.js.map
 
 # editors
 /.vscode
