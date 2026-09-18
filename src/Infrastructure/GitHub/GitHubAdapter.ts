@@ -3,6 +3,7 @@ import type {
   ProjectIdentityData,
   ProjectStatusOption,
 } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { TaskData } from '../../Domain/DataTransferObjects/TaskData.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
@@ -104,6 +105,55 @@ export class GitHubAdapter implements ProjectManagementPort {
       projectNodeId: project.id,
       statusFieldId: project.statusFieldId,
       statusOptions: project.statusOptions,
+    };
+  }
+
+  async fetchChangedTasks(since: string): Promise<TaskData[]> {
+    // Single page is fine for v1: the since cursor bounds the result set and
+    // per_page=100 covers a typical poll window. Pagination lands with the
+    // v2 slices ticket if a project outgrows one page.
+    const path =
+      `/repos/${this.repo.owner}/${this.repo.name}/issues` +
+      `?state=all&since=${encodeURIComponent(since)}&per_page=100`;
+
+    const response = await this.transport.get(path);
+    if (response.status !== 200) {
+      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+    }
+    if (!Array.isArray(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+
+    return response.json
+      .filter(isRecord)
+      .filter((issue) => this.isTaskIssue(issue))
+      .map((issue) => this.mapIssue(issue));
+  }
+
+  private isTaskIssue(issue: Record<string, unknown>): boolean {
+    // v1 materialises tasks only; type:slice arrives with the v2 slices ticket.
+    if (!Array.isArray(issue.labels)) {
+      return false;
+    }
+    return issue.labels.some((label) => isRecord(label) && label.name === 'type:task');
+  }
+
+  private mapIssue(issue: Record<string, unknown>): TaskData {
+    const labels = Array.isArray(issue.labels)
+      ? issue.labels
+          .filter(isRecord)
+          .filter((label): label is { name: string } => typeof label.name === 'string')
+          .map((label) => label.name)
+      : [];
+
+    return {
+      url: typeof issue.html_url === 'string' ? issue.html_url : '',
+      remoteId: typeof issue.number === 'number' ? issue.number : 0,
+      title: typeof issue.title === 'string' ? issue.title : '',
+      body: typeof issue.body === 'string' ? issue.body : '',
+      state: issue.state === 'closed' ? 'closed' : 'open',
+      updatedAt: typeof issue.updated_at === 'string' ? issue.updated_at : '',
+      labels,
     };
   }
 

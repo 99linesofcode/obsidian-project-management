@@ -180,4 +180,79 @@ describe('GitHubAdapter', () => {
     // Then — it fails with a clear error
     await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/Status/);
   });
+
+  it('maps raw issues onto TaskData and filters out non-task issues', async () => {
+    // Given — a REST response mixing a task issue with a non-task issue
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          html_url: 'https://github.com/acme/widgets/issues/42',
+          number: 42,
+          title: 'Fix the Bug!',
+          body: 'The bug happens when the widget is resized.',
+          state: 'open',
+          updated_at: '2026-09-18T10:00:00Z',
+          labels: [{ name: 'type:task' }, { name: 'bug' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/43',
+          number: 43,
+          title: 'A slice',
+          body: 'Not a task.',
+          state: 'open',
+          updated_at: '2026-09-18T11:00:00Z',
+          labels: [{ name: 'type:slice' }],
+        },
+      ],
+    };
+    const { transport, paths } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter fetches changed tasks since a cursor
+    const result = await adapter.fetchChangedTasks('2026-09-18T00:00:00Z');
+
+    // Then — only the type:task issue is surfaced, mapped onto TaskData
+    expect(result).toEqual([
+      {
+        url: 'https://github.com/acme/widgets/issues/42',
+        remoteId: 42,
+        title: 'Fix the Bug!',
+        body: 'The bug happens when the widget is resized.',
+        state: 'open',
+        updatedAt: '2026-09-18T10:00:00Z',
+        labels: ['type:task', 'bug'],
+      },
+    ]);
+    // And the REST path targeted the bound repo with the since cursor
+    expect(paths[0]).toBe(
+      '/repos/acme/widgets/issues?state=all&since=2026-09-18T00%3A00%3A00Z&per_page=100',
+    );
+  });
+
+  it('maps a closed issue to a closed task state', async () => {
+    // Given — a REST response with a closed task issue
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          html_url: 'https://github.com/acme/widgets/issues/7',
+          number: 7,
+          title: 'Close me',
+          body: 'Done.',
+          state: 'closed',
+          updated_at: '2026-09-18T09:00:00Z',
+          labels: [{ name: 'type:task' }],
+        },
+      ],
+    };
+    const { transport } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter fetches changed tasks
+    const result = await adapter.fetchChangedTasks('2026-09-18T00:00:00Z');
+
+    // Then — the state is closed
+    expect(result[0]!.state).toBe('closed');
+  });
 });

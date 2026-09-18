@@ -7,4 +7,5 @@ export interface TaskData {
   body: string;
   state: 'open' | 'closed';
   updatedAt: string;
+  labels: string[];
 }

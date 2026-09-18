@@ -42,6 +42,7 @@ const task: TaskData = {
   body: 'The bug happens when the widget is resized.',
   state: 'open',
   updatedAt: '2026-09-18T10:00:00Z',
+  labels: [],
 };
 
 describe('CreateTaskNoteAction', () => {
