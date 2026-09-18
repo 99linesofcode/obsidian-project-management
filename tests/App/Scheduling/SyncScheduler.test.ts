@@ -34,6 +34,7 @@ class FakeVault implements VaultPort {
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
   async renameNote(): Promise<void> {}
+  onNoteChanged(): void {}
 }
 
 class FakeSyncState implements SyncStatePort {

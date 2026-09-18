@@ -58,7 +58,7 @@ export default class ProjectManagementPlugin extends Plugin {
       load: () => this.loadData() as Promise<Record<string, unknown>>,
       save: (data) => this.saveData(data),
     });
-    const vault = new VaultAdapter(this.app);
+    const vault = new VaultAdapter(this.app, (eventRef) => this.registerEvent(eventRef));
 
     // v1 wiring: project discovery (enumerating the attached project notes)
     // lands in a later ticket. The adapter is bound to one repo and the
