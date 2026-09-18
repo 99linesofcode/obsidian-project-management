@@ -7,12 +7,13 @@ import type { TaskData } from '../../Domain/DataTransferObjects/TaskData.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
-// GraphQL goes over POST, the REST since-poll over GET. The adapter stays
-// token-agnostic; production wiring injects a transport that adds the
-// Authorization header.
+// GraphQL goes over POST, the REST reads over GET, the REST update over
+// PATCH. The adapter stays token-agnostic; production wiring injects a
+// transport that adds the Authorization header.
 export interface Transport {
   post(body: string): Promise<{ status: number; json: unknown }>;
   get(path: string): Promise<{ status: number; json: unknown }>;
+  patch(path: string, body: string): Promise<{ status: number; json: unknown }>;
 }
 
 interface RepoParts {
@@ -136,6 +137,44 @@ export class GitHubAdapter implements ProjectManagementPort {
       return false;
     }
     return issue.labels.some((label) => isRecord(label) && label.name === 'type:task');
+  }
+
+  async fetchTask(url: string): Promise<TaskData> {
+    const number = this.issueNumberFromUrl(url);
+    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}`;
+
+    const response = await this.transport.get(path);
+    if (response.status !== 200) {
+      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+    }
+    if (!isRecord(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+    return this.mapIssue(response.json);
+  }
+
+  async updateTask(url: string, input: { title: string; body: string }): Promise<TaskData> {
+    const number = this.issueNumberFromUrl(url);
+    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}`;
+
+    const response = await this.transport.patch(path, JSON.stringify(input));
+    if (response.status !== 200) {
+      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+    }
+    if (!isRecord(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+    return this.mapIssue(response.json);
+  }
+
+  private issueNumberFromUrl(url: string): number {
+    const segments = this.pathSegments(url);
+    const numberRaw = segments[segments.length - 1];
+    const number = Number(numberRaw);
+    if (!Number.isInteger(number)) {
+      throw new Error(`GitHubAdapter: invalid issue url ${url}`);
+    }
+    return number;
   }
 
   private mapIssue(issue: Record<string, unknown>): TaskData {

@@ -61,6 +61,12 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.sinceCalls.push(since);
     return [];
   }
+  async fetchTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+  async updateTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
 }
 
 describe('SyncScheduler', () => {

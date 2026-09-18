@@ -35,6 +35,15 @@ function createTransport(token: string): Transport {
       });
       return { status: response.status, json: response.json };
     },
+    async patch(path, body) {
+      const response = await requestUrl({
+        url: `https://api.github.com${path}`,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body,
+      });
+      return { status: response.status, json: response.json };
+    },
   };
 }
 
