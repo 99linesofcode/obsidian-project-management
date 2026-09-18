@@ -110,6 +110,7 @@ describe('SyncProjectAction', () => {
       lastSyncedBodyHash: hash('old body'),
       lastSyncedRemoteUpdatedAt: '2026-09-18T09:00:00Z',
       lastSyncedStatus: 'open',
+      lastSyncedTitle: taskA.title,
     });
     // The existing note holds the old body, so the remote change rewrites it
     const oldTaskA: TaskData = { ...taskA, body: 'old body' };

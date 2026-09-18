@@ -85,6 +85,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
     lastSyncedStatus: TaskStatus.Open,
+    lastSyncedTitle: task.title,
     ...overrides,
   };
 }
@@ -125,6 +126,7 @@ describe('ApplyRemoteChangeAction', () => {
         lastSyncedBodyHash: hash(changed.body),
         lastSyncedRemoteUpdatedAt: changed.updatedAt,
         lastSyncedStatus: TaskStatus.Open,
+        lastSyncedTitle: changed.title,
       },
     ]);
   });

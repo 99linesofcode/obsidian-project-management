@@ -33,6 +33,7 @@ export class SyncStateAdapter implements SyncStatePort {
       lastSyncedRemoteUpdatedAt:
         typeof raw.lastSyncedRemoteUpdatedAt === 'string' ? raw.lastSyncedRemoteUpdatedAt : '',
       lastSyncedStatus: raw.lastSyncedStatus === 'done' ? 'done' : 'open',
+      lastSyncedTitle: typeof raw.lastSyncedTitle === 'string' ? raw.lastSyncedTitle : '',
     };
   }
 

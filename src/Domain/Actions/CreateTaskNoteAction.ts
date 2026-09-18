@@ -40,6 +40,7 @@ export class CreateTaskNoteAction {
       lastSyncedBodyHash: hash(input.task.body),
       lastSyncedRemoteUpdatedAt: input.task.updatedAt,
       lastSyncedStatus: taskStatusFromState(input.task.state),
+      lastSyncedTitle: input.task.title,
     };
     await this.syncState.set(status);
   }

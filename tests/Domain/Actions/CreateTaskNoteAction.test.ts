@@ -86,6 +86,7 @@ describe('CreateTaskNoteAction', () => {
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: task.updatedAt,
         lastSyncedStatus: TaskStatus.Open,
+        lastSyncedTitle: task.title,
       },
     ]);
   });
