@@ -1,49 +1,53 @@
 # Project Management
 
 An Obsidian plugin that syncs vault project management with GitHub Projects —
-the vault is the system of record.
+the vault is the system of record. Project notes anchor GitHub repos and
+project boards; promoted issues become task notes in the vault; edits, status
+changes, and deletions propagate in both directions.
 
-Built on [node-skeleton](https://github.com/99linesofcode/node-skeleton) for
-the shared configuration (`.editorconfig`, `.prettierrc`, `.gitignore`,
-`.ignore`) and the Node/TypeScript toolchain (TypeScript, vitest, eslint with
-prettier), with bun as the package manager and esbuild for the plugin bundle.
+**Status:** v1 in active development. The sync engine, GitHub adapter, and
+scheduler are in place; project discovery and the full sync loop are being
+built ticket by ticket (see the issue tracker).
 
-## How to use
+## How to use (development)
 
-1. `git init`
-2. `git remote add origin <REPOSITORY>`
-3. `git remote add skeleton git@github.com:99linesofcode/node-skeleton.git`
-4. `git fetch skeleton`
-5. `git rebase skeleton/main`
-
-Updates flow the same way: `git fetch skeleton && git rebase skeleton/main`.
-Conflicts on rebase are the divergence points — resolve them by keeping your
-repo's override where it differs from the shared default.
+1. Build: `pnpm install && pnpm run build` (produces `main.js`).
+2. Copy `main.js` + `manifest.json` into a scratch vault's
+   `.obsidian/plugins/project-management/`.
+3. Enable the plugin under Community plugins; set a GitHub fine-grained PAT
+   (Issues: read/write, Projects: read/write) in the plugin settings.
+4. Never develop in your main vault — always use a scratch dev vault.
 
 ## Commands
 
 ```bash
-bun install      # install dependencies
-bun run build    # bundle the plugin to main.js (minified)
-bun run dev      # watch and rebuild on change (with sourcemaps)
-bun test         # run the test suite once
-bun test:watch   # run the test suite in watch mode
-bun run lint     # eslint (flat config + prettier)
-bun run typecheck # type-check without emitting
-bun run audit    # check dependencies for known vulnerabilities
+pnpm install         # install dependencies
+pnpm run build       # bundle the plugin to main.js (minified)
+pnpm run dev         # watch and rebuild on change (with sourcemaps)
+pnpm test            # run the test suite once
+pnpm run test:watch  # run the test suite in watch mode
+pnpm run lint        # eslint (flat config + prettier)
+pnpm run typecheck   # type-check without emitting
+pnpm run audit       # check dependencies for known vulnerabilities
 ```
+
+## Architecture
+
+Hexagonal, per the owner's software architecture contract: `src/App/`
+(driving side: scheduler, commands, settings), `src/Domain/` (pure core:
+actions, models, ports — never imports `obsidian`), `src/Infrastructure/`
+(driven adapters: Obsidian vault, GitHub REST + GraphQL).
 
 ## Development
 
-- `bun run build` produces `main.js` at the repo root.
-- To load the plugin in a scratch dev vault, copy `main.js` and
-  `manifest.json` into `<vault>/.obsidian/plugins/project-management/`, then
-  enable the plugin in Obsidian's community plugins settings.
-- Never develop in your main vault — always use a scratch dev vault.
+Built on [node-skeleton](https://github.com/99linesofcode/node-skeleton):
+shared config flows via remote + rebase, pnpm runs inside the `devshell-node`
+Nix devshell (`.envrc` → `use flake ./devshell`), esbuild bundles the plugin.
+Updates flow via `git fetch skeleton && git rebase skeleton/main`.
 
 ## Contributing
 
-Please review the [Contribution Guidelines](https://github.com/99linesofcode/.github/blob/main/.github/CONTRIBUTING.md).
+Please review the [Contribution Guidelines](https://github.com/99linesofcode/.github/blob/main/CONTRIBUTING.md).
 
 ## Code of conduct
 
