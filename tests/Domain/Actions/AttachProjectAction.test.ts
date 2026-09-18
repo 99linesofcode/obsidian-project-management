@@ -14,6 +14,10 @@ class FakePort implements ProjectManagementPort {
     this.calls.push(data);
     return this.result;
   }
+
+  async fetchChangedTasks(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const identity: ProjectIdentityData = {

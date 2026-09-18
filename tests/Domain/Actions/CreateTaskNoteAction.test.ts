@@ -21,6 +21,14 @@ class FakeVault implements VaultPort {
   async createNote(path: string, content: string): Promise<void> {
     this.created.push({ path, content });
   }
+
+  async writeNote(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async renameNote(): Promise<void> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -33,6 +41,14 @@ class FakeSyncState implements SyncStatePort {
   async set(status: Status): Promise<void> {
     this.stored.push(status);
   }
+
+  async getLastPoll(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastPoll(): Promise<void> {
+    throw new Error('not used in this test');
+  }
 }
 
 const task: TaskData = {
@@ -42,6 +58,7 @@ const task: TaskData = {
   body: 'The bug happens when the widget is resized.',
   state: 'open',
   updatedAt: '2026-09-18T10:00:00Z',
+  labels: [],
 };
 
 describe('CreateTaskNoteAction', () => {
@@ -65,6 +82,7 @@ describe('CreateTaskNoteAction', () => {
       {
         url: task.url,
         remoteId: task.remoteId,
+        notePath: path,
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: task.updatedAt,
         lastSyncedStatus: TaskStatus.Open,
