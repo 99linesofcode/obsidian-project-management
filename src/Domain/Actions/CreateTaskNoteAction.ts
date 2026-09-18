@@ -36,6 +36,7 @@ export class CreateTaskNoteAction {
     const status: Status = {
       url: input.task.url,
       remoteId: input.task.remoteId,
+      notePath: path,
       lastSyncedBodyHash: hash(input.task.body),
       lastSyncedRemoteUpdatedAt: input.task.updatedAt,
       lastSyncedStatus: taskStatusFromState(input.task.state),

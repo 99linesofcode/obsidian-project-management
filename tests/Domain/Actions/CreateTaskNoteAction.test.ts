@@ -66,6 +66,7 @@ describe('CreateTaskNoteAction', () => {
       {
         url: task.url,
         remoteId: task.remoteId,
+        notePath: path,
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: task.updatedAt,
         lastSyncedStatus: TaskStatus.Open,
