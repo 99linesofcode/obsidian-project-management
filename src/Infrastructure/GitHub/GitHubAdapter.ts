@@ -6,8 +6,13 @@ import type {
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
-// Production wiring (the real requestUrl) lands in a later ticket.
-export type Post = (body: string) => Promise<{ status: number; json: unknown }>;
+// GraphQL goes over POST, the REST since-poll over GET. The adapter stays
+// token-agnostic; production wiring injects a transport that adds the
+// Authorization header.
+export interface Transport {
+  post(body: string): Promise<{ status: number; json: unknown }>;
+  get(path: string): Promise<{ status: number; json: unknown }>;
+}
 
 interface RepoParts {
   owner: string;
@@ -75,14 +80,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // Implements the project management port against GitHub's GraphQL API.
 // Maps raw responses onto the identity DTO; the core never sees GitHub JSON.
+// The adapter is bound to one repo (resolved from the attached project's
+// repo url) because the REST since-poll needs owner/name and the port's
+// fetchChangedTasks only carries the since cursor.
 export class GitHubAdapter implements ProjectManagementPort {
-  constructor(private readonly post: Post) {}
+  private readonly repo: RepoParts;
+
+  constructor(
+    private readonly transport: Transport,
+    repoUrl: string,
+  ) {
+    this.repo = this.parseRepoUrl(repoUrl);
+  }
 
   async fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null> {
-    const repo = this.parseRepoUrl(data.repoUrl);
     const board = this.parseBoardUrl(data.boardUrl);
 
-    const repoNodeId = await this.fetchRepoNodeId(repo);
+    const repoNodeId = await this.fetchRepoNodeId(this.repo);
     const project = await this.fetchProject(board);
 
     return {
@@ -147,7 +161,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     query: string,
     variables: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const response = await this.post(JSON.stringify({ query, variables }));
+    const response = await this.transport.post(JSON.stringify({ query, variables }));
     if (response.status !== 200) {
       throw new Error(`GitHubAdapter: GraphQL request failed with status ${response.status}`);
     }
