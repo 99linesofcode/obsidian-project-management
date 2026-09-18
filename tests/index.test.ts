@@ -1,7 +1,9 @@
-import { expect, test } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-test('Math.sqrt()', () => {
-  expect(Math.sqrt(4)).toBe(2);
-  expect(Math.sqrt(144)).toBe(12);
-  expect(Math.sqrt(2)).toBe(Math.SQRT2);
+// Harness proof only — no domain logic exists yet, so there is nothing
+// behavioural to assert. This guards the vitest toolchain itself.
+describe('test harness', () => {
+  it('runs', () => {
+    expect(1 + 1).toBe(2);
+  });
 });
