@@ -5,13 +5,13 @@
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "dev": "bun run scripts/build.mjs --watch",
-    "build": "bun run scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "build": "node scripts/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "audit": "bun audit"
+    "audit": "pnpm audit"
   },
   "keywords": [],
   "author": "Jordy Schreuders <99linesofcode@gmail.com>",
