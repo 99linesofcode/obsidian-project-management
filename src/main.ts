@@ -7,7 +7,10 @@ import {
 import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
+import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
+import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './Infrastructure/GitHub/GitHubAdapter.js';
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
 import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
@@ -72,6 +75,16 @@ export default class ProjectManagementPlugin extends Plugin {
     const github = new GitHubAdapter(transport, repoUrl);
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
     const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
+    const pushNote = new PushNoteAction(github);
+    const reconcileTask = new ReconcileTaskAction(
+      vault,
+      syncState,
+      github,
+      createTaskNote,
+      applyRemoteChange,
+      pushNote,
+      new VerdictResolver(),
+    );
     const syncProject = new SyncProjectAction(
       github,
       syncState,
@@ -83,6 +96,9 @@ export default class ProjectManagementPlugin extends Plugin {
       syncProject,
       projectNames,
       this.settings.pollIntervalMinutes * 60 * 1000,
+      vault,
+      reconcileTask,
+      this.settings.debounceSeconds * 1000,
     );
     this.addChild(scheduler);
 
