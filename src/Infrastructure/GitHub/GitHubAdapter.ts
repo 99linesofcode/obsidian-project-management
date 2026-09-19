@@ -215,12 +215,12 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private isTaskIssue(issue: Record<string, unknown>): boolean {
-    // v1 materialises tasks only; type:slice arrives with the v2 slices ticket.
+    // v1 materialises tasks only; type: slice arrives with the v2 slices ticket.
     if (!Array.isArray(issue.labels)) {
       return false;
     }
     return issue.labels.some(
-      (label) => isRecord(label) && label.name === 'type:task',
+      (label) => isRecord(label) && label.name === 'type: task',
     );
   }
 
@@ -256,7 +256,7 @@ export class GitHubAdapter implements ProjectManagementPort {
         (label): label is { name: string } => typeof label.name === 'string',
       )
       .map((label) => label.name);
-    return !names.includes('type:task') && !names.includes('type:slice');
+    return !names.includes('type: task') && !names.includes('type: slice');
   }
 
   async addLabel(url: string, label: string): Promise<void> {

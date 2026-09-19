@@ -81,7 +81,7 @@ class FakeProjectManagement implements ProjectManagementPort {
     body: 'The bug happens when the widget is resized.',
     state: 'closed',
     updatedAt: '2026-09-18T12:30:00Z',
-    labels: ['type:task'],
+    labels: ['type: task'],
   };
 
   async fetchProjectIdentity(): Promise<null> {

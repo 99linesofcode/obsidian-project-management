@@ -139,13 +139,13 @@ describe('PromoteIssueAction', () => {
     // When — the action promotes the issue
     await action.execute({
       url: port.task.url,
-      label: 'type:task',
+      label: 'type: task',
       projectName: 'Acme Widgets',
     });
 
     // Then — the label is applied to the issue
     expect(port.addedLabels).toEqual([
-      { url: port.task.url, label: 'type:task' },
+      { url: port.task.url, label: 'type: task' },
     ]);
     // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
@@ -153,10 +153,10 @@ describe('PromoteIssueAction', () => {
   });
 
   it('applies the label idempotently even when the issue is already labelled', async () => {
-    // Given — an issue that already carries the type:task label (the modal's
+    // Given — an issue that already carries the type: task label (the modal's
     // filter would hide it, but a direct promote still runs)
     const port = new FakePort();
-    port.task = { ...port.task, labels: ['type:task'] };
+    port.task = { ...port.task, labels: ['type: task'] };
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = makeAction(port, vault, syncState);
@@ -164,14 +164,14 @@ describe('PromoteIssueAction', () => {
     // When — the action promotes the already-labelled issue
     await action.execute({
       url: port.task.url,
-      label: 'type:task',
+      label: 'type: task',
       projectName: 'Acme Widgets',
     });
 
     // Then — the label is still applied (GitHub labels are idempotent) and the
     // note is materialised
     expect(port.addedLabels).toEqual([
-      { url: port.task.url, label: 'type:task' },
+      { url: port.task.url, label: 'type: task' },
     ]);
     expect(vault.created).toHaveLength(1);
   });

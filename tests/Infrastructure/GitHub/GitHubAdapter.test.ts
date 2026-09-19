@@ -234,7 +234,7 @@ describe('GitHubAdapter', () => {
           body: 'The bug happens when the widget is resized.',
           state: 'open',
           updated_at: '2026-09-18T10:00:00Z',
-          labels: [{ name: 'type:task' }, { name: 'bug' }],
+          labels: [{ name: 'type: task' }, { name: 'bug' }],
         },
         {
           html_url: 'https://github.com/acme/widgets/issues/43',
@@ -244,7 +244,7 @@ describe('GitHubAdapter', () => {
           body: 'Not a task.',
           state: 'open',
           updated_at: '2026-09-18T11:00:00Z',
-          labels: [{ name: 'type:slice' }],
+          labels: [{ name: 'type: slice' }],
         },
       ],
     };
@@ -257,7 +257,7 @@ describe('GitHubAdapter', () => {
       '2026-09-18T00:00:00Z',
     );
 
-    // Then — only the type:task issue is surfaced, mapped onto TaskData
+    // Then — only the type: task issue is surfaced, mapped onto TaskData
     expect(result).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/42',
@@ -267,13 +267,44 @@ describe('GitHubAdapter', () => {
         body: 'The bug happens when the widget is resized.',
         state: 'open',
         updatedAt: '2026-09-18T10:00:00Z',
-        labels: ['type:task', 'bug'],
+        labels: ['type: task', 'bug'],
       },
     ]);
     // And the REST path targeted the bound repo with the since cursor
     expect(paths[0]).toBe(
       '/repos/acme/widgets/issues?state=all&since=2026-09-18T00%3A00%3A00Z&per_page=100',
     );
+  });
+
+  it('does not materialise an issue carrying the no-space task label', async () => {
+    // Given — a REST response with an issue labelled type:task (no space),
+    // which predates the spaced convention
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          html_url: 'https://github.com/acme/widgets/issues/42',
+          number: 42,
+          node_id: 'I_kwDOAAAA42',
+          title: 'Fix the Bug!',
+          body: 'The bug happens when the widget is resized.',
+          state: 'open',
+          updated_at: '2026-09-18T10:00:00Z',
+          labels: [{ name: 'type:task' }],
+        },
+      ],
+    };
+    const { transport } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter fetches changed tasks
+    const result = await adapter.fetchChangedTasks(
+      'https://github.com/acme/widgets',
+      '2026-09-18T00:00:00Z',
+    );
+
+    // Then — the no-space issue is not surfaced as a task
+    expect(result).toEqual([]);
   });
 
   it('omits the since filter when no cursor is given', async () => {
@@ -305,7 +336,7 @@ describe('GitHubAdapter', () => {
           body: 'Done.',
           state: 'closed',
           updated_at: '2026-09-18T09:00:00Z',
-          labels: [{ name: 'type:task' }],
+          labels: [{ name: 'type: task' }],
         },
       ],
     };
@@ -334,7 +365,7 @@ describe('GitHubAdapter', () => {
         body: 'The bug happens when the widget is resized.',
         state: 'open',
         updated_at: '2026-09-18T10:00:00Z',
-        labels: [{ name: 'type:task' }],
+        labels: [{ name: 'type: task' }],
       },
     };
     const { transport, paths } = fakeTransport([issueResponse]);
@@ -354,7 +385,7 @@ describe('GitHubAdapter', () => {
       body: 'The bug happens when the widget is resized.',
       state: 'open',
       updatedAt: '2026-09-18T10:00:00Z',
-      labels: ['type:task'],
+      labels: ['type: task'],
     });
     // And the REST path targeted the bound repo and issue number
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
@@ -372,7 +403,7 @@ describe('GitHubAdapter', () => {
         body: 'The bug now also happens on resize.',
         state: 'open',
         updated_at: '2026-09-18T12:30:00Z',
-        labels: [{ name: 'type:task' }],
+        labels: [{ name: 'type: task' }],
       },
     };
     const { transport, paths, bodies } = fakeTransport([updatedResponse]);
@@ -396,7 +427,7 @@ describe('GitHubAdapter', () => {
       body: 'The bug now also happens on resize.',
       state: 'open',
       updatedAt: '2026-09-18T12:30:00Z',
-      labels: ['type:task'],
+      labels: ['type: task'],
     });
     // And the PATCH targeted the bound repo and issue number with the input
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
@@ -420,7 +451,7 @@ describe('GitHubAdapter', () => {
         body: 'The bug happens when the widget is resized.',
         state: 'closed',
         updated_at: '2026-09-18T12:30:00Z',
-        labels: [{ name: 'type:task' }],
+        labels: [{ name: 'type: task' }],
       },
     };
     const { transport, paths, bodies } = fakeTransport([closedResponse]);
@@ -441,7 +472,7 @@ describe('GitHubAdapter', () => {
       body: 'The bug happens when the widget is resized.',
       state: 'closed',
       updatedAt: '2026-09-18T12:30:00Z',
-      labels: ['type:task'],
+      labels: ['type: task'],
     });
     // And the PATCH targeted the bound repo and issue number with the state
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
@@ -663,7 +694,7 @@ describe('GitHubAdapter', () => {
         body: 'The bug happens when the widget is resized.',
         state: 'open',
         updated_at: '2026-09-18T10:00:00Z',
-        labels: [{ name: 'type:task' }],
+        labels: [{ name: 'type: task' }],
       },
     };
     const mutationResponse = {
@@ -701,7 +732,7 @@ describe('GitHubAdapter', () => {
           body: 'The bug happens when the widget is resized.',
           state: 'open',
           updated_at: '2026-09-18T10:00:00Z',
-          labels: [{ name: 'type:task' }],
+          labels: [{ name: 'type: task' }],
         },
         {
           html_url: 'https://github.com/acme/widgets/issues/43',
@@ -711,7 +742,7 @@ describe('GitHubAdapter', () => {
           body: 'Not a task.',
           state: 'open',
           updated_at: '2026-09-18T11:00:00Z',
-          labels: [{ name: 'type:slice' }],
+          labels: [{ name: 'type: slice' }],
         },
         {
           html_url: 'https://github.com/acme/widgets/issues/44',
@@ -751,7 +782,7 @@ describe('GitHubAdapter', () => {
   });
 
   it('excludes issues that carry the task label from the unpromoted list', async () => {
-    // Given — a REST response with only a type:task issue
+    // Given — a REST response with only a type: task issue
     const issuesResponse = {
       status: 200,
       json: [
@@ -763,7 +794,7 @@ describe('GitHubAdapter', () => {
           body: 'The bug happens when the widget is resized.',
           state: 'open',
           updated_at: '2026-09-18T10:00:00Z',
-          labels: [{ name: 'type:task' }],
+          labels: [{ name: 'type: task' }],
         },
       ],
     };
@@ -780,7 +811,7 @@ describe('GitHubAdapter', () => {
   });
 
   it('excludes issues that carry the slice label from the unpromoted list', async () => {
-    // Given — a REST response with only a type:slice issue
+    // Given — a REST response with only a type: slice issue
     const issuesResponse = {
       status: 200,
       json: [
@@ -792,7 +823,7 @@ describe('GitHubAdapter', () => {
           body: 'Not a task.',
           state: 'open',
           updated_at: '2026-09-18T11:00:00Z',
-          labels: [{ name: 'type:slice' }],
+          labels: [{ name: 'type: slice' }],
         },
       ],
     };
@@ -810,19 +841,19 @@ describe('GitHubAdapter', () => {
 
   it('adds a label to an issue via the labels endpoint', async () => {
     // Given — a transport that accepts the label POST
-    const labelsResponse = { status: 200, json: [{ name: 'type:task' }] };
+    const labelsResponse = { status: 200, json: [{ name: 'type: task' }] };
     const { transport, paths, bodies } = fakeTransport([labelsResponse]);
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter adds the label to the issue
     await adapter.addLabel(
       'https://github.com/acme/widgets/issues/42',
-      'type:task',
+      'type: task',
     );
 
     // Then — the POST targeted the bound repo, issue and labels endpoint
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
-    expect(bodies[0]).toBe(JSON.stringify({ labels: ['type:task'] }));
+    expect(bodies[0]).toBe(JSON.stringify({ labels: ['type: task'] }));
   });
 
   it('reports an invalid repo url clearly instead of a TypeError', async () => {

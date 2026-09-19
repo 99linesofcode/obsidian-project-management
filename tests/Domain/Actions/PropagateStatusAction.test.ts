@@ -23,7 +23,7 @@ class FakeProjectManagement implements ProjectManagementPort {
     body: 'The bug happens when the widget is resized.',
     state: 'closed',
     updatedAt: '2026-09-18T12:30:00Z',
-    labels: ['type:task'],
+    labels: ['type: task'],
   };
 
   async fetchProjectIdentity(): Promise<null> {
@@ -107,7 +107,7 @@ const task: TaskData = {
   body: 'The bug happens when the widget is resized.',
   state: 'open',
   updatedAt: '2026-09-18T10:00:00Z',
-  labels: ['type:task'],
+  labels: ['type: task'],
 };
 
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
