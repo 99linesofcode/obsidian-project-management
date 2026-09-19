@@ -78,6 +78,14 @@ class FakeSyncState implements SyncStatePort {
   async setLastPoll(projectName: string, iso: string): Promise<void> {
     this.lastPollCalls.push({ projectName, iso });
   }
+
+  async setIdentity(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async getIdentity(): Promise<null> {
+    return null;
+  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {

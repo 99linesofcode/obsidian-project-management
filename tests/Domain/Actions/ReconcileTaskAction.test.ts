@@ -79,6 +79,14 @@ class FakeSyncState implements SyncStatePort {
     throw new Error('not used in this test');
   }
 
+  async setIdentity(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async getIdentity(): Promise<null> {
+    return null;
+  }
+
   async findByNotePath(): Promise<Status | null> {
     return null;
   }

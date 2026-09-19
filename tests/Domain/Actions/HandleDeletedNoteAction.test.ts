@@ -65,6 +65,10 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setLastPoll(): Promise<void> {}
+  async setIdentity(): Promise<void> {}
+  async getIdentity(): Promise<null> {
+    return null;
+  }
 }
 
 const task: TaskData = {

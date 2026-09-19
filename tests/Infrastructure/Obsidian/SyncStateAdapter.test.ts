@@ -135,4 +135,59 @@ describe('SyncStateAdapter', () => {
     // Then — the record is gone
     expect(await adapter.get(status.url)).toBeNull();
   });
+
+  it('round-trips a project identity under a namespaced key', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    const identity = {
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+    };
+
+    // When — an identity is set then read back
+    await adapter.setIdentity('Acme Widgets', identity);
+    const result = await adapter.getIdentity('Acme Widgets');
+
+    // Then — the identity round-trips intact
+    expect(result).toEqual(identity);
+  });
+
+  it('returns null for a project with no stored identity', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — an unknown project is read
+    const result = await adapter.getIdentity('Other Project');
+
+    // Then — null is returned
+    expect(result).toBeNull();
+  });
+
+  it('keeps identities distinct from status and last poll records', async () => {
+    // Given — an empty storage
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    const identity = {
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+    };
+
+    // When — an identity is written alongside a status and last poll
+    await adapter.setIdentity('Acme Widgets', identity);
+    await adapter.set(status);
+    await adapter.setLastPoll('Acme Widgets', '2026-09-18T12:00:00Z');
+
+    // Then — each lives under its own namespaced key
+    expect(snapshot()).toEqual({
+      'identity.Acme Widgets': identity,
+      'status.https://github.com/acme/widgets/issues/42': status,
+      'lastPoll.Acme Widgets': '2026-09-18T12:00:00Z',
+    });
+  });
 });
