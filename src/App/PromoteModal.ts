@@ -43,7 +43,7 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
       if (!identity) {
         continue;
       }
-      const issues = await this.port.fetchUnpromotedIssues();
+      const issues = await this.port.fetchUnpromotedIssues(identity.repoUrl);
       for (const issue of issues) {
         items.push({ task: issue, projectName });
       }

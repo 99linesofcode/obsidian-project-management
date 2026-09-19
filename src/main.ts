@@ -83,11 +83,7 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     const vault = new VaultAdapter(this.app, (eventRef) => this.registerEvent(eventRef));
 
-    // The adapter is bound to one repo; the repo url is resolved from the
-    // attached project's frontmatter in a later ticket.
-    const repoUrl = '';
-
-    const github = new GitHubAdapter(transport, repoUrl);
+    const github = new GitHubAdapter(transport);
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
     const boardStatus = new BoardStatusAction(syncState, github, this.settings.doneOptionName);
     const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote, boardStatus);

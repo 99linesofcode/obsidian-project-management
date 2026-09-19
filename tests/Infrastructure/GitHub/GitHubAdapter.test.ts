@@ -94,7 +94,7 @@ describe('GitHubAdapter', () => {
   it('resolves identities for a user board url', async () => {
     // Given — a user-scoped board and a transport that resolves it
     const { transport, bodies } = fakeTransport([repoResponse, userProjectResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
       pm: 'github',
       repoUrl: 'https://github.com/acme/widgets',
@@ -106,6 +106,7 @@ describe('GitHubAdapter', () => {
 
     // Then — the DTO carries the resolved identities
     expect(result).toEqual({
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
@@ -127,7 +128,7 @@ describe('GitHubAdapter', () => {
   it('resolves identities for an org board url', async () => {
     // Given — an org-scoped board and a transport that resolves it
     const { transport, bodies } = fakeTransport([repoResponse, orgProjectResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
       pm: 'github',
       repoUrl: 'https://github.com/acme/widgets',
@@ -139,6 +140,7 @@ describe('GitHubAdapter', () => {
 
     // Then — the DTO carries the resolved identities
     expect(result).toEqual({
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_789',
       statusFieldId: 'PVTF_101',
@@ -153,7 +155,7 @@ describe('GitHubAdapter', () => {
   it('maps a raw response onto the identity DTO', async () => {
     // Given — a transport returning a raw GraphQL payload
     const { transport } = fakeTransport([repoResponse, userProjectResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
       pm: 'github',
       repoUrl: 'https://github.com/acme/widgets',
@@ -188,7 +190,7 @@ describe('GitHubAdapter', () => {
 
     // When — the adapter resolves the identity
     const { transport } = fakeTransport([repoResponse, noStatus]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
       pm: 'github',
       repoUrl: 'https://github.com/acme/widgets',
@@ -227,10 +229,10 @@ describe('GitHubAdapter', () => {
       ],
     };
     const { transport, paths } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches changed tasks since a cursor
-    const result = await adapter.fetchChangedTasks('2026-09-18T00:00:00Z');
+    const result = await adapter.fetchChangedTasks('https://github.com/acme/widgets', '2026-09-18T00:00:00Z');
 
     // Then — only the type:task issue is surfaced, mapped onto TaskData
     expect(result).toEqual([
@@ -269,10 +271,10 @@ describe('GitHubAdapter', () => {
       ],
     };
     const { transport } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches changed tasks
-    const result = await adapter.fetchChangedTasks('2026-09-18T00:00:00Z');
+    const result = await adapter.fetchChangedTasks('https://github.com/acme/widgets', '2026-09-18T00:00:00Z');
 
     // Then — the state is closed
     expect(result[0]!.state).toBe('closed');
@@ -294,7 +296,7 @@ describe('GitHubAdapter', () => {
       },
     };
     const { transport, paths } = fakeTransport([issueResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches the task by url
     const result = await adapter.fetchTask('https://github.com/acme/widgets/issues/42');
@@ -330,7 +332,7 @@ describe('GitHubAdapter', () => {
       },
     };
     const { transport, paths, bodies } = fakeTransport([updatedResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter updates the task
     const result = await adapter.updateTask('https://github.com/acme/widgets/issues/42', {
@@ -372,7 +374,7 @@ describe('GitHubAdapter', () => {
       },
     };
     const { transport, paths, bodies } = fakeTransport([closedResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter sets the task state to closed
     const result = await adapter.setTaskState('https://github.com/acme/widgets/issues/42', 'closed');
@@ -426,7 +428,7 @@ describe('GitHubAdapter', () => {
       },
     };
     const { transport, bodies } = fakeTransport([boardResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches the board items
     const result = await adapter.fetchBoardItems('PVT_123');
@@ -469,7 +471,7 @@ describe('GitHubAdapter', () => {
       },
     };
     const { transport, bodies } = fakeTransport([boardResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches the board items
     const result = await adapter.fetchBoardItems('PVT_123');
@@ -512,7 +514,7 @@ describe('GitHubAdapter', () => {
       },
     };
     const { transport, bodies, paths } = fakeTransport([mutationResponse, issueResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter promotes the draft card
     const result = await adapter.promoteCard('PVTI_2', 'R_kgDOAAAA');
@@ -558,7 +560,7 @@ describe('GitHubAdapter', () => {
     };
     const mutationResponse = { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } };
     const { transport, bodies } = fakeTransport([boardResponse, mutationResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter sets the board status to the done option
     await adapter.setBoardStatus('PVT_123', 'PVTF_456', 'https://github.com/acme/widgets/issues/42', 'PVTSSF_3');
@@ -587,7 +589,7 @@ describe('GitHubAdapter', () => {
     };
     const mutationResponse = { status: 200, json: { data: { item: { id: 'PVTI_9' } } } };
     const { transport, bodies } = fakeTransport([issueResponse, mutationResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter adds the issue to the board
     await adapter.addBoardItem('PVT_123', 'https://github.com/acme/widgets/issues/42');
@@ -636,10 +638,10 @@ describe('GitHubAdapter', () => {
       ],
     };
     const { transport, paths } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues();
+    const result = await adapter.fetchUnpromotedIssues('https://github.com/acme/widgets');
 
     // Then — only the unlabeled issue is surfaced, mapped onto TaskData
     expect(result).toEqual([
@@ -676,10 +678,10 @@ describe('GitHubAdapter', () => {
       ],
     };
     const { transport } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues();
+    const result = await adapter.fetchUnpromotedIssues('https://github.com/acme/widgets');
 
     // Then — the labelled task is not surfaced
     expect(result).toEqual([]);
@@ -703,10 +705,10 @@ describe('GitHubAdapter', () => {
       ],
     };
     const { transport } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues();
+    const result = await adapter.fetchUnpromotedIssues('https://github.com/acme/widgets');
 
     // Then — the slice is not surfaced
     expect(result).toEqual([]);
@@ -716,7 +718,7 @@ describe('GitHubAdapter', () => {
     // Given — a transport that accepts the label POST
     const labelsResponse = { status: 200, json: [{ name: 'type:task' }] };
     const { transport, paths, bodies } = fakeTransport([labelsResponse]);
-    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+    const adapter = new GitHubAdapter(transport);
 
     // When — the adapter adds the label to the issue
     await adapter.addLabel('https://github.com/acme/widgets/issues/42', 'type:task');

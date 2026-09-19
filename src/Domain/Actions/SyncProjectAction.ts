@@ -18,7 +18,9 @@ const EPOCH = '1970-01-01T00:00:00.000Z';
 // creating notes for newly promoted issues — then reconciles the board: the
 // board's Status drives the issue and note (UC8), and every tracked task
 // missing from the board is added to it (UC9). Finally advances the poll
-// cursor. Board steps run only when the project has a stored identity.
+// cursor. The poll needs the project's repo url, so a project without a
+// stored identity (or one lacking a repo url) is skipped with a clear error
+// rather than crashing.
 export class SyncProjectAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -29,8 +31,13 @@ export class SyncProjectAction {
   ) {}
 
   async execute(input: SyncProjectInput): Promise<void> {
+    const identity = await this.syncState.getIdentity(input.projectName);
+    if (!identity?.repoUrl) {
+      throw new Error(`SyncProjectAction: no repo url for project ${input.projectName}`);
+    }
+
     const since = (await this.syncState.getLastPoll(input.projectName)) ?? EPOCH;
-    const tasks = await this.projectManagement.fetchChangedTasks(since);
+    const tasks = await this.projectManagement.fetchChangedTasks(identity.repoUrl, since);
 
     for (const task of tasks) {
       const status = await this.syncState.get(task.url);
@@ -49,26 +56,23 @@ export class SyncProjectAction {
       }
     }
 
-    const identity = await this.syncState.getIdentity(input.projectName);
-    if (identity) {
-      const items = await this.projectManagement.fetchBoardItems(identity.projectNodeId);
+    const items = await this.projectManagement.fetchBoardItems(identity.projectNodeId);
 
-      for (const item of items) {
-        await this.applyBoardChange.execute({
-          projectName: input.projectName,
-          item,
-          syncedAt: input.syncedAt,
-        });
-      }
+    for (const item of items) {
+      await this.applyBoardChange.execute({
+        projectName: input.projectName,
+        item,
+        syncedAt: input.syncedAt,
+      });
+    }
 
-      const boardUrls = new Set(
-        items.filter((item) => item.issueUrl !== undefined).map((item) => item.issueUrl as string),
-      );
-      const tracked = await this.syncState.list();
-      for (const status of tracked) {
-        if (!boardUrls.has(status.url)) {
-          await this.projectManagement.addBoardItem(identity.projectNodeId, status.url);
-        }
+    const boardUrls = new Set(
+      items.filter((item) => item.issueUrl !== undefined).map((item) => item.issueUrl as string),
+    );
+    const tracked = await this.syncState.list();
+    for (const status of tracked) {
+      if (!boardUrls.has(status.url)) {
+        await this.projectManagement.addBoardItem(identity.projectNodeId, status.url);
       }
     }
 

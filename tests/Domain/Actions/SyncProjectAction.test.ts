@@ -99,6 +99,7 @@ class FakeSyncState implements SyncStatePort {
 
 class FakeProjectManagement implements ProjectManagementPort {
   tasks: TaskData[] = [];
+  repoUrlCalls: string[] = [];
   sinceCalls: string[] = [];
   boardItems: BoardItemData[] = [];
   boardItemsCalls: string[] = [];
@@ -109,7 +110,8 @@ class FakeProjectManagement implements ProjectManagementPort {
     return null;
   }
 
-  async fetchChangedTasks(since: string): Promise<TaskData[]> {
+  async fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]> {
+    this.repoUrlCalls.push(repoUrl);
     this.sinceCalls.push(since);
     return this.tasks;
   }
@@ -187,6 +189,7 @@ const taskB: TaskData = {
 };
 
 const identity: ProjectIdentityData = {
+  repoUrl: 'https://github.com/acme/widgets',
   repoNodeId: 'R_kgDOAAAA',
   projectNodeId: 'PVT_123',
   statusFieldId: 'PVTF_456',
@@ -224,6 +227,7 @@ describe('SyncProjectAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.lastPoll = '2026-09-18T10:00:00Z';
+    syncState.identity = identity;
     const { path: pathA } = TaskNoteMapper.map(taskA, context);
     syncState.statuses.set(taskA.url, {
       url: taskA.url,
@@ -246,7 +250,8 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     await action.execute(context);
 
-    // Then — tasks are fetched since the last poll
+    // Then — tasks are fetched since the last poll, for the identity's repo
+    expect(projectManagement.repoUrlCalls).toEqual(['https://github.com/acme/widgets']);
     expect(projectManagement.sinceCalls).toEqual(['2026-09-18T10:00:00Z']);
     // And the existing task is applied (rewritten) while the new one is created
     expect(vault.written).toHaveLength(1);
@@ -264,6 +269,7 @@ describe('SyncProjectAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.lastPoll = null;
+    syncState.identity = identity;
     const projectManagement = new FakeProjectManagement();
     projectManagement.tasks = [];
     const action = makeAction(vault, syncState, projectManagement);
@@ -368,7 +374,7 @@ describe('SyncProjectAction', () => {
     expect(projectManagement.addBoardItemCalls).toEqual([]);
   });
 
-  it('skips the board steps when the project has no stored identity', async () => {
+  it('skips the poll with a clear error when the project has no stored identity', async () => {
     // Given — a project with no stored identity (board-less)
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
@@ -378,11 +384,27 @@ describe('SyncProjectAction', () => {
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the project is synced
-    await action.execute(context);
-
-    // Then — the board is never fetched, driven or written to
+    // Then — the poll is skipped with a clear error rather than crashing
+    await expect(action.execute(context)).rejects.toThrow(/no repo url/);
+    expect(projectManagement.sinceCalls).toEqual([]);
     expect(projectManagement.boardItemsCalls).toEqual([]);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(projectManagement.addBoardItemCalls).toEqual([]);
+  });
+
+  it('skips the poll with a clear error when the identity lacks a repo url', async () => {
+    // Given — a project whose stored identity has no repo url
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = { ...identity, repoUrl: '' };
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [];
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    // Then — the poll is skipped with a clear error rather than crashing
+    await expect(action.execute(context)).rejects.toThrow(/no repo url/);
+    expect(projectManagement.sinceCalls).toEqual([]);
+    expect(projectManagement.boardItemsCalls).toEqual([]);
   });
 });

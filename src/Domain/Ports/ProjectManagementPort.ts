@@ -11,8 +11,8 @@ import type { TaskData } from '../DataTransferObjects/TaskData.js';
 // Returns null when the provider is not ours to handle.
 export interface ProjectManagementPort {
   fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null>;
-  fetchChangedTasks(since: string): Promise<TaskData[]>;
-  fetchUnpromotedIssues(): Promise<TaskData[]>;
+  fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]>;
+  fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(url: string, input: { title: string; body: string }): Promise<TaskData>;
   setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData>;

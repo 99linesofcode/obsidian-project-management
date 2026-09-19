@@ -24,6 +24,8 @@ import { ApplyBoardChangeAction } from '../../../src/Domain/Actions/ApplyBoardCh
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
@@ -60,6 +62,7 @@ class FakeVault implements VaultPort {
 
 class FakeSyncState implements SyncStatePort {
   lastPollCalls: Array<{ projectName: string; iso: string }> = [];
+  identity: ProjectIdentityData | null = null;
 
   async get(): Promise<Status | null> {
     return null;
@@ -76,8 +79,8 @@ class FakeSyncState implements SyncStatePort {
     this.lastPollCalls.push({ projectName, iso });
   }
   async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<null> {
-    return null;
+  async getIdentity(): Promise<ProjectIdentityData | null> {
+    return this.identity;
   }
   async list(): Promise<Status[]> {
     return [];
@@ -90,7 +93,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchChangedTasks(since: string): Promise<TaskData[]> {
+  async fetchChangedTasks(_repoUrl: string, since: string): Promise<TaskData[]> {
     this.sinceCalls.push(since);
     return [];
   }
@@ -103,8 +106,8 @@ class FakeProjectManagement implements ProjectManagementPort {
   async setTaskState(): Promise<TaskData> {
     throw new Error('not used in this test');
   }
-  async fetchBoardItems(): Promise<never> {
-    throw new Error('not used in this test');
+  async fetchBoardItems(): Promise<BoardItemData[]> {
+    return [];
   }
   async setBoardStatus(): Promise<void> {
     throw new Error('not used in this test');
@@ -176,6 +179,13 @@ describe('SyncScheduler', () => {
     // Given — a scheduler wired to two projects on a 60s interval
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
+    syncState.identity = {
+      repoUrl: 'https://github.com/acme/widgets',
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [],
+    };
     const projectManagement = new FakeProjectManagement();
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
     const applyRemoteChange = new ApplyRemoteChangeAction(

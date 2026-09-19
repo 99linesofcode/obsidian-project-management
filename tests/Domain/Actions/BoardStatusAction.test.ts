@@ -84,6 +84,7 @@ class FakeSyncState implements SyncStatePort {
 }
 
 const identity: ProjectIdentityData = {
+  repoUrl: 'https://github.com/acme/widgets',
   repoNodeId: 'R_kgDOAAAA',
   projectNodeId: 'PVT_123',
   statusFieldId: 'PVTF_456',

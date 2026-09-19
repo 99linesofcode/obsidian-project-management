@@ -168,6 +168,7 @@ describe('SyncStateAdapter', () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     const identity = {
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
@@ -199,6 +200,7 @@ describe('SyncStateAdapter', () => {
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     const identity = {
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',

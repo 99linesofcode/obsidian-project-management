@@ -93,6 +93,7 @@ export class SyncStateAdapter implements SyncStatePort {
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {
     return {
+      repoUrl: typeof raw.repoUrl === 'string' ? raw.repoUrl : '',
       repoNodeId: typeof raw.repoNodeId === 'string' ? raw.repoNodeId : '',
       projectNodeId: typeof raw.projectNodeId === 'string' ? raw.projectNodeId : '',
       statusFieldId: typeof raw.statusFieldId === 'string' ? raw.statusFieldId : '',

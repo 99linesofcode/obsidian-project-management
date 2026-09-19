@@ -284,6 +284,7 @@ describe('ApplyRemoteChangeAction', () => {
     const action = makeAction(vault, syncState, projectManagement);
     const closed: TaskData = { ...task, state: 'closed', updatedAt: '2026-09-18T11:00:00Z' };
     syncState.identity = {
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
