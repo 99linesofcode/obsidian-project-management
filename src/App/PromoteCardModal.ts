@@ -68,7 +68,6 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
 
   // The event is part of the FuzzySuggestModal contract but unused here; the
   // pick only needs the chosen card.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onChooseItem(
     item: PromoteCardSuggestion,
     _evt: MouseEvent | KeyboardEvent,

@@ -62,7 +62,6 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
 
   // The event is part of the FuzzySuggestModal contract but unused here; the
   // pick only needs the chosen issue.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onChooseItem(
     item: PromoteSuggestion,
     _evt: MouseEvent | KeyboardEvent,
