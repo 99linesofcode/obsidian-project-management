@@ -12,6 +12,7 @@ import type { TaskData } from '../DataTransferObjects/TaskData.js';
 export interface ProjectManagementPort {
   fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null>;
   fetchChangedTasks(since: string): Promise<TaskData[]>;
+  fetchUnpromotedIssues(): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(url: string, input: { title: string; body: string }): Promise<TaskData>;
   setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData>;
@@ -23,4 +24,5 @@ export interface ProjectManagementPort {
     statusOptionId: string,
   ): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
+  addLabel(url: string, label: string): Promise<void>;
 }

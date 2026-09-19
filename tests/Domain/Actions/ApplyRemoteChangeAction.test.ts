@@ -132,6 +132,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  async fetchUnpromotedIssues(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async addLabel(): Promise<void> {
+    throw new Error('not used in this test');
+  }
 }
 
 const task: TaskData = {

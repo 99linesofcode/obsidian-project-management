@@ -14,12 +14,14 @@ import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
 import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
+import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './Infrastructure/GitHub/GitHubAdapter.js';
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
 import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
+import { PromoteToTaskCommand } from './App/Commands/PromoteToTaskCommand.js';
 
 // Builds the transport the GitHub adapter talks through. The adapter stays
 // token-agnostic; the Authorization header is added here. GraphQL goes over
@@ -53,11 +55,21 @@ function createTransport(token: string): Transport {
       });
       return { status: response.status, json: response.json };
     },
+    async postPath(path, body) {
+      const response = await requestUrl({
+        url: `https://api.github.com${path}`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body,
+      });
+      return { status: response.status, json: response.json };
+    },
   };
 }
 
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
+  private projectNames: string[] = [];
 
   override async onload(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -105,6 +117,15 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     const discoverProjects = new DiscoverProjectsAction(vault, new AttachProjectAction(github));
 
+    const promoteIssue = new PromoteIssueAction(github, createTaskNote);
+    const promoteToTask = new PromoteToTaskCommand(
+      () => this.projectNames,
+      syncState,
+      github,
+      promoteIssue,
+    );
+    promoteToTask.register(this);
+
     // v1 wiring: the scheduler starts inert (no projects) and is populated
     // once the vault's project notes are discovered after layout is ready.
     const scheduler = new SyncScheduler(
@@ -137,6 +158,7 @@ export default class ProjectManagementPlugin extends Plugin {
     for (const project of projects) {
       await syncState.setIdentity(project.projectName, project.identity);
     }
+    this.projectNames = projects.map((project) => project.projectName);
     scheduler.setProjectNames(projects.map((project) => project.projectName));
   }
 

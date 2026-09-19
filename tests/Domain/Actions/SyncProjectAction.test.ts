@@ -148,6 +148,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     this.addBoardItemCalls.push({ projectNodeId, issueUrl });
   }
+
+  async fetchUnpromotedIssues(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async addLabel(): Promise<void> {
+    throw new Error('not used in this test');
+  }
 }
 
 const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };
