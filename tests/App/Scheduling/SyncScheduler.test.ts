@@ -39,6 +39,9 @@ class FakeVault implements VaultPort {
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
   async renameNote(): Promise<void> {}
+  async findProjectNotes(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   onNoteChanged(cb: (path: string) => void): void {
     this.noteChangedCb = cb;
   }

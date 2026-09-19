@@ -45,6 +45,10 @@ class FakeVault implements VaultPort {
     this.renamed.push({ oldPath, newPath });
   }
 
+  async findProjectNotes(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   onNoteChanged(): void {
     throw new Error('not used in this test');
   }
