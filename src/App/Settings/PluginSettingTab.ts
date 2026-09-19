@@ -58,7 +58,9 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Done option name')
-      .setDesc('The GitHub Projects single-select option that marks a task done.')
+      .setDesc(
+        'The GitHub Projects single-select option that marks a task done.',
+      )
       .addText((text) =>
         text
           .setValue(this.plugin.settings.doneOptionName)

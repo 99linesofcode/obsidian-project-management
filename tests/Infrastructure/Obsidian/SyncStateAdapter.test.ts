@@ -50,7 +50,9 @@ describe('SyncStateAdapter', () => {
     const adapter = new SyncStateAdapter(storage);
 
     // When — an unknown url is read
-    const result = await adapter.get('https://github.com/acme/widgets/issues/999');
+    const result = await adapter.get(
+      'https://github.com/acme/widgets/issues/999',
+    );
 
     // Then — null is returned
     expect(result).toBeNull();
@@ -117,7 +119,9 @@ describe('SyncStateAdapter', () => {
     await adapter.set(status);
 
     // When — an unknown note path is looked up
-    const result = await adapter.findByNotePath('Projecten/Other/taken/99-unknown.md');
+    const result = await adapter.findByNotePath(
+      'Projecten/Other/taken/99-unknown.md',
+    );
 
     // Then — null is returned
     expect(result).toBeNull();
@@ -140,7 +144,11 @@ describe('SyncStateAdapter', () => {
     // Given — two stored status records
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
-    const other: Status = { ...status, url: 'https://github.com/acme/widgets/issues/43', remoteId: 43 };
+    const other: Status = {
+      ...status,
+      url: 'https://github.com/acme/widgets/issues/43',
+      remoteId: 43,
+    };
     await adapter.set(status);
     await adapter.set(other);
 

@@ -19,7 +19,10 @@ import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
-import { GitHubAdapter, type Transport } from './Infrastructure/GitHub/GitHubAdapter.js';
+import {
+  GitHubAdapter,
+  type Transport,
+} from './Infrastructure/GitHub/GitHubAdapter.js';
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
 import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
 import { PromoteToTaskCommand } from './App/Commands/PromoteToTaskCommand.js';
@@ -35,7 +38,10 @@ function createTransport(token: string): Transport {
       const response = await requestUrl({
         url: 'https://api.github.com/graphql',
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body,
       });
       return { status: response.status, json: response.json };
@@ -52,7 +58,10 @@ function createTransport(token: string): Transport {
       const response = await requestUrl({
         url: `https://api.github.com${path}`,
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body,
       });
       return { status: response.status, json: response.json };
@@ -61,7 +70,10 @@ function createTransport(token: string): Transport {
       const response = await requestUrl({
         url: `https://api.github.com${path}`,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body,
       });
       return { status: response.status, json: response.json };
@@ -81,15 +93,34 @@ export default class ProjectManagementPlugin extends Plugin {
       load: () => this.loadData() as Promise<Record<string, unknown>>,
       save: (data) => this.saveData(data),
     });
-    const vault = new VaultAdapter(this.app, (eventRef) => this.registerEvent(eventRef));
+    const vault = new VaultAdapter(this.app, (eventRef) =>
+      this.registerEvent(eventRef),
+    );
 
     const github = new GitHubAdapter(transport);
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-    const boardStatus = new BoardStatusAction(syncState, github, this.settings.doneOptionName);
-    const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote, boardStatus);
+    const boardStatus = new BoardStatusAction(
+      syncState,
+      github,
+      this.settings.doneOptionName,
+    );
+    const applyRemoteChange = new ApplyRemoteChangeAction(
+      vault,
+      syncState,
+      createTaskNote,
+      boardStatus,
+    );
     const pushNote = new PushNoteAction(github);
-    const propagateStatus = new PropagateStatusAction(github, syncState, boardStatus);
-    const handleDeletedNote = new HandleDeletedNoteAction(syncState, github, boardStatus);
+    const propagateStatus = new PropagateStatusAction(
+      github,
+      syncState,
+      boardStatus,
+    );
+    const handleDeletedNote = new HandleDeletedNoteAction(
+      syncState,
+      github,
+      boardStatus,
+    );
     const reconcileTask = new ReconcileTaskAction(
       vault,
       syncState,
@@ -113,7 +144,10 @@ export default class ProjectManagementPlugin extends Plugin {
       createTaskNote,
       applyBoardChange,
     );
-    const discoverProjects = new DiscoverProjectsAction(vault, new AttachProjectAction(github));
+    const discoverProjects = new DiscoverProjectsAction(
+      vault,
+      new AttachProjectAction(github),
+    );
 
     const promoteIssue = new PromoteIssueAction(github, createTaskNote);
     const promoteToTask = new PromoteToTaskCommand(
@@ -170,7 +204,9 @@ export default class ProjectManagementPlugin extends Plugin {
       this.projectNames = projects.map((project) => project.projectName);
       scheduler.setProjectNames(projects.map((project) => project.projectName));
       if (errors.length > 0) {
-        new Notice(`Project discovery: ${errors.length} project(s) could not be attached`);
+        new Notice(
+          `Project discovery: ${errors.length} project(s) could not be attached`,
+        );
       }
     } catch (error) {
       new Notice(

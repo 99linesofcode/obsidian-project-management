@@ -104,7 +104,8 @@ class FakeSyncState implements SyncStatePort {
 class FakeProjectManagement implements ProjectManagementPort {
   remote: TaskData = task;
   updated: TaskData = task;
-  updateCalls: Array<{ url: string; input: { title: string; body: string } }> = [];
+  updateCalls: Array<{ url: string; input: { title: string; body: string } }> =
+    [];
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
 
   async fetchProjectIdentity(): Promise<null> {
@@ -119,7 +120,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     return this.remote;
   }
 
-  async updateTask(url: string, input: { title: string; body: string }): Promise<TaskData> {
+  async updateTask(
+    url: string,
+    input: { title: string; body: string },
+  ): Promise<TaskData> {
     this.updateCalls.push({ url, input });
     return this.updated;
   }
@@ -165,7 +169,10 @@ const task: TaskData = {
   labels: ['type:task'],
 };
 
-const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };
+const context = {
+  projectName: 'Acme Widgets',
+  syncedAt: '2026-09-18T12:00:00Z',
+};
 const path = TaskNoteMapper.map(task, context).path;
 const content = TaskNoteMapper.map(task, context).content;
 const NEW_BODY = 'The bug now also happens on resize.';
@@ -183,7 +190,11 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
   };
 }
 
-function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagement: FakeProjectManagement) {
+function makeAction(
+  vault: FakeVault,
+  syncState: FakeSyncState,
+  projectManagement: FakeProjectManagement,
+) {
   const createTaskNote = new CreateTaskNoteAction(vault, syncState);
   const applyRemoteChange = new ApplyRemoteChangeAction(
     vault,
@@ -215,9 +226,16 @@ describe('ReconcileTaskAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
-    vault.notes.set(path, TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content);
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, body: NEW_BODY, updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      body: NEW_BODY,
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the note edit is reconciled
@@ -266,9 +284,17 @@ describe('ReconcileTaskAction', () => {
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
     const newPath = 'Projecten/Acme Widgets/taken/42-fix-the-widget.md';
-    vault.notes.set(newPath, TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content);
+    vault.notes.set(
+      newPath,
+      TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, title: 'fix the widget', body: NEW_BODY, updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      title: 'fix the widget',
+      body: NEW_BODY,
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the renamed note edit is reconciled
@@ -285,9 +311,16 @@ describe('ReconcileTaskAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
-    vault.notes.set(path, TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content);
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, body: NEW_BODY, updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      body: NEW_BODY,
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the note edit is reconciled
@@ -304,10 +337,21 @@ describe('ReconcileTaskAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
-    vault.notes.set(path, TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content);
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.remote = { ...task, body: 'Remote changed body.', updatedAt: '2026-09-18T11:00:00Z' };
-    projectManagement.updated = { ...task, body: NEW_BODY, updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.remote = {
+      ...task,
+      body: 'Remote changed body.',
+      updatedAt: '2026-09-18T11:00:00Z',
+    };
+    projectManagement.updated = {
+      ...task,
+      body: NEW_BODY,
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the conflicting note edit is reconciled
@@ -320,7 +364,9 @@ describe('ReconcileTaskAction', () => {
     // And the baseline is refreshed from the PATCH response
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.lastSyncedBodyHash).toBe(hash(NEW_BODY));
-    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe('2026-09-18T12:30:00Z');
+    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
+      '2026-09-18T12:30:00Z',
+    );
   });
 
   it('applies the remote change when only the remote status changed', async () => {
@@ -330,14 +376,21 @@ describe('ReconcileTaskAction', () => {
     syncState.statuses.set(task.url, makeStatus());
     vault.notes.set(path, content);
     const projectManagement = new FakeProjectManagement();
-    projectManagement.remote = { ...task, state: 'closed', updatedAt: task.updatedAt };
+    projectManagement.remote = {
+      ...task,
+      state: 'closed',
+      updatedAt: task.updatedAt,
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the note edit is reconciled
     await action.execute({ notePath: path, ...context });
 
     // Then — the remote change is applied (the note is rewritten with the new status)
-    const { content: closedContent } = TaskNoteMapper.map({ ...task, state: 'closed' }, context);
+    const { content: closedContent } = TaskNoteMapper.map(
+      { ...task, state: 'closed' },
+      context,
+    );
     expect(vault.written).toEqual([{ path, content: closedContent }]);
     // And the baseline mirrors the remote status
     expect(syncState.setCalls).toHaveLength(1);
@@ -349,19 +402,30 @@ describe('ReconcileTaskAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
-    vault.notes.set(path, TaskNoteMapper.map({ ...task, state: 'closed' }, context).content);
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, state: 'closed' }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the note edit is reconciled
     await action.execute({ notePath: path, ...context });
 
     // Then — the issue is closed and the baseline is refreshed from the response
-    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'closed' }]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: task.url, state: 'closed' },
+    ]);
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
-    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe('2026-09-18T12:30:00Z');
+    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
+      '2026-09-18T12:30:00Z',
+    );
   });
 
   it('lets the note win when both sides flipped the status differently', async () => {
@@ -369,17 +433,30 @@ describe('ReconcileTaskAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
-    vault.notes.set(path, TaskNoteMapper.map({ ...task, state: 'closed' }, context).content);
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, state: 'closed' }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.remote = { ...task, state: 'closed', updatedAt: task.updatedAt };
-    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.remote = {
+      ...task,
+      state: 'closed',
+      updatedAt: task.updatedAt,
+    };
+    projectManagement.updated = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the conflicting note edit is reconciled
     await action.execute({ notePath: path, ...context });
 
     // Then — the note's status is propagated to the remote and the baseline refreshed
-    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'closed' }]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: task.url, state: 'closed' },
+    ]);
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
   });
@@ -389,10 +466,22 @@ describe('ReconcileTaskAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
-    vault.notes.set(path, TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content);
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content,
+    );
     const projectManagement = new FakeProjectManagement();
-    projectManagement.remote = { ...task, state: 'closed', updatedAt: '2026-09-18T11:00:00Z' };
-    projectManagement.updated = { ...task, body: NEW_BODY, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.remote = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T11:00:00Z',
+    };
+    projectManagement.updated = {
+      ...task,
+      body: NEW_BODY,
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the note edit is reconciled

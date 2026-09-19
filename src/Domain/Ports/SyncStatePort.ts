@@ -14,6 +14,9 @@ export interface SyncStatePort {
   list(): Promise<Status[]>;
   getLastPoll(projectName: string): Promise<string | null>;
   setLastPoll(projectName: string, iso: string): Promise<void>;
-  setIdentity(projectName: string, identity: ProjectIdentityData): Promise<void>;
+  setIdentity(
+    projectName: string,
+    identity: ProjectIdentityData,
+  ): Promise<void>;
   getIdentity(projectName: string): Promise<ProjectIdentityData | null>;
 }

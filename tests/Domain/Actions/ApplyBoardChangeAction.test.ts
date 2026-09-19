@@ -159,8 +159,17 @@ function makeItem(overrides: Partial<BoardItemData> = {}): BoardItemData {
   };
 }
 
-function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagement: FakeProjectManagement) {
-  return new ApplyBoardChangeAction(syncState, projectManagement, vault, 'Done');
+function makeAction(
+  vault: FakeVault,
+  syncState: FakeSyncState,
+  projectManagement: FakeProjectManagement,
+) {
+  return new ApplyBoardChangeAction(
+    syncState,
+    projectManagement,
+    vault,
+    'Done',
+  );
 }
 
 describe('ApplyBoardChangeAction', () => {
@@ -171,20 +180,31 @@ describe('ApplyBoardChangeAction', () => {
     const syncState = new FakeSyncState();
     syncState.statuses.set(url, makeStatus());
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...projectManagement.updated, state: 'closed' };
+    projectManagement.updated = {
+      ...projectManagement.updated,
+      state: 'closed',
+    };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the board change is applied
-    await action.execute({ projectName: 'Acme Widgets', item: makeItem(), syncedAt: '2026-09-18T12:00:00Z' });
+    await action.execute({
+      projectName: 'Acme Widgets',
+      item: makeItem(),
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
 
     // Then — the issue is closed
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
     // And the note's status line is flipped to done, body preserved
-    expect(vault.written).toEqual([{ path: notePath, content: withStatus(noteContent, 'done') }]);
+    expect(vault.written).toEqual([
+      { path: notePath, content: withStatus(noteContent, 'done') },
+    ]);
     // And the baseline is refreshed from the response
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
-    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe('2026-09-18T12:30:00Z');
+    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
+      '2026-09-18T12:30:00Z',
+    );
   });
 
   it('reopens the issue, flips the note and refreshes the baseline when the board is not done but the issue is closed', async () => {
@@ -192,7 +212,10 @@ describe('ApplyBoardChangeAction', () => {
     const vault = new FakeVault();
     vault.notes.set(notePath, withStatus(noteContent, 'done'));
     const syncState = new FakeSyncState();
-    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: TaskStatus.Done }));
+    syncState.statuses.set(
+      url,
+      makeStatus({ lastSyncedStatus: TaskStatus.Done }),
+    );
     const projectManagement = new FakeProjectManagement();
     projectManagement.updated = { ...projectManagement.updated, state: 'open' };
     const action = makeAction(vault, syncState, projectManagement);
@@ -207,7 +230,9 @@ describe('ApplyBoardChangeAction', () => {
     // Then — the issue is reopened
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
     // And the note's status line is flipped to open
-    expect(vault.written).toEqual([{ path: notePath, content: withStatus(noteContent, 'open') }]);
+    expect(vault.written).toEqual([
+      { path: notePath, content: withStatus(noteContent, 'open') },
+    ]);
     // And the baseline is refreshed
     expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Open);
   });
@@ -217,12 +242,19 @@ describe('ApplyBoardChangeAction', () => {
     const vault = new FakeVault();
     vault.notes.set(notePath, withStatus(noteContent, 'done'));
     const syncState = new FakeSyncState();
-    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: TaskStatus.Done }));
+    syncState.statuses.set(
+      url,
+      makeStatus({ lastSyncedStatus: TaskStatus.Done }),
+    );
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the board change is applied
-    await action.execute({ projectName: 'Acme Widgets', item: makeItem(), syncedAt: '2026-09-18T12:00:00Z' });
+    await action.execute({
+      projectName: 'Acme Widgets',
+      item: makeItem(),
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
 
     // Then — nothing is closed, reopened, rewritten or re-recorded
     expect(projectManagement.stateCalls).toEqual([]);
@@ -278,7 +310,11 @@ describe('ApplyBoardChangeAction', () => {
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the board change is applied
-    await action.execute({ projectName: 'Acme Widgets', item: makeItem(), syncedAt: '2026-09-18T12:00:00Z' });
+    await action.execute({
+      projectName: 'Acme Widgets',
+      item: makeItem(),
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
 
     // Then — nothing happens
     expect(projectManagement.stateCalls).toEqual([]);

@@ -117,8 +117,15 @@ class FakeSyncState implements SyncStatePort {
   }
 }
 
-function makeAction(port: FakePort, vault: FakeVault, syncState: FakeSyncState): PromoteCardAction {
-  return new PromoteCardAction(port, new CreateTaskNoteAction(vault, syncState));
+function makeAction(
+  port: FakePort,
+  vault: FakeVault,
+  syncState: FakeSyncState,
+): PromoteCardAction {
+  return new PromoteCardAction(
+    port,
+    new CreateTaskNoteAction(vault, syncState),
+  );
 }
 
 describe('PromoteCardAction', () => {
@@ -137,7 +144,9 @@ describe('PromoteCardAction', () => {
     });
 
     // Then — the card is converted against the repo
-    expect(port.promoted).toEqual([{ itemId: 'PVTI_2', repoNodeId: 'R_kgDOAAAA' }]);
+    expect(port.promoted).toEqual([
+      { itemId: 'PVTI_2', repoNodeId: 'R_kgDOAAAA' },
+    ]);
     // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toContain(slugify(port.task.title));

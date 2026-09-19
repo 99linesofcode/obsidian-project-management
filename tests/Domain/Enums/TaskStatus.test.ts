@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TaskStatus, taskStatusFromState } from '../../../src/Domain/Enums/TaskStatus.js';
+import {
+  TaskStatus,
+  taskStatusFromState,
+} from '../../../src/Domain/Enums/TaskStatus.js';
 
 describe('TaskStatus', () => {
   it('maps an open state to open', () => {

@@ -8,7 +8,9 @@ export interface ParsedTaskNote {
 
 // Splits a note into its YAML frontmatter (as a flat key/value map) and body.
 // Returns null when the note has no frontmatter block.
-function splitFrontmatter(content: string): { fields: Map<string, string>; body: string } | null {
+function splitFrontmatter(
+  content: string,
+): { fields: Map<string, string>; body: string } | null {
   const lines = content.split('\n');
   if (lines[0] !== '---') {
     return null;
@@ -40,7 +42,8 @@ export const TaskNoteParser = {
     if (!url) {
       return null;
     }
-    const status = split.fields.get('status') === 'done' ? TaskStatus.Done : TaskStatus.Open;
+    const status =
+      split.fields.get('status') === 'done' ? TaskStatus.Done : TaskStatus.Open;
     return { url, status, body: split.body };
   },
 };

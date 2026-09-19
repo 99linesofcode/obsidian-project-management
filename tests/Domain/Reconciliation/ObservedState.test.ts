@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { ObservedState } from '../../../src/Domain/Reconciliation/ObservedState.js';
-import type { BaselineView, NoteView, RemoteView } from '../../../src/Domain/Reconciliation/ObservedState.js';
+import type {
+  BaselineView,
+  NoteView,
+  RemoteView,
+} from '../../../src/Domain/Reconciliation/ObservedState.js';
 
 describe('ObservedState', () => {
   it('holds the three views of one task', () => {
     // Given — a note, remote and baseline view of the same task
-    const note: NoteView = { body: 'The bug happens on resize.', status: 'open' };
+    const note: NoteView = {
+      body: 'The bug happens on resize.',
+      status: 'open',
+    };
     const remote: RemoteView = {
       body: 'The bug happens on resize.',
       status: 'open',

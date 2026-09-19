@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { boardOptionId, statusFromBoardOption } from '../../../src/Domain/Board/boardStatus.js';
+import {
+  boardOptionId,
+  statusFromBoardOption,
+} from '../../../src/Domain/Board/boardStatus.js';
 import type { ProjectStatusOption } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 
 const options: ProjectStatusOption[] = [
@@ -36,7 +39,9 @@ describe('boardOptionId', () => {
     // Given — a board with no status options
     // When — the open option id is resolved
     // Then — it fails with a clear error
-    expect(() => boardOptionId([], 'Done', 'open')).toThrow(/no status options/);
+    expect(() => boardOptionId([], 'Done', 'open')).toThrow(
+      /no status options/,
+    );
   });
 });
 

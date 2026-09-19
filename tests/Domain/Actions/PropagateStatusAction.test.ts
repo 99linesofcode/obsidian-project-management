@@ -126,8 +126,15 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
   };
 }
 
-function makeAction(projectManagement: FakeProjectManagement, syncState: FakeSyncState) {
-  const boardStatus = new BoardStatusAction(syncState, projectManagement, 'Done');
+function makeAction(
+  projectManagement: FakeProjectManagement,
+  syncState: FakeSyncState,
+) {
+  const boardStatus = new BoardStatusAction(
+    syncState,
+    projectManagement,
+    'Done',
+  );
   return new PropagateStatusAction(projectManagement, syncState, boardStatus);
 }
 
@@ -135,16 +142,27 @@ describe('PropagateStatusAction', () => {
   it('closes the issue for a done note and refreshes the baseline', async () => {
     // Given — a synced note whose status the user flipped to done
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
-    await action.execute({ url: task.url, status: TaskStatus.Done, notePath, projectName });
+    await action.execute({
+      url: task.url,
+      status: TaskStatus.Done,
+      notePath,
+      projectName,
+    });
 
     // Then — the issue is closed
-    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'closed' }]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: task.url, state: 'closed' },
+    ]);
     // And the baseline is refreshed from the response, keeping the other fields
     expect(syncState.setCalls).toEqual([
       {
@@ -162,26 +180,46 @@ describe('PropagateStatusAction', () => {
   it('reopens the issue for an open note and refreshes the baseline', async () => {
     // Given — a synced note whose status the user flipped back to open
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, state: 'open', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      state: 'open',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus({ lastSyncedStatus: TaskStatus.Done }));
+    syncState.statuses.set(
+      task.url,
+      makeStatus({ lastSyncedStatus: TaskStatus.Done }),
+    );
     const action = makeAction(projectManagement, syncState);
 
     // When — the open status is propagated
-    await action.execute({ url: task.url, status: TaskStatus.Open, notePath, projectName });
+    await action.execute({
+      url: task.url,
+      status: TaskStatus.Open,
+      notePath,
+      projectName,
+    });
 
     // Then — the issue is reopened
-    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'open' }]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: task.url, state: 'open' },
+    ]);
     // And the baseline is refreshed from the response
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Open);
-    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe('2026-09-18T12:30:00Z');
+    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
+      '2026-09-18T12:30:00Z',
+    );
   });
 
   it('mirrors the status onto the board when the project has an identity', async () => {
     // Given — a project with a stored identity and a done note
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
     syncState.identity = {
@@ -197,7 +235,12 @@ describe('PropagateStatusAction', () => {
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
-    await action.execute({ url: task.url, status: TaskStatus.Done, notePath, projectName });
+    await action.execute({
+      url: task.url,
+      status: TaskStatus.Done,
+      notePath,
+      projectName,
+    });
 
     // Then — the board Status is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
@@ -208,14 +251,23 @@ describe('PropagateStatusAction', () => {
   it('skips the board mirror when the project has no identity', async () => {
     // Given — a project with no stored identity (board-less)
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    projectManagement.updated = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
     syncState.identity = null;
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
-    await action.execute({ url: task.url, status: TaskStatus.Done, notePath, projectName });
+    await action.execute({
+      url: task.url,
+      status: TaskStatus.Done,
+      notePath,
+      projectName,
+    });
 
     // Then — the board is left untouched
     expect(projectManagement.boardStatusCalls).toEqual([]);

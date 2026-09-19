@@ -105,14 +105,18 @@ describe('DiscoverProjectsAction', () => {
     const result = await action.execute();
 
     // Then — the project is discovered with its name and resolved identity
-    expect(result.projects).toEqual([{ projectName: 'Acme Widgets', identity }]);
+    expect(result.projects).toEqual([
+      { projectName: 'Acme Widgets', identity },
+    ]);
     expect(result.errors).toEqual([]);
   });
 
   it('skips project notes for providers this plugin does not handle', async () => {
     // Given — a vault with a non-github project note
     const vault = new FakeVault();
-    vault.notes = [githubNote({ pm: 'linear', board: 'https://linear.app/acme/project/1' })];
+    vault.notes = [
+      githubNote({ pm: 'linear', board: 'https://linear.app/acme/project/1' }),
+    ];
     const port = new FakePort();
     const action = makeAction(port, vault);
 
@@ -128,7 +132,11 @@ describe('DiscoverProjectsAction', () => {
     // Given — a vault with a broken github note (no board) and a valid one
     const vault = new FakeVault();
     vault.notes = [
-      githubNote({ path: 'Projecten/Broken/_home.md', projectName: 'Broken', board: '' }),
+      githubNote({
+        path: 'Projecten/Broken/_home.md',
+        projectName: 'Broken',
+        board: '',
+      }),
       githubNote(),
     ];
     const port = new FakePort();
@@ -140,7 +148,9 @@ describe('DiscoverProjectsAction', () => {
 
     // Then — the valid project is still discovered and the broken one's error
     // is collected rather than aborting the whole discovery
-    expect(result.projects).toEqual([{ projectName: 'Acme Widgets', identity }]);
+    expect(result.projects).toEqual([
+      { projectName: 'Acme Widgets', identity },
+    ]);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toBeInstanceOf(Error);
   });

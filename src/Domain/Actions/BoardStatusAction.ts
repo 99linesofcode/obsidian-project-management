@@ -24,7 +24,11 @@ export class BoardStatusAction {
       return;
     }
 
-    const optionId = boardOptionId(identity.statusOptions, this.doneOptionName, input.status);
+    const optionId = boardOptionId(
+      identity.statusOptions,
+      this.doneOptionName,
+      input.status,
+    );
     await this.projectManagement.setBoardStatus(
       identity.projectNodeId,
       identity.statusFieldId,

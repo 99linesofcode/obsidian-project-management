@@ -13,7 +13,10 @@ const task: TaskData = {
   labels: [],
 };
 
-const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };
+const context = {
+  projectName: 'Acme Widgets',
+  syncedAt: '2026-09-18T12:00:00Z',
+};
 
 describe('TaskNoteMapper', () => {
   it('maps a task to a note path under the project taken folder', () => {
