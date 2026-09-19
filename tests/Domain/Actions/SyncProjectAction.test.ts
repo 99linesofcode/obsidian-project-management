@@ -156,6 +156,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addLabel(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  async promoteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };

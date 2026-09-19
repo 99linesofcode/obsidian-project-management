@@ -117,6 +117,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addLabel(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  async promoteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';

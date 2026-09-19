@@ -90,6 +90,10 @@ const BOARD_ITEMS_QUERY = `
               ... on Issue {
                 url
               }
+              ... on DraftIssue {
+                title
+                body
+              }
             }
             fieldValues(first: 20) {
               nodes {
@@ -129,6 +133,22 @@ const ADD_BOARD_ITEM_MUTATION = `
   mutation AddBoardItem($projectId: ID!, $contentId: ID!) {
     addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
       item { id }
+    }
+  }
+`;
+
+const CONVERT_DRAFT_ISSUE_MUTATION = `
+  mutation ConvertDraftIssue($itemId: ID!, $repositoryId: ID!) {
+    convertProjectV2DraftIssueItemToIssue(
+      input: { itemId: $itemId, repositoryId: $repositoryId }
+    ) {
+      item {
+        content {
+          ... on Issue {
+            url
+          }
+        }
+      }
     }
   }
 `;
@@ -317,21 +337,44 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
+  async promoteCard(itemId: string, repoNodeId: string): Promise<TaskData> {
+    const data = await this.postQuery(CONVERT_DRAFT_ISSUE_MUTATION, {
+      itemId,
+      repositoryId: repoNodeId,
+    });
+    const converted = data.convertProjectV2DraftIssueItemToIssue;
+    if (!isRecord(converted) || !isRecord(converted.item) || !isRecord(converted.item.content)) {
+      throw new Error('GitHubAdapter: unexpected convert draft issue response shape');
+    }
+    const url = converted.item.content.url;
+    if (typeof url !== 'string') {
+      throw new Error('GitHubAdapter: convert draft issue returned no issue url');
+    }
+    return this.fetchTask(url);
+  }
+
   private mapBoardItem(node: Record<string, unknown>): BoardItemData | null {
     if (typeof node.id !== 'string') {
       return null;
     }
     const type = node.type === 'DRAFT_ISSUE' ? 'DRAFT_ISSUE' : 'ISSUE';
-    const content = isRecord(node.content) && typeof node.content.url === 'string'
-      ? node.content.url
-      : undefined;
+    const content = isRecord(node.content) ? node.content : undefined;
+    const issueUrl = content && typeof content.url === 'string' ? content.url : undefined;
+    const draftTitle = content && typeof content.title === 'string' ? content.title : undefined;
+    const draftBody = content && typeof content.body === 'string' ? content.body : undefined;
     const statusOptionName = this.statusOptionName(node.fieldValues);
     const item: BoardItemData = { itemId: node.id, type };
-    if (content !== undefined) {
-      item.issueUrl = content;
+    if (issueUrl !== undefined) {
+      item.issueUrl = issueUrl;
     }
     if (statusOptionName !== undefined) {
       item.statusOptionName = statusOptionName;
+    }
+    if (draftTitle !== undefined) {
+      item.draftTitle = draftTitle;
+    }
+    if (draftBody !== undefined) {
+      item.draftBody = draftBody;
     }
     return item;
   }

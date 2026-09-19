@@ -118,6 +118,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addLabel(): Promise<void> {
     throw new Error('not used in this test');
   }
+  async promoteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 // A fake reconcile action that records its invocations and can be made slow,

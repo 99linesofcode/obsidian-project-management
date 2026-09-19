@@ -15,6 +15,7 @@ import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteActio
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
 import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
+import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
@@ -22,6 +23,7 @@ import { GitHubAdapter, type Transport } from './Infrastructure/GitHub/GitHubAda
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
 import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
 import { PromoteToTaskCommand } from './App/Commands/PromoteToTaskCommand.js';
+import { PromoteCardToIssueCommand } from './App/Commands/PromoteCardToIssueCommand.js';
 
 // Builds the transport the GitHub adapter talks through. The adapter stays
 // token-agnostic; the Authorization header is added here. GraphQL goes over
@@ -125,6 +127,15 @@ export default class ProjectManagementPlugin extends Plugin {
       promoteIssue,
     );
     promoteToTask.register(this);
+
+    const promoteCard = new PromoteCardAction(github, createTaskNote);
+    const promoteCardToIssue = new PromoteCardToIssueCommand(
+      () => this.projectNames,
+      syncState,
+      github,
+      promoteCard,
+    );
+    promoteCardToIssue.register(this);
 
     // v1 wiring: the scheduler starts inert (no projects) and is populated
     // once the vault's project notes are discovered after layout is ready.
