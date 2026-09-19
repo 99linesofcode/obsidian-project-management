@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
+import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
@@ -8,6 +9,8 @@ import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 
 // Fakes at the ports: hold notes and status records in memory and record the
 // operations the action performs, so the action's own behaviour is under test.
@@ -57,6 +60,7 @@ class FakeVault implements VaultPort {
 class FakeSyncState implements SyncStatePort {
   statuses = new Map<string, Status>();
   setCalls: Status[] = [];
+  identity: ProjectIdentityData | null = null;
 
   async get(url: string): Promise<Status | null> {
     return this.statuses.get(url) ?? null;
@@ -87,14 +91,53 @@ class FakeSyncState implements SyncStatePort {
     throw new Error('not used in this test');
   }
 
-  async getIdentity(): Promise<null> {
+  async getIdentity(): Promise<ProjectIdentityData | null> {
+    return this.identity;
+  }
+
+  async list(): Promise<Status[]> {
+    return [];
+  }
+}
+
+class FakeProjectManagement implements ProjectManagementPort {
+  boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
+
+  async fetchProjectIdentity(): Promise<null> {
     return null;
+  }
+  async fetchChangedTasks(): Promise<TaskData[]> {
+    return [];
+  }
+  async fetchTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+  async updateTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+  async setTaskState(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+  async fetchBoardItems(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async setBoardStatus(
+    _projectNodeId: string,
+    _statusFieldId: string,
+    issueUrl: string,
+    statusOptionId: string,
+  ): Promise<void> {
+    this.boardStatusCalls.push({ issueUrl, statusOptionId });
+  }
+  async addBoardItem(): Promise<void> {
+    throw new Error('not used in this test');
   }
 }
 
 const task: TaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
+  nodeId: 'I_kwDOAAAA42',
   title: 'Fix the Bug!',
   body: 'The bug happens when the widget is resized.',
   state: 'open',
@@ -118,9 +161,10 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
   };
 }
 
-function makeAction(vault: FakeVault, syncState: FakeSyncState) {
+function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagement: FakeProjectManagement) {
   const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-  return new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
+  const boardStatus = new BoardStatusAction(syncState, projectManagement, 'Done');
+  return new ApplyRemoteChangeAction(vault, syncState, createTaskNote, boardStatus);
 }
 
 describe('ApplyRemoteChangeAction', () => {
@@ -132,7 +176,7 @@ describe('ApplyRemoteChangeAction', () => {
     syncState.statuses.set(task.url, status);
     const { path, content } = TaskNoteMapper.map(task, context);
     vault.notes.set(path, content);
-    const action = makeAction(vault, syncState);
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
     const changed: TaskData = {
       ...task,
       body: 'The bug now also happens on resize.',
@@ -167,7 +211,7 @@ describe('ApplyRemoteChangeAction', () => {
     syncState.statuses.set(task.url, status);
     const { path, content } = TaskNoteMapper.map(task, context);
     vault.notes.set(path, content);
-    const action = makeAction(vault, syncState);
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
     const retitled: TaskData = { ...task, title: 'Fix the Widget!' };
 
     // When — the remote change is applied
@@ -188,7 +232,7 @@ describe('ApplyRemoteChangeAction', () => {
     syncState.statuses.set(task.url, status);
     const { path, content } = TaskNoteMapper.map(task, context);
     vault.notes.set(path, content);
-    const action = makeAction(vault, syncState);
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
 
     // When — the unchanged remote change is applied
     await action.execute({ task, ...context });
@@ -203,7 +247,7 @@ describe('ApplyRemoteChangeAction', () => {
     // Given — a task with no status record (a newly promoted issue)
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    const action = makeAction(vault, syncState);
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
 
     // When — the remote change is applied
     await action.execute({ task, ...context });
@@ -214,5 +258,35 @@ describe('ApplyRemoteChangeAction', () => {
     // And a status record is written
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.notePath).toBe(path);
+  });
+
+  it('mirrors a remote status flip onto the board', async () => {
+    // Given — a synced open note whose remote status has since closed
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const status = makeStatus();
+    syncState.statuses.set(task.url, status);
+    const { path, content } = TaskNoteMapper.map(task, context);
+    vault.notes.set(path, content);
+    const projectManagement = new FakeProjectManagement();
+    const action = makeAction(vault, syncState, projectManagement);
+    const closed: TaskData = { ...task, state: 'closed', updatedAt: '2026-09-18T11:00:00Z' };
+    syncState.identity = {
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Todo' },
+        { id: 'PVTSSF_3', name: 'Done' },
+      ],
+    };
+
+    // When — the remote change is applied
+    await action.execute({ task: closed, ...context });
+
+    // Then — the board Status is mirrored to the done option
+    expect(projectManagement.boardStatusCalls).toEqual([
+      { issueUrl: task.url, statusOptionId: 'PVTSSF_3' },
+    ]);
   });
 });

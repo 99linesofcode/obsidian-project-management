@@ -102,7 +102,7 @@ export class SyncScheduler extends Component {
     const previous = this.chains.get(projectName) ?? Promise.resolve();
     const next = previous.then(() => {
       if (kind === 'delete') {
-        return this.handleDeletedNote.execute({ notePath: path });
+        return this.handleDeletedNote.execute({ notePath: path, projectName });
       }
       return this.reconcileTask.execute({
         notePath: path,

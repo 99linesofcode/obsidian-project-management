@@ -5,6 +5,7 @@ import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { BoardStatusAction } from './BoardStatusAction.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 
 export interface ApplyRemoteChangeInput {
@@ -13,16 +14,17 @@ export interface ApplyRemoteChangeInput {
   syncedAt: string;
 }
 
-// UC3: mirror a remote change onto an existing task note. Locates the note
+// UC3/UC7: mirror a remote change onto an existing task note. Locates the note
 // via its Status record, re-maps the content, renames on a title change,
-// rewrites on a body/status change, and updates the Status record. Skips
-// silently when nothing changed. A task with no Status record is treated as
-// new and delegated to CreateTaskNoteAction.
+// rewrites on a body/status change, mirrors a status flip onto the board, and
+// updates the Status record. Skips silently when nothing changed. A task with
+// no Status record is treated as new and delegated to CreateTaskNoteAction.
 export class ApplyRemoteChangeAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
     private readonly createTaskNote: CreateTaskNoteAction,
+    private readonly boardStatus: BoardStatusAction,
   ) {}
 
   async execute(input: ApplyRemoteChangeInput): Promise<void> {
@@ -64,6 +66,16 @@ export class ApplyRemoteChangeAction {
     const existingContent = existing?.content ?? '';
     if (existingContent !== content) {
       await this.vault.writeNote(path, content);
+    }
+
+    // A remote status flip is mirrored onto the board so the card stays in
+    // step with the issue even when the change came from outside the board.
+    if (newStatus !== status.lastSyncedStatus) {
+      await this.boardStatus.execute({
+        projectName: input.projectName,
+        url: input.task.url,
+        status: newStatus,
+      });
     }
 
     const updated: Status = {

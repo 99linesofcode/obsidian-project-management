@@ -20,6 +20,8 @@ import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
+import { ApplyBoardChangeAction } from '../../../src/Domain/Actions/ApplyBoardChangeAction.js';
+import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
@@ -77,6 +79,9 @@ class FakeSyncState implements SyncStatePort {
   async getIdentity(): Promise<null> {
     return null;
   }
+  async list(): Promise<Status[]> {
+    return [];
+  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
@@ -96,6 +101,15 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   async setTaskState(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+  async fetchBoardItems(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async setBoardStatus(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+  async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
   }
 }
@@ -129,9 +143,9 @@ const fakeSyncProject = { execute: vi.fn(async () => {}) } as unknown as SyncPro
 // A fake delete handler that records its invocations, so the scheduler's
 // wiring of the delete path is observable.
 class FakeHandleDeleted {
-  calls: Array<{ notePath: string }> = [];
+  calls: Array<{ notePath: string; projectName: string }> = [];
 
-  async execute(input: { notePath: string }): Promise<void> {
+  async execute(input: { notePath: string; projectName: string }): Promise<void> {
     this.calls.push(input);
   }
 }
@@ -155,12 +169,19 @@ describe('SyncScheduler', () => {
     const syncState = new FakeSyncState();
     const projectManagement = new FakeProjectManagement();
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-    const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
+    const applyRemoteChange = new ApplyRemoteChangeAction(
+      vault,
+      syncState,
+      createTaskNote,
+      new BoardStatusAction(syncState, projectManagement, 'Done'),
+    );
+    const applyBoardChange = new ApplyBoardChangeAction(syncState, projectManagement, vault, 'Done');
     const syncProject = new SyncProjectAction(
       projectManagement,
       syncState,
       applyRemoteChange,
       createTaskNote,
+      applyBoardChange,
     );
     const reconcile = new FakeReconcile();
     const handleDeleted = new FakeHandleDeleted();

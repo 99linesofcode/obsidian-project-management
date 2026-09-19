@@ -1,4 +1,5 @@
 import type { AttachProjectData } from '../../Domain/DataTransferObjects/AttachProjectData.js';
+import type { BoardItemData } from '../../Domain/DataTransferObjects/BoardItemData.js';
 import type {
   ProjectIdentityData,
   ProjectStatusOption,
@@ -72,6 +73,61 @@ const ORG_PROJECT_QUERY = `
           }
         }
       }
+    }
+  }
+`;
+
+const BOARD_ITEMS_QUERY = `
+  query BoardItems($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        items(first: 100) {
+          nodes {
+            id
+            type
+            content {
+              ... on Issue {
+                url
+              }
+            }
+            fieldValues(first: 20) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field {
+                    ... on ProjectV2SingleSelectField {
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const SET_BOARD_STATUS_MUTATION = `
+  mutation SetBoardStatus($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+    updateProjectV2ItemFieldValue(
+      input: {
+        projectId: $projectId
+        itemId: $itemId
+        fieldId: $fieldId
+        value: { singleSelectOptionId: $optionId }
+      }
+    ) {
+      projectV2Item { id }
+    }
+  }
+`;
+
+const ADD_BOARD_ITEM_MUTATION = `
+  mutation AddBoardItem($projectId: ID!, $contentId: ID!) {
+    addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+      item { id }
     }
   }
 `;
@@ -181,6 +237,83 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
+  async fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]> {
+    const data = await this.postQuery(BOARD_ITEMS_QUERY, { projectId: projectNodeId });
+    const project = data.node;
+    if (!isRecord(project) || !isRecord(project.items) || !Array.isArray(project.items.nodes)) {
+      throw new Error('GitHubAdapter: unexpected board items response shape');
+    }
+    return project.items.nodes
+      .filter(isRecord)
+      .map((node) => this.mapBoardItem(node))
+      .filter((item): item is BoardItemData => item !== null);
+  }
+
+  async setBoardStatus(
+    projectNodeId: string,
+    statusFieldId: string,
+    issueUrl: string,
+    statusOptionId: string,
+  ): Promise<void> {
+    const items = await this.fetchBoardItems(projectNodeId);
+    const item = items.find((candidate) => candidate.issueUrl === issueUrl);
+    if (!item) {
+      throw new Error(`GitHubAdapter: no board item for ${issueUrl}`);
+    }
+    await this.postQuery(SET_BOARD_STATUS_MUTATION, {
+      projectId: projectNodeId,
+      itemId: item.itemId,
+      fieldId: statusFieldId,
+      optionId: statusOptionId,
+    });
+  }
+
+  async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
+    const task = await this.fetchTask(issueUrl);
+    await this.postQuery(ADD_BOARD_ITEM_MUTATION, {
+      projectId: projectNodeId,
+      contentId: task.nodeId,
+    });
+  }
+
+  private mapBoardItem(node: Record<string, unknown>): BoardItemData | null {
+    if (typeof node.id !== 'string') {
+      return null;
+    }
+    const type = node.type === 'DRAFT_ISSUE' ? 'DRAFT_ISSUE' : 'ISSUE';
+    const content = isRecord(node.content) && typeof node.content.url === 'string'
+      ? node.content.url
+      : undefined;
+    const statusOptionName = this.statusOptionName(node.fieldValues);
+    const item: BoardItemData = { itemId: node.id, type };
+    if (content !== undefined) {
+      item.issueUrl = content;
+    }
+    if (statusOptionName !== undefined) {
+      item.statusOptionName = statusOptionName;
+    }
+    return item;
+  }
+
+  // Finds the current Status single-select value's option name among a card's
+  // field values, so the core can tell whether the card is done.
+  private statusOptionName(fieldValues: unknown): string | undefined {
+    if (!isRecord(fieldValues) || !Array.isArray(fieldValues.nodes)) {
+      return undefined;
+    }
+    for (const value of fieldValues.nodes) {
+      if (
+        isRecord(value) &&
+        typeof value.name === 'string' &&
+        isRecord(value.field) &&
+        value.field.name === 'Status'
+      ) {
+        return value.name;
+      }
+    }
+    return undefined;
+  }
+
   private issueNumberFromUrl(url: string): number {
     const segments = this.pathSegments(url);
     const numberRaw = segments[segments.length - 1];
@@ -202,6 +335,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     return {
       url: typeof issue.html_url === 'string' ? issue.html_url : '',
       remoteId: typeof issue.number === 'number' ? issue.number : 0,
+      nodeId: typeof issue.node_id === 'string' ? issue.node_id : '',
       title: typeof issue.title === 'string' ? issue.title : '',
       body: typeof issue.body === 'string' ? issue.body : '',
       state: issue.state === 'closed' ? 'closed' : 'open',

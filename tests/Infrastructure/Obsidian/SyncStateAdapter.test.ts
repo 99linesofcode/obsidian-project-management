@@ -136,6 +136,33 @@ describe('SyncStateAdapter', () => {
     expect(await adapter.get(status.url)).toBeNull();
   });
 
+  it('lists every stored status record', async () => {
+    // Given — two stored status records
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    const other: Status = { ...status, url: 'https://github.com/acme/widgets/issues/43', remoteId: 43 };
+    await adapter.set(status);
+    await adapter.set(other);
+
+    // When — all records are listed
+    const result = await adapter.list();
+
+    // Then — both records are returned
+    expect(result).toEqual([status, other]);
+  });
+
+  it('lists an empty array when no status records exist', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — all records are listed
+    const result = await adapter.list();
+
+    // Then — an empty array is returned
+    expect(result).toEqual([]);
+  });
+
   it('round-trips a project identity under a namespaced key', async () => {
     // Given — an empty storage
     const { storage } = fakeStorage();

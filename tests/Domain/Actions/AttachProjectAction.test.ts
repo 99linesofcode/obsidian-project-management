@@ -30,6 +30,18 @@ class FakePort implements ProjectManagementPort {
   async setTaskState(): Promise<never> {
     throw new Error('not used in this test');
   }
+
+  async fetchBoardItems(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async setBoardStatus(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async addBoardItem(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const identity: ProjectIdentityData = {

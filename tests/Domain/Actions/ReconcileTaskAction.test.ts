@@ -4,6 +4,7 @@ import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNote
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { PushNoteAction } from '../../../src/Domain/Actions/PushNoteAction.js';
 import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStatusAction.js';
+import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
@@ -94,6 +95,10 @@ class FakeSyncState implements SyncStatePort {
   async remove(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  async list(): Promise<Status[]> {
+    return [];
+  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
@@ -123,11 +128,24 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return this.updated;
   }
+
+  async fetchBoardItems(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async setBoardStatus(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async addBoardItem(): Promise<void> {
+    throw new Error('not used in this test');
+  }
 }
 
 const task: TaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
+  nodeId: 'I_kwDOAAAA42',
   title: 'Fix the Bug!',
   body: 'The bug happens when the widget is resized.',
   state: 'open',
@@ -155,9 +173,18 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
 
 function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagement: FakeProjectManagement) {
   const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-  const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
+  const applyRemoteChange = new ApplyRemoteChangeAction(
+    vault,
+    syncState,
+    createTaskNote,
+    new BoardStatusAction(syncState, projectManagement, 'Done'),
+  );
   const pushNote = new PushNoteAction(projectManagement);
-  const propagateStatus = new PropagateStatusAction(projectManagement, syncState);
+  const propagateStatus = new PropagateStatusAction(
+    projectManagement,
+    syncState,
+    new BoardStatusAction(syncState, projectManagement, 'Done'),
+  );
   return new ReconcileTaskAction(
     vault,
     syncState,

@@ -8,6 +8,8 @@ import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
+import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
@@ -73,10 +75,11 @@ export default class ProjectManagementPlugin extends Plugin {
 
     const github = new GitHubAdapter(transport, repoUrl);
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-    const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
+    const boardStatus = new BoardStatusAction(syncState, github, this.settings.doneOptionName);
+    const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote, boardStatus);
     const pushNote = new PushNoteAction(github);
-    const propagateStatus = new PropagateStatusAction(github, syncState);
-    const handleDeletedNote = new HandleDeletedNoteAction(syncState, github);
+    const propagateStatus = new PropagateStatusAction(github, syncState, boardStatus);
+    const handleDeletedNote = new HandleDeletedNoteAction(syncState, github, boardStatus);
     const reconcileTask = new ReconcileTaskAction(
       vault,
       syncState,
@@ -87,11 +90,18 @@ export default class ProjectManagementPlugin extends Plugin {
       propagateStatus,
       new VerdictResolver(),
     );
+    const applyBoardChange = new ApplyBoardChangeAction(
+      syncState,
+      github,
+      vault,
+      this.settings.doneOptionName,
+    );
     const syncProject = new SyncProjectAction(
       github,
       syncState,
       applyRemoteChange,
       createTaskNote,
+      applyBoardChange,
     );
     const discoverProjects = new DiscoverProjectsAction(vault, new AttachProjectAction(github));
 
