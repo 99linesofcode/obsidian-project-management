@@ -7,6 +7,7 @@ export interface ProjectStatusOption {
 }
 
 export interface ProjectIdentityData {
+  repoUrl: string;
   repoNodeId: string;
   projectNodeId: string;
   statusFieldId: string;

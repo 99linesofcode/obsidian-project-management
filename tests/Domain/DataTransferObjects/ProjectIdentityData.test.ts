@@ -25,6 +25,7 @@ describe('ProjectIdentityData', () => {
   it('carries the resolved github identities', () => {
     // Given — the identities resolved for a project
     const data: ProjectIdentityData = {
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
@@ -35,6 +36,7 @@ describe('ProjectIdentityData', () => {
     };
 
     // When/Then — the fields are readable as authored
+    expect(data.repoUrl).toBe('https://github.com/acme/widgets');
     expect(data.repoNodeId).toBe('R_kgDOAAAA');
     expect(data.projectNodeId).toBe('PVT_123');
     expect(data.statusFieldId).toBe('PVTF_456');

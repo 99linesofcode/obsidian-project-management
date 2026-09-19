@@ -144,6 +144,7 @@ describe('HandleDeletedNoteAction', () => {
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
     syncState.identity = {
+      repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',

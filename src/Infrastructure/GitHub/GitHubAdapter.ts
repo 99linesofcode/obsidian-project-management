@@ -159,26 +159,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // Implements the project management port against GitHub's GraphQL API.
 // Maps raw responses onto the identity DTO; the core never sees GitHub JSON.
-// The adapter is bound to one repo (resolved from the attached project's
-// repo url) because the REST since-poll needs owner/name and the port's
-// fetchChangedTasks only carries the since cursor.
+// The adapter is repo-agnostic infrastructure: the repo url is passed per
+// call (from the attached project's identity) rather than bound at
+// construction, so constructing it can never fail on a bad url.
 export class GitHubAdapter implements ProjectManagementPort {
-  private readonly repo: RepoParts;
-
-  constructor(
-    private readonly transport: Transport,
-    repoUrl: string,
-  ) {
-    this.repo = this.parseRepoUrl(repoUrl);
-  }
+  constructor(private readonly transport: Transport) {}
 
   async fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null> {
     const board = this.parseBoardUrl(data.boardUrl);
+    const repo = this.parseRepoUrl(data.repoUrl);
 
-    const repoNodeId = await this.fetchRepoNodeId(this.repo);
+    const repoNodeId = await this.fetchRepoNodeId(repo);
     const project = await this.fetchProject(board);
 
     return {
+      repoUrl: data.repoUrl,
       repoNodeId,
       projectNodeId: project.id,
       statusFieldId: project.statusFieldId,
@@ -186,12 +181,13 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchChangedTasks(since: string): Promise<TaskData[]> {
+  async fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]> {
+    const repo = this.parseRepoUrl(repoUrl);
     // Single page is fine for v1: the since cursor bounds the result set and
     // per_page=100 covers a typical poll window. Pagination lands with the
     // v2 slices ticket if a project outgrows one page.
     const path =
-      `/repos/${this.repo.owner}/${this.repo.name}/issues` +
+      `/repos/${repo.owner}/${repo.name}/issues` +
       `?state=all&since=${encodeURIComponent(since)}&per_page=100`;
 
     const response = await this.transport.get(path);
@@ -216,10 +212,11 @@ export class GitHubAdapter implements ProjectManagementPort {
     return issue.labels.some((label) => isRecord(label) && label.name === 'type:task');
   }
 
-  async fetchUnpromotedIssues(): Promise<TaskData[]> {
+  async fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]> {
+    const repo = this.parseRepoUrl(repoUrl);
     // Open issues only; the client-side filter keeps issues that are neither a
     // task nor a slice, so the promote modal only offers what can be promoted.
-    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues?state=open&per_page=100`;
+    const path = `/repos/${repo.owner}/${repo.name}/issues?state=open&per_page=100`;
 
     const response = await this.transport.get(path);
     if (response.status !== 200) {
@@ -247,8 +244,9 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   async addLabel(url: string, label: string): Promise<void> {
+    const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
-    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}/labels`;
+    const path = `/repos/${repo.owner}/${repo.name}/issues/${number}/labels`;
 
     const response = await this.transport.postPath(path, JSON.stringify({ labels: [label] }));
     if (response.status !== 200) {
@@ -257,8 +255,9 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   async fetchTask(url: string): Promise<TaskData> {
+    const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
-    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}`;
+    const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
 
     const response = await this.transport.get(path);
     if (response.status !== 200) {
@@ -271,8 +270,9 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   async updateTask(url: string, input: { title: string; body: string }): Promise<TaskData> {
+    const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
-    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}`;
+    const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
 
     const response = await this.transport.patch(path, JSON.stringify(input));
     if (response.status !== 200) {
@@ -285,8 +285,9 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+    const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
-    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}`;
+    const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
 
     const response = await this.transport.patch(path, JSON.stringify({ state }));
     if (response.status !== 200) {
@@ -494,7 +495,12 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private parseRepoUrl(url: string): RepoParts {
-    const path = this.pathSegments(url);
+    let path: string[];
+    try {
+      path = this.pathSegments(url);
+    } catch {
+      throw new Error(`GitHubAdapter: invalid repo url ${url}`);
+    }
     if (path.length < 2) {
       throw new Error(`GitHubAdapter: invalid repo url ${url}`);
     }
@@ -502,7 +508,12 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private parseBoardUrl(url: string): BoardParts {
-    const path = this.pathSegments(url);
+    let path: string[];
+    try {
+      path = this.pathSegments(url);
+    } catch {
+      throw new Error(`GitHubAdapter: invalid board url ${url}`);
+    }
     const kind = path[0];
     const login = path[1];
     const projects = path[2];

@@ -41,7 +41,7 @@ export class DiscoverProjectsAction {
           boardUrl: note.board,
         });
         if (identity) {
-          projects.push({ projectName: note.projectName, identity });
+          projects.push({ projectName: note.projectName, identity: { ...identity, repoUrl: note.url } });
         }
       } catch (error) {
         errors.push(error);
