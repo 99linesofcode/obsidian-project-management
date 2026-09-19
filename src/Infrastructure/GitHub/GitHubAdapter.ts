@@ -495,7 +495,12 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private parseRepoUrl(url: string): RepoParts {
-    const path = this.pathSegments(url);
+    let path: string[];
+    try {
+      path = this.pathSegments(url);
+    } catch {
+      throw new Error(`GitHubAdapter: invalid repo url ${url}`);
+    }
     if (path.length < 2) {
       throw new Error(`GitHubAdapter: invalid repo url ${url}`);
     }
@@ -503,7 +508,12 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private parseBoardUrl(url: string): BoardParts {
-    const path = this.pathSegments(url);
+    let path: string[];
+    try {
+      path = this.pathSegments(url);
+    } catch {
+      throw new Error(`GitHubAdapter: invalid board url ${url}`);
+    }
     const kind = path[0];
     const login = path[1];
     const projects = path[2];

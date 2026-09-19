@@ -727,4 +727,31 @@ describe('GitHubAdapter', () => {
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
     expect(bodies[0]).toBe(JSON.stringify({ labels: ['type:task'] }));
   });
+
+  it('reports an invalid repo url clearly instead of a TypeError', async () => {
+    // Given — an adapter and an empty repo url
+    const { transport } = fakeTransport([]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — a repo-scoped call is made with the empty url
+    // Then — it fails with a clear error, not a raw TypeError
+    await expect(adapter.fetchChangedTasks('', '2026-09-18T00:00:00Z')).rejects.toThrow(
+      /invalid repo url/,
+    );
+  });
+
+  it('reports an invalid board url clearly instead of a TypeError', async () => {
+    // Given — an adapter and an empty board url
+    const { transport } = fakeTransport([]);
+    const adapter = new GitHubAdapter(transport);
+    const data: AttachProjectData = {
+      pm: 'github',
+      repoUrl: 'https://github.com/acme/widgets',
+      boardUrl: '',
+    };
+
+    // When — the identity is resolved with the empty board url
+    // Then — it fails with a clear error, not a raw TypeError
+    await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/invalid board url/);
+  });
 });
