@@ -96,4 +96,43 @@ describe('SyncStateAdapter', () => {
       'lastPoll.Acme Widgets': '2026-09-18T12:00:00Z',
     });
   });
+
+  it('finds a status record by its note path', async () => {
+    // Given — a stored status record
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.set(status);
+
+    // When — the record is looked up by its note path
+    const result = await adapter.findByNotePath(status.notePath);
+
+    // Then — the record is returned
+    expect(result).toEqual(status);
+  });
+
+  it('returns null when no record matches the note path', async () => {
+    // Given — a stored status record
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.set(status);
+
+    // When — an unknown note path is looked up
+    const result = await adapter.findByNotePath('Projecten/Other/taken/99-unknown.md');
+
+    // Then — null is returned
+    expect(result).toBeNull();
+  });
+
+  it('removes a status record by its url', async () => {
+    // Given — a stored status record
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.set(status);
+
+    // When — the record is removed
+    await adapter.remove(status.url);
+
+    // Then — the record is gone
+    expect(await adapter.get(status.url)).toBeNull();
+  });
 });

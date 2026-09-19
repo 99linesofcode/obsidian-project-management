@@ -40,6 +40,10 @@ class FakeVault implements VaultPort {
   onNoteChanged(): void {
     throw new Error('not used in this test');
   }
+
+  onNoteDeleted(): void {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -53,6 +57,14 @@ class FakeSyncState implements SyncStatePort {
 
   async set(status: Status): Promise<void> {
     this.statuses.set(status.url, status);
+  }
+
+  async findByNotePath(): Promise<Status | null> {
+    return null;
+  }
+
+  async remove(): Promise<void> {
+    throw new Error('not used in this test');
   }
 
   async getLastPoll(): Promise<string | null> {
@@ -82,6 +94,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 
   async updateTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+
+  async setTaskState(): Promise<TaskData> {
     throw new Error('not used in this test');
   }
 }

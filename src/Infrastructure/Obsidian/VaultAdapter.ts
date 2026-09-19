@@ -53,4 +53,14 @@ export class VaultAdapter implements VaultPort {
     });
     this.registerEvent(eventRef);
   }
+
+  onNoteDeleted(cb: (path: string) => void): void {
+    // Only task notes under Projecten/ are synced; everything else is ignored.
+    const eventRef = this.app.vault.on('delete', (file) => {
+      if (file instanceof TFile && file.extension === 'md' && file.path.startsWith('Projecten/')) {
+        cb(file.path);
+      }
+    });
+    this.registerEvent(eventRef);
+  }
 }

@@ -33,6 +33,10 @@ class FakeVault implements VaultPort {
   onNoteChanged(): void {
     throw new Error('not used in this test');
   }
+
+  onNoteDeleted(): void {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -44,6 +48,14 @@ class FakeSyncState implements SyncStatePort {
 
   async set(status: Status): Promise<void> {
     this.stored.push(status);
+  }
+
+  async findByNotePath(): Promise<Status | null> {
+    return null;
+  }
+
+  async remove(): Promise<void> {
+    throw new Error('not used in this test');
   }
 
   async getLastPoll(): Promise<string | null> {

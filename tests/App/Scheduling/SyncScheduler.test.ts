@@ -20,6 +20,7 @@ import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
+import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
@@ -30,6 +31,7 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // through the real composed action, without touching Obsidian or GitHub.
 class FakeVault implements VaultPort {
   noteChangedCb: ((path: string) => void) | null = null;
+  noteDeletedCb: ((path: string) => void) | null = null;
 
   async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
@@ -40,8 +42,14 @@ class FakeVault implements VaultPort {
   onNoteChanged(cb: (path: string) => void): void {
     this.noteChangedCb = cb;
   }
+  onNoteDeleted(cb: (path: string) => void): void {
+    this.noteDeletedCb = cb;
+  }
   fireNoteChanged(path: string): void {
     this.noteChangedCb?.(path);
+  }
+  fireNoteDeleted(path: string): void {
+    this.noteDeletedCb?.(path);
   }
 }
 
@@ -52,6 +60,10 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async set(): Promise<void> {}
+  async findByNotePath(): Promise<Status | null> {
+    return null;
+  }
+  async remove(): Promise<void> {}
   async getLastPoll(): Promise<string | null> {
     return null;
   }
@@ -74,6 +86,9 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   async updateTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+  async setTaskState(): Promise<TaskData> {
     throw new Error('not used in this test');
   }
 }
@@ -104,6 +119,16 @@ class FakeReconcile {
 
 const fakeSyncProject = { execute: vi.fn(async () => {}) } as unknown as SyncProjectAction;
 
+// A fake delete handler that records its invocations, so the scheduler's
+// wiring of the delete path is observable.
+class FakeHandleDeleted {
+  calls: Array<{ notePath: string }> = [];
+
+  async execute(input: { notePath: string }): Promise<void> {
+    this.calls.push(input);
+  }
+}
+
 describe('SyncScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -131,12 +156,14 @@ describe('SyncScheduler', () => {
       createTaskNote,
     );
     const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       syncProject,
       ['Acme Widgets', 'Other'],
       60_000,
       vault,
       reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
       2000,
     );
     scheduler.load();
@@ -155,12 +182,14 @@ describe('SyncScheduler', () => {
     // Given — a scheduler subscribed to vault note changes
     const vault = new FakeVault();
     const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       [],
       60_000,
       vault,
       reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
       0,
     );
     scheduler.load();
@@ -179,12 +208,14 @@ describe('SyncScheduler', () => {
     // Given — a scheduler subscribed to vault note changes
     const vault = new FakeVault();
     const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       [],
       60_000,
       vault,
       reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
       0,
     );
     scheduler.load();
@@ -201,12 +232,14 @@ describe('SyncScheduler', () => {
     // Given — a scheduler with a 2s debounce
     const vault = new FakeVault();
     const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       [],
       60_000,
       vault,
       reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
       2000,
     );
     scheduler.load();
@@ -226,12 +259,14 @@ describe('SyncScheduler', () => {
     // Given — a scheduler with no debounce and a slow reconcile
     const vault = new FakeVault();
     const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       [],
       60_000,
       vault,
       reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
       0,
     );
     scheduler.load();
@@ -254,5 +289,55 @@ describe('SyncScheduler', () => {
     // Then — the second reconcile runs only after the first finished
     expect(reconcile.calls).toHaveLength(2);
     expect(reconcile.maxActive).toBe(1);
+  });
+
+  it('wires note deletions to the delete handler, debounced per project', async () => {
+    // Given — a scheduler subscribed to vault note deletions
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
+      2000,
+    );
+    scheduler.load();
+
+    // When — a task note under Projecten is deleted twice within the window
+    vault.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    vault.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(2000);
+
+    // Then — the delete handler runs once with the note path
+    expect(handleDeleted.calls).toHaveLength(1);
+    expect(handleDeleted.calls[0]!.notePath).toBe('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+  });
+
+  it('ignores note deletions outside Projecten', async () => {
+    // Given — a scheduler subscribed to vault note deletions
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a note outside Projecten is deleted
+    vault.fireNoteDeleted('Notes/random.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — no delete handler is scheduled
+    expect(handleDeleted.calls).toHaveLength(0);
   });
 });

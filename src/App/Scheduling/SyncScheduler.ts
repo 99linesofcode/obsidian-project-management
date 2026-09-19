@@ -1,4 +1,5 @@
 import { Component } from 'obsidian';
+import type { HandleDeletedNoteAction } from '../../Domain/Actions/HandleDeletedNoteAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
 import type { SyncProjectAction } from '../../Domain/Actions/SyncProjectAction.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
@@ -13,11 +14,12 @@ declare const window: {
   clearTimeout(id: number): void;
 };
 
-// Delivery mechanics only: turns a timer and vault note changes into
-// per-project sync invocations. Zero decisions — the actions, project list,
-// interval and debounce are injected. Note changes are debounced per project
-// and serialised per project (a promise chain per project name), so a poll
-// tick and an edit-triggered reconcile never overlap for the same project.
+// Delivery mechanics only: turns a timer and vault note changes/deletions
+// into per-project sync invocations. Zero decisions — the actions, project
+// list, interval and debounce are injected. Note changes and deletions are
+// debounced per project and serialised per project (a promise chain per
+// project name), so a poll tick and an edit-triggered reconcile never overlap
+// for the same project.
 export class SyncScheduler extends Component {
   private readonly chains = new Map<string, Promise<void>>();
   private readonly debounceTimers = new Map<string, number>();
@@ -28,6 +30,7 @@ export class SyncScheduler extends Component {
     private readonly intervalMs: number,
     private readonly vault: VaultPort,
     private readonly reconcileTask: ReconcileTaskAction,
+    private readonly handleDeletedNote: HandleDeletedNoteAction,
     private readonly debounceMs: number,
   ) {
     super();
@@ -43,7 +46,14 @@ export class SyncScheduler extends Component {
     this.vault.onNoteChanged((path) => {
       const projectName = this.projectNameFromPath(path);
       if (projectName) {
-        this.scheduleReconcile(projectName, path);
+        this.schedule('reconcile', projectName, path);
+      }
+    });
+
+    this.vault.onNoteDeleted((path) => {
+      const projectName = this.projectNameFromPath(path);
+      if (projectName) {
+        this.schedule('delete', projectName, path);
       }
     });
   }
@@ -64,27 +74,34 @@ export class SyncScheduler extends Component {
     return segments[1] ?? null;
   }
 
-  private scheduleReconcile(projectName: string, path: string): void {
-    const existing = this.debounceTimers.get(projectName);
+  // Debounces per project and per kind, so a modify and a delete for the same
+  // project don't coalesce into one action; both still serialise on the same
+  // per-project chain.
+  private schedule(kind: 'reconcile' | 'delete', projectName: string, path: string): void {
+    const key = `${kind}:${projectName}`;
+    const existing = this.debounceTimers.get(key);
     if (existing !== undefined) {
       window.clearTimeout(existing);
     }
     const timer = window.setTimeout(() => {
-      this.debounceTimers.delete(projectName);
-      this.enqueueReconcile(projectName, path);
+      this.debounceTimers.delete(key);
+      this.enqueue(kind, projectName, path);
     }, this.debounceMs);
-    this.debounceTimers.set(projectName, timer);
+    this.debounceTimers.set(key, timer);
   }
 
-  private enqueueReconcile(projectName: string, path: string): void {
+  private enqueue(kind: 'reconcile' | 'delete', projectName: string, path: string): void {
     const previous = this.chains.get(projectName) ?? Promise.resolve();
-    const next = previous.then(() =>
-      this.reconcileTask.execute({
+    const next = previous.then(() => {
+      if (kind === 'delete') {
+        return this.handleDeletedNote.execute({ notePath: path });
+      }
+      return this.reconcileTask.execute({
         notePath: path,
         projectName,
         syncedAt: new Date().toISOString(),
-      }),
-    );
+      });
+    });
     this.chains.set(projectName, next);
   }
 }

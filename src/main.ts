@@ -7,6 +7,8 @@ import {
 import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
+import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
 import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
@@ -76,6 +78,8 @@ export default class ProjectManagementPlugin extends Plugin {
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
     const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
     const pushNote = new PushNoteAction(github);
+    const propagateStatus = new PropagateStatusAction(github, syncState);
+    const handleDeletedNote = new HandleDeletedNoteAction(syncState, github);
     const reconcileTask = new ReconcileTaskAction(
       vault,
       syncState,
@@ -83,6 +87,7 @@ export default class ProjectManagementPlugin extends Plugin {
       createTaskNote,
       applyRemoteChange,
       pushNote,
+      propagateStatus,
       new VerdictResolver(),
     );
     const syncProject = new SyncProjectAction(
@@ -98,6 +103,7 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.pollIntervalMinutes * 60 * 1000,
       vault,
       reconcileTask,
+      handleDeletedNote,
       this.settings.debounceSeconds * 1000,
     );
     this.addChild(scheduler);
