@@ -186,14 +186,17 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]> {
+  async fetchChangedTasks(repoUrl: string, since?: string): Promise<TaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
     // Single page is fine for v1: the since cursor bounds the result set and
     // per_page=100 covers a typical poll window. Pagination lands with the
     // v2 slices ticket if a project outgrows one page.
+    const filter =
+      since === undefined
+        ? 'state=all'
+        : `state=all&since=${encodeURIComponent(since)}`;
     const path =
-      `/repos/${repo.owner}/${repo.name}/issues` +
-      `?state=all&since=${encodeURIComponent(since)}&per_page=100`;
+      `/repos/${repo.owner}/${repo.name}/issues?${filter}&per_page=100`;
 
     const response = await this.transport.get(path);
     if (response.status !== 200) {

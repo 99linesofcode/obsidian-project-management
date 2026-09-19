@@ -276,6 +276,22 @@ describe('GitHubAdapter', () => {
     );
   });
 
+  it('omits the since filter when no cursor is given', async () => {
+    // Given — a REST response and a transport that records the requested path
+    const issuesResponse = { status: 200, json: [] };
+    const { transport, paths } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter fetches changed tasks with no since cursor
+    const result = await adapter.fetchChangedTasks(
+      'https://github.com/acme/widgets',
+    );
+
+    // Then — the since filter is omitted from the requested path
+    expect(paths[0]).toBe('/repos/acme/widgets/issues?state=all&per_page=100');
+    expect(result).toEqual([]);
+  });
+
   it('maps a closed issue to a closed task state', async () => {
     // Given — a REST response with a closed task issue
     const issuesResponse = {
