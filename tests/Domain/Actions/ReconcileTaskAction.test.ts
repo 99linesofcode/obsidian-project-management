@@ -3,6 +3,7 @@ import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAc
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { PushNoteAction } from '../../../src/Domain/Actions/PushNoteAction.js';
+import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStatusAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
@@ -47,6 +48,10 @@ class FakeVault implements VaultPort {
   onNoteChanged(): void {
     throw new Error('not used in this test');
   }
+
+  onNoteDeleted(): void {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -69,12 +74,21 @@ class FakeSyncState implements SyncStatePort {
   async setLastPoll(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  async findByNotePath(): Promise<Status | null> {
+    return null;
+  }
+
+  async remove(): Promise<void> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
   remote: TaskData = task;
   updated: TaskData = task;
   updateCalls: Array<{ url: string; input: { title: string; body: string } }> = [];
+  stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
 
   async fetchProjectIdentity(): Promise<null> {
     return null;
@@ -90,6 +104,11 @@ class FakeProjectManagement implements ProjectManagementPort {
 
   async updateTask(url: string, input: { title: string; body: string }): Promise<TaskData> {
     this.updateCalls.push({ url, input });
+    return this.updated;
+  }
+
+  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+    this.stateCalls.push({ url, state });
     return this.updated;
   }
 }
@@ -126,6 +145,7 @@ function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagemen
   const createTaskNote = new CreateTaskNoteAction(vault, syncState);
   const applyRemoteChange = new ApplyRemoteChangeAction(vault, syncState, createTaskNote);
   const pushNote = new PushNoteAction(projectManagement);
+  const propagateStatus = new PropagateStatusAction(projectManagement, syncState);
   return new ReconcileTaskAction(
     vault,
     syncState,
@@ -133,6 +153,7 @@ function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagemen
     createTaskNote,
     applyRemoteChange,
     pushNote,
+    propagateStatus,
     new VerdictResolver(),
   );
 }
@@ -272,22 +293,73 @@ describe('ReconcileTaskAction', () => {
     expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
   });
 
-  it('defers a local status change (no action)', async () => {
-    // Given — a note whose status the user changed, remote unchanged
+  it('propagates a local status flip to the issue and refreshes the baseline', async () => {
+    // Given — a note whose status the user flipped to done, remote unchanged
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.statuses.set(task.url, makeStatus());
     vault.notes.set(path, TaskNoteMapper.map({ ...task, state: 'closed' }, context).content);
     const projectManagement = new FakeProjectManagement();
+    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the note edit is reconciled
     await action.execute({ notePath: path, ...context });
 
-    // Then — nothing is pushed or applied (status push lands with t7)
-    expect(projectManagement.updateCalls).toEqual([]);
-    expect(vault.written).toEqual([]);
-    expect(syncState.setCalls).toEqual([]);
+    // Then — the issue is closed and the baseline is refreshed from the response
+    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'closed' }]);
+    expect(syncState.setCalls).toHaveLength(1);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
+    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe('2026-09-18T12:30:00Z');
+  });
+
+  it('lets the note win when both sides flipped the status differently', async () => {
+    // Given — both the note and the remote changed status since the last sync
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.statuses.set(task.url, makeStatus());
+    vault.notes.set(path, TaskNoteMapper.map({ ...task, state: 'closed' }, context).content);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.remote = { ...task, state: 'closed', updatedAt: task.updatedAt };
+    projectManagement.updated = { ...task, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the conflicting note edit is reconciled
+    await action.execute({ notePath: path, ...context });
+
+    // Then — the note's status is propagated to the remote and the baseline refreshed
+    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'closed' }]);
+    expect(syncState.setCalls).toHaveLength(1);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
+  });
+
+  it('mirrors the remote status onto the note without clobbering a pushed body', async () => {
+    // Given — a note whose body the user edited while the remote status changed
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.statuses.set(task.url, makeStatus());
+    vault.notes.set(path, TaskNoteMapper.map({ ...task, body: NEW_BODY }, context).content);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.remote = { ...task, state: 'closed', updatedAt: '2026-09-18T11:00:00Z' };
+    projectManagement.updated = { ...task, body: NEW_BODY, state: 'closed', updatedAt: '2026-09-18T12:30:00Z' };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the note edit is reconciled
+    await action.execute({ notePath: path, ...context });
+
+    // Then — the pushed body is sent to the issue
+    expect(projectManagement.updateCalls).toEqual([
+      { url: task.url, input: { title: task.title, body: NEW_BODY } },
+    ]);
+    // And the note keeps the pushed body but gains the remote status
+    const written = vault.written[0]!;
+    expect(written.path).toBe(path);
+    expect(written.content).toContain(`status: done`);
+    expect(written.content).toContain(NEW_BODY);
+    // And the baseline is refreshed from the push response
+    expect(syncState.setCalls).toHaveLength(1);
+    expect(syncState.setCalls[0]!.lastSyncedBodyHash).toBe(hash(NEW_BODY));
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
   });
 
   it('materialises via the create action when no status record exists', async () => {

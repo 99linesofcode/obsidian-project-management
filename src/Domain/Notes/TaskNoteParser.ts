@@ -44,3 +44,26 @@ export const TaskNoteParser = {
     return { url, status, body: split.body };
   },
 };
+
+// Rewrites the frontmatter status line of a task note, preserving the body
+// and every other frontmatter field. Used to mirror a remote status change
+// onto a note whose body was just pushed, without clobbering the pushed body.
+export function withStatus(content: string, status: 'open' | 'done'): string {
+  const lines = content.split('\n');
+  let inFrontmatter = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (i === 0 && line === '---') {
+      inFrontmatter = true;
+      continue;
+    }
+    if (inFrontmatter && line === '---') {
+      break;
+    }
+    if (inFrontmatter && line.startsWith('status:')) {
+      lines[i] = `status: ${status}`;
+      break;
+    }
+  }
+  return lines.join('\n');
+}

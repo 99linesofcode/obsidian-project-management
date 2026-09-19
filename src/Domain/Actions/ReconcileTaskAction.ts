@@ -1,7 +1,7 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import { taskStatusFromState } from '../Enums/TaskStatus.js';
 import type { Status } from '../Models/Status.js';
-import { TaskNoteParser } from '../Notes/TaskNoteParser.js';
+import { TaskNoteParser, withStatus } from '../Notes/TaskNoteParser.js';
 import { slugify, titleFromNotePath } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
@@ -11,6 +11,7 @@ import { ObservedState } from '../Reconciliation/ObservedState.js';
 import { VerdictResolver } from '../Reconciliation/VerdictResolver.js';
 import type { ApplyRemoteChangeAction } from './ApplyRemoteChangeAction.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
+import type { PropagateStatusAction } from './PropagateStatusAction.js';
 import type { PushNoteAction } from './PushNoteAction.js';
 
 export interface ReconcileTaskInput {
@@ -19,11 +20,11 @@ export interface ReconcileTaskInput {
   syncedAt: string;
 }
 
-// UC4: push a note edit. Reads the note, reconciles it against the remote and
-// the last-synced baseline, and pushes the note's body (and title when the
-// filename was renamed) onto the GitHub issue. The verdict's 'none' cell is
-// the echo guard: every write refreshes the full baseline, so our own writes
-// never bounce back as a push.
+// UC4/UC6: reconcile a note edit. Reads the note, reconciles it against the
+// remote and the last-synced baseline, and pushes the note's body (and title
+// when the filename was renamed) and status onto the GitHub issue. The
+// verdict's 'none' cell is the echo guard: every write refreshes the full
+// baseline, so our own writes never bounce back as a push.
 export class ReconcileTaskAction {
   constructor(
     private readonly vault: VaultPort,
@@ -32,6 +33,7 @@ export class ReconcileTaskAction {
     private readonly createTaskNote: CreateTaskNoteAction,
     private readonly applyRemoteChange: ApplyRemoteChangeAction,
     private readonly pushNote: PushNoteAction,
+    private readonly propagateStatus: PropagateStatusAction,
     private readonly verdictResolver: VerdictResolver,
   ) {}
 
@@ -95,18 +97,39 @@ export class ReconcileTaskAction {
       });
     }
 
-    // Status dimension: mirror a remote status change when we did not just
-    // push the body (the push already refreshed the baseline; applying the
-    // remote would clobber the pushed body). A local status change is
-    // deferred to t7's PropagateStatusAction — status push lands with the
-    // status-lifecycle ticket.
-    if (verdict.status === 'pull' && verdict.body === 'none') {
-      await this.applyRemoteChange.execute({
-        task: remote,
-        projectName: input.projectName,
-        syncedAt: input.syncedAt,
+    // Status dimension: a local status flip (or a conflict, where the note
+    // wins) propagates the note's status to the remote. A remote-only status
+    // change mirrors onto the note — via a targeted status-only rewrite when
+    // the body was just pushed (a full apply would clobber the pushed body),
+    // via the full apply otherwise.
+    if (verdict.status === 'push' || verdict.status === 'conflict') {
+      await this.propagateStatus.execute({
+        url: parsed.url,
+        status: parsed.status,
+        notePath: input.notePath,
       });
+    } else if (verdict.status === 'pull') {
+      if (verdict.body === 'push' || verdict.body === 'conflict') {
+        await this.applyStatusToNote(input.notePath, taskStatusFromState(remote.state));
+      } else if (verdict.body === 'none') {
+        await this.applyRemoteChange.execute({
+          task: remote,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+      }
     }
+  }
+
+  // Rewrites just the note's frontmatter status line, keeping the body that
+  // was just pushed. The body push above already refreshed the baseline, so
+  // the note and the baseline now agree on the mirrored status.
+  private async applyStatusToNote(notePath: string, status: 'open' | 'done'): Promise<void> {
+    const note = await this.vault.getNoteByPath(notePath);
+    if (!note) {
+      return;
+    }
+    await this.vault.writeNote(notePath, withStatus(note.content, status));
   }
 
   private async refreshBaseline(status: Status, updated: TaskData, notePath: string): Promise<void> {

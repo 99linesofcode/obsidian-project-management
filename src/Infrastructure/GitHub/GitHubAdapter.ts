@@ -167,6 +167,20 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
+  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+    const number = this.issueNumberFromUrl(url);
+    const path = `/repos/${this.repo.owner}/${this.repo.name}/issues/${number}`;
+
+    const response = await this.transport.patch(path, JSON.stringify({ state }));
+    if (response.status !== 200) {
+      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+    }
+    if (!isRecord(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+    return this.mapIssue(response.json);
+  }
+
   private issueNumberFromUrl(url: string): number {
     const segments = this.pathSegments(url);
     const numberRaw = segments[segments.length - 1];

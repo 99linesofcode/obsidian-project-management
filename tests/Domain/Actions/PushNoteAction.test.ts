@@ -34,6 +34,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.updateCalls.push({ url, input });
     return this.updated;
   }
+
+  async setTaskState(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
 }
 
 describe('PushNoteAction', () => {

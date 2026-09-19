@@ -338,4 +338,39 @@ describe('GitHubAdapter', () => {
       JSON.stringify({ title: 'fix the widget', body: 'The bug now also happens on resize.' }),
     );
   });
+
+  it('sets a task state and returns the updated issue', async () => {
+    // Given — a REST response for the closed issue
+    const closedResponse = {
+      status: 200,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/42',
+        number: 42,
+        title: 'Fix the Bug!',
+        body: 'The bug happens when the widget is resized.',
+        state: 'closed',
+        updated_at: '2026-09-18T12:30:00Z',
+        labels: [{ name: 'type:task' }],
+      },
+    };
+    const { transport, paths, bodies } = fakeTransport([closedResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter sets the task state to closed
+    const result = await adapter.setTaskState('https://github.com/acme/widgets/issues/42', 'closed');
+
+    // Then — the updated issue is mapped onto TaskData
+    expect(result).toEqual({
+      url: 'https://github.com/acme/widgets/issues/42',
+      remoteId: 42,
+      title: 'Fix the Bug!',
+      body: 'The bug happens when the widget is resized.',
+      state: 'closed',
+      updatedAt: '2026-09-18T12:30:00Z',
+      labels: ['type:task'],
+    });
+    // And the PATCH targeted the bound repo and issue number with the state
+    expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
+    expect(bodies[0]).toBe(JSON.stringify({ state: 'closed' }));
+  });
 });

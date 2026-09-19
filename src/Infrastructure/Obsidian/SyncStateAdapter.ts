@@ -21,10 +21,32 @@ export class SyncStateAdapter implements SyncStatePort {
   async get(url: string): Promise<Status | null> {
     const data = await this.storage.load();
     const raw = data[`status.${url}`];
-    if (!isRecord(raw)) {
-      return null;
-    }
+    return isRecord(raw) ? this.mapStatus(raw) : null;
+  }
 
+  async set(status: Status): Promise<void> {
+    const data = await this.storage.load();
+    data[`status.${status.url}`] = status;
+    await this.storage.save(data);
+  }
+
+  async findByNotePath(notePath: string): Promise<Status | null> {
+    const data = await this.storage.load();
+    for (const [key, raw] of Object.entries(data)) {
+      if (key.startsWith('status.') && isRecord(raw) && raw.notePath === notePath) {
+        return this.mapStatus(raw);
+      }
+    }
+    return null;
+  }
+
+  async remove(url: string): Promise<void> {
+    const data = await this.storage.load();
+    delete data[`status.${url}`];
+    await this.storage.save(data);
+  }
+
+  private mapStatus(raw: Record<string, unknown>): Status {
     return {
       url: typeof raw.url === 'string' ? raw.url : '',
       remoteId: typeof raw.remoteId === 'number' ? raw.remoteId : 0,
@@ -35,12 +57,6 @@ export class SyncStateAdapter implements SyncStatePort {
       lastSyncedStatus: raw.lastSyncedStatus === 'done' ? 'done' : 'open',
       lastSyncedTitle: typeof raw.lastSyncedTitle === 'string' ? raw.lastSyncedTitle : '',
     };
-  }
-
-  async set(status: Status): Promise<void> {
-    const data = await this.storage.load();
-    data[`status.${status.url}`] = status;
-    await this.storage.save(data);
   }
 
   async getLastPoll(projectName: string): Promise<string | null> {
