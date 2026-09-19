@@ -5,8 +5,10 @@ import {
   type ProjectManagementSettings,
 } from './App/Settings/PluginSettingTab.js';
 import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
+import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
 import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
@@ -65,14 +67,9 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     const vault = new VaultAdapter(this.app, (eventRef) => this.registerEvent(eventRef));
 
-    // v1 wiring: project discovery (enumerating the attached project notes)
-    // lands in a later ticket. The adapter is bound to one repo and the
-    // scheduler to the resolved project names; with none discovered yet the
-    // scheduler is inert but the architecture is in place. At startup each
-    // attached project would run AttachProjectAction once to resolve its
-    // identities.
+    // The adapter is bound to one repo; the repo url is resolved from the
+    // attached project's frontmatter in a later ticket.
     const repoUrl = '';
-    const projectNames: string[] = [];
 
     const github = new GitHubAdapter(transport, repoUrl);
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
@@ -96,10 +93,13 @@ export default class ProjectManagementPlugin extends Plugin {
       applyRemoteChange,
       createTaskNote,
     );
+    const discoverProjects = new DiscoverProjectsAction(vault, new AttachProjectAction(github));
 
+    // v1 wiring: the scheduler starts inert (no projects) and is populated
+    // once the vault's project notes are discovered after layout is ready.
     const scheduler = new SyncScheduler(
       syncProject,
-      projectNames,
+      [],
       this.settings.pollIntervalMinutes * 60 * 1000,
       vault,
       reconcileTask,
@@ -108,7 +108,26 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     this.addChild(scheduler);
 
+    this.app.workspace.onLayoutReady(() => {
+      void this.discoverAndSync(discoverProjects, syncState, scheduler);
+    });
+
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
+  }
+
+  // Discovers the vault's synced projects, persists their identities for
+  // later board operations, and hands the project names to the scheduler so
+  // its tick syncs each discovered project.
+  private async discoverAndSync(
+    discoverProjects: DiscoverProjectsAction,
+    syncState: SyncStateAdapter,
+    scheduler: SyncScheduler,
+  ): Promise<void> {
+    const { projects } = await discoverProjects.execute();
+    for (const project of projects) {
+      await syncState.setIdentity(project.projectName, project.identity);
+    }
+    scheduler.setProjectNames(projects.map((project) => project.projectName));
   }
 
   override onunload(): void {

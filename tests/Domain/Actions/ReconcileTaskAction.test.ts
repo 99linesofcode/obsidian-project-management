@@ -45,6 +45,10 @@ class FakeVault implements VaultPort {
     this.renamed.push({ oldPath, newPath });
   }
 
+  async findProjectNotes(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   onNoteChanged(): void {
     throw new Error('not used in this test');
   }
@@ -73,6 +77,14 @@ class FakeSyncState implements SyncStatePort {
 
   async setLastPoll(): Promise<void> {
     throw new Error('not used in this test');
+  }
+
+  async setIdentity(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async getIdentity(): Promise<null> {
+    return null;
   }
 
   async findByNotePath(): Promise<Status | null> {

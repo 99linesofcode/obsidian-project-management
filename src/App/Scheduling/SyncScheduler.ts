@@ -23,10 +23,11 @@ declare const window: {
 export class SyncScheduler extends Component {
   private readonly chains = new Map<string, Promise<void>>();
   private readonly debounceTimers = new Map<string, number>();
+  private projectNames: string[];
 
   constructor(
     private readonly syncProject: SyncProjectAction,
-    private readonly projectNames: string[],
+    projectNames: string[],
     private readonly intervalMs: number,
     private readonly vault: VaultPort,
     private readonly reconcileTask: ReconcileTaskAction,
@@ -34,6 +35,13 @@ export class SyncScheduler extends Component {
     private readonly debounceMs: number,
   ) {
     super();
+    this.projectNames = projectNames;
+  }
+
+  // Discovery runs asynchronously after layout is ready, so the project list
+  // is populated once the vault's project notes are known.
+  setProjectNames(projectNames: string[]): void {
+    this.projectNames = projectNames;
   }
 
   override onload(): void {

@@ -1,3 +1,4 @@
+import type { ProjectIdentityData } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { Status } from '../../Domain/Models/Status.js';
 import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
 
@@ -69,5 +70,34 @@ export class SyncStateAdapter implements SyncStatePort {
     const data = await this.storage.load();
     data[`lastPoll.${projectName}`] = iso;
     await this.storage.save(data);
+  }
+
+  async setIdentity(projectName: string, identity: ProjectIdentityData): Promise<void> {
+    const data = await this.storage.load();
+    data[`identity.${projectName}`] = identity;
+    await this.storage.save(data);
+  }
+
+  async getIdentity(projectName: string): Promise<ProjectIdentityData | null> {
+    const data = await this.storage.load();
+    const raw = data[`identity.${projectName}`];
+    return isRecord(raw) ? this.mapIdentity(raw) : null;
+  }
+
+  private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {
+    return {
+      repoNodeId: typeof raw.repoNodeId === 'string' ? raw.repoNodeId : '',
+      projectNodeId: typeof raw.projectNodeId === 'string' ? raw.projectNodeId : '',
+      statusFieldId: typeof raw.statusFieldId === 'string' ? raw.statusFieldId : '',
+      statusOptions: Array.isArray(raw.statusOptions)
+        ? raw.statusOptions
+            .filter(isRecord)
+            .filter(
+              (o): o is { id: string; name: string } =>
+                typeof o.id === 'string' && typeof o.name === 'string',
+            )
+            .map((o) => ({ id: o.id, name: o.name }))
+        : [],
+    };
   }
 }

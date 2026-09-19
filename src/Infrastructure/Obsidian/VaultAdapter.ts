@@ -1,5 +1,7 @@
 import { App, EventRef, TFile } from 'obsidian';
+import type { ProjectNoteData } from '../../Domain/DataTransferObjects/ProjectNoteData.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
+import { projectNoteFromCache } from './projectNoteFromCache.js';
 
 // Registers an Obsidian event ref for cleanup when the plugin unloads. The
 // plugin's registerEvent is injected so the adapter stays decoupled from it.
@@ -42,6 +44,20 @@ export class VaultAdapter implements VaultPort {
     if (file instanceof TFile) {
       await this.app.fileManager.renameFile(file, newPath);
     }
+  }
+
+  async findProjectNotes(): Promise<ProjectNoteData[]> {
+    // Reads each markdown file's frontmatter cache (no full-file reads) and
+    // keeps only the notes that declare a pm property.
+    const notes: ProjectNoteData[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const cache = this.app.metadataCache.getFileCache(file);
+      const note = projectNoteFromCache(file.path, cache?.frontmatter);
+      if (note) {
+        notes.push(note);
+      }
+    }
+    return notes;
   }
 
   onNoteChanged(cb: (path: string) => void): void {
