@@ -68,7 +68,7 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
   ): void {
     void this.promote.execute({
       url: item.task.url,
-      label: 'type:task',
+      label: 'type: task',
       projectName: item.projectName,
     });
   }
