@@ -59,6 +59,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addLabel(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  async promoteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 describe('PushNoteAction', () => {

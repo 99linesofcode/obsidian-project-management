@@ -446,6 +446,95 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
+  it('maps draft card title and body onto the board item DTO', async () => {
+    // Given — a GraphQL board items response with a draft card carrying a
+    // title and body
+    const boardResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            items: {
+              nodes: [
+                {
+                  id: 'PVTI_2',
+                  type: 'DRAFT_ISSUE',
+                  content: { title: 'An idea', body: 'The draft body.' },
+                  fieldValues: { nodes: [] },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([boardResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter fetches the board items
+    const result = await adapter.fetchBoardItems('PVT_123');
+
+    // Then — the draft title and body are surfaced on the DTO
+    expect(result).toEqual([
+      { itemId: 'PVTI_2', type: 'DRAFT_ISSUE', draftTitle: 'An idea', draftBody: 'The draft body.' },
+    ]);
+    // And the query asks for the draft content
+    expect(bodies[0]).toContain('DraftIssue');
+  });
+
+  it('promotes a draft card to an issue and fetches the full task', async () => {
+    // Given — a transport that converts the draft card and then returns the
+    // new issue via REST
+    const mutationResponse = {
+      status: 200,
+      json: {
+        data: {
+          convertProjectV2DraftIssueItemToIssue: {
+            item: {
+              id: 'PVTI_2',
+              content: { url: 'https://github.com/acme/widgets/issues/50' },
+            },
+          },
+        },
+      },
+    };
+    const issueResponse = {
+      status: 200,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/50',
+        number: 50,
+        node_id: 'I_kwDOAAAA50',
+        title: 'An idea',
+        body: 'The draft body.',
+        state: 'open',
+        updated_at: '2026-09-19T10:00:00Z',
+        labels: [],
+      },
+    };
+    const { transport, bodies, paths } = fakeTransport([mutationResponse, issueResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter promotes the draft card
+    const result = await adapter.promoteCard('PVTI_2', 'R_kgDOAAAA');
+
+    // Then — the mutation targeted the item and repository, and the new issue
+    // is fetched in full and mapped onto TaskData
+    expect(result).toEqual({
+      url: 'https://github.com/acme/widgets/issues/50',
+      remoteId: 50,
+      nodeId: 'I_kwDOAAAA50',
+      title: 'An idea',
+      body: 'The draft body.',
+      state: 'open',
+      updatedAt: '2026-09-19T10:00:00Z',
+      labels: [],
+    });
+    expect(bodies[0]).toContain('ConvertDraftIssue');
+    expect(bodies[0]).toContain('"itemId":"PVTI_2"');
+    expect(bodies[0]).toContain('"repositoryId":"R_kgDOAAAA"');
+    expect(paths[0]).toBe('/repos/acme/widgets/issues/50');
+  });
+
   it('sets a board item status via updateProjectV2ItemFieldValue', async () => {
     // Given — a board containing the issue and a transport for the two calls
     const boardResponse = {

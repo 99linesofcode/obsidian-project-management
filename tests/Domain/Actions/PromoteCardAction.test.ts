@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PromoteIssueAction } from '../../../src/Domain/Actions/PromoteIssueAction.js';
+import { PromoteCardAction } from '../../../src/Domain/Actions/PromoteCardAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { slugify } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
@@ -8,29 +8,26 @@ import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectMan
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
-// Fakes at the ports: the project management port records the labels it was
-// asked to add and returns the task the action should materialise; the vault
-// and sync state record what the note action creates. The promote action's
-// own behaviour (label first, then materialise the fetched task) is what's
+// Fakes at the ports: the project management port records the draft card it
+// was asked to promote and returns the resulting task; the vault and sync
+// state record what the note action creates. The promote action's own
+// behaviour (convert the card, then materialise the fetched task) is what's
 // under test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
-  addedLabels: Array<{ url: string; label: string }> = [];
+  promoted: Array<{ itemId: string; repoNodeId: string }> = [];
   task: TaskData = {
-    url: 'https://github.com/acme/widgets/issues/42',
-    remoteId: 42,
-    nodeId: 'I_kwDOAAAA42',
-    title: 'Fix the Bug!',
-    body: 'The bug happens when the widget is resized.',
+    url: 'https://github.com/acme/widgets/issues/50',
+    remoteId: 50,
+    nodeId: 'I_kwDOAAAA50',
+    title: 'An idea',
+    body: 'The draft body.',
     state: 'open',
-    updatedAt: '2026-09-18T10:00:00Z',
+    updatedAt: '2026-09-19T10:00:00Z',
     labels: [],
   };
 
-  async addLabel(url: string, label: string): Promise<void> {
-    this.addedLabels.push({ url, label });
-  }
-
-  async fetchTask(): Promise<TaskData> {
+  async promoteCard(itemId: string, repoNodeId: string): Promise<TaskData> {
+    this.promoted.push({ itemId, repoNodeId });
     return this.task;
   }
 
@@ -41,6 +38,9 @@ class FakePort implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   async fetchUnpromotedIssues(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchTask(): Promise<never> {
     throw new Error('not used in this test');
   }
   async updateTask(): Promise<never> {
@@ -58,7 +58,7 @@ class FakePort implements ProjectManagementPort {
   async addBoardItem(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async promoteCard(): Promise<never> {
+  async addLabel(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -117,43 +117,29 @@ class FakeSyncState implements SyncStatePort {
   }
 }
 
-function makeAction(port: FakePort, vault: FakeVault, syncState: FakeSyncState): PromoteIssueAction {
-  return new PromoteIssueAction(port, new CreateTaskNoteAction(vault, syncState));
+function makeAction(port: FakePort, vault: FakeVault, syncState: FakeSyncState): PromoteCardAction {
+  return new PromoteCardAction(port, new CreateTaskNoteAction(vault, syncState));
 }
 
-describe('PromoteIssueAction', () => {
-  it('applies the label and materialises the note from the fetched task', async () => {
-    // Given — a port that returns the issue to promote and an empty vault
+describe('PromoteCardAction', () => {
+  it('converts the draft card and materialises the note from the fetched task', async () => {
+    // Given — a port that promotes the card and an empty vault
     const port = new FakePort();
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = makeAction(port, vault, syncState);
 
-    // When — the action promotes the issue
-    await action.execute({ url: port.task.url, label: 'type:task', projectName: 'Acme Widgets' });
+    // When — the action promotes the draft card
+    await action.execute({
+      itemId: 'PVTI_2',
+      repoNodeId: 'R_kgDOAAAA',
+      projectName: 'Acme Widgets',
+    });
 
-    // Then — the label is applied to the issue
-    expect(port.addedLabels).toEqual([{ url: port.task.url, label: 'type:task' }]);
+    // Then — the card is converted against the repo
+    expect(port.promoted).toEqual([{ itemId: 'PVTI_2', repoNodeId: 'R_kgDOAAAA' }]);
     // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toContain(slugify(port.task.title));
-  });
-
-  it('applies the label idempotently even when the issue is already labelled', async () => {
-    // Given — an issue that already carries the type:task label (the modal's
-    // filter would hide it, but a direct promote still runs)
-    const port = new FakePort();
-    port.task = { ...port.task, labels: ['type:task'] };
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    const action = makeAction(port, vault, syncState);
-
-    // When — the action promotes the already-labelled issue
-    await action.execute({ url: port.task.url, label: 'type:task', projectName: 'Acme Widgets' });
-
-    // Then — the label is still applied (GitHub labels are idempotent) and the
-    // note is materialised
-    expect(port.addedLabels).toEqual([{ url: port.task.url, label: 'type:task' }]);
-    expect(vault.created).toHaveLength(1);
   });
 });
