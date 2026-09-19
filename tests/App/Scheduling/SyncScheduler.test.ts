@@ -17,6 +17,7 @@ vi.mock('obsidian', () => {
 
 import { SyncScheduler } from '../../../src/App/Scheduling/SyncScheduler.js';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
+import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
@@ -28,13 +29,20 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // Fakes at the ports so the scheduler's per-project invocation is observable
 // through the real composed action, without touching Obsidian or GitHub.
 class FakeVault implements VaultPort {
+  noteChangedCb: ((path: string) => void) | null = null;
+
   async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
   }
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
   async renameNote(): Promise<void> {}
-  onNoteChanged(): void {}
+  onNoteChanged(cb: (path: string) => void): void {
+    this.noteChangedCb = cb;
+  }
+  fireNoteChanged(path: string): void {
+    this.noteChangedCb?.(path);
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -70,11 +78,37 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 }
 
+// A fake reconcile action that records its invocations and can be made slow,
+// so the scheduler's debounce and per-project serialisation are observable.
+class FakeReconcile {
+  calls: Array<{ notePath: string; projectName: string; syncedAt: string }> = [];
+  active = 0;
+  maxActive = 0;
+  private resolvers: Array<() => void> = [];
+
+  async execute(input: { notePath: string; projectName: string; syncedAt: string }): Promise<void> {
+    this.active++;
+    this.maxActive = Math.max(this.maxActive, this.active);
+    this.calls.push(input);
+    await new Promise<void>((resolve) => this.resolvers.push(resolve));
+    this.active--;
+  }
+
+  releaseAll(): void {
+    for (const resolve of this.resolvers) {
+      resolve();
+    }
+    this.resolvers = [];
+  }
+}
+
+const fakeSyncProject = { execute: vi.fn(async () => {}) } as unknown as SyncProjectAction;
+
 describe('SyncScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     // Obsidian runs in a browser where window is the global; the scheduler
-    // uses window.setInterval, so point window at the faked global timers.
+    // uses window.setInterval/setTimeout, so point window at the faked globals.
     vi.stubGlobal('window', globalThis);
   });
 
@@ -96,7 +130,15 @@ describe('SyncScheduler', () => {
       applyRemoteChange,
       createTaskNote,
     );
-    const scheduler = new SyncScheduler(syncProject, ['Acme Widgets', 'Other'], 60_000);
+    const reconcile = new FakeReconcile();
+    const scheduler = new SyncScheduler(
+      syncProject,
+      ['Acme Widgets', 'Other'],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      2000,
+    );
     scheduler.load();
 
     // When — one interval elapses
@@ -107,5 +149,110 @@ describe('SyncScheduler', () => {
     expect(syncState.lastPollCalls).toHaveLength(2);
     expect(syncState.lastPollCalls[0]!.projectName).toBe('Acme Widgets');
     expect(syncState.lastPollCalls[1]!.projectName).toBe('Other');
+  });
+
+  it('derives the project name from a note change and reconciles it', async () => {
+    // Given — a scheduler subscribed to vault note changes
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a task note under Projecten changes
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — the reconcile runs for the derived project with the note path
+    expect(reconcile.calls).toHaveLength(1);
+    expect(reconcile.calls[0]!.projectName).toBe('Acme Widgets');
+    expect(reconcile.calls[0]!.notePath).toBe('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+  });
+
+  it('ignores note changes outside Projecten', async () => {
+    // Given — a scheduler subscribed to vault note changes
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a note outside Projecten changes
+    vault.fireNoteChanged('Notes/random.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — no reconcile is scheduled
+    expect(reconcile.calls).toHaveLength(0);
+  });
+
+  it('debounces rapid note changes into one reconcile', async () => {
+    // Given — a scheduler with a 2s debounce
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      2000,
+    );
+    scheduler.load();
+
+    // When — several changes for the same project arrive within the window
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(2000);
+
+    // Then — they coalesce into a single reconcile
+    expect(reconcile.calls).toHaveLength(1);
+    expect(reconcile.calls[0]!.projectName).toBe('Acme Widgets');
+  });
+
+  it('serialises reconciles per project so they never overlap', async () => {
+    // Given — a scheduler with no debounce and a slow reconcile
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      reconcile as unknown as ReconcileTaskAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a second change for the same project arrives while the first
+    // reconcile is still in flight
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — only the first reconcile has started, and never two at once
+    expect(reconcile.calls).toHaveLength(1);
+    expect(reconcile.maxActive).toBe(1);
+
+    // When — the first reconcile completes
+    reconcile.releaseAll();
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — the second reconcile runs only after the first finished
+    expect(reconcile.calls).toHaveLength(2);
+    expect(reconcile.maxActive).toBe(1);
   });
 });
