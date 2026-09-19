@@ -1,4 +1,4 @@
-import { Plugin, requestUrl } from 'obsidian';
+import { Notice, Plugin, requestUrl } from 'obsidian';
 import {
   DEFAULT_SETTINGS,
   ProjectManagementSettingTab,
@@ -155,18 +155,28 @@ export default class ProjectManagementPlugin extends Plugin {
 
   // Discovers the vault's synced projects, persists their identities for
   // later board operations, and hands the project names to the scheduler so
-  // its tick syncs each discovered project.
+  // its tick syncs each discovered project. Discovery must never crash the
+  // plugin: unexpected failures and per-note errors surface as notices.
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
     scheduler: SyncScheduler,
   ): Promise<void> {
-    const { projects } = await discoverProjects.execute();
-    for (const project of projects) {
-      await syncState.setIdentity(project.projectName, project.identity);
+    try {
+      const { projects, errors } = await discoverProjects.execute();
+      for (const project of projects) {
+        await syncState.setIdentity(project.projectName, project.identity);
+      }
+      this.projectNames = projects.map((project) => project.projectName);
+      scheduler.setProjectNames(projects.map((project) => project.projectName));
+      if (errors.length > 0) {
+        new Notice(`Project discovery: ${errors.length} project(s) could not be attached`);
+      }
+    } catch (error) {
+      new Notice(
+        `Project discovery failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-    this.projectNames = projects.map((project) => project.projectName);
-    scheduler.setProjectNames(projects.map((project) => project.projectName));
   }
 
   override onunload(): void {
