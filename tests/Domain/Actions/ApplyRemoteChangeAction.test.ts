@@ -40,6 +40,10 @@ class FakeVault implements VaultPort {
     }
     this.renamed.push({ oldPath, newPath });
   }
+
+  onNoteChanged(): void {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -85,6 +89,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
     lastSyncedStatus: TaskStatus.Open,
+    lastSyncedTitle: task.title,
     ...overrides,
   };
 }
@@ -125,6 +130,7 @@ describe('ApplyRemoteChangeAction', () => {
         lastSyncedBodyHash: hash(changed.body),
         lastSyncedRemoteUpdatedAt: changed.updatedAt,
         lastSyncedStatus: TaskStatus.Open,
+        lastSyncedTitle: changed.title,
       },
     ]);
   });

@@ -29,6 +29,10 @@ class FakeVault implements VaultPort {
   async renameNote(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  onNoteChanged(): void {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -86,6 +90,7 @@ describe('CreateTaskNoteAction', () => {
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: task.updatedAt,
         lastSyncedStatus: TaskStatus.Open,
+        lastSyncedTitle: task.title,
       },
     ]);
   });

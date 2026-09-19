@@ -73,6 +73,7 @@ export class ApplyRemoteChangeAction {
       lastSyncedBodyHash: newHash,
       lastSyncedRemoteUpdatedAt: input.task.updatedAt,
       lastSyncedStatus: newStatus,
+      lastSyncedTitle: input.task.title,
     };
     await this.syncState.set(updated);
   }

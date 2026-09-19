@@ -27,6 +27,7 @@ const status: Status = {
   lastSyncedBodyHash: 'abc123',
   lastSyncedRemoteUpdatedAt: '2026-09-18T10:00:00Z',
   lastSyncedStatus: 'open',
+  lastSyncedTitle: 'Fix the Bug!',
 };
 
 describe('SyncStateAdapter', () => {

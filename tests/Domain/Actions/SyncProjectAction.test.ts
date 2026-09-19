@@ -36,6 +36,10 @@ class FakeVault implements VaultPort {
   async renameNote(): Promise<void> {
     throw new Error('not used in this test');
   }
+
+  onNoteChanged(): void {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -71,6 +75,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchChangedTasks(since: string): Promise<TaskData[]> {
     this.sinceCalls.push(since);
     return this.tasks;
+  }
+
+  async fetchTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+
+  async updateTask(): Promise<TaskData> {
+    throw new Error('not used in this test');
   }
 }
 
@@ -110,6 +122,7 @@ describe('SyncProjectAction', () => {
       lastSyncedBodyHash: hash('old body'),
       lastSyncedRemoteUpdatedAt: '2026-09-18T09:00:00Z',
       lastSyncedStatus: 'open',
+      lastSyncedTitle: taskA.title,
     });
     // The existing note holds the old body, so the remote change rewrites it
     const oldTaskA: TaskData = { ...taskA, body: 'old body' };

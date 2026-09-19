@@ -25,6 +25,15 @@ function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
       }
       return next;
     },
+    async patch(path, body) {
+      paths.push(path);
+      bodies.push(body);
+      const next = responses.shift();
+      if (!next) {
+        throw new Error('fake transport: no more responses queued');
+      }
+      return next;
+    },
   };
   return { transport, bodies, paths };
 }
@@ -254,5 +263,79 @@ describe('GitHubAdapter', () => {
 
     // Then — the state is closed
     expect(result[0]!.state).toBe('closed');
+  });
+
+  it('fetches a single task by its issue url', async () => {
+    // Given — a REST response for one issue
+    const issueResponse = {
+      status: 200,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/42',
+        number: 42,
+        title: 'Fix the Bug!',
+        body: 'The bug happens when the widget is resized.',
+        state: 'open',
+        updated_at: '2026-09-18T10:00:00Z',
+        labels: [{ name: 'type:task' }],
+      },
+    };
+    const { transport, paths } = fakeTransport([issueResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter fetches the task by url
+    const result = await adapter.fetchTask('https://github.com/acme/widgets/issues/42');
+
+    // Then — the issue is mapped onto TaskData
+    expect(result).toEqual({
+      url: 'https://github.com/acme/widgets/issues/42',
+      remoteId: 42,
+      title: 'Fix the Bug!',
+      body: 'The bug happens when the widget is resized.',
+      state: 'open',
+      updatedAt: '2026-09-18T10:00:00Z',
+      labels: ['type:task'],
+    });
+    // And the REST path targeted the bound repo and issue number
+    expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
+  });
+
+  it('updates a task and returns the updated issue', async () => {
+    // Given — a REST response for the updated issue
+    const updatedResponse = {
+      status: 200,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/42',
+        number: 42,
+        title: 'fix the widget',
+        body: 'The bug now also happens on resize.',
+        state: 'open',
+        updated_at: '2026-09-18T12:30:00Z',
+        labels: [{ name: 'type:task' }],
+      },
+    };
+    const { transport, paths, bodies } = fakeTransport([updatedResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter updates the task
+    const result = await adapter.updateTask('https://github.com/acme/widgets/issues/42', {
+      title: 'fix the widget',
+      body: 'The bug now also happens on resize.',
+    });
+
+    // Then — the updated issue is mapped onto TaskData
+    expect(result).toEqual({
+      url: 'https://github.com/acme/widgets/issues/42',
+      remoteId: 42,
+      title: 'fix the widget',
+      body: 'The bug now also happens on resize.',
+      state: 'open',
+      updatedAt: '2026-09-18T12:30:00Z',
+      labels: ['type:task'],
+    });
+    // And the PATCH targeted the bound repo and issue number with the input
+    expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
+    expect(bodies[0]).toBe(
+      JSON.stringify({ title: 'fix the widget', body: 'The bug now also happens on resize.' }),
+    );
   });
 });
