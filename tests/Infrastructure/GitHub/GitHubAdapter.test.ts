@@ -34,6 +34,15 @@ function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
       }
       return next;
     },
+    async postPath(path, body) {
+      paths.push(path);
+      bodies.push(body);
+      const next = responses.shift();
+      if (!next) {
+        throw new Error('fake transport: no more responses queued');
+      }
+      return next;
+    },
   };
   return { transport, bodies, paths };
 }
@@ -498,5 +507,133 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('AddBoardItem');
     expect(bodies[0]).toContain('"contentId":"I_kwDOAAAA42"');
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('lists open issues that carry neither the task nor the slice label', async () => {
+    // Given — a REST response mixing a task, a slice, and an unlabeled issue
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          html_url: 'https://github.com/acme/widgets/issues/42',
+          number: 42,
+          node_id: 'I_kwDOAAAA42',
+          title: 'Fix the Bug!',
+          body: 'The bug happens when the widget is resized.',
+          state: 'open',
+          updated_at: '2026-09-18T10:00:00Z',
+          labels: [{ name: 'type:task' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/43',
+          number: 43,
+          node_id: 'I_kwDOAAAA43',
+          title: 'A slice',
+          body: 'Not a task.',
+          state: 'open',
+          updated_at: '2026-09-18T11:00:00Z',
+          labels: [{ name: 'type:slice' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/44',
+          number: 44,
+          node_id: 'I_kwDOAAAA44',
+          title: 'An idea',
+          body: 'No labels yet.',
+          state: 'open',
+          updated_at: '2026-09-18T12:00:00Z',
+          labels: [],
+        },
+      ],
+    };
+    const { transport, paths } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter lists unpromoted issues
+    const result = await adapter.fetchUnpromotedIssues();
+
+    // Then — only the unlabeled issue is surfaced, mapped onto TaskData
+    expect(result).toEqual([
+      {
+        url: 'https://github.com/acme/widgets/issues/44',
+        remoteId: 44,
+        nodeId: 'I_kwDOAAAA44',
+        title: 'An idea',
+        body: 'No labels yet.',
+        state: 'open',
+        updatedAt: '2026-09-18T12:00:00Z',
+        labels: [],
+      },
+    ]);
+    // And the REST path targeted the bound repo with open issues
+    expect(paths[0]).toBe('/repos/acme/widgets/issues?state=open&per_page=100');
+  });
+
+  it('excludes issues that carry the task label from the unpromoted list', async () => {
+    // Given — a REST response with only a type:task issue
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          html_url: 'https://github.com/acme/widgets/issues/42',
+          number: 42,
+          node_id: 'I_kwDOAAAA42',
+          title: 'Fix the Bug!',
+          body: 'The bug happens when the widget is resized.',
+          state: 'open',
+          updated_at: '2026-09-18T10:00:00Z',
+          labels: [{ name: 'type:task' }],
+        },
+      ],
+    };
+    const { transport } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter lists unpromoted issues
+    const result = await adapter.fetchUnpromotedIssues();
+
+    // Then — the labelled task is not surfaced
+    expect(result).toEqual([]);
+  });
+
+  it('excludes issues that carry the slice label from the unpromoted list', async () => {
+    // Given — a REST response with only a type:slice issue
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          html_url: 'https://github.com/acme/widgets/issues/43',
+          number: 43,
+          node_id: 'I_kwDOAAAA43',
+          title: 'A slice',
+          body: 'Not a task.',
+          state: 'open',
+          updated_at: '2026-09-18T11:00:00Z',
+          labels: [{ name: 'type:slice' }],
+        },
+      ],
+    };
+    const { transport } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter lists unpromoted issues
+    const result = await adapter.fetchUnpromotedIssues();
+
+    // Then — the slice is not surfaced
+    expect(result).toEqual([]);
+  });
+
+  it('adds a label to an issue via the labels endpoint', async () => {
+    // Given — a transport that accepts the label POST
+    const labelsResponse = { status: 200, json: [{ name: 'type:task' }] };
+    const { transport, paths, bodies } = fakeTransport([labelsResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter adds the label to the issue
+    await adapter.addLabel('https://github.com/acme/widgets/issues/42', 'type:task');
+
+    // Then — the POST targeted the bound repo, issue and labels endpoint
+    expect(paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
+    expect(bodies[0]).toBe(JSON.stringify({ labels: ['type:task'] }));
   });
 });
