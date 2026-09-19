@@ -9,10 +9,6 @@ export interface SyncProjectInput {
   syncedAt: string;
 }
 
-// The cursor used when a project has never been polled: the Unix epoch, so
-// the first poll fetches every issue and materialises the whole project.
-const EPOCH = '1970-01-01T00:00:00.000Z';
-
 // UC3/UC8/UC9: sync one project. Fetches the tasks changed since the last
 // poll and mirrors each onto its note — applying changes to existing notes,
 // creating notes for newly promoted issues — then reconciles the board: the
@@ -38,8 +34,12 @@ export class SyncProjectAction {
       );
     }
 
+    // The first poll has no cursor yet, so since is undefined and the filter
+    // is omitted to fetch everything. GitHub's since filter silently matches
+    // nothing for epoch-era timestamps (verified 2026-09-19), so a sentinel
+    // epoch cursor would materialise nothing.
     const since =
-      (await this.syncState.getLastPoll(input.projectName)) ?? EPOCH;
+      (await this.syncState.getLastPoll(input.projectName)) ?? undefined;
     const tasks = await this.projectManagement.fetchChangedTasks(
       identity.repoUrl,
       since,

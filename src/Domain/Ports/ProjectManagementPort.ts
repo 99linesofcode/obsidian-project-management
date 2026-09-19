@@ -13,7 +13,7 @@ export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
-  fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]>;
+  fetchChangedTasks(repoUrl: string, since?: string): Promise<TaskData[]>;
   fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(

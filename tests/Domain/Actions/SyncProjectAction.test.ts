@@ -100,7 +100,7 @@ class FakeSyncState implements SyncStatePort {
 class FakeProjectManagement implements ProjectManagementPort {
   tasks: TaskData[] = [];
   repoUrlCalls: string[] = [];
-  sinceCalls: string[] = [];
+  sinceCalls: Array<string | undefined> = [];
   boardItems: BoardItemData[] = [];
   boardItemsCalls: string[] = [];
   addBoardItemCalls: Array<{ projectNodeId: string; issueUrl: string }> = [];
@@ -110,7 +110,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     return null;
   }
 
-  async fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]> {
+  async fetchChangedTasks(
+    repoUrl: string,
+    since?: string,
+  ): Promise<TaskData[]> {
     this.repoUrlCalls.push(repoUrl);
     this.sinceCalls.push(since);
     return this.tasks;
@@ -276,7 +279,7 @@ describe('SyncProjectAction', () => {
     ]);
   });
 
-  it('fetches since the epoch when no last poll exists', async () => {
+  it('passes undefined through when no last poll exists', async () => {
     // Given — no last poll cursor yet
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
@@ -289,8 +292,8 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     await action.execute(context);
 
-    // Then — tasks are fetched since the epoch (first poll materialises all)
-    expect(projectManagement.sinceCalls).toEqual(['1970-01-01T00:00:00.000Z']);
+    // Then — the since cursor is undefined (first poll fetches everything)
+    expect(projectManagement.sinceCalls).toEqual([undefined]);
   });
 
   it('applies board-driven changes when the board disagrees with the issue', async () => {
