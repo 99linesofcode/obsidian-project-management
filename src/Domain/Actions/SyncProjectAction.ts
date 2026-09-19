@@ -2,6 +2,7 @@ import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { ApplyBoardChangeAction } from './ApplyBoardChangeAction.js';
 import type { ApplyRemoteChangeAction } from './ApplyRemoteChangeAction.js';
+import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 
 export interface SyncProjectInput {
@@ -40,10 +41,10 @@ export class SyncProjectAction {
     // epoch cursor would materialise nothing.
     const since =
       (await this.syncState.getLastPoll(input.projectName)) ?? undefined;
-    const tasks = await this.projectManagement.fetchChangedTasks(
-      identity.repoUrl,
-      since,
-    );
+    // Only tasks carrying a type label are tracked; the rest never sync.
+    const tasks = (
+      await this.projectManagement.fetchChangedTasks(identity.repoUrl, since)
+    ).filter((task) => hasTypeLabel(task.labels));
 
     for (const task of tasks) {
       const status = await this.syncState.get(task.url);

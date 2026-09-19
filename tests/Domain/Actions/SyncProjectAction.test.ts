@@ -279,6 +279,27 @@ describe('SyncProjectAction', () => {
     ]);
   });
 
+  it('skips tasks without a type label — only typed tasks are tracked', async () => {
+    // Given — one task carrying a type label and one carrying none
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const typed: TaskData = { ...taskA, labels: ['type: slice'] };
+    const untyped: TaskData = { ...taskB, labels: ['bug'] };
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [typed, untyped];
+
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(context);
+
+    // Then — only the typed task materializes; the untyped one is ignored
+    expect(vault.created).toHaveLength(1);
+    expect(vault.created[0]!.path).toBe(TaskNoteMapper.map(typed, context).path);
+    expect(vault.written).toHaveLength(0);
+  });
+
   it('passes undefined through when no last poll exists', async () => {
     // Given — no last poll cursor yet
     const vault = new FakeVault();
