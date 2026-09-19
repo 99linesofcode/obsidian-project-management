@@ -1,6 +1,7 @@
 import { App, EventRef, TFile } from 'obsidian';
 import type { ProjectNoteData } from '../../Domain/DataTransferObjects/ProjectNoteData.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
+import { folderChainForPath } from './folderChainForPath.js';
 import { projectNoteFromCache } from './projectNoteFromCache.js';
 
 // Registers an Obsidian event ref for cleanup when the plugin unloads. The
@@ -27,6 +28,14 @@ export class VaultAdapter implements VaultPort {
   }
 
   async createNote(path: string, content: string): Promise<void> {
+    // Obsidian's create throws when the parent folder is missing, so build
+    // the folder chain first (mkdir -p semantics), then create the note.
+    for (const folder of folderChainForPath(path)) {
+      if (!this.app.vault.getFolderByPath(folder)) {
+        await this.app.vault.createFolder(folder);
+      }
+    }
+
     await this.app.vault.create(path, content);
   }
 
