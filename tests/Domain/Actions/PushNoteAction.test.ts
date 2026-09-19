@@ -11,6 +11,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   updated: TaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
+    nodeId: 'I_kwDOAAAA42',
     title: 'fix the widget',
     body: 'The bug now also happens on resize.',
     state: 'open',
@@ -36,6 +37,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 
   async setTaskState(): Promise<TaskData> {
+    throw new Error('not used in this test');
+  }
+
+  async fetchBoardItems(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async setBoardStatus(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
   }
 }

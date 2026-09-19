@@ -47,6 +47,13 @@ export class SyncStateAdapter implements SyncStatePort {
     await this.storage.save(data);
   }
 
+  async list(): Promise<Status[]> {
+    const data = await this.storage.load();
+    return Object.entries(data)
+      .filter(([key, raw]) => key.startsWith('status.') && isRecord(raw))
+      .map(([, raw]) => this.mapStatus(raw as Record<string, unknown>));
+  }
+
   private mapStatus(raw: Record<string, unknown>): Status {
     return {
       url: typeof raw.url === 'string' ? raw.url : '',

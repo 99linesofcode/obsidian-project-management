@@ -3,6 +3,7 @@
 export interface TaskData {
   url: string;
   remoteId: number;
+  nodeId: string;
   title: string;
   body: string;
   state: 'open' | 'closed';

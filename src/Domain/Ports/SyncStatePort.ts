@@ -11,6 +11,7 @@ export interface SyncStatePort {
   set(status: Status): Promise<void>;
   findByNotePath(notePath: string): Promise<Status | null>;
   remove(url: string): Promise<void>;
+  list(): Promise<Status[]>;
   getLastPoll(projectName: string): Promise<string | null>;
   setLastPoll(projectName: string, iso: string): Promise<void>;
   setIdentity(projectName: string, identity: ProjectIdentityData): Promise<void>;

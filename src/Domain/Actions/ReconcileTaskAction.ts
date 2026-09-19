@@ -107,6 +107,7 @@ export class ReconcileTaskAction {
         url: parsed.url,
         status: parsed.status,
         notePath: input.notePath,
+        projectName: input.projectName,
       });
     } else if (verdict.status === 'pull') {
       if (verdict.body === 'push' || verdict.body === 'conflict') {

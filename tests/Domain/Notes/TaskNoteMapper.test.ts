@@ -5,6 +5,7 @@ import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.
 const task: TaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
+  nodeId: 'I_kwDOAAAA42',
   title: 'Fix the Bug!',
   body: 'The bug happens when the widget is resized.',
   state: 'open',

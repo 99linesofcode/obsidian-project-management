@@ -198,6 +198,7 @@ describe('GitHubAdapter', () => {
         {
           html_url: 'https://github.com/acme/widgets/issues/42',
           number: 42,
+          node_id: 'I_kwDOAAAA42',
           title: 'Fix the Bug!',
           body: 'The bug happens when the widget is resized.',
           state: 'open',
@@ -207,6 +208,7 @@ describe('GitHubAdapter', () => {
         {
           html_url: 'https://github.com/acme/widgets/issues/43',
           number: 43,
+          node_id: 'I_kwDOAAAA43',
           title: 'A slice',
           body: 'Not a task.',
           state: 'open',
@@ -226,6 +228,7 @@ describe('GitHubAdapter', () => {
       {
         url: 'https://github.com/acme/widgets/issues/42',
         remoteId: 42,
+        nodeId: 'I_kwDOAAAA42',
         title: 'Fix the Bug!',
         body: 'The bug happens when the widget is resized.',
         state: 'open',
@@ -247,6 +250,7 @@ describe('GitHubAdapter', () => {
         {
           html_url: 'https://github.com/acme/widgets/issues/7',
           number: 7,
+          node_id: 'I_kwDOAAAA7',
           title: 'Close me',
           body: 'Done.',
           state: 'closed',
@@ -272,6 +276,7 @@ describe('GitHubAdapter', () => {
       json: {
         html_url: 'https://github.com/acme/widgets/issues/42',
         number: 42,
+        node_id: 'I_kwDOAAAA42',
         title: 'Fix the Bug!',
         body: 'The bug happens when the widget is resized.',
         state: 'open',
@@ -289,6 +294,7 @@ describe('GitHubAdapter', () => {
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
+      nodeId: 'I_kwDOAAAA42',
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
       state: 'open',
@@ -306,6 +312,7 @@ describe('GitHubAdapter', () => {
       json: {
         html_url: 'https://github.com/acme/widgets/issues/42',
         number: 42,
+        node_id: 'I_kwDOAAAA42',
         title: 'fix the widget',
         body: 'The bug now also happens on resize.',
         state: 'open',
@@ -326,6 +333,7 @@ describe('GitHubAdapter', () => {
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
+      nodeId: 'I_kwDOAAAA42',
       title: 'fix the widget',
       body: 'The bug now also happens on resize.',
       state: 'open',
@@ -346,6 +354,7 @@ describe('GitHubAdapter', () => {
       json: {
         html_url: 'https://github.com/acme/widgets/issues/42',
         number: 42,
+        node_id: 'I_kwDOAAAA42',
         title: 'Fix the Bug!',
         body: 'The bug happens when the widget is resized.',
         state: 'closed',
@@ -363,6 +372,7 @@ describe('GitHubAdapter', () => {
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
+      nodeId: 'I_kwDOAAAA42',
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
       state: 'closed',
@@ -372,5 +382,121 @@ describe('GitHubAdapter', () => {
     // And the PATCH targeted the bound repo and issue number with the state
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
     expect(bodies[0]).toBe(JSON.stringify({ state: 'closed' }));
+  });
+
+  it('maps board items onto the DTO, distinguishing issues from draft cards', async () => {
+    // Given — a GraphQL board items response with an issue and a draft card
+    const boardResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            items: {
+              nodes: [
+                {
+                  id: 'PVTI_1',
+                  type: 'ISSUE',
+                  content: { url: 'https://github.com/acme/widgets/issues/42' },
+                  fieldValues: {
+                    nodes: [
+                      { name: 'Done', field: { name: 'Status' } },
+                      { name: 'High', field: { name: 'Priority' } },
+                    ],
+                  },
+                },
+                {
+                  id: 'PVTI_2',
+                  type: 'DRAFT_ISSUE',
+                  content: null,
+                  fieldValues: { nodes: [] },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([boardResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter fetches the board items
+    const result = await adapter.fetchBoardItems('PVT_123');
+
+    // Then — the issue and draft card are mapped onto the DTO
+    expect(result).toEqual([
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: 'https://github.com/acme/widgets/issues/42',
+        statusOptionName: 'Done',
+      },
+      { itemId: 'PVTI_2', type: 'DRAFT_ISSUE', issueUrl: undefined, statusOptionName: undefined },
+    ]);
+    // And the query targeted the project node id
+    expect(bodies[0]).toContain('BoardItems');
+    expect(bodies[0]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('sets a board item status via updateProjectV2ItemFieldValue', async () => {
+    // Given — a board containing the issue and a transport for the two calls
+    const boardResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            items: {
+              nodes: [
+                {
+                  id: 'PVTI_1',
+                  type: 'ISSUE',
+                  content: { url: 'https://github.com/acme/widgets/issues/42' },
+                  fieldValues: { nodes: [{ name: 'Todo', field: { name: 'Status' } }] },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const mutationResponse = { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } };
+    const { transport, bodies } = fakeTransport([boardResponse, mutationResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter sets the board status to the done option
+    await adapter.setBoardStatus('PVT_123', 'PVTF_456', 'https://github.com/acme/widgets/issues/42', 'PVTSSF_3');
+
+    // Then — the item id is resolved from the board and the field value is updated
+    expect(bodies[1]).toContain('SetBoardStatus');
+    expect(bodies[1]).toContain('"itemId":"PVTI_1"');
+    expect(bodies[1]).toContain('"fieldId":"PVTF_456"');
+    expect(bodies[1]).toContain('"optionId":"PVTSSF_3"');
+  });
+
+  it('adds an issue to the board via addProjectV2ItemById', async () => {
+    // Given — a REST issue response and a transport for the two calls
+    const issueResponse = {
+      status: 200,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/42',
+        number: 42,
+        node_id: 'I_kwDOAAAA42',
+        title: 'Fix the Bug!',
+        body: 'The bug happens when the widget is resized.',
+        state: 'open',
+        updated_at: '2026-09-18T10:00:00Z',
+        labels: [{ name: 'type:task' }],
+      },
+    };
+    const mutationResponse = { status: 200, json: { data: { item: { id: 'PVTI_9' } } } };
+    const { transport, bodies } = fakeTransport([issueResponse, mutationResponse]);
+    const adapter = new GitHubAdapter(transport, 'https://github.com/acme/widgets');
+
+    // When — the adapter adds the issue to the board
+    await adapter.addBoardItem('PVT_123', 'https://github.com/acme/widgets/issues/42');
+
+    // Then — the issue's node id is resolved from the REST response and added
+    expect(bodies[0]).toContain('AddBoardItem');
+    expect(bodies[0]).toContain('"contentId":"I_kwDOAAAA42"');
+    expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 });
