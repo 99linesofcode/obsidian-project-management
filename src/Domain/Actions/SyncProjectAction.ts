@@ -33,11 +33,17 @@ export class SyncProjectAction {
   async execute(input: SyncProjectInput): Promise<void> {
     const identity = await this.syncState.getIdentity(input.projectName);
     if (!identity?.repoUrl) {
-      throw new Error(`SyncProjectAction: no repo url for project ${input.projectName}`);
+      throw new Error(
+        `SyncProjectAction: no repo url for project ${input.projectName}`,
+      );
     }
 
-    const since = (await this.syncState.getLastPoll(input.projectName)) ?? EPOCH;
-    const tasks = await this.projectManagement.fetchChangedTasks(identity.repoUrl, since);
+    const since =
+      (await this.syncState.getLastPoll(input.projectName)) ?? EPOCH;
+    const tasks = await this.projectManagement.fetchChangedTasks(
+      identity.repoUrl,
+      since,
+    );
 
     for (const task of tasks) {
       const status = await this.syncState.get(task.url);
@@ -56,7 +62,9 @@ export class SyncProjectAction {
       }
     }
 
-    const items = await this.projectManagement.fetchBoardItems(identity.projectNodeId);
+    const items = await this.projectManagement.fetchBoardItems(
+      identity.projectNodeId,
+    );
 
     for (const item of items) {
       await this.applyBoardChange.execute({
@@ -67,12 +75,17 @@ export class SyncProjectAction {
     }
 
     const boardUrls = new Set(
-      items.filter((item) => item.issueUrl !== undefined).map((item) => item.issueUrl as string),
+      items
+        .filter((item) => item.issueUrl !== undefined)
+        .map((item) => item.issueUrl as string),
     );
     const tracked = await this.syncState.list();
     for (const status of tracked) {
       if (!boardUrls.has(status.url)) {
-        await this.projectManagement.addBoardItem(identity.projectNodeId, status.url);
+        await this.projectManagement.addBoardItem(
+          identity.projectNodeId,
+          status.url,
+        );
       }
     }
 

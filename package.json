@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "audit": "pnpm audit"
+    "audit": "pnpm audit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [],
   "author": "Jordy Schreuders <99linesofcode@gmail.com>",

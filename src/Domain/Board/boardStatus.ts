@@ -12,7 +12,9 @@ export function boardOptionId(
   if (status === 'done') {
     const done = statusOptions.find((option) => option.name === doneOptionName);
     if (!done) {
-      throw new DomainError(`Board: no status option named "${doneOptionName}"`);
+      throw new DomainError(
+        `Board: no status option named "${doneOptionName}"`,
+      );
     }
     return done.id;
   }
@@ -25,6 +27,9 @@ export function boardOptionId(
 
 // The note status a board Status option name implies: the done option is done,
 // every other option is open.
-export function statusFromBoardOption(doneOptionName: string, optionName: string): 'done' | 'open' {
+export function statusFromBoardOption(
+  doneOptionName: string,
+  optionName: string,
+): 'done' | 'open' {
   return optionName === doneOptionName ? 'done' : 'open';
 }

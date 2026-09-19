@@ -15,7 +15,10 @@ export interface Transport {
   post(body: string): Promise<{ status: number; json: unknown }>;
   get(path: string): Promise<{ status: number; json: unknown }>;
   patch(path: string, body: string): Promise<{ status: number; json: unknown }>;
-  postPath(path: string, body: string): Promise<{ status: number; json: unknown }>;
+  postPath(
+    path: string,
+    body: string,
+  ): Promise<{ status: number; json: unknown }>;
 }
 
 interface RepoParts {
@@ -165,7 +168,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class GitHubAdapter implements ProjectManagementPort {
   constructor(private readonly transport: Transport) {}
 
-  async fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null> {
+  async fetchProjectIdentity(
+    data: AttachProjectData,
+  ): Promise<ProjectIdentityData | null> {
     const board = this.parseBoardUrl(data.boardUrl);
     const repo = this.parseRepoUrl(data.repoUrl);
 
@@ -192,7 +197,9 @@ export class GitHubAdapter implements ProjectManagementPort {
 
     const response = await this.transport.get(path);
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
     }
     if (!Array.isArray(response.json)) {
       throw new Error('GitHubAdapter: unexpected REST response shape');
@@ -209,7 +216,9 @@ export class GitHubAdapter implements ProjectManagementPort {
     if (!Array.isArray(issue.labels)) {
       return false;
     }
-    return issue.labels.some((label) => isRecord(label) && label.name === 'type:task');
+    return issue.labels.some(
+      (label) => isRecord(label) && label.name === 'type:task',
+    );
   }
 
   async fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]> {
@@ -220,7 +229,9 @@ export class GitHubAdapter implements ProjectManagementPort {
 
     const response = await this.transport.get(path);
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
     }
     if (!Array.isArray(response.json)) {
       throw new Error('GitHubAdapter: unexpected REST response shape');
@@ -238,7 +249,9 @@ export class GitHubAdapter implements ProjectManagementPort {
     }
     const names = issue.labels
       .filter(isRecord)
-      .filter((label): label is { name: string } => typeof label.name === 'string')
+      .filter(
+        (label): label is { name: string } => typeof label.name === 'string',
+      )
       .map((label) => label.name);
     return !names.includes('type:task') && !names.includes('type:slice');
   }
@@ -248,9 +261,14 @@ export class GitHubAdapter implements ProjectManagementPort {
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}/labels`;
 
-    const response = await this.transport.postPath(path, JSON.stringify({ labels: [label] }));
+    const response = await this.transport.postPath(
+      path,
+      JSON.stringify({ labels: [label] }),
+    );
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
     }
   }
 
@@ -261,7 +279,9 @@ export class GitHubAdapter implements ProjectManagementPort {
 
     const response = await this.transport.get(path);
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
     }
     if (!isRecord(response.json)) {
       throw new Error('GitHubAdapter: unexpected REST response shape');
@@ -269,14 +289,19 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
-  async updateTask(url: string, input: { title: string; body: string }): Promise<TaskData> {
+  async updateTask(
+    url: string,
+    input: { title: string; body: string },
+  ): Promise<TaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
 
     const response = await this.transport.patch(path, JSON.stringify(input));
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
     }
     if (!isRecord(response.json)) {
       throw new Error('GitHubAdapter: unexpected REST response shape');
@@ -289,9 +314,14 @@ export class GitHubAdapter implements ProjectManagementPort {
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
 
-    const response = await this.transport.patch(path, JSON.stringify({ state }));
+    const response = await this.transport.patch(
+      path,
+      JSON.stringify({ state }),
+    );
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: REST request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
     }
     if (!isRecord(response.json)) {
       throw new Error('GitHubAdapter: unexpected REST response shape');
@@ -300,9 +330,15 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   async fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]> {
-    const data = await this.postQuery(BOARD_ITEMS_QUERY, { projectId: projectNodeId });
+    const data = await this.postQuery(BOARD_ITEMS_QUERY, {
+      projectId: projectNodeId,
+    });
     const project = data.node;
-    if (!isRecord(project) || !isRecord(project.items) || !Array.isArray(project.items.nodes)) {
+    if (
+      !isRecord(project) ||
+      !isRecord(project.items) ||
+      !Array.isArray(project.items.nodes)
+    ) {
       throw new Error('GitHubAdapter: unexpected board items response shape');
     }
     return project.items.nodes
@@ -344,12 +380,20 @@ export class GitHubAdapter implements ProjectManagementPort {
       repositoryId: repoNodeId,
     });
     const converted = data.convertProjectV2DraftIssueItemToIssue;
-    if (!isRecord(converted) || !isRecord(converted.item) || !isRecord(converted.item.content)) {
-      throw new Error('GitHubAdapter: unexpected convert draft issue response shape');
+    if (
+      !isRecord(converted) ||
+      !isRecord(converted.item) ||
+      !isRecord(converted.item.content)
+    ) {
+      throw new Error(
+        'GitHubAdapter: unexpected convert draft issue response shape',
+      );
     }
     const url = converted.item.content.url;
     if (typeof url !== 'string') {
-      throw new Error('GitHubAdapter: convert draft issue returned no issue url');
+      throw new Error(
+        'GitHubAdapter: convert draft issue returned no issue url',
+      );
     }
     return this.fetchTask(url);
   }
@@ -360,9 +404,12 @@ export class GitHubAdapter implements ProjectManagementPort {
     }
     const type = node.type === 'DRAFT_ISSUE' ? 'DRAFT_ISSUE' : 'ISSUE';
     const content = isRecord(node.content) ? node.content : undefined;
-    const issueUrl = content && typeof content.url === 'string' ? content.url : undefined;
-    const draftTitle = content && typeof content.title === 'string' ? content.title : undefined;
-    const draftBody = content && typeof content.body === 'string' ? content.body : undefined;
+    const issueUrl =
+      content && typeof content.url === 'string' ? content.url : undefined;
+    const draftTitle =
+      content && typeof content.title === 'string' ? content.title : undefined;
+    const draftBody =
+      content && typeof content.body === 'string' ? content.body : undefined;
     const statusOptionName = this.statusOptionName(node.fieldValues);
     const item: BoardItemData = { itemId: node.id, type };
     if (issueUrl !== undefined) {
@@ -413,7 +460,10 @@ export class GitHubAdapter implements ProjectManagementPort {
     const labels = Array.isArray(issue.labels)
       ? issue.labels
           .filter(isRecord)
-          .filter((label): label is { name: string } => typeof label.name === 'string')
+          .filter(
+            (label): label is { name: string } =>
+              typeof label.name === 'string',
+          )
           .map((label) => label.name)
       : [];
 
@@ -430,10 +480,15 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private async fetchRepoNodeId(repo: RepoParts): Promise<string> {
-    const data = await this.postQuery(REPO_QUERY, { owner: repo.owner, name: repo.name });
+    const data = await this.postQuery(REPO_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+    });
     const repository = data.repository;
     if (!isRecord(repository) || typeof repository.id !== 'string') {
-      throw new Error(`GitHubAdapter: repository ${repo.owner}/${repo.name} not found`);
+      throw new Error(
+        `GitHubAdapter: repository ${repo.owner}/${repo.name} not found`,
+      );
     }
     return repository.id;
   }
@@ -443,18 +498,28 @@ export class GitHubAdapter implements ProjectManagementPort {
     statusFieldId: string;
     statusOptions: ProjectStatusOption[];
   }> {
-    const query = board.kind === 'users' ? USER_PROJECT_QUERY : ORG_PROJECT_QUERY;
-    const data = await this.postQuery(query, { login: board.login, number: board.number });
+    const query =
+      board.kind === 'users' ? USER_PROJECT_QUERY : ORG_PROJECT_QUERY;
+    const data = await this.postQuery(query, {
+      login: board.login,
+      number: board.number,
+    });
     const owner = data[board.kind === 'users' ? 'user' : 'organization'];
     if (!isRecord(owner)) {
       throw new Error(`GitHubAdapter: ${board.kind} ${board.login} not found`);
     }
     const project = owner.projectV2;
     if (!isRecord(project) || typeof project.id !== 'string') {
-      throw new Error(`GitHubAdapter: project ${board.number} not found for ${board.login}`);
+      throw new Error(
+        `GitHubAdapter: project ${board.number} not found for ${board.login}`,
+      );
     }
     const status = this.findStatusField(project.fields);
-    return { id: project.id, statusFieldId: status.id, statusOptions: status.options };
+    return {
+      id: project.id,
+      statusFieldId: status.id,
+      statusOptions: status.options,
+    };
   }
 
   private findStatusField(fields: unknown): StatusField {
@@ -462,7 +527,11 @@ export class GitHubAdapter implements ProjectManagementPort {
       throw new Error('GitHubAdapter: project has no fields');
     }
     for (const node of fields.nodes) {
-      if (!isRecord(node) || node.name !== 'Status' || typeof node.id !== 'string') {
+      if (
+        !isRecord(node) ||
+        node.name !== 'Status' ||
+        typeof node.id !== 'string'
+      ) {
         continue;
       }
       const options = Array.isArray(node.options)
@@ -483,9 +552,13 @@ export class GitHubAdapter implements ProjectManagementPort {
     query: string,
     variables: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const response = await this.transport.post(JSON.stringify({ query, variables }));
+    const response = await this.transport.post(
+      JSON.stringify({ query, variables }),
+    );
     if (response.status !== 200) {
-      throw new Error(`GitHubAdapter: GraphQL request failed with status ${response.status}`);
+      throw new Error(
+        `GitHubAdapter: GraphQL request failed with status ${response.status}`,
+      );
     }
     const json = response.json;
     if (!isRecord(json) || !isRecord(json.data)) {
@@ -521,17 +594,25 @@ export class GitHubAdapter implements ProjectManagementPort {
     if (kind !== 'users' && kind !== 'orgs') {
       throw new Error(`GitHubAdapter: invalid board url ${url}`);
     }
-    if (projects !== 'projects' || login === undefined || numberRaw === undefined) {
+    if (
+      projects !== 'projects' ||
+      login === undefined ||
+      numberRaw === undefined
+    ) {
       throw new Error(`GitHubAdapter: invalid board url ${url}`);
     }
     const number = Number(numberRaw);
     if (!Number.isInteger(number)) {
-      throw new Error(`GitHubAdapter: invalid project number in board url ${url}`);
+      throw new Error(
+        `GitHubAdapter: invalid project number in board url ${url}`,
+      );
     }
     return { kind, login, number };
   }
 
   private pathSegments(url: string): string[] {
-    return new URL(url).pathname.split('/').filter((segment) => segment.length > 0);
+    return new URL(url).pathname
+      .split('/')
+      .filter((segment) => segment.length > 0);
   }
 }

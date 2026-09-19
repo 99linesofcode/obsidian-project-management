@@ -40,7 +40,12 @@ class FakeProjectManagement implements ProjectManagementPort {
     issueUrl: string,
     statusOptionId: string,
   ): Promise<void> {
-    this.boardStatusCalls.push({ projectNodeId, statusFieldId, issueUrl, statusOptionId });
+    this.boardStatusCalls.push({
+      projectNodeId,
+      statusFieldId,
+      issueUrl,
+      statusOptionId,
+    });
   }
   async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
@@ -109,7 +114,12 @@ describe('BoardStatusAction', () => {
 
     // Then — the board Status is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
-      { projectNodeId: 'PVT_123', statusFieldId: 'PVTF_456', issueUrl: url, statusOptionId: 'PVTSSF_3' },
+      {
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        issueUrl: url,
+        statusOptionId: 'PVTSSF_3',
+      },
     ]);
   });
 
@@ -125,7 +135,12 @@ describe('BoardStatusAction', () => {
 
     // Then — the board Status is set to the first (default) option
     expect(projectManagement.boardStatusCalls).toEqual([
-      { projectNodeId: 'PVT_123', statusFieldId: 'PVTF_456', issueUrl: url, statusOptionId: 'PVTSSF_1' },
+      {
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        issueUrl: url,
+        statusOptionId: 'PVTSSF_1',
+      },
     ]);
   });
 

@@ -117,8 +117,15 @@ class FakeSyncState implements SyncStatePort {
   }
 }
 
-function makeAction(port: FakePort, vault: FakeVault, syncState: FakeSyncState): PromoteIssueAction {
-  return new PromoteIssueAction(port, new CreateTaskNoteAction(vault, syncState));
+function makeAction(
+  port: FakePort,
+  vault: FakeVault,
+  syncState: FakeSyncState,
+): PromoteIssueAction {
+  return new PromoteIssueAction(
+    port,
+    new CreateTaskNoteAction(vault, syncState),
+  );
 }
 
 describe('PromoteIssueAction', () => {
@@ -130,10 +137,16 @@ describe('PromoteIssueAction', () => {
     const action = makeAction(port, vault, syncState);
 
     // When — the action promotes the issue
-    await action.execute({ url: port.task.url, label: 'type:task', projectName: 'Acme Widgets' });
+    await action.execute({
+      url: port.task.url,
+      label: 'type:task',
+      projectName: 'Acme Widgets',
+    });
 
     // Then — the label is applied to the issue
-    expect(port.addedLabels).toEqual([{ url: port.task.url, label: 'type:task' }]);
+    expect(port.addedLabels).toEqual([
+      { url: port.task.url, label: 'type:task' },
+    ]);
     // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toContain(slugify(port.task.title));
@@ -149,11 +162,17 @@ describe('PromoteIssueAction', () => {
     const action = makeAction(port, vault, syncState);
 
     // When — the action promotes the already-labelled issue
-    await action.execute({ url: port.task.url, label: 'type:task', projectName: 'Acme Widgets' });
+    await action.execute({
+      url: port.task.url,
+      label: 'type:task',
+      projectName: 'Acme Widgets',
+    });
 
     // Then — the label is still applied (GitHub labels are idempotent) and the
     // note is materialised
-    expect(port.addedLabels).toEqual([{ url: port.task.url, label: 'type:task' }]);
+    expect(port.addedLabels).toEqual([
+      { url: port.task.url, label: 'type:task' },
+    ]);
     expect(vault.created).toHaveLength(1);
   });
 });

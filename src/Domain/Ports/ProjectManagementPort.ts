@@ -10,11 +10,16 @@ import type { TaskData } from '../DataTransferObjects/TaskData.js';
 // issue to the board). Designed for the core, not to mimic GitHub's API.
 // Returns null when the provider is not ours to handle.
 export interface ProjectManagementPort {
-  fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null>;
+  fetchProjectIdentity(
+    data: AttachProjectData,
+  ): Promise<ProjectIdentityData | null>;
   fetchChangedTasks(repoUrl: string, since: string): Promise<TaskData[]>;
   fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
-  updateTask(url: string, input: { title: string; body: string }): Promise<TaskData>;
+  updateTask(
+    url: string,
+    input: { title: string; body: string },
+  ): Promise<TaskData>;
   setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData>;
   fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]>;
   setBoardStatus(

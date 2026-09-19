@@ -102,7 +102,11 @@ describe('CreateTaskNoteAction', () => {
     const action = new CreateTaskNoteAction(vault, syncState);
 
     // When — the action materialises the task note
-    await action.execute({ task, projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' });
+    await action.execute({
+      task,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
 
     // Then — the note is created at the mapped path with the mapped content
     const { path, content } = TaskNoteMapper.map(task, {
@@ -132,7 +136,11 @@ describe('CreateTaskNoteAction', () => {
     const action = new CreateTaskNoteAction(vault, syncState);
 
     // When — the action runs
-    await action.execute({ task, projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' });
+    await action.execute({
+      task,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
 
     // Then — nothing is created and no status record is written
     expect(vault.created).toEqual([]);

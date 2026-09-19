@@ -39,14 +39,23 @@ export class ApplyBoardChangeAction {
       return;
     }
 
-    const boardStatus = statusFromBoardOption(this.doneOptionName, item.statusOptionName);
+    const boardStatus = statusFromBoardOption(
+      this.doneOptionName,
+      item.statusOptionName,
+    );
     const issueState = status.lastSyncedStatus;
 
     if (boardStatus === 'done' && issueState === 'open') {
-      const updated = await this.projectManagement.setTaskState(item.issueUrl, 'closed');
+      const updated = await this.projectManagement.setTaskState(
+        item.issueUrl,
+        'closed',
+      );
       await this.flipNote(status, 'done', updated);
     } else if (boardStatus === 'open' && issueState === 'done') {
-      const updated = await this.projectManagement.setTaskState(item.issueUrl, 'open');
+      const updated = await this.projectManagement.setTaskState(
+        item.issueUrl,
+        'open',
+      );
       await this.flipNote(status, 'open', updated);
     }
   }
@@ -54,10 +63,17 @@ export class ApplyBoardChangeAction {
   // Rewrites just the note's status line and refreshes the baseline from the
   // state-change response, so the note and the baseline agree on the new
   // status without clobbering the body.
-  private async flipNote(status: Status, newStatus: 'done' | 'open', updated: TaskData): Promise<void> {
+  private async flipNote(
+    status: Status,
+    newStatus: 'done' | 'open',
+    updated: TaskData,
+  ): Promise<void> {
     const note = await this.vault.getNoteByPath(status.notePath);
     if (note) {
-      await this.vault.writeNote(status.notePath, withStatus(note.content, newStatus));
+      await this.vault.writeNote(
+        status.notePath,
+        withStatus(note.content, newStatus),
+      );
     }
 
     await this.syncState.set({

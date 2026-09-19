@@ -63,7 +63,11 @@ export class VaultAdapter implements VaultPort {
   onNoteChanged(cb: (path: string) => void): void {
     // Only task notes under Projecten/ are synced; everything else is ignored.
     const eventRef = this.app.vault.on('modify', (file) => {
-      if (file instanceof TFile && file.extension === 'md' && file.path.startsWith('Projecten/')) {
+      if (
+        file instanceof TFile &&
+        file.extension === 'md' &&
+        file.path.startsWith('Projecten/')
+      ) {
         cb(file.path);
       }
     });
@@ -73,7 +77,11 @@ export class VaultAdapter implements VaultPort {
   onNoteDeleted(cb: (path: string) => void): void {
     // Only task notes under Projecten/ are synced; everything else is ignored.
     const eventRef = this.app.vault.on('delete', (file) => {
-      if (file instanceof TFile && file.extension === 'md' && file.path.startsWith('Projecten/')) {
+      if (
+        file instanceof TFile &&
+        file.extension === 'md' &&
+        file.path.startsWith('Projecten/')
+      ) {
         cb(file.path);
       }
     });

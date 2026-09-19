@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { ObservedState } from '../../../src/Domain/Reconciliation/ObservedState.js';
 import { VerdictResolver } from '../../../src/Domain/Reconciliation/VerdictResolver.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { BaselineView, NoteView, RemoteView } from '../../../src/Domain/Reconciliation/ObservedState.js';
+import type {
+  BaselineView,
+  NoteView,
+  RemoteView,
+} from '../../../src/Domain/Reconciliation/ObservedState.js';
 
 const BODY = 'The bug happens when the widget is resized.';
 const UPDATED_AT = '2026-09-18T10:00:00Z';
@@ -10,13 +14,20 @@ const LATER = '2026-09-18T11:00:00Z';
 
 // Builds an ObservedState where, by default, note, remote and baseline all
 // agree. Overrides flip one view at a time to set up a scenario.
-function makeObserved(overrides: {
-  note?: Partial<NoteView>;
-  remote?: Partial<RemoteView>;
-  baseline?: Partial<BaselineView>;
-} = {}): ObservedState {
+function makeObserved(
+  overrides: {
+    note?: Partial<NoteView>;
+    remote?: Partial<RemoteView>;
+    baseline?: Partial<BaselineView>;
+  } = {},
+): ObservedState {
   const note = { body: BODY, status: 'open', ...overrides.note } as NoteView;
-  const remote = { body: BODY, status: 'open', updatedAt: UPDATED_AT, ...overrides.remote } as RemoteView;
+  const remote = {
+    body: BODY,
+    status: 'open',
+    updatedAt: UPDATED_AT,
+    ...overrides.remote,
+  } as RemoteView;
   const baseline = {
     lastSyncedBodyHash: hash(BODY),
     lastSyncedRemoteUpdatedAt: UPDATED_AT,
@@ -32,7 +43,9 @@ describe('VerdictResolver', () => {
   describe('body dimension', () => {
     it('pushes the note body when only the note changed', () => {
       // Given — the note body changed since the last sync, the remote did not
-      const observed = makeObserved({ note: { body: 'The bug now also happens on resize.' } });
+      const observed = makeObserved({
+        note: { body: 'The bug now also happens on resize.' },
+      });
 
       // When — the verdict is resolved
       const verdict = resolver.resolve(observed);
@@ -103,7 +116,10 @@ describe('VerdictResolver', () => {
 
     it('conflicts (note wins) when both statuses changed', () => {
       // Given — both the note and remote status changed since the last sync
-      const observed = makeObserved({ note: { status: 'done' }, remote: { status: 'done' } });
+      const observed = makeObserved({
+        note: { status: 'done' },
+        remote: { status: 'done' },
+      });
 
       // When — the verdict is resolved
       const verdict = resolver.resolve(observed);
@@ -174,7 +190,9 @@ describe('VerdictResolver', () => {
 
     it('does not mutate the observed state it is given', () => {
       // Given — an observed state
-      const observed = makeObserved({ note: { body: 'The bug now also happens on resize.' } });
+      const observed = makeObserved({
+        note: { body: 'The bug now also happens on resize.' },
+      });
       const before = {
         note: { ...observed.note },
         remote: { ...observed.remote },

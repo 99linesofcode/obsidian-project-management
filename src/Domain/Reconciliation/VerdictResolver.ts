@@ -21,7 +21,10 @@ export class VerdictResolver {
     return new SyncVerdict({ body, status });
   }
 
-  private resolveDimension(localChanged: boolean, remoteChanged: boolean): DimensionVerdict {
+  private resolveDimension(
+    localChanged: boolean,
+    remoteChanged: boolean,
+  ): DimensionVerdict {
     if (localChanged && remoteChanged) return 'conflict';
     if (localChanged) return 'push';
     if (remoteChanged) return 'pull';

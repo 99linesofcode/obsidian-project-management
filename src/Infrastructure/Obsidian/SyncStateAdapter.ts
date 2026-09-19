@@ -34,7 +34,11 @@ export class SyncStateAdapter implements SyncStatePort {
   async findByNotePath(notePath: string): Promise<Status | null> {
     const data = await this.storage.load();
     for (const [key, raw] of Object.entries(data)) {
-      if (key.startsWith('status.') && isRecord(raw) && raw.notePath === notePath) {
+      if (
+        key.startsWith('status.') &&
+        isRecord(raw) &&
+        raw.notePath === notePath
+      ) {
         return this.mapStatus(raw);
       }
     }
@@ -59,11 +63,17 @@ export class SyncStateAdapter implements SyncStatePort {
       url: typeof raw.url === 'string' ? raw.url : '',
       remoteId: typeof raw.remoteId === 'number' ? raw.remoteId : 0,
       notePath: typeof raw.notePath === 'string' ? raw.notePath : '',
-      lastSyncedBodyHash: typeof raw.lastSyncedBodyHash === 'string' ? raw.lastSyncedBodyHash : '',
+      lastSyncedBodyHash:
+        typeof raw.lastSyncedBodyHash === 'string'
+          ? raw.lastSyncedBodyHash
+          : '',
       lastSyncedRemoteUpdatedAt:
-        typeof raw.lastSyncedRemoteUpdatedAt === 'string' ? raw.lastSyncedRemoteUpdatedAt : '',
+        typeof raw.lastSyncedRemoteUpdatedAt === 'string'
+          ? raw.lastSyncedRemoteUpdatedAt
+          : '',
       lastSyncedStatus: raw.lastSyncedStatus === 'done' ? 'done' : 'open',
-      lastSyncedTitle: typeof raw.lastSyncedTitle === 'string' ? raw.lastSyncedTitle : '',
+      lastSyncedTitle:
+        typeof raw.lastSyncedTitle === 'string' ? raw.lastSyncedTitle : '',
     };
   }
 
@@ -79,7 +89,10 @@ export class SyncStateAdapter implements SyncStatePort {
     await this.storage.save(data);
   }
 
-  async setIdentity(projectName: string, identity: ProjectIdentityData): Promise<void> {
+  async setIdentity(
+    projectName: string,
+    identity: ProjectIdentityData,
+  ): Promise<void> {
     const data = await this.storage.load();
     data[`identity.${projectName}`] = identity;
     await this.storage.save(data);
@@ -95,8 +108,10 @@ export class SyncStateAdapter implements SyncStatePort {
     return {
       repoUrl: typeof raw.repoUrl === 'string' ? raw.repoUrl : '',
       repoNodeId: typeof raw.repoNodeId === 'string' ? raw.repoNodeId : '',
-      projectNodeId: typeof raw.projectNodeId === 'string' ? raw.projectNodeId : '',
-      statusFieldId: typeof raw.statusFieldId === 'string' ? raw.statusFieldId : '',
+      projectNodeId:
+        typeof raw.projectNodeId === 'string' ? raw.projectNodeId : '',
+      statusFieldId:
+        typeof raw.statusFieldId === 'string' ? raw.statusFieldId : '',
       statusOptions: Array.isArray(raw.statusOptions)
         ? raw.statusOptions
             .filter(isRecord)

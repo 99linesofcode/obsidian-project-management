@@ -10,7 +10,9 @@ class FakePort implements ProjectManagementPort {
   calls: AttachProjectData[] = [];
   result: ProjectIdentityData | null = null;
 
-  async fetchProjectIdentity(data: AttachProjectData): Promise<ProjectIdentityData | null> {
+  async fetchProjectIdentity(
+    data: AttachProjectData,
+  ): Promise<ProjectIdentityData | null> {
     this.calls.push(data);
     return this.result;
   }

@@ -15,7 +15,10 @@ const task: TaskData = {
   labels: [],
 };
 
-const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };
+const context = {
+  projectName: 'Acme Widgets',
+  syncedAt: '2026-09-18T12:00:00Z',
+};
 
 describe('TaskNoteParser', () => {
   it('round-trips a mapped note back to url, status and body', () => {
@@ -47,7 +50,9 @@ describe('TaskNoteParser', () => {
 
   it('returns null for content with frontmatter but no url', () => {
     // Given — a note that is not a synced artifact (no url frontmatter)
-    const content = ['---', 'categories: [taken]', '---', 'Some body.'].join('\n');
+    const content = ['---', 'categories: [taken]', '---', 'Some body.'].join(
+      '\n',
+    );
 
     // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);

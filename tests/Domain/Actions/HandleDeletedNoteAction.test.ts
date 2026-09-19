@@ -132,8 +132,15 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
   };
 }
 
-function makeAction(syncState: FakeSyncState, projectManagement: FakeProjectManagement) {
-  const boardStatus = new BoardStatusAction(syncState, projectManagement, 'Done');
+function makeAction(
+  syncState: FakeSyncState,
+  projectManagement: FakeProjectManagement,
+) {
+  const boardStatus = new BoardStatusAction(
+    syncState,
+    projectManagement,
+    'Done',
+  );
   return new HandleDeletedNoteAction(syncState, projectManagement, boardStatus);
 }
 
@@ -159,7 +166,9 @@ describe('HandleDeletedNoteAction', () => {
     await action.execute({ notePath, projectName });
 
     // Then — the issue is closed, the board set to done, and the record removed
-    expect(projectManagement.stateCalls).toEqual([{ url: task.url, state: 'closed' }]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: task.url, state: 'closed' },
+    ]);
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: task.url, statusOptionId: 'PVTSSF_3' },
     ]);
@@ -174,7 +183,10 @@ describe('HandleDeletedNoteAction', () => {
     const action = makeAction(syncState, projectManagement);
 
     // When — the note is deleted
-    await action.execute({ notePath: 'Projecten/Acme Widgets/taken/99-untracked.md', projectName });
+    await action.execute({
+      notePath: 'Projecten/Acme Widgets/taken/99-untracked.md',
+      projectName,
+    });
 
     // Then — nothing is closed, mirrored or removed
     expect(projectManagement.stateCalls).toEqual([]);

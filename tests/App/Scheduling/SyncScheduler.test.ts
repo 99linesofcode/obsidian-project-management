@@ -93,7 +93,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchChangedTasks(_repoUrl: string, since: string): Promise<TaskData[]> {
+  async fetchChangedTasks(
+    _repoUrl: string,
+    since: string,
+  ): Promise<TaskData[]> {
     this.sinceCalls.push(since);
     return [];
   }
@@ -129,12 +132,17 @@ class FakeProjectManagement implements ProjectManagementPort {
 // A fake reconcile action that records its invocations and can be made slow,
 // so the scheduler's debounce and per-project serialisation are observable.
 class FakeReconcile {
-  calls: Array<{ notePath: string; projectName: string; syncedAt: string }> = [];
+  calls: Array<{ notePath: string; projectName: string; syncedAt: string }> =
+    [];
   active = 0;
   maxActive = 0;
   private resolvers: Array<() => void> = [];
 
-  async execute(input: { notePath: string; projectName: string; syncedAt: string }): Promise<void> {
+  async execute(input: {
+    notePath: string;
+    projectName: string;
+    syncedAt: string;
+  }): Promise<void> {
     this.active++;
     this.maxActive = Math.max(this.maxActive, this.active);
     this.calls.push(input);
@@ -150,14 +158,19 @@ class FakeReconcile {
   }
 }
 
-const fakeSyncProject = { execute: vi.fn(async () => {}) } as unknown as SyncProjectAction;
+const fakeSyncProject = {
+  execute: vi.fn(async () => {}),
+} as unknown as SyncProjectAction;
 
 // A fake delete handler that records its invocations, so the scheduler's
 // wiring of the delete path is observable.
 class FakeHandleDeleted {
   calls: Array<{ notePath: string; projectName: string }> = [];
 
-  async execute(input: { notePath: string; projectName: string }): Promise<void> {
+  async execute(input: {
+    notePath: string;
+    projectName: string;
+  }): Promise<void> {
     this.calls.push(input);
   }
 }
@@ -194,7 +207,12 @@ describe('SyncScheduler', () => {
       createTaskNote,
       new BoardStatusAction(syncState, projectManagement, 'Done'),
     );
-    const applyBoardChange = new ApplyBoardChangeAction(syncState, projectManagement, vault, 'Done');
+    const applyBoardChange = new ApplyBoardChangeAction(
+      syncState,
+      projectManagement,
+      vault,
+      'Done',
+    );
     const syncProject = new SyncProjectAction(
       projectManagement,
       syncState,
@@ -248,7 +266,9 @@ describe('SyncScheduler', () => {
     // Then — the reconcile runs for the derived project with the note path
     expect(reconcile.calls).toHaveLength(1);
     expect(reconcile.calls[0]!.projectName).toBe('Acme Widgets');
-    expect(reconcile.calls[0]!.notePath).toBe('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    expect(reconcile.calls[0]!.notePath).toBe(
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    );
   });
 
   it('ignores note changes outside Projecten', async () => {
@@ -361,7 +381,9 @@ describe('SyncScheduler', () => {
 
     // Then — the delete handler runs once with the note path
     expect(handleDeleted.calls).toHaveLength(1);
-    expect(handleDeleted.calls[0]!.notePath).toBe('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    expect(handleDeleted.calls[0]!.notePath).toBe(
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    );
   });
 
   it('ignores note deletions outside Projecten', async () => {

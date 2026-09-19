@@ -157,7 +157,10 @@ const task: TaskData = {
   labels: ['type:task'],
 };
 
-const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };
+const context = {
+  projectName: 'Acme Widgets',
+  syncedAt: '2026-09-18T12:00:00Z',
+};
 
 function makeStatus(overrides: Partial<Status> = {}): Status {
   const { path } = TaskNoteMapper.map(task, context);
@@ -173,10 +176,23 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
   };
 }
 
-function makeAction(vault: FakeVault, syncState: FakeSyncState, projectManagement: FakeProjectManagement) {
+function makeAction(
+  vault: FakeVault,
+  syncState: FakeSyncState,
+  projectManagement: FakeProjectManagement,
+) {
   const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-  const boardStatus = new BoardStatusAction(syncState, projectManagement, 'Done');
-  return new ApplyRemoteChangeAction(vault, syncState, createTaskNote, boardStatus);
+  const boardStatus = new BoardStatusAction(
+    syncState,
+    projectManagement,
+    'Done',
+  );
+  return new ApplyRemoteChangeAction(
+    vault,
+    syncState,
+    createTaskNote,
+    boardStatus,
+  );
 }
 
 describe('ApplyRemoteChangeAction', () => {
@@ -282,7 +298,11 @@ describe('ApplyRemoteChangeAction', () => {
     vault.notes.set(path, content);
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
-    const closed: TaskData = { ...task, state: 'closed', updatedAt: '2026-09-18T11:00:00Z' };
+    const closed: TaskData = {
+      ...task,
+      state: 'closed',
+      updatedAt: '2026-09-18T11:00:00Z',
+    };
     syncState.identity = {
       repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',

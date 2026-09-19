@@ -7,7 +7,8 @@ import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectMan
 // canned updated task, so the action's own behaviour (PATCH + return) is
 // what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
-  updateCalls: Array<{ url: string; input: { title: string; body: string } }> = [];
+  updateCalls: Array<{ url: string; input: { title: string; body: string } }> =
+    [];
   updated: TaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
@@ -31,7 +32,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
 
-  async updateTask(url: string, input: { title: string; body: string }): Promise<TaskData> {
+  async updateTask(
+    url: string,
+    input: { title: string; body: string },
+  ): Promise<TaskData> {
     this.updateCalls.push({ url, input });
     return this.updated;
   }
@@ -82,7 +86,10 @@ describe('PushNoteAction', () => {
     expect(port.updateCalls).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/42',
-        input: { title: 'fix the widget', body: 'The bug now also happens on resize.' },
+        input: {
+          title: 'fix the widget',
+          body: 'The bug now also happens on resize.',
+        },
       },
     ]);
     // And the updated task is returned for the caller to refresh its baseline

@@ -85,7 +85,11 @@ export class SyncScheduler extends Component {
   // Debounces per project and per kind, so a modify and a delete for the same
   // project don't coalesce into one action; both still serialise on the same
   // per-project chain.
-  private schedule(kind: 'reconcile' | 'delete', projectName: string, path: string): void {
+  private schedule(
+    kind: 'reconcile' | 'delete',
+    projectName: string,
+    path: string,
+  ): void {
     const key = `${kind}:${projectName}`;
     const existing = this.debounceTimers.get(key);
     if (existing !== undefined) {
@@ -98,7 +102,11 @@ export class SyncScheduler extends Component {
     this.debounceTimers.set(key, timer);
   }
 
-  private enqueue(kind: 'reconcile' | 'delete', projectName: string, path: string): void {
+  private enqueue(
+    kind: 'reconcile' | 'delete',
+    projectName: string,
+    path: string,
+  ): void {
     const previous = this.chains.get(projectName) ?? Promise.resolve();
     const next = previous.then(() => {
       if (kind === 'delete') {

@@ -44,7 +44,9 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
       if (!identity) {
         continue;
       }
-      const boardItems = await this.port.fetchBoardItems(identity.projectNodeId);
+      const boardItems = await this.port.fetchBoardItems(
+        identity.projectNodeId,
+      );
       for (const item of boardItems) {
         if (item.type !== 'DRAFT_ISSUE') {
           continue;
@@ -66,8 +68,10 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
 
   // The event is part of the FuzzySuggestModal contract but unused here; the
   // pick only needs the chosen card.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onChooseItem(item: PromoteCardSuggestion, _evt: MouseEvent | KeyboardEvent): void {
+  onChooseItem(
+    item: PromoteCardSuggestion,
+    _evt: MouseEvent | KeyboardEvent,
+  ): void {
     void this.promote.execute({
       itemId: item.item.itemId,
       repoNodeId: item.repoNodeId,

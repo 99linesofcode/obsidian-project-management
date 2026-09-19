@@ -164,7 +164,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 }
 
-const context = { projectName: 'Acme Widgets', syncedAt: '2026-09-18T12:00:00Z' };
+const context = {
+  projectName: 'Acme Widgets',
+  syncedAt: '2026-09-18T12:00:00Z',
+};
 
 const taskA: TaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
@@ -211,7 +214,12 @@ function makeAction(
     createTaskNote,
     new BoardStatusAction(syncState, projectManagement, 'Done'),
   );
-  const applyBoardChange = new ApplyBoardChangeAction(syncState, projectManagement, vault, 'Done');
+  const applyBoardChange = new ApplyBoardChangeAction(
+    syncState,
+    projectManagement,
+    vault,
+    'Done',
+  );
   return new SyncProjectAction(
     projectManagement,
     syncState,
@@ -251,13 +259,17 @@ describe('SyncProjectAction', () => {
     await action.execute(context);
 
     // Then — tasks are fetched since the last poll, for the identity's repo
-    expect(projectManagement.repoUrlCalls).toEqual(['https://github.com/acme/widgets']);
+    expect(projectManagement.repoUrlCalls).toEqual([
+      'https://github.com/acme/widgets',
+    ]);
     expect(projectManagement.sinceCalls).toEqual(['2026-09-18T10:00:00Z']);
     // And the existing task is applied (rewritten) while the new one is created
     expect(vault.written).toHaveLength(1);
     expect(vault.written[0]!.path).toBe(pathA);
     expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(TaskNoteMapper.map(taskB, context).path);
+    expect(vault.created[0]!.path).toBe(
+      TaskNoteMapper.map(taskB, context).path,
+    );
     // And the cursor is advanced to the sync time
     expect(syncState.lastPollCalls).toEqual([
       { projectName: 'Acme Widgets', iso: '2026-09-18T12:00:00Z' },
@@ -300,7 +312,12 @@ describe('SyncProjectAction', () => {
     const projectManagement = new FakeProjectManagement();
     projectManagement.tasks = [];
     projectManagement.boardItems = [
-      { itemId: 'PVTI_1', type: 'ISSUE', issueUrl: taskA.url, statusOptionName: 'Done' },
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: taskA.url,
+        statusOptionName: 'Done',
+      },
     ];
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -309,7 +326,9 @@ describe('SyncProjectAction', () => {
 
     // Then — the board items are fetched once and the issue is closed
     expect(projectManagement.boardItemsCalls).toEqual(['PVT_123']);
-    expect(projectManagement.stateCalls).toEqual([{ url: taskA.url, state: 'closed' }]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: taskA.url, state: 'closed' },
+    ]);
   });
 
   it('adds a tracked task missing from the board', async () => {
@@ -331,7 +350,12 @@ describe('SyncProjectAction', () => {
     const projectManagement = new FakeProjectManagement();
     projectManagement.tasks = [];
     projectManagement.boardItems = [
-      { itemId: 'PVTI_1', type: 'ISSUE', issueUrl: 'https://github.com/acme/widgets/issues/99', statusOptionName: 'Todo' },
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: 'https://github.com/acme/widgets/issues/99',
+        statusOptionName: 'Todo',
+      },
     ];
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -363,7 +387,12 @@ describe('SyncProjectAction', () => {
     const projectManagement = new FakeProjectManagement();
     projectManagement.tasks = [];
     projectManagement.boardItems = [
-      { itemId: 'PVTI_1', type: 'ISSUE', issueUrl: taskA.url, statusOptionName: 'Todo' },
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: taskA.url,
+        statusOptionName: 'Todo',
+      },
     ];
     const action = makeAction(vault, syncState, projectManagement);
 

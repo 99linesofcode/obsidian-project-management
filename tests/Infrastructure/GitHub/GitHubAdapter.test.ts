@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { GitHubAdapter, type Transport } from '../../../src/Infrastructure/GitHub/GitHubAdapter.js';
+import {
+  GitHubAdapter,
+  type Transport,
+} from '../../../src/Infrastructure/GitHub/GitHubAdapter.js';
 import type { AttachProjectData } from '../../../src/Domain/DataTransferObjects/AttachProjectData.js';
 
 // A fake transport at the boundary: returns canned responses in call order
@@ -47,7 +50,10 @@ function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
   return { transport, bodies, paths };
 }
 
-const repoResponse = { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } };
+const repoResponse = {
+  status: 200,
+  json: { data: { repository: { id: 'R_kgDOAAAA' } } },
+};
 
 const userProjectResponse = {
   status: 200,
@@ -58,10 +64,14 @@ const userProjectResponse = {
           id: 'PVT_123',
           fields: {
             nodes: [
-              { id: 'PVTF_456', name: 'Status', options: [
-                { id: 'PVTSSF_1', name: 'Todo' },
-                { id: 'PVTSSF_2', name: 'Done' },
-              ] },
+              {
+                id: 'PVTF_456',
+                name: 'Status',
+                options: [
+                  { id: 'PVTSSF_1', name: 'Todo' },
+                  { id: 'PVTSSF_2', name: 'Done' },
+                ],
+              },
             ],
           },
         },
@@ -79,9 +89,11 @@ const orgProjectResponse = {
           id: 'PVT_789',
           fields: {
             nodes: [
-              { id: 'PVTF_101', name: 'Status', options: [
-                { id: 'PVTSSF_3', name: 'In progress' },
-              ] },
+              {
+                id: 'PVTF_101',
+                name: 'Status',
+                options: [{ id: 'PVTSSF_3', name: 'In progress' }],
+              },
             ],
           },
         },
@@ -93,7 +105,10 @@ const orgProjectResponse = {
 describe('GitHubAdapter', () => {
   it('resolves identities for a user board url', async () => {
     // Given — a user-scoped board and a transport that resolves it
-    const { transport, bodies } = fakeTransport([repoResponse, userProjectResponse]);
+    const { transport, bodies } = fakeTransport([
+      repoResponse,
+      userProjectResponse,
+    ]);
     const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
       pm: 'github',
@@ -127,7 +142,10 @@ describe('GitHubAdapter', () => {
 
   it('resolves identities for an org board url', async () => {
     // Given — an org-scoped board and a transport that resolves it
-    const { transport, bodies } = fakeTransport([repoResponse, orgProjectResponse]);
+    const { transport, bodies } = fakeTransport([
+      repoResponse,
+      orgProjectResponse,
+    ]);
     const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
       pm: 'github',
@@ -181,7 +199,9 @@ describe('GitHubAdapter', () => {
           user: {
             projectV2: {
               id: 'PVT_123',
-              fields: { nodes: [{ id: 'PVTF_999', name: 'Priority', options: [] }] },
+              fields: {
+                nodes: [{ id: 'PVTF_999', name: 'Priority', options: [] }],
+              },
             },
           },
         },
@@ -232,7 +252,10 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches changed tasks since a cursor
-    const result = await adapter.fetchChangedTasks('https://github.com/acme/widgets', '2026-09-18T00:00:00Z');
+    const result = await adapter.fetchChangedTasks(
+      'https://github.com/acme/widgets',
+      '2026-09-18T00:00:00Z',
+    );
 
     // Then — only the type:task issue is surfaced, mapped onto TaskData
     expect(result).toEqual([
@@ -274,7 +297,10 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches changed tasks
-    const result = await adapter.fetchChangedTasks('https://github.com/acme/widgets', '2026-09-18T00:00:00Z');
+    const result = await adapter.fetchChangedTasks(
+      'https://github.com/acme/widgets',
+      '2026-09-18T00:00:00Z',
+    );
 
     // Then — the state is closed
     expect(result[0]!.state).toBe('closed');
@@ -299,7 +325,9 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter fetches the task by url
-    const result = await adapter.fetchTask('https://github.com/acme/widgets/issues/42');
+    const result = await adapter.fetchTask(
+      'https://github.com/acme/widgets/issues/42',
+    );
 
     // Then — the issue is mapped onto TaskData
     expect(result).toEqual({
@@ -335,10 +363,13 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter updates the task
-    const result = await adapter.updateTask('https://github.com/acme/widgets/issues/42', {
-      title: 'fix the widget',
-      body: 'The bug now also happens on resize.',
-    });
+    const result = await adapter.updateTask(
+      'https://github.com/acme/widgets/issues/42',
+      {
+        title: 'fix the widget',
+        body: 'The bug now also happens on resize.',
+      },
+    );
 
     // Then — the updated issue is mapped onto TaskData
     expect(result).toEqual({
@@ -354,7 +385,10 @@ describe('GitHubAdapter', () => {
     // And the PATCH targeted the bound repo and issue number with the input
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
     expect(bodies[0]).toBe(
-      JSON.stringify({ title: 'fix the widget', body: 'The bug now also happens on resize.' }),
+      JSON.stringify({
+        title: 'fix the widget',
+        body: 'The bug now also happens on resize.',
+      }),
     );
   });
 
@@ -377,7 +411,10 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter sets the task state to closed
-    const result = await adapter.setTaskState('https://github.com/acme/widgets/issues/42', 'closed');
+    const result = await adapter.setTaskState(
+      'https://github.com/acme/widgets/issues/42',
+      'closed',
+    );
 
     // Then — the updated issue is mapped onto TaskData
     expect(result).toEqual({
@@ -441,7 +478,12 @@ describe('GitHubAdapter', () => {
         issueUrl: 'https://github.com/acme/widgets/issues/42',
         statusOptionName: 'Done',
       },
-      { itemId: 'PVTI_2', type: 'DRAFT_ISSUE', issueUrl: undefined, statusOptionName: undefined },
+      {
+        itemId: 'PVTI_2',
+        type: 'DRAFT_ISSUE',
+        issueUrl: undefined,
+        statusOptionName: undefined,
+      },
     ]);
     // And the query targeted the project node id
     expect(bodies[0]).toContain('BoardItems');
@@ -478,7 +520,12 @@ describe('GitHubAdapter', () => {
 
     // Then — the draft title and body are surfaced on the DTO
     expect(result).toEqual([
-      { itemId: 'PVTI_2', type: 'DRAFT_ISSUE', draftTitle: 'An idea', draftBody: 'The draft body.' },
+      {
+        itemId: 'PVTI_2',
+        type: 'DRAFT_ISSUE',
+        draftTitle: 'An idea',
+        draftBody: 'The draft body.',
+      },
     ]);
     // And the query asks for the draft content
     expect(bodies[0]).toContain('DraftIssue');
@@ -513,7 +560,10 @@ describe('GitHubAdapter', () => {
         labels: [],
       },
     };
-    const { transport, bodies, paths } = fakeTransport([mutationResponse, issueResponse]);
+    const { transport, bodies, paths } = fakeTransport([
+      mutationResponse,
+      issueResponse,
+    ]);
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter promotes the draft card
@@ -550,7 +600,9 @@ describe('GitHubAdapter', () => {
                   id: 'PVTI_1',
                   type: 'ISSUE',
                   content: { url: 'https://github.com/acme/widgets/issues/42' },
-                  fieldValues: { nodes: [{ name: 'Todo', field: { name: 'Status' } }] },
+                  fieldValues: {
+                    nodes: [{ name: 'Todo', field: { name: 'Status' } }],
+                  },
                 },
               ],
             },
@@ -558,12 +610,23 @@ describe('GitHubAdapter', () => {
         },
       },
     };
-    const mutationResponse = { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } };
-    const { transport, bodies } = fakeTransport([boardResponse, mutationResponse]);
+    const mutationResponse = {
+      status: 200,
+      json: { data: { projectV2Item: { id: 'PVTI_1' } } },
+    };
+    const { transport, bodies } = fakeTransport([
+      boardResponse,
+      mutationResponse,
+    ]);
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter sets the board status to the done option
-    await adapter.setBoardStatus('PVT_123', 'PVTF_456', 'https://github.com/acme/widgets/issues/42', 'PVTSSF_3');
+    await adapter.setBoardStatus(
+      'PVT_123',
+      'PVTF_456',
+      'https://github.com/acme/widgets/issues/42',
+      'PVTSSF_3',
+    );
 
     // Then — the item id is resolved from the board and the field value is updated
     expect(bodies[1]).toContain('SetBoardStatus');
@@ -587,12 +650,21 @@ describe('GitHubAdapter', () => {
         labels: [{ name: 'type:task' }],
       },
     };
-    const mutationResponse = { status: 200, json: { data: { item: { id: 'PVTI_9' } } } };
-    const { transport, bodies } = fakeTransport([issueResponse, mutationResponse]);
+    const mutationResponse = {
+      status: 200,
+      json: { data: { item: { id: 'PVTI_9' } } },
+    };
+    const { transport, bodies } = fakeTransport([
+      issueResponse,
+      mutationResponse,
+    ]);
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter adds the issue to the board
-    await adapter.addBoardItem('PVT_123', 'https://github.com/acme/widgets/issues/42');
+    await adapter.addBoardItem(
+      'PVT_123',
+      'https://github.com/acme/widgets/issues/42',
+    );
 
     // Then — the issue's node id is resolved from the REST response and added
     expect(bodies[0]).toContain('AddBoardItem');
@@ -641,7 +713,9 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues('https://github.com/acme/widgets');
+    const result = await adapter.fetchUnpromotedIssues(
+      'https://github.com/acme/widgets',
+    );
 
     // Then — only the unlabeled issue is surfaced, mapped onto TaskData
     expect(result).toEqual([
@@ -681,7 +755,9 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues('https://github.com/acme/widgets');
+    const result = await adapter.fetchUnpromotedIssues(
+      'https://github.com/acme/widgets',
+    );
 
     // Then — the labelled task is not surfaced
     expect(result).toEqual([]);
@@ -708,7 +784,9 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues('https://github.com/acme/widgets');
+    const result = await adapter.fetchUnpromotedIssues(
+      'https://github.com/acme/widgets',
+    );
 
     // Then — the slice is not surfaced
     expect(result).toEqual([]);
@@ -721,7 +799,10 @@ describe('GitHubAdapter', () => {
     const adapter = new GitHubAdapter(transport);
 
     // When — the adapter adds the label to the issue
-    await adapter.addLabel('https://github.com/acme/widgets/issues/42', 'type:task');
+    await adapter.addLabel(
+      'https://github.com/acme/widgets/issues/42',
+      'type:task',
+    );
 
     // Then — the POST targeted the bound repo, issue and labels endpoint
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
@@ -735,9 +816,9 @@ describe('GitHubAdapter', () => {
 
     // When — a repo-scoped call is made with the empty url
     // Then — it fails with a clear error, not a raw TypeError
-    await expect(adapter.fetchChangedTasks('', '2026-09-18T00:00:00Z')).rejects.toThrow(
-      /invalid repo url/,
-    );
+    await expect(
+      adapter.fetchChangedTasks('', '2026-09-18T00:00:00Z'),
+    ).rejects.toThrow(/invalid repo url/);
   });
 
   it('reports an invalid board url clearly instead of a TypeError', async () => {
@@ -752,6 +833,8 @@ describe('GitHubAdapter', () => {
 
     // When — the identity is resolved with the empty board url
     // Then — it fails with a clear error, not a raw TypeError
-    await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/invalid board url/);
+    await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(
+      /invalid board url/,
+    );
   });
 });

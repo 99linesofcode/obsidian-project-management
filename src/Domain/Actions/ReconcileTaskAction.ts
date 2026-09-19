@@ -82,7 +82,8 @@ export class ReconcileTaskAction {
     // renamed) when the note changed; pull the remote body when only the
     // remote changed.
     if (verdict.body === 'push' || verdict.body === 'conflict') {
-      const titleChanged = slugify(currentTitle) !== slugify(status.lastSyncedTitle);
+      const titleChanged =
+        slugify(currentTitle) !== slugify(status.lastSyncedTitle);
       const updated = await this.pushNote.execute({
         url: parsed.url,
         title: titleChanged ? currentTitle : status.lastSyncedTitle,
@@ -111,7 +112,10 @@ export class ReconcileTaskAction {
       });
     } else if (verdict.status === 'pull') {
       if (verdict.body === 'push' || verdict.body === 'conflict') {
-        await this.applyStatusToNote(input.notePath, taskStatusFromState(remote.state));
+        await this.applyStatusToNote(
+          input.notePath,
+          taskStatusFromState(remote.state),
+        );
       } else if (verdict.body === 'none') {
         await this.applyRemoteChange.execute({
           task: remote,
@@ -125,7 +129,10 @@ export class ReconcileTaskAction {
   // Rewrites just the note's frontmatter status line, keeping the body that
   // was just pushed. The body push above already refreshed the baseline, so
   // the note and the baseline now agree on the mirrored status.
-  private async applyStatusToNote(notePath: string, status: 'open' | 'done'): Promise<void> {
+  private async applyStatusToNote(
+    notePath: string,
+    status: 'open' | 'done',
+  ): Promise<void> {
     const note = await this.vault.getNoteByPath(notePath);
     if (!note) {
       return;
@@ -133,7 +140,11 @@ export class ReconcileTaskAction {
     await this.vault.writeNote(notePath, withStatus(note.content, status));
   }
 
-  private async refreshBaseline(status: Status, updated: TaskData, notePath: string): Promise<void> {
+  private async refreshBaseline(
+    status: Status,
+    updated: TaskData,
+    notePath: string,
+  ): Promise<void> {
     await this.syncState.set({
       url: status.url,
       remoteId: status.remoteId,
