@@ -4,7 +4,6 @@ import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNote
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
@@ -160,6 +159,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
+        statusName: 'In Progress',
 };
 
 function makeStatus(overrides: Partial<Status> = {}): Status {
@@ -170,7 +170,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath: path,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: TaskStatus.Open,
+    lastSyncedStatus: 'In Progress',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -182,11 +182,7 @@ function makeAction(
   projectManagement: FakeProjectManagement,
 ) {
   const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-  const boardStatus = new BoardStatusAction(
-    syncState,
-    projectManagement,
-    'Done',
-  );
+  const boardStatus = new BoardStatusAction(syncState, projectManagement);
   return new ApplyRemoteChangeAction(
     vault,
     syncState,
@@ -225,7 +221,7 @@ describe('ApplyRemoteChangeAction', () => {
         notePath: path,
         lastSyncedBodyHash: hash(changed.body),
         lastSyncedRemoteUpdatedAt: changed.updatedAt,
-        lastSyncedStatus: TaskStatus.Open,
+        lastSyncedStatus: 'In Progress',
         lastSyncedTitle: changed.title,
       },
     ]);
@@ -315,7 +311,7 @@ describe('ApplyRemoteChangeAction', () => {
     };
 
     // When — the remote change is applied
-    await action.execute({ task: closed, ...context });
+    await action.execute({ task: closed, ...context, statusName: 'Done' });
 
     // Then — the board Status is mirrored to the done option
     expect(projectManagement.boardStatusCalls).toEqual([

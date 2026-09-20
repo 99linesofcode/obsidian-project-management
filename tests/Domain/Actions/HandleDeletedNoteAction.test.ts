@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
-import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
@@ -126,7 +125,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: TaskStatus.Open,
+    lastSyncedStatus: 'open',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -136,12 +135,13 @@ function makeAction(
   syncState: FakeSyncState,
   projectManagement: FakeProjectManagement,
 ) {
-  const boardStatus = new BoardStatusAction(
+  const boardStatus = new BoardStatusAction(syncState, projectManagement);
+  return new HandleDeletedNoteAction(
     syncState,
     projectManagement,
-    'Done',
+    boardStatus,
+    'Shipped',
   );
-  return new HandleDeletedNoteAction(syncState, projectManagement, boardStatus);
 }
 
 describe('HandleDeletedNoteAction', () => {
@@ -156,9 +156,10 @@ describe('HandleDeletedNoteAction', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-        { id: 'PVTSSF_1', name: 'Todo' },
-        { id: 'PVTSSF_3', name: 'Done' },
-      ],
+    { id: 'PVTSSF_1', name: 'Todo' },
+    { id: 'PVTSSF_2', name: 'In Progress' },
+    { id: 'PVTSSF_3', name: 'Shipped' },
+  ],
     };
     const action = makeAction(syncState, projectManagement);
 

@@ -17,6 +17,7 @@ export class HandleDeletedNoteAction {
     private readonly syncState: SyncStatePort,
     private readonly projectManagement: ProjectManagementPort,
     private readonly boardStatus: BoardStatusAction,
+    private readonly doneOptionName: string,
   ) {}
 
   async execute(input: HandleDeletedNoteInput): Promise<void> {
@@ -29,7 +30,7 @@ export class HandleDeletedNoteAction {
     await this.boardStatus.execute({
       projectName: input.projectName,
       url: status.url,
-      status: 'done',
+      statusName: this.doneOptionName,
     });
     await this.syncState.remove(status.url);
   }

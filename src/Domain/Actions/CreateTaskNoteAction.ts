@@ -1,5 +1,4 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import { taskStatusFromState } from '../Enums/TaskStatus.js';
 import type { Status } from '../Models/Status.js';
 import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
@@ -10,6 +9,8 @@ export interface CreateTaskNoteInput {
   task: TaskData;
   projectName: string;
   syncedAt: string;
+  // The project's Status option name the task starts in.
+  statusName: string;
 }
 
 // UC2: materialise a task note. Idempotent — if the note already exists it is
@@ -24,6 +25,7 @@ export class CreateTaskNoteAction {
     const { path, content } = TaskNoteMapper.map(input.task, {
       projectName: input.projectName,
       syncedAt: input.syncedAt,
+      statusName: input.statusName,
     });
 
     const existing = await this.vault.getNoteByPath(path);
@@ -39,7 +41,7 @@ export class CreateTaskNoteAction {
       notePath: path,
       lastSyncedBodyHash: hash(input.task.body),
       lastSyncedRemoteUpdatedAt: input.task.updatedAt,
-      lastSyncedStatus: taskStatusFromState(input.task.state),
+      lastSyncedStatus: input.statusName,
       lastSyncedTitle: input.task.title,
     };
     await this.syncState.set(status);

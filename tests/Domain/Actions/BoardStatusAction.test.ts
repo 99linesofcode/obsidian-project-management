@@ -95,7 +95,8 @@ const identity: ProjectIdentityData = {
   statusFieldId: 'PVTF_456',
   statusOptions: [
     { id: 'PVTSSF_1', name: 'Todo' },
-    { id: 'PVTSSF_3', name: 'Done' },
+    { id: 'PVTSSF_2', name: 'In Progress' },
+    { id: 'PVTSSF_3', name: 'Shipped' },
   ],
 };
 
@@ -107,10 +108,10 @@ describe('BoardStatusAction', () => {
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    const action = new BoardStatusAction(syncState, projectManagement, 'Done');
+    const action = new BoardStatusAction(syncState, projectManagement);
 
     // When — the done status is mirrored to the board
-    await action.execute({ projectName: 'Acme Widgets', url, status: 'done' });
+    await action.execute({ projectName: 'Acme Widgets', url, statusName: 'Shipped' });
 
     // Then — the board Status is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
@@ -128,10 +129,10 @@ describe('BoardStatusAction', () => {
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    const action = new BoardStatusAction(syncState, projectManagement, 'Done');
+    const action = new BoardStatusAction(syncState, projectManagement);
 
     // When — the open status is mirrored to the board
-    await action.execute({ projectName: 'Acme Widgets', url, status: 'open' });
+    await action.execute({ projectName: 'Acme Widgets', url, statusName: 'Todo' });
 
     // Then — the board Status is set to the first (default) option
     expect(projectManagement.boardStatusCalls).toEqual([
@@ -149,10 +150,10 @@ describe('BoardStatusAction', () => {
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     syncState.identity = null;
-    const action = new BoardStatusAction(syncState, projectManagement, 'Done');
+    const action = new BoardStatusAction(syncState, projectManagement);
 
     // When — a status is mirrored to the board
-    await action.execute({ projectName: 'Acme Widgets', url, status: 'done' });
+    await action.execute({ projectName: 'Acme Widgets', url, statusName: 'Shipped' });
 
     // Then — nothing is written to the board
     expect(projectManagement.boardStatusCalls).toEqual([]);

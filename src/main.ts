@@ -99,11 +99,7 @@ export default class ProjectManagementPlugin extends Plugin {
 
     const github = new GitHubAdapter(transport);
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
-    const boardStatus = new BoardStatusAction(
-      syncState,
-      github,
-      this.settings.doneOptionName,
-    );
+    const boardStatus = new BoardStatusAction(syncState, github);
     const applyRemoteChange = new ApplyRemoteChangeAction(
       vault,
       syncState,
@@ -115,11 +111,13 @@ export default class ProjectManagementPlugin extends Plugin {
       github,
       syncState,
       boardStatus,
+      this.settings.doneOptionName,
     );
     const handleDeletedNote = new HandleDeletedNoteAction(
       syncState,
       github,
       boardStatus,
+      this.settings.doneOptionName,
     );
     const reconcileTask = new ReconcileTaskAction(
       vault,
@@ -130,6 +128,7 @@ export default class ProjectManagementPlugin extends Plugin {
       pushNote,
       propagateStatus,
       new VerdictResolver(),
+      this.settings.doneOptionName,
     );
     const applyBoardChange = new ApplyBoardChangeAction(
       syncState,
@@ -143,13 +142,14 @@ export default class ProjectManagementPlugin extends Plugin {
       applyRemoteChange,
       createTaskNote,
       applyBoardChange,
+      this.settings.doneOptionName,
     );
     const discoverProjects = new DiscoverProjectsAction(
       vault,
       new AttachProjectAction(github),
     );
 
-    const promoteIssue = new PromoteIssueAction(github, createTaskNote);
+    const promoteIssue = new PromoteIssueAction(github, syncState, createTaskNote);
     const promoteToTask = new PromoteToTaskCommand(
       () => this.projectNames,
       syncState,
@@ -158,7 +158,7 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     promoteToTask.register(this);
 
-    const promoteCard = new PromoteCardAction(github, createTaskNote);
+    const promoteCard = new PromoteCardAction(github, syncState, createTaskNote);
     const promoteCardToIssue = new PromoteCardToIssueCommand(
       () => this.projectNames,
       syncState,

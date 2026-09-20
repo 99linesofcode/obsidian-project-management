@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStatusAction.js';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
-import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
@@ -120,7 +119,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: TaskStatus.Open,
+    lastSyncedStatus: 'Todo',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -130,12 +129,13 @@ function makeAction(
   projectManagement: FakeProjectManagement,
   syncState: FakeSyncState,
 ) {
-  const boardStatus = new BoardStatusAction(
-    syncState,
+  const boardStatus = new BoardStatusAction(syncState, projectManagement);
+  return new PropagateStatusAction(
     projectManagement,
-    'Done',
+    syncState,
+    boardStatus,
+    'Shipped',
   );
-  return new PropagateStatusAction(projectManagement, syncState, boardStatus);
 }
 
 describe('PropagateStatusAction', () => {
@@ -154,7 +154,7 @@ describe('PropagateStatusAction', () => {
     // When — the done status is propagated
     await action.execute({
       url: task.url,
-      status: TaskStatus.Done,
+      statusName: 'Shipped',
       notePath,
       projectName,
     });
@@ -171,7 +171,7 @@ describe('PropagateStatusAction', () => {
         notePath,
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: '2026-09-18T12:30:00Z',
-        lastSyncedStatus: TaskStatus.Done,
+        lastSyncedStatus: 'Shipped',
         lastSyncedTitle: task.title,
       },
     ]);
@@ -188,14 +188,14 @@ describe('PropagateStatusAction', () => {
     const syncState = new FakeSyncState();
     syncState.statuses.set(
       task.url,
-      makeStatus({ lastSyncedStatus: TaskStatus.Done }),
+      makeStatus({ lastSyncedStatus: 'done' }),
     );
     const action = makeAction(projectManagement, syncState);
 
     // When — the open status is propagated
     await action.execute({
       url: task.url,
-      status: TaskStatus.Open,
+      statusName: 'Todo',
       notePath,
       projectName,
     });
@@ -206,7 +206,7 @@ describe('PropagateStatusAction', () => {
     ]);
     // And the baseline is refreshed from the response
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Open);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Todo');
     expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
       '2026-09-18T12:30:00Z',
     );
@@ -228,16 +228,17 @@ describe('PropagateStatusAction', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-        { id: 'PVTSSF_1', name: 'Todo' },
-        { id: 'PVTSSF_3', name: 'Done' },
-      ],
+    { id: 'PVTSSF_1', name: 'Todo' },
+    { id: 'PVTSSF_2', name: 'In Progress' },
+    { id: 'PVTSSF_3', name: 'Shipped' },
+  ],
     };
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
     await action.execute({
       url: task.url,
-      status: TaskStatus.Done,
+      statusName: 'Shipped',
       notePath,
       projectName,
     });
@@ -264,7 +265,7 @@ describe('PropagateStatusAction', () => {
     // When — the done status is propagated
     await action.execute({
       url: task.url,
-      status: TaskStatus.Done,
+      statusName: 'Shipped',
       notePath,
       projectName,
     });

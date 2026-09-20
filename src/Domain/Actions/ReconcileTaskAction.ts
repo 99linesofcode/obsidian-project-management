@@ -1,5 +1,4 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import { taskStatusFromState } from '../Enums/TaskStatus.js';
 import type { Status } from '../Models/Status.js';
 import { TaskNoteParser, withStatus } from '../Notes/TaskNoteParser.js';
 import { slugify, titleFromNotePath } from '../Notes/TaskNoteMapper.js';
@@ -35,6 +34,7 @@ export class ReconcileTaskAction {
     private readonly pushNote: PushNoteAction,
     private readonly propagateStatus: PropagateStatusAction,
     private readonly verdictResolver: VerdictResolver,
+    private readonly doneOptionName: string,
   ) {}
 
   async execute(input: ReconcileTaskInput): Promise<void> {
@@ -56,6 +56,7 @@ export class ReconcileTaskAction {
         task: remote,
         projectName: input.projectName,
         syncedAt: input.syncedAt,
+        statusName: await this.statusNameFor(remote.state, input.projectName),
       });
       return;
     }
@@ -66,7 +67,7 @@ export class ReconcileTaskAction {
       { body: parsed.body, status: parsed.status },
       {
         body: remote.body,
-        status: taskStatusFromState(remote.state),
+        status: await this.statusNameFor(remote.state, input.projectName),
         updatedAt: remote.updatedAt,
       },
       {
@@ -89,12 +90,13 @@ export class ReconcileTaskAction {
         title: titleChanged ? currentTitle : status.lastSyncedTitle,
         body: parsed.body,
       });
-      await this.refreshBaseline(status, updated, input.notePath);
+      await this.refreshBaseline(status, updated, input.notePath, input.projectName);
     } else if (verdict.body === 'pull') {
       await this.applyRemoteChange.execute({
         task: remote,
         projectName: input.projectName,
         syncedAt: input.syncedAt,
+        statusName: await this.statusNameFor(remote.state, input.projectName),
       });
     }
 
@@ -106,7 +108,7 @@ export class ReconcileTaskAction {
     if (verdict.status === 'push' || verdict.status === 'conflict') {
       await this.propagateStatus.execute({
         url: parsed.url,
-        status: parsed.status,
+        statusName: parsed.status,
         notePath: input.notePath,
         projectName: input.projectName,
       });
@@ -114,13 +116,14 @@ export class ReconcileTaskAction {
       if (verdict.body === 'push' || verdict.body === 'conflict') {
         await this.applyStatusToNote(
           input.notePath,
-          taskStatusFromState(remote.state),
+          await this.statusNameFor(remote.state, input.projectName),
         );
       } else if (verdict.body === 'none') {
         await this.applyRemoteChange.execute({
           task: remote,
           projectName: input.projectName,
           syncedAt: input.syncedAt,
+          statusName: await this.statusNameFor(remote.state, input.projectName),
         });
       }
     }
@@ -131,28 +134,46 @@ export class ReconcileTaskAction {
   // the note and the baseline now agree on the mirrored status.
   private async applyStatusToNote(
     notePath: string,
-    status: 'open' | 'done',
+    statusName: string,
   ): Promise<void> {
     const note = await this.vault.getNoteByPath(notePath);
     if (!note) {
       return;
     }
-    await this.vault.writeNote(notePath, withStatus(note.content, status));
+    await this.vault.writeNote(notePath, withStatus(note.content, statusName));
   }
 
   private async refreshBaseline(
     status: Status,
     updated: TaskData,
     notePath: string,
+    projectName: string,
   ): Promise<void> {
+    // The baseline reflects the remote as of the push response — including
+    // the lane the remote's state implies (a push can race a remote status
+    // change).
     await this.syncState.set({
       url: status.url,
       remoteId: status.remoteId,
       notePath,
       lastSyncedBodyHash: hash(updated.body),
       lastSyncedRemoteUpdatedAt: updated.updatedAt,
-      lastSyncedStatus: taskStatusFromState(updated.state),
+      lastSyncedStatus: await this.statusNameFor(
+        updated.state,
+        projectName,
+      ),
       lastSyncedTitle: updated.title,
     });
+  }
+
+  // The lane an issue state implies: closed issues sit in the done lane; open
+  // ones fall back to the project's default lane (the board's first option).
+  private async statusNameFor(
+    state: 'open' | 'closed',
+    projectName: string,
+  ): Promise<string> {
+    if (state === 'closed') return this.doneOptionName;
+    const identity = await this.syncState.getIdentity(projectName);
+    return identity?.statusOptions[0]?.name ?? this.doneOptionName;
   }
 }

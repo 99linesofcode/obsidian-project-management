@@ -1,9 +1,10 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import { taskStatusFromState } from '../Enums/TaskStatus.js';
 
 export interface TaskNoteContext {
   projectName: string;
   syncedAt: string;
+  // The project's Status option name the task sits in — written verbatim.
+  statusName: string;
 }
 
 export interface TaskNote {
@@ -41,7 +42,7 @@ export const TaskNoteMapper = {
       '---',
       'categories: [taken]',
       `url: ${task.url}`,
-      `status: ${taskStatusFromState(task.state)}`,
+      `status: ${context.statusName}`,
       `affiliation: ["[[${context.projectName}]]"]`,
       `synced: ${context.syncedAt}`,
       '---',

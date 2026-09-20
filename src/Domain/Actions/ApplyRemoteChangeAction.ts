@@ -1,5 +1,4 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import { taskStatusFromState } from '../Enums/TaskStatus.js';
 import type { Status } from '../Models/Status.js';
 import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
@@ -12,6 +11,9 @@ export interface ApplyRemoteChangeInput {
   task: TaskData;
   projectName: string;
   syncedAt: string;
+  // The project's Status option name the task's issue state implies —
+  // computed by the sync from the project's identity.
+  statusName: string;
 }
 
 // UC3/UC7: mirror a remote change onto an existing task note. Locates the note
@@ -34,6 +36,7 @@ export class ApplyRemoteChangeAction {
         task: input.task,
         projectName: input.projectName,
         syncedAt: input.syncedAt,
+        statusName: input.statusName,
       });
       return;
     }
@@ -41,9 +44,9 @@ export class ApplyRemoteChangeAction {
     const { path, content } = TaskNoteMapper.map(input.task, {
       projectName: input.projectName,
       syncedAt: input.syncedAt,
+      statusName: input.statusName,
     });
     const newHash = hash(input.task.body);
-    const newStatus = taskStatusFromState(input.task.state);
 
     // Nothing changed on the remote — leave the note and record untouched.
     // A title change shows up as a different mapped path, so it is included
@@ -51,7 +54,7 @@ export class ApplyRemoteChangeAction {
     if (
       status.notePath === path &&
       status.lastSyncedBodyHash === newHash &&
-      status.lastSyncedStatus === newStatus &&
+      status.lastSyncedStatus === input.statusName &&
       status.lastSyncedRemoteUpdatedAt === input.task.updatedAt
     ) {
       return;
@@ -70,11 +73,11 @@ export class ApplyRemoteChangeAction {
 
     // A remote status flip is mirrored onto the board so the card stays in
     // step with the issue even when the change came from outside the board.
-    if (newStatus !== status.lastSyncedStatus) {
+    if (input.statusName !== status.lastSyncedStatus) {
       await this.boardStatus.execute({
         projectName: input.projectName,
         url: input.task.url,
-        status: newStatus,
+        statusName: input.statusName,
       });
     }
 
@@ -84,7 +87,7 @@ export class ApplyRemoteChangeAction {
       notePath: path,
       lastSyncedBodyHash: newHash,
       lastSyncedRemoteUpdatedAt: input.task.updatedAt,
-      lastSyncedStatus: newStatus,
+      lastSyncedStatus: input.statusName,
       lastSyncedTitle: input.task.title,
     };
     await this.syncState.set(updated);

@@ -1,8 +1,6 @@
-import { TaskStatus } from '../Enums/TaskStatus.js';
-
 export interface ParsedTaskNote {
   url: string;
-  status: TaskStatus;
+  status: string;
   body: string;
 }
 
@@ -31,7 +29,8 @@ function splitFrontmatter(
 }
 
 // Reads a task note back into its sync fields. Returns null when the note has
-// no url frontmatter — i.e. it is not a synced artifact.
+// no url frontmatter — i.e. it is not a synced artifact. The status is the
+// project's Status option name, verbatim.
 export const TaskNoteParser = {
   parse(content: string): ParsedTaskNote | null {
     const split = splitFrontmatter(content);
@@ -42,16 +41,15 @@ export const TaskNoteParser = {
     if (!url) {
       return null;
     }
-    const status =
-      split.fields.get('status') === 'done' ? TaskStatus.Done : TaskStatus.Open;
+    const status = split.fields.get('status') ?? '';
     return { url, status, body: split.body };
   },
 };
 
 // Rewrites the frontmatter status line of a task note, preserving the body
-// and every other frontmatter field. Used to mirror a remote status change
-// onto a note whose body was just pushed, without clobbering the pushed body.
-export function withStatus(content: string, status: 'open' | 'done'): string {
+// and every other frontmatter field. Used to mirror a status change onto a
+// note whose body was just pushed, without clobbering the pushed body.
+export function withStatus(content: string, status: string): string {
   const lines = content.split('\n');
   let inFrontmatter = false;
   for (let i = 0; i < lines.length; i++) {

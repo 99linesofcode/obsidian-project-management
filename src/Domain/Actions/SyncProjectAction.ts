@@ -1,8 +1,10 @@
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
+import { defaultStatusName } from '../Board/defaultStatusName.js';
+import { statusNameFromState } from '../Board/statusNameFromState.js';
 import type { ApplyBoardChangeAction } from './ApplyBoardChangeAction.js';
 import type { ApplyRemoteChangeAction } from './ApplyRemoteChangeAction.js';
-import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 
 export interface SyncProjectInput {
@@ -25,6 +27,7 @@ export class SyncProjectAction {
     private readonly applyRemoteChange: ApplyRemoteChangeAction,
     private readonly createTaskNote: CreateTaskNoteAction,
     private readonly applyBoardChange: ApplyBoardChangeAction,
+    private readonly doneOptionName: string,
   ) {}
 
   async execute(input: SyncProjectInput): Promise<void> {
@@ -46,19 +49,36 @@ export class SyncProjectAction {
       await this.projectManagement.fetchChangedTasks(identity.repoUrl, since)
     ).filter((task) => hasTypeLabel(task.labels));
 
+    // The lane a task's issue state implies when the board is not the
+    // source: closed issues sit in the done lane, open ones in the default.
+    const fallbackStatusName = statusNameFromState(
+      'open',
+      this.doneOptionName,
+      defaultStatusName(identity.statusOptions),
+    );
+    const doneStatusName = statusNameFromState(
+      'closed',
+      this.doneOptionName,
+      defaultStatusName(identity.statusOptions),
+    );
+
     for (const task of tasks) {
+      const statusName =
+        task.state === 'closed' ? doneStatusName : fallbackStatusName;
       const status = await this.syncState.get(task.url);
       if (status) {
         await this.applyRemoteChange.execute({
           task,
           projectName: input.projectName,
           syncedAt: input.syncedAt,
+          statusName,
         });
       } else {
         await this.createTaskNote.execute({
           task,
           projectName: input.projectName,
           syncedAt: input.syncedAt,
+          statusName,
         });
       }
     }

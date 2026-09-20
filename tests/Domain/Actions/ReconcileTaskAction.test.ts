@@ -7,10 +7,10 @@ import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStat
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
 import { VerdictResolver } from '../../../src/Domain/Reconciliation/VerdictResolver.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
@@ -84,8 +84,18 @@ class FakeSyncState implements SyncStatePort {
     throw new Error('not used in this test');
   }
 
-  async getIdentity(): Promise<null> {
-    return null;
+  async getIdentity(): Promise<ProjectIdentityData | null> {
+    return {
+      repoUrl: 'https://github.com/acme/widgets',
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Todo' },
+        { id: 'PVTSSF_2', name: 'In Progress' },
+        { id: 'PVTSSF_3', name: 'Shipped' },
+      ],
+    };
   }
 
   async findByNotePath(): Promise<Status | null> {
@@ -137,8 +147,25 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
 
-  async setBoardStatus(): Promise<void> {
-    throw new Error('not used in this test');
+  boardStatusCalls: Array<{
+    projectNodeId: string;
+    statusFieldId: string;
+    issueUrl: string;
+    optionId: string;
+  }> = [];
+
+  async setBoardStatus(
+    projectNodeId: string,
+    statusFieldId: string,
+    issueUrl: string,
+    optionId: string,
+  ): Promise<void> {
+    this.boardStatusCalls.push({
+      projectNodeId,
+      statusFieldId,
+      issueUrl,
+      optionId,
+    });
   }
 
   async addBoardItem(): Promise<void> {
@@ -172,6 +199,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
+  statusName: 'Todo',
 };
 const path = TaskNoteMapper.map(task, context).path;
 const content = TaskNoteMapper.map(task, context).content;
@@ -184,7 +212,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath: path,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: TaskStatus.Open,
+    lastSyncedStatus: 'Todo',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -200,13 +228,14 @@ function makeAction(
     vault,
     syncState,
     createTaskNote,
-    new BoardStatusAction(syncState, projectManagement, 'Done'),
+    new BoardStatusAction(syncState, projectManagement),
   );
   const pushNote = new PushNoteAction(projectManagement);
   const propagateStatus = new PropagateStatusAction(
     projectManagement,
     syncState,
-    new BoardStatusAction(syncState, projectManagement, 'Done'),
+    new BoardStatusAction(syncState, projectManagement),
+    'Shipped',
   );
   return new ReconcileTaskAction(
     vault,
@@ -217,6 +246,7 @@ function makeAction(
     pushNote,
     propagateStatus,
     new VerdictResolver(),
+    'Shipped',
   );
 }
 
@@ -253,7 +283,7 @@ describe('ReconcileTaskAction', () => {
         notePath: path,
         lastSyncedBodyHash: hash(NEW_BODY),
         lastSyncedRemoteUpdatedAt: '2026-09-18T12:30:00Z',
-        lastSyncedStatus: TaskStatus.Open,
+        lastSyncedStatus: 'Todo',
         lastSyncedTitle: task.title,
       },
     ]);
@@ -388,13 +418,13 @@ describe('ReconcileTaskAction', () => {
 
     // Then — the remote change is applied (the note is rewritten with the new status)
     const { content: closedContent } = TaskNoteMapper.map(
-      { ...task, state: 'closed' },
-      context,
-    );
+        { ...task, state: 'closed' },
+        { ...context, statusName: 'Shipped' },
+      );
     expect(vault.written).toEqual([{ path, content: closedContent }]);
     // And the baseline mirrors the remote status
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Shipped');
   });
 
   it('propagates a local status flip to the issue and refreshes the baseline', async () => {
@@ -404,7 +434,7 @@ describe('ReconcileTaskAction', () => {
     syncState.statuses.set(task.url, makeStatus());
     vault.notes.set(
       path,
-      TaskNoteMapper.map({ ...task, state: 'closed' }, context).content,
+      TaskNoteMapper.map({ ...task, state: 'closed' }, { ...context, statusName: 'Shipped' }).content,
     );
     const projectManagement = new FakeProjectManagement();
     projectManagement.updated = {
@@ -422,7 +452,7 @@ describe('ReconcileTaskAction', () => {
       { url: task.url, state: 'closed' },
     ]);
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Shipped');
     expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
       '2026-09-18T12:30:00Z',
     );
@@ -435,7 +465,7 @@ describe('ReconcileTaskAction', () => {
     syncState.statuses.set(task.url, makeStatus());
     vault.notes.set(
       path,
-      TaskNoteMapper.map({ ...task, state: 'closed' }, context).content,
+      TaskNoteMapper.map({ ...task, state: 'closed' }, { ...context, statusName: 'Shipped' }).content,
     );
     const projectManagement = new FakeProjectManagement();
     projectManagement.remote = {
@@ -458,7 +488,7 @@ describe('ReconcileTaskAction', () => {
       { url: task.url, state: 'closed' },
     ]);
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Shipped');
   });
 
   it('mirrors the remote status onto the note without clobbering a pushed body', async () => {
@@ -494,12 +524,12 @@ describe('ReconcileTaskAction', () => {
     // And the note keeps the pushed body but gains the remote status
     const written = vault.written[0]!;
     expect(written.path).toBe(path);
-    expect(written.content).toContain(`status: done`);
+    expect(written.content).toContain(`status: Shipped`);
     expect(written.content).toContain(NEW_BODY);
     // And the baseline is refreshed from the push response
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.lastSyncedBodyHash).toBe(hash(NEW_BODY));
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe(TaskStatus.Done);
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Shipped');
   });
 
   it('materialises via the create action when no status record exists', async () => {

@@ -1,5 +1,7 @@
-import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
+import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
+import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import { defaultStatusName } from '../Board/defaultStatusName.js';
 
 export interface PromoteCardInput {
   itemId: string;
@@ -7,23 +9,24 @@ export interface PromoteCardInput {
   projectName: string;
 }
 
-// UC11: promote a draft card on the project board into a real GitHub issue.
-// Converts the card via the port, then materialises the task note immediately
-// (via the note action) so the note appears now rather than on the next poll.
-// Composed via constructor injection.
+// UC: promote a board card into a tracked task with a note. The note starts
+// in the project's default lane.
 export class PromoteCardAction {
   constructor(
     private readonly port: ProjectManagementPort,
+    private readonly syncState: SyncStatePort,
     private readonly createTaskNote: CreateTaskNoteAction,
   ) {}
 
   async execute(input: PromoteCardInput): Promise<void> {
     const task = await this.port.promoteCard(input.itemId, input.repoNodeId);
 
+    const identity = await this.syncState.getIdentity(input.projectName);
     await this.createTaskNote.execute({
       task,
       projectName: input.projectName,
       syncedAt: new Date().toISOString(),
+      statusName: defaultStatusName(identity?.statusOptions ?? []),
     });
   }
 }

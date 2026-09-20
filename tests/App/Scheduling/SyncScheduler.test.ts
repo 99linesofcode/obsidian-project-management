@@ -197,7 +197,11 @@ describe('SyncScheduler', () => {
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
-      statusOptions: [],
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Todo' },
+        { id: 'PVTSSF_2', name: 'In Progress' },
+        { id: 'PVTSSF_3', name: 'Shipped' },
+      ],
     };
     const projectManagement = new FakeProjectManagement();
     const createTaskNote = new CreateTaskNoteAction(vault, syncState);
@@ -205,7 +209,7 @@ describe('SyncScheduler', () => {
       vault,
       syncState,
       createTaskNote,
-      new BoardStatusAction(syncState, projectManagement, 'Done'),
+      new BoardStatusAction(syncState, projectManagement),
     );
     const applyBoardChange = new ApplyBoardChangeAction(
       syncState,
@@ -219,6 +223,7 @@ describe('SyncScheduler', () => {
       applyRemoteChange,
       createTaskNote,
       applyBoardChange,
+      'Shipped',
     );
     const reconcile = new FakeReconcile();
     const handleDeleted = new FakeHandleDeleted();

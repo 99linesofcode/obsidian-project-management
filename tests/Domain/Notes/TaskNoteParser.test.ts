@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { TaskNoteParser } from '../../../src/Domain/Notes/TaskNoteParser.js';
-import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 
 const task: TaskData = {
@@ -18,6 +17,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
+  statusName: 'In Progress',
 };
 
 describe('TaskNoteParser', () => {
@@ -31,21 +31,23 @@ describe('TaskNoteParser', () => {
     // Then — url, status and body are preserved
     expect(parsed).toEqual({
       url: task.url,
-      status: TaskStatus.Open,
+      status: 'In Progress',
       body: task.body,
     });
   });
 
-  it('round-trips a closed task to a done status', () => {
-    // Given — a closed task mapped to a note
-    const closed: TaskData = { ...task, state: 'closed' };
-    const { content } = TaskNoteMapper.map(closed, context);
+  it('round-trips a lane name with spaces verbatim', () => {
+    // Given — a note whose card sits in a multi-word lane
+    const { content } = TaskNoteMapper.map(task, {
+      ...context,
+      statusName: 'Shipped',
+    });
 
     // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — the status is done
-    expect(parsed?.status).toBe(TaskStatus.Done);
+    // Then — the status is the lane name verbatim
+    expect(parsed?.status).toBe('Shipped');
   });
 
   it('returns null for content with frontmatter but no url', () => {

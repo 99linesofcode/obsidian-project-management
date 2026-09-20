@@ -4,6 +4,7 @@ import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNote
 import { slugify } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
@@ -96,6 +97,18 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  identity = {
+    repoUrl: 'https://github.com/acme/widgets',
+    repoNodeId: 'R_kgDOAAAA',
+    projectNodeId: 'PVT_123',
+    statusFieldId: 'PVTF_456',
+    statusOptions: [
+      { id: 'PVTSSF_1', name: 'Todo' },
+      { id: 'PVTSSF_2', name: 'In Progress' },
+      { id: 'PVTSSF_3', name: 'Shipped' },
+    ],
+  };
+
   async get(): Promise<Status | null> {
     return null;
   }
@@ -112,8 +125,8 @@ class FakeSyncState implements SyncStatePort {
   }
   async setLastPoll(): Promise<void> {}
   async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<null> {
-    return null;
+  async getIdentity(): Promise<ProjectIdentityData | null> {
+    return this.identity;
   }
 }
 
@@ -124,6 +137,7 @@ function makeAction(
 ): PromoteIssueAction {
   return new PromoteIssueAction(
     port,
+    syncState,
     new CreateTaskNoteAction(vault, syncState),
   );
 }

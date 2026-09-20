@@ -146,8 +146,25 @@ class FakeProjectManagement implements ProjectManagementPort {
     return this.boardItems;
   }
 
-  async setBoardStatus(): Promise<void> {
-    throw new Error('not used in this test');
+  boardStatusCalls: Array<{
+    projectNodeId: string;
+    statusFieldId: string;
+    issueUrl: string;
+    optionId: string;
+  }> = [];
+
+  async setBoardStatus(
+    projectNodeId: string,
+    statusFieldId: string,
+    issueUrl: string,
+    optionId: string,
+  ): Promise<void> {
+    this.boardStatusCalls.push({
+      projectNodeId,
+      statusFieldId,
+      issueUrl,
+      optionId,
+    });
   }
 
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
@@ -170,6 +187,7 @@ class FakeProjectManagement implements ProjectManagementPort {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'In Progress',
 };
 
 const taskA: TaskData = {
@@ -201,7 +219,8 @@ const identity: ProjectIdentityData = {
   statusFieldId: 'PVTF_456',
   statusOptions: [
     { id: 'PVTSSF_1', name: 'Todo' },
-    { id: 'PVTSSF_3', name: 'Done' },
+    { id: 'PVTSSF_2', name: 'In Progress' },
+    { id: 'PVTSSF_3', name: 'Shipped' },
   ],
 };
 
@@ -215,7 +234,7 @@ function makeAction(
     vault,
     syncState,
     createTaskNote,
-    new BoardStatusAction(syncState, projectManagement, 'Done'),
+    new BoardStatusAction(syncState, projectManagement),
   );
   const applyBoardChange = new ApplyBoardChangeAction(
     syncState,
@@ -229,6 +248,7 @@ function makeAction(
     applyRemoteChange,
     createTaskNote,
     applyBoardChange,
+    'Shipped',
   );
 }
 

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import { TaskStatus } from '../../../src/Domain/Enums/TaskStatus.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
@@ -106,12 +105,14 @@ describe('CreateTaskNoteAction', () => {
       task,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'In Progress',
     });
 
     // Then — the note is created at the mapped path with the mapped content
     const { path, content } = TaskNoteMapper.map(task, {
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'In Progress',
     });
     expect(vault.created).toEqual([{ path, content }]);
     // And the status record is written with the body hash and remote updatedAt
@@ -122,7 +123,7 @@ describe('CreateTaskNoteAction', () => {
         notePath: path,
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: task.updatedAt,
-        lastSyncedStatus: TaskStatus.Open,
+        lastSyncedStatus: 'In Progress',
         lastSyncedTitle: task.title,
       },
     ]);
@@ -140,6 +141,7 @@ describe('CreateTaskNoteAction', () => {
       task,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'In Progress',
     });
 
     // Then — nothing is created and no status record is written

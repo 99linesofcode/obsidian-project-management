@@ -1,20 +1,21 @@
 // The three views of one task that a sync reconciles: the note as it exists
 // now, the remote as fetched now, and the baseline of what the last sync saw.
+// The status is the project's Status option name on every view.
 export interface NoteView {
   body: string;
-  status: 'open' | 'done';
+  status: string;
 }
 
 export interface RemoteView {
   body: string;
-  status: 'open' | 'done';
+  status: string;
   updatedAt: string;
 }
 
 export interface BaselineView {
   lastSyncedBodyHash: string;
   lastSyncedRemoteUpdatedAt: string;
-  lastSyncedStatus: 'open' | 'done';
+  lastSyncedStatus: string;
 }
 
 // An immutable snapshot of one task's three views, handed to the verdict

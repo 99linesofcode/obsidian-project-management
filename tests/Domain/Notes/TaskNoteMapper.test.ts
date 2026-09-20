@@ -16,6 +16,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
+  statusName: 'In Progress',
 };
 
 describe('TaskNoteMapper', () => {
@@ -41,7 +42,7 @@ describe('TaskNoteMapper', () => {
         '---',
         'categories: [taken]',
         'url: https://github.com/acme/widgets/issues/42',
-        'status: open',
+        'status: In Progress',
         'affiliation: ["[[Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',
         '---',
@@ -50,15 +51,16 @@ describe('TaskNoteMapper', () => {
     );
   });
 
-  it('maps a closed task to a done status', () => {
-    // Given — a closed task
-    const closed: TaskData = { ...task, state: 'closed' };
+  it('writes the status name verbatim — the lane the card sits in', () => {
+    // Given — a task whose card sits in the done lane
+    const shipped = TaskNoteMapper.map(task, {
+      ...context,
+      statusName: 'Shipped',
+    });
 
-    // When — the note is mapped
-    const { content } = TaskNoteMapper.map(closed, context);
-
-    // Then — the frontmatter status is done
-    expect(content).toContain('status: done');
+    // When — the frontmatter is inspected
+    // Then — the status line carries the lane name verbatim
+    expect(shipped.content).toContain('status: Shipped');
   });
 
   it('sanitizes the title into a slug for the filename', () => {

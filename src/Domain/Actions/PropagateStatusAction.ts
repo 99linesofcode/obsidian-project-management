@@ -1,37 +1,39 @@
-import { TaskStatus, taskStatusFromState } from '../Enums/TaskStatus.js';
+import { stateFromStatus } from '../Board/stateFromStatus.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { BoardStatusAction } from './BoardStatusAction.js';
 
 export interface PropagateStatusInput {
   url: string;
-  status: TaskStatus;
+  // The project's Status option name the note now carries.
+  statusName: string;
   notePath: string;
   projectName: string;
 }
 
 // UC6/UC7: propagate a task note's status onto its GitHub issue and mirror it
-// onto the board. A done note closes the issue; an open note reopens it. The
-// Status record is refreshed from the PATCH response so the baseline tracks
-// the new remote state (the echo guard depends on every write refreshing the
-// full record).
+// onto the board. The done lane closes the issue, every other lane reopens
+// it; the card moves to the lane the note carries. The Status record is
+// refreshed so the baseline tracks the new lane (the echo guard depends on
+// every write refreshing the full record).
 export class PropagateStatusAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
     private readonly syncState: SyncStatePort,
     private readonly boardStatus: BoardStatusAction,
+    private readonly doneOptionName: string,
   ) {}
 
   async execute(input: PropagateStatusInput): Promise<void> {
     const updated = await this.projectManagement.setTaskState(
       input.url,
-      input.status === TaskStatus.Done ? 'closed' : 'open',
+      stateFromStatus(input.statusName, this.doneOptionName),
     );
 
     await this.boardStatus.execute({
       projectName: input.projectName,
       url: input.url,
-      status: taskStatusFromState(updated.state),
+      statusName: input.statusName,
     });
 
     const status = await this.syncState.get(input.url);
@@ -45,7 +47,7 @@ export class PropagateStatusAction {
       notePath: input.notePath,
       lastSyncedBodyHash: status.lastSyncedBodyHash,
       lastSyncedRemoteUpdatedAt: updated.updatedAt,
-      lastSyncedStatus: taskStatusFromState(updated.state),
+      lastSyncedStatus: input.statusName,
       lastSyncedTitle: status.lastSyncedTitle,
     });
   }
