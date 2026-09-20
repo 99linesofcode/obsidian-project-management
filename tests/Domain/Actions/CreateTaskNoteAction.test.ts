@@ -105,14 +105,14 @@ describe('CreateTaskNoteAction', () => {
       task,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'In Progress',
+      statusName: 'Building',
     });
 
     // Then — the note is created at the mapped path with the mapped content
     const { path, content } = TaskNoteMapper.map(task, {
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'In Progress',
+      statusName: 'Building',
     });
     expect(vault.created).toEqual([{ path, content }]);
     // And the status record is written with the body hash and remote updatedAt
@@ -123,7 +123,7 @@ describe('CreateTaskNoteAction', () => {
         notePath: path,
         lastSyncedBodyHash: hash(task.body),
         lastSyncedRemoteUpdatedAt: task.updatedAt,
-        lastSyncedStatus: 'In Progress',
+        lastSyncedStatus: 'Building',
         lastSyncedTitle: task.title,
       },
     ]);
@@ -141,7 +141,7 @@ describe('CreateTaskNoteAction', () => {
       task,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'In Progress',
+      statusName: 'Building',
     });
 
     // Then — nothing is created and no status record is written

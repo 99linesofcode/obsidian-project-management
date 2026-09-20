@@ -180,7 +180,7 @@ describe('SyncStateAdapter', () => {
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
-      statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+      statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     };
 
     // When — an identity is set then read back
@@ -212,7 +212,7 @@ describe('SyncStateAdapter', () => {
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
-      statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+      statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     };
 
     // When — an identity is written alongside a status and last poll

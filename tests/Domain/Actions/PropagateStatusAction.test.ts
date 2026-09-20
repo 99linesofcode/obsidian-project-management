@@ -119,7 +119,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: 'Todo',
+    lastSyncedStatus: 'Unshaped',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -195,7 +195,7 @@ describe('PropagateStatusAction', () => {
     // When — the open status is propagated
     await action.execute({
       url: task.url,
-      statusName: 'Todo',
+      statusName: 'Unshaped',
       notePath,
       projectName,
     });
@@ -206,7 +206,7 @@ describe('PropagateStatusAction', () => {
     ]);
     // And the baseline is refreshed from the response
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Todo');
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Unshaped');
     expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
       '2026-09-18T12:30:00Z',
     );
@@ -228,9 +228,11 @@ describe('PropagateStatusAction', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-    { id: 'PVTSSF_1', name: 'Todo' },
-    { id: 'PVTSSF_2', name: 'In Progress' },
-    { id: 'PVTSSF_3', name: 'Shipped' },
+    { id: 'PVTSSF_1', name: 'Unshaped' },
+      { id: 'PVTSSF_2', name: 'Shaping' },
+      { id: 'PVTSSF_3', name: 'Shaped' },
+      { id: 'PVTSSF_4', name: 'Building' },
+      { id: 'PVTSSF_5', name: 'Shipped' },
   ],
     };
     const action = makeAction(projectManagement, syncState);
@@ -245,7 +247,7 @@ describe('PropagateStatusAction', () => {
 
     // Then — the board Status is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
-      { issueUrl: task.url, statusOptionId: 'PVTSSF_3' },
+      { issueUrl: task.url, statusOptionId: 'PVTSSF_5' },
     ]);
   });
 

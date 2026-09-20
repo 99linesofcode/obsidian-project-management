@@ -74,7 +74,7 @@ const identity: ProjectIdentityData = {
   repoNodeId: 'R_kgDOAAAA',
   projectNodeId: 'PVT_123',
   statusFieldId: 'PVTF_456',
-  statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+  statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 
 function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {

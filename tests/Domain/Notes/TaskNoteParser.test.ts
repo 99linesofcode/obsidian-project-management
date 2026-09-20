@@ -17,7 +17,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-  statusName: 'In Progress',
+  statusName: 'Building',
 };
 
 describe('TaskNoteParser', () => {
@@ -31,7 +31,7 @@ describe('TaskNoteParser', () => {
     // Then — url, status and body are preserved
     expect(parsed).toEqual({
       url: task.url,
-      status: 'In Progress',
+      status: 'Building',
       body: task.body,
     });
   });

@@ -7,7 +7,7 @@ describe('stateFromStatus', () => {
   });
 
   it('leaves the issue open for every other lane', () => {
-    expect(stateFromStatus('Todo', 'Shipped')).toBe('open');
-    expect(stateFromStatus('In Progress', 'Shipped')).toBe('open');
+    expect(stateFromStatus('Unshaped', 'Shipped')).toBe('open');
+    expect(stateFromStatus('Building', 'Shipped')).toBe('open');
   });
 });

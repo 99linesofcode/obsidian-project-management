@@ -91,9 +91,11 @@ class FakeSyncState implements SyncStatePort {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-        { id: 'PVTSSF_1', name: 'Todo' },
-        { id: 'PVTSSF_2', name: 'In Progress' },
-        { id: 'PVTSSF_3', name: 'Shipped' },
+        { id: 'PVTSSF_1', name: 'Unshaped' },
+      { id: 'PVTSSF_2', name: 'Shaping' },
+      { id: 'PVTSSF_3', name: 'Shaped' },
+      { id: 'PVTSSF_4', name: 'Building' },
+      { id: 'PVTSSF_5', name: 'Shipped' },
       ],
     };
   }
@@ -199,7 +201,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-  statusName: 'Todo',
+  statusName: 'Unshaped',
 };
 const path = TaskNoteMapper.map(task, context).path;
 const content = TaskNoteMapper.map(task, context).content;
@@ -212,7 +214,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath: path,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: 'Todo',
+    lastSyncedStatus: 'Unshaped',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -283,7 +285,7 @@ describe('ReconcileTaskAction', () => {
         notePath: path,
         lastSyncedBodyHash: hash(NEW_BODY),
         lastSyncedRemoteUpdatedAt: '2026-09-18T12:30:00Z',
-        lastSyncedStatus: 'Todo',
+        lastSyncedStatus: 'Unshaped',
         lastSyncedTitle: task.title,
       },
     ]);

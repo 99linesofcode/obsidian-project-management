@@ -68,7 +68,7 @@ const userProjectResponse = {
                 id: 'PVTF_456',
                 name: 'Status',
                 options: [
-                  { id: 'PVTSSF_1', name: 'Todo' },
+                  { id: 'PVTSSF_1', name: 'Unshaped' },
                   { id: 'PVTSSF_2', name: 'Done' },
                 ],
               },
@@ -92,7 +92,7 @@ const orgProjectResponse = {
               {
                 id: 'PVTF_101',
                 name: 'Status',
-                options: [{ id: 'PVTSSF_3', name: 'In progress' }],
+                options: [{ id: 'PVTSSF_3', name: 'Building' }],
               },
             ],
           },
@@ -126,7 +126,7 @@ describe('GitHubAdapter', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-        { id: 'PVTSSF_1', name: 'Todo' },
+        { id: 'PVTSSF_1', name: 'Unshaped' },
         { id: 'PVTSSF_2', name: 'Done' },
       ],
     });
@@ -162,7 +162,7 @@ describe('GitHubAdapter', () => {
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_789',
       statusFieldId: 'PVTF_101',
-      statusOptions: [{ id: 'PVTSSF_3', name: 'In progress' }],
+      statusOptions: [{ id: 'PVTSSF_3', name: 'Building' }],
     });
     // And the project query targeted the organization login and number
     expect(bodies[1]).toContain('organization');
@@ -187,7 +187,7 @@ describe('GitHubAdapter', () => {
     expect(result).not.toBeNull();
     expect(result!.statusFieldId).toBe('PVTF_456');
     expect(result!.statusOptions).toHaveLength(2);
-    expect(result!.statusOptions[0]).toEqual({ id: 'PVTSSF_1', name: 'Todo' });
+    expect(result!.statusOptions[0]).toEqual({ id: 'PVTSSF_1', name: 'Unshaped' });
   });
 
   it('throws when the project has no Status field', async () => {
@@ -648,7 +648,7 @@ describe('GitHubAdapter', () => {
                   type: 'ISSUE',
                   content: { url: 'https://github.com/acme/widgets/issues/42' },
                   fieldValues: {
-                    nodes: [{ name: 'Todo', field: { name: 'Status' } }],
+                    nodes: [{ name: 'Unshaped', field: { name: 'Status' } }],
                   },
                 },
               ],

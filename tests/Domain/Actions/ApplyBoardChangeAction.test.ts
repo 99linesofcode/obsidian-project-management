@@ -142,7 +142,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath,
     lastSyncedBodyHash: hash('The bug happens when the widget is resized.'),
     lastSyncedRemoteUpdatedAt: '2026-09-18T10:00:00Z',
-    lastSyncedStatus: 'In Progress',
+    lastSyncedStatus: 'Building',
     lastSyncedTitle: 'Fix the Bug!',
     ...overrides,
   };
@@ -173,34 +173,34 @@ function makeAction(
 
 describe('ApplyBoardChangeAction', () => {
   it('carries a non-done lane onto the note and leaves the issue alone', async () => {
-    // Given — a tracked issue whose card moved to Todo while the baseline
-    // says In Progress; both lanes are non-done, so the issue is untouched
+    // Given — a tracked issue whose card moved to Unshaped while the baseline
+    // says Building; both lanes are non-done, so the issue is untouched
     const vault = new FakeVault();
     vault.notes.set(
       notePath,
-      withStatus(noteContent, 'In Progress'),
+      withStatus(noteContent, 'Building'),
     );
     const syncState = new FakeSyncState();
-    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'In Progress' }));
+    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'Building' }));
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the board change is applied
     await action.execute({
       projectName: 'Acme Widgets',
-      item: makeItem({ statusOptionName: 'Todo' }),
+      item: makeItem({ statusOptionName: 'Unshaped' }),
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
     // Then — the note carries the lane, body preserved
     expect(vault.written).toEqual([
-      { path: notePath, content: withStatus(noteContent, 'Todo') },
+      { path: notePath, content: withStatus(noteContent, 'Unshaped') },
     ]);
     // And the issue state was never touched
     expect(projectManagement.stateCalls).toHaveLength(0);
     // And the baseline tracks the new lane
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Todo');
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Unshaped');
   });
 
   it('closes the issue, flips the note and refreshes the baseline when the board is done but the issue is open', async () => {
@@ -253,7 +253,7 @@ describe('ApplyBoardChangeAction', () => {
     // When — the board change is applied
     await action.execute({
       projectName: 'Acme Widgets',
-      item: makeItem({ statusOptionName: 'In progress' }),
+      item: makeItem({ statusOptionName: 'Building' }),
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -261,10 +261,10 @@ describe('ApplyBoardChangeAction', () => {
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
     // And the note's status line is flipped to open
     expect(vault.written).toEqual([
-      { path: notePath, content: withStatus(noteContent, 'In progress') },
+      { path: notePath, content: withStatus(noteContent, 'Building') },
     ]);
     // And the baseline is refreshed
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('In progress');
+    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Building');
   });
 
   it('does nothing when the board and the issue agree', async () => {

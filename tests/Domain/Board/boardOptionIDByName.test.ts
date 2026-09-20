@@ -3,14 +3,14 @@ import { boardOptionIDByName } from '../../../src/Domain/Board/boardOptionIDByNa
 import { DomainError } from '../../../src/Domain/Errors/DomainError.js';
 
 const options = [
-  { id: 'opt_1', name: 'Todo' },
-  { id: 'opt_2', name: 'In Progress' },
+  { id: 'opt_1', name: 'Unshaped' },
+  { id: 'opt_2', name: 'Building' },
   { id: 'opt_3', name: 'Shipped' },
 ];
 
 describe('boardOptionIDByName', () => {
   it('resolves an option id by its exact name', () => {
-    expect(boardOptionIDByName(options, 'In Progress')).toBe('opt_2');
+    expect(boardOptionIDByName(options, 'Building')).toBe('opt_2');
     expect(boardOptionIDByName(options, 'Shipped')).toBe('opt_3');
   });
 

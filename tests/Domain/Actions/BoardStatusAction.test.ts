@@ -94,9 +94,11 @@ const identity: ProjectIdentityData = {
   projectNodeId: 'PVT_123',
   statusFieldId: 'PVTF_456',
   statusOptions: [
-    { id: 'PVTSSF_1', name: 'Todo' },
-    { id: 'PVTSSF_2', name: 'In Progress' },
-    { id: 'PVTSSF_3', name: 'Shipped' },
+    { id: 'PVTSSF_1', name: 'Unshaped' },
+      { id: 'PVTSSF_2', name: 'Shaping' },
+      { id: 'PVTSSF_3', name: 'Shaped' },
+      { id: 'PVTSSF_4', name: 'Building' },
+      { id: 'PVTSSF_5', name: 'Shipped' },
   ],
 };
 
@@ -119,7 +121,7 @@ describe('BoardStatusAction', () => {
         projectNodeId: 'PVT_123',
         statusFieldId: 'PVTF_456',
         issueUrl: url,
-        statusOptionId: 'PVTSSF_3',
+        statusOptionId: 'PVTSSF_5',
       },
     ]);
   });
@@ -132,7 +134,7 @@ describe('BoardStatusAction', () => {
     const action = new BoardStatusAction(syncState, projectManagement);
 
     // When — the open status is mirrored to the board
-    await action.execute({ projectName: 'Acme Widgets', url, statusName: 'Todo' });
+    await action.execute({ projectName: 'Acme Widgets', url, statusName: 'Unshaped' });
 
     // Then — the board Status is set to the first (default) option
     expect(projectManagement.boardStatusCalls).toEqual([

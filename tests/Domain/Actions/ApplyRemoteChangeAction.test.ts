@@ -159,7 +159,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-        statusName: 'In Progress',
+        statusName: 'Building',
 };
 
 function makeStatus(overrides: Partial<Status> = {}): Status {
@@ -170,7 +170,7 @@ function makeStatus(overrides: Partial<Status> = {}): Status {
     notePath: path,
     lastSyncedBodyHash: hash(task.body),
     lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: 'In Progress',
+    lastSyncedStatus: 'Building',
     lastSyncedTitle: task.title,
     ...overrides,
   };
@@ -221,7 +221,7 @@ describe('ApplyRemoteChangeAction', () => {
         notePath: path,
         lastSyncedBodyHash: hash(changed.body),
         lastSyncedRemoteUpdatedAt: changed.updatedAt,
-        lastSyncedStatus: 'In Progress',
+        lastSyncedStatus: 'Building',
         lastSyncedTitle: changed.title,
       },
     ]);
@@ -305,7 +305,7 @@ describe('ApplyRemoteChangeAction', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-        { id: 'PVTSSF_1', name: 'Todo' },
+        { id: 'PVTSSF_1', name: 'Unshaped' },
         { id: 'PVTSSF_3', name: 'Done' },
       ],
     };

@@ -16,7 +16,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-  statusName: 'In Progress',
+  statusName: 'Building',
 };
 
 describe('TaskNoteMapper', () => {
@@ -42,7 +42,7 @@ describe('TaskNoteMapper', () => {
         '---',
         'categories: [taken]',
         'url: https://github.com/acme/widgets/issues/42',
-        'status: In Progress',
+        'status: Building',
         'affiliation: ["[[Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',
         '---',

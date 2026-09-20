@@ -187,7 +187,7 @@ class FakeProjectManagement implements ProjectManagementPort {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'In Progress',
+      statusName: 'Building',
 };
 
 const taskA: TaskData = {
@@ -218,9 +218,11 @@ const identity: ProjectIdentityData = {
   projectNodeId: 'PVT_123',
   statusFieldId: 'PVTF_456',
   statusOptions: [
-    { id: 'PVTSSF_1', name: 'Todo' },
-    { id: 'PVTSSF_2', name: 'In Progress' },
-    { id: 'PVTSSF_3', name: 'Shipped' },
+    { id: 'PVTSSF_1', name: 'Unshaped' },
+      { id: 'PVTSSF_2', name: 'Shaping' },
+      { id: 'PVTSSF_3', name: 'Shaped' },
+      { id: 'PVTSSF_4', name: 'Building' },
+      { id: 'PVTSSF_5', name: 'Shipped' },
   ],
 };
 
@@ -398,7 +400,7 @@ describe('SyncProjectAction', () => {
         itemId: 'PVTI_1',
         type: 'ISSUE',
         issueUrl: 'https://github.com/acme/widgets/issues/99',
-        statusOptionName: 'Todo',
+        statusOptionName: 'Unshaped',
       },
     ];
     const action = makeAction(vault, syncState, projectManagement);
@@ -435,7 +437,7 @@ describe('SyncProjectAction', () => {
         itemId: 'PVTI_1',
         type: 'ISSUE',
         issueUrl: taskA.url,
-        statusOptionName: 'Todo',
+        statusOptionName: 'Unshaped',
       },
     ];
     const action = makeAction(vault, syncState, projectManagement);

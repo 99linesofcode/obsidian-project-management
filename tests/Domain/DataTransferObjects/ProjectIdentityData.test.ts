@@ -30,7 +30,7 @@ describe('ProjectIdentityData', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-        { id: 'PVTSSF_1', name: 'Todo' },
+        { id: 'PVTSSF_1', name: 'Unshaped' },
         { id: 'PVTSSF_2', name: 'Done' },
       ],
     };
@@ -41,7 +41,7 @@ describe('ProjectIdentityData', () => {
     expect(data.projectNodeId).toBe('PVT_123');
     expect(data.statusFieldId).toBe('PVTF_456');
     expect(data.statusOptions).toEqual([
-      { id: 'PVTSSF_1', name: 'Todo' },
+      { id: 'PVTSSF_1', name: 'Unshaped' },
       { id: 'PVTSSF_2', name: 'Done' },
     ]);
   });
