@@ -25,6 +25,8 @@ import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncChecklistAction.js';
 import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
+import type { RelinkRenamedTodoAction } from '../../../src/Domain/Actions/RelinkRenamedTodoAction.js';
+import type { RelocateTaskStatusAction } from '../../../src/Domain/Actions/RelocateTaskStatusAction.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
@@ -38,6 +40,7 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 class FakeVault implements VaultPort {
   noteChangedCb: ((path: string) => void) | null = null;
   noteDeletedCb: ((path: string) => void) | null = null;
+  noteRenamedCb: ((oldPath: string, newPath: string) => void) | null = null;
 
   async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
@@ -60,11 +63,17 @@ class FakeVault implements VaultPort {
   onNoteDeleted(cb: (path: string) => void): void {
     this.noteDeletedCb = cb;
   }
+  onNoteRenamed(cb: (oldPath: string, newPath: string) => void): void {
+    this.noteRenamedCb = cb;
+  }
   fireNoteChanged(path: string): void {
     this.noteChangedCb?.(path);
   }
   fireNoteDeleted(path: string): void {
     this.noteDeletedCb?.(path);
+  }
+  fireNoteRenamed(oldPath: string, newPath: string): void {
+    this.noteRenamedCb?.(oldPath, newPath);
   }
 }
 
@@ -209,6 +218,42 @@ function idleMirror(): MirrorTodoStatusAction {
   return new FakeMirrorTodo() as unknown as MirrorTodoStatusAction;
 }
 
+// Fakes for the rename actions, recording their invocations (and order, via a
+// shared events array) without the real vault or sync state.
+class FakeRelinkRenamedTodo {
+  calls: Array<{ oldPath: string; newPath: string; syncedAt: string }> = [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: {
+    oldPath: string;
+    newPath: string;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('relink');
+  }
+}
+
+class FakeRelocateTaskStatus {
+  calls: Array<{ oldPath: string; newPath: string }> = [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: { oldPath: string; newPath: string }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('relocate');
+  }
+}
+
+function idleRelink(): RelinkRenamedTodoAction {
+  return new FakeRelinkRenamedTodo() as unknown as RelinkRenamedTodoAction;
+}
+
+function idleRelocate(): RelocateTaskStatusAction {
+  return new FakeRelocateTaskStatus() as unknown as RelocateTaskStatusAction;
+}
+
 const fakeSyncProject = {
   execute: vi.fn(async () => {}),
 } as unknown as SyncProjectAction;
@@ -294,6 +339,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       2000,
     );
     scheduler.load();
@@ -322,6 +369,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       0,
     );
     scheduler.load();
@@ -354,6 +403,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       0,
     );
     scheduler.load();
@@ -387,6 +438,8 @@ describe('SyncScheduler', () => {
       mirror as unknown as MirrorTodoStatusAction,
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       0,
     );
     scheduler.load();
@@ -403,6 +456,148 @@ describe('SyncScheduler', () => {
     expect(reconcile.calls).toHaveLength(0);
   });
 
+  it('routes a to-do rename to the relink action', async () => {
+    // Given — a scheduler wired to observe rename routing
+    const vault = new FakeVault();
+    const events: string[] = [];
+    const relink = new FakeRelinkRenamedTodo(events);
+    const relocate = new FakeRelocateTaskStatus(events);
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      idleChecklist(),
+      idleMirror(),
+      new FakeReconcile() as unknown as ReconcileTaskAction,
+      new FakeHandleDeleted() as unknown as HandleDeletedNoteAction,
+      relink as unknown as RelinkRenamedTodoAction,
+      relocate as unknown as RelocateTaskStatusAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a to-do under Projecten/<project>/todos is renamed
+    vault.fireNoteRenamed(
+      'Projecten/Acme Widgets/todos/fi.md',
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Then — the relink action runs with both paths, the relocate does not
+    expect(events).toEqual(['relink']);
+    expect(relink.calls[0]!.oldPath).toBe(
+      'Projecten/Acme Widgets/todos/fi.md',
+    );
+    expect(relink.calls[0]!.newPath).toBe(
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+    );
+    expect(relocate.calls).toHaveLength(0);
+  });
+
+  it('routes a task-note rename to the status relocate action', async () => {
+    // Given — a scheduler wired to observe rename routing
+    const vault = new FakeVault();
+    const events: string[] = [];
+    const relink = new FakeRelinkRenamedTodo(events);
+    const relocate = new FakeRelocateTaskStatus(events);
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      idleChecklist(),
+      idleMirror(),
+      new FakeReconcile() as unknown as ReconcileTaskAction,
+      new FakeHandleDeleted() as unknown as HandleDeletedNoteAction,
+      relink as unknown as RelinkRenamedTodoAction,
+      relocate as unknown as RelocateTaskStatusAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a task note under Projecten/<project>/taken is renamed
+    vault.fireNoteRenamed(
+      'Projecten/Acme Widgets/taken/42-old.md',
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Then — the relocate action runs with both paths, the relink does not
+    expect(events).toEqual(['relocate']);
+    expect(relocate.calls[0]).toEqual({
+      oldPath: 'Projecten/Acme Widgets/taken/42-old.md',
+      newPath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    });
+    expect(relink.calls).toHaveLength(0);
+  });
+
+  it('ignores renames of other Projecten notes', async () => {
+    // Given — a scheduler wired to observe rename routing
+    const vault = new FakeVault();
+    const events: string[] = [];
+    const relink = new FakeRelinkRenamedTodo(events);
+    const relocate = new FakeRelocateTaskStatus(events);
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      idleChecklist(),
+      idleMirror(),
+      new FakeReconcile() as unknown as ReconcileTaskAction,
+      new FakeHandleDeleted() as unknown as HandleDeletedNoteAction,
+      relink as unknown as RelinkRenamedTodoAction,
+      relocate as unknown as RelocateTaskStatusAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a note under Projecten that is neither a to-do nor a task changes
+    vault.fireNoteRenamed(
+      'Projecten/Acme Widgets/board.md',
+      'Projecten/Acme Widgets/board-2.md',
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Then — no rename action is invoked
+    expect(events).toEqual([]);
+    expect(relink.calls).toHaveLength(0);
+    expect(relocate.calls).toHaveLength(0);
+  });
+
+  it('fires a rename immediately, bypassing the debounce', async () => {
+    // Given — a scheduler with a 2s debounce
+    const vault = new FakeVault();
+    const events: string[] = [];
+    const relink = new FakeRelinkRenamedTodo(events);
+    const relocate = new FakeRelocateTaskStatus(events);
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      idleChecklist(),
+      idleMirror(),
+      new FakeReconcile() as unknown as ReconcileTaskAction,
+      new FakeHandleDeleted() as unknown as HandleDeletedNoteAction,
+      relink as unknown as RelinkRenamedTodoAction,
+      relocate as unknown as RelocateTaskStatusAction,
+      2000,
+    );
+    scheduler.load();
+
+    // When — a to-do is renamed
+    vault.fireNoteRenamed(
+      'Projecten/Acme Widgets/todos/fi.md',
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Then — it has already run, without waiting out the debounce window
+    expect(relink.calls).toHaveLength(1);
+  });
+
   it('ignores note changes outside Projecten', async () => {
     // Given — a scheduler subscribed to vault note changes
     const vault = new FakeVault();
@@ -417,6 +612,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       0,
     );
     scheduler.load();
@@ -443,6 +640,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       2000,
     );
     scheduler.load();
@@ -472,6 +671,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       0,
     );
     scheduler.load();
@@ -510,6 +711,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       2000,
     );
     scheduler.load();
@@ -540,6 +743,8 @@ describe('SyncScheduler', () => {
       idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
       0,
     );
     scheduler.load();

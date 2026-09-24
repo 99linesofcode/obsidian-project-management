@@ -42,6 +42,7 @@ class FakeVault implements VaultPort {
 
   onNoteChanged(): void {}
   onNoteDeleted(): void {}
+  onNoteRenamed(): void {}
 }
 
 const projectName = 'Acme Widgets';

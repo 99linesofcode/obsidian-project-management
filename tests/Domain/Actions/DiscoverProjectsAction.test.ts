@@ -31,6 +31,7 @@ class FakeVault implements VaultPort {
   }
   onNoteChanged(): void {}
   onNoteDeleted(): void {}
+  onNoteRenamed(): void {}
 }
 
 class FakePort implements ProjectManagementPort {
