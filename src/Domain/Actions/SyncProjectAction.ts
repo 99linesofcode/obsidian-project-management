@@ -10,6 +10,7 @@ import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 export interface SyncProjectInput {
   projectName: string;
   syncedAt: string;
+  includeBoard: boolean;
 }
 
 // UC3/UC8/UC9: sync one project. Fetches the complete tracked issue set and
@@ -20,6 +21,9 @@ export interface SyncProjectInput {
 // last update predates the previous poll still materializes. The poll needs
 // the project's repo url, so a project without a stored identity (or one
 // lacking a repo url) is skipped with a clear error rather than crashing.
+// includeBoard gates only the board half: the tracked-issue reconcile always
+// runs, and the board fetch, its change loop and its add-missing bookkeeping
+// are skipped when the project's remote updatedAt has not moved.
 export class SyncProjectAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -77,6 +81,14 @@ export class SyncProjectAction {
           statusName,
         });
       }
+    }
+
+    // The board fetch is the expensive half of the poll, so the scheduler gates
+    // it on the project's remote updatedAt. A board change always moves that
+    // updatedAt, so a skipped board fetch resumes on the next tick after any
+    // board activity — including card removals, which the bookkeeping re-adds.
+    if (!input.includeBoard) {
+      return;
     }
 
     const items = await this.projectManagement.fetchBoardItems(

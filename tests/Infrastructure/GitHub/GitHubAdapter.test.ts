@@ -963,4 +963,105 @@ describe('GitHubAdapter', () => {
       /invalid board url/,
     );
   });
+
+  it('probes every project in one aliased query, keyed by node id', async () => {
+    // Given — a transport returning one aliased node field per project
+    const fleetResponse = {
+      status: 200,
+      json: {
+        data: {
+          p0: {
+            id: 'PVT_1',
+            updatedAt: '2026-09-18T10:00:00Z',
+            closed: false,
+          },
+          p1: {
+            id: 'PVT_2',
+            updatedAt: '2026-09-18T11:00:00Z',
+            closed: true,
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([fleetResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter probes both projects
+    const result = await adapter.fetchProjectStates(['PVT_1', 'PVT_2']);
+
+    // Then — one POST carries an aliased node field per id, no connections
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain('FleetState');
+    expect(bodies[0]).toContain('p0: node(id: $id0)');
+    expect(bodies[0]).toContain('p1: node(id: $id1)');
+    expect(bodies[0]).toContain('ProjectV2');
+    expect(bodies[0]).toContain('"id0":"PVT_1"');
+    expect(bodies[0]).toContain('"id1":"PVT_2"');
+    // And the map is keyed by node id, carrying the lightweight state
+    expect([...result.keys()]).toEqual(['PVT_1', 'PVT_2']);
+    expect(result.get('PVT_1')).toEqual({
+      projectId: 'PVT_1',
+      updatedAt: '2026-09-18T10:00:00Z',
+      closed: false,
+    });
+    expect(result.get('PVT_2')).toEqual({
+      projectId: 'PVT_2',
+      updatedAt: '2026-09-18T11:00:00Z',
+      closed: true,
+    });
+  });
+
+  it('issues no request when probing an empty project list', async () => {
+    // Given — an adapter with no queued responses
+    const { transport, bodies } = fakeTransport([]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the probe has no projects to ask about
+    const result = await adapter.fetchProjectStates([]);
+
+    // Then — no request is made and the map is empty
+    expect(result.size).toBe(0);
+    expect(bodies).toHaveLength(0);
+  });
+
+  it('skips a missing node so a deleted project does not crash the probe', async () => {
+    // Given — a response where one project no longer resolves
+    const fleetResponse = {
+      status: 200,
+      json: {
+        data: {
+          p0: null,
+          p1: {
+            id: 'PVT_2',
+            updatedAt: '2026-09-18T11:00:00Z',
+            closed: false,
+          },
+        },
+      },
+    };
+    const { transport } = fakeTransport([fleetResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter probes both projects
+    const result = await adapter.fetchProjectStates(['PVT_1', 'PVT_2']);
+
+    // Then — only the resolvable project is surfaced
+    expect([...result.keys()]).toEqual(['PVT_2']);
+  });
+
+  it('skips an invalid node shape rather than failing the probe', async () => {
+    // Given — a node missing the state fields the probe needs
+    const fleetResponse = {
+      status: 200,
+      json: { data: { p0: { id: 'PVT_1' } } },
+    };
+    const { transport } = fakeTransport([fleetResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter probes the project
+    const result = await adapter.fetchProjectStates(['PVT_1']);
+
+    // Then — the unusable node is dropped
+    expect(result.size).toBe(0);
+  });
 });

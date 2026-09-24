@@ -50,6 +50,11 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   statuses = new Map<string, Status>();
   setCalls: Status[] = [];
 
@@ -74,6 +79,9 @@ class FakeSyncState implements SyncStatePort {
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   updated: TaskData = {
     url: 'https://github.com/acme/widgets/issues/42',

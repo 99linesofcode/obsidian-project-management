@@ -8,6 +8,11 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 // save, so the relocate's single decision (move the record or not) is
 // observable.
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   records: Status[] = [];
   saved: Status[] = [];
 

@@ -198,4 +198,54 @@ describe('SyncStateAdapter', () => {
       'status.https://github.com/acme/widgets/issues/42': status,
     });
   });
+
+  it('round-trips a project update under a namespaced key', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — a project update is set then read back
+    await adapter.setLastProjectUpdate('Acme Widgets', '2026-09-18T10:00:00Z');
+    const result = await adapter.getLastProjectUpdate('Acme Widgets');
+
+    // Then — the update round-trips intact
+    expect(result).toBe('2026-09-18T10:00:00Z');
+  });
+
+  it('returns null for a project with no stored update', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — an unknown project is read
+    const result = await adapter.getLastProjectUpdate('Other Project');
+
+    // Then — null is returned
+    expect(result).toBeNull();
+  });
+
+  it('keeps project updates distinct from status records and identities', async () => {
+    // Given — an empty storage
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    const identity = {
+      repoUrl: 'https://github.com/acme/widgets',
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+    };
+
+    // When — a project update is written alongside a status and an identity
+    await adapter.setLastProjectUpdate('Acme Widgets', '2026-09-18T10:00:00Z');
+    await adapter.setIdentity('Acme Widgets', identity);
+    await adapter.set(status);
+
+    // Then — each lives under its own namespaced key
+    expect(snapshot()).toEqual({
+      'projectUpdate.Acme Widgets': '2026-09-18T10:00:00Z',
+      'identity.Acme Widgets': identity,
+      'status.https://github.com/acme/widgets/issues/42': status,
+    });
+  });
 });

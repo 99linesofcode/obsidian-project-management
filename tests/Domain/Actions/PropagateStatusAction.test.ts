@@ -12,6 +12,9 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 // the status record in memory, so the action's own behaviour (PATCH state +
 // baseline refresh + board mirror) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
   updated: TaskData = {
@@ -70,6 +73,11 @@ class FakeProjectManagement implements ProjectManagementPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   statuses = new Map<string, Status>();
   setCalls: Status[] = [];
   identity: ProjectIdentityData | null = null;

@@ -15,6 +15,9 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // own behaviour (label first, then materialise the fetched task) is what's
 // under test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   addedLabels: Array<{ url: string; label: string }> = [];
   task: TaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
@@ -106,6 +109,11 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   identity = {
     repoUrl: 'https://github.com/acme/widgets',
     repoNodeId: 'R_kgDOAAAA',
