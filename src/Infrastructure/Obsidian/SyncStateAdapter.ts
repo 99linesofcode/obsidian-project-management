@@ -223,6 +223,7 @@ export class SyncStateAdapter implements SyncStatePort {
       notePath: typeof raw.notePath === 'string' ? raw.notePath : '',
       lastSyncedHash:
         typeof raw.lastSyncedHash === 'string' ? raw.lastSyncedHash : '',
+      lastSyncedCompleted: raw.lastSyncedCompleted === true,
     };
   }
 
