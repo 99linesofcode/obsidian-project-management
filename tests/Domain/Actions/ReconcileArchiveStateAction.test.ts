@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
+import type { ArchiveBaselineData } from '../../../src/Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
@@ -11,17 +12,21 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
 // Fakes at the ports: the vault holds a path set and actually moves files, the
-// sync state holds Status records and actually relocates them, and the project
-// management fake records the board mutations. The action's reconciliation is
-// what's under test, and the fakes' real movement is what makes idempotency
-// observable.
+// sync state holds Status records and baselines and actually relocates them,
+// and the project management fake records the board mutations. The action's
+// reconciliation is what's under test, and the fakes' real movement is what
+// makes idempotency observable.
 class FakeVault implements VaultPort {
   paths = new Set<string>();
   moveCalls: Array<{ from: string; to: string }> = [];
   renames: Array<{ from: string; to: string }> = [];
+  failMove = false;
 
   async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
     this.moveCalls.push({ from: fromPrefix, to: toPrefix });
+    if (this.failMove) {
+      throw new Error('move failed');
+    }
     const from = fromPrefix.endsWith('/') ? fromPrefix : `${fromPrefix}/`;
     const to = toPrefix.endsWith('/') ? toPrefix : `${toPrefix}/`;
     for (const path of [...this.paths]) {
@@ -62,6 +67,9 @@ class FakeSyncState implements SyncStatePort {
   };
   records: Status[] = [];
   saved: Status[] = [];
+  baselines = new Map<string, ArchiveBaselineData>();
+  baselineSets: Array<{ projectName: string; baseline: ArchiveBaselineData }> =
+    [];
 
   async get(): Promise<Status | null> {
     return null;
@@ -90,6 +98,18 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setLastProjectUpdate(): Promise<void> {}
+  async getArchiveBaseline(
+    projectName: string,
+  ): Promise<ArchiveBaselineData | null> {
+    return this.baselines.get(projectName) ?? null;
+  }
+  async setArchiveBaseline(
+    projectName: string,
+    baseline: ArchiveBaselineData,
+  ): Promise<void> {
+    this.baselineSets.push({ projectName, baseline });
+    this.baselines.set(projectName, baseline);
+  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
@@ -159,25 +179,116 @@ function setup() {
 }
 
 describe('ReconcileArchiveStateAction', () => {
-  it('archives: closes the board, moves the folder and relocates the Status records', async () => {
-    // Given — an active project whose board is still open
+  it('adopts the first observation without transitioning', async () => {
+    // Given — a project discovered mid-life with no baseline, its folder and
+    // board already disagreeing
     const { action, port, vault, syncState } = setup();
-    vault.paths.add('Projecten/Acme Widgets/_home.md');
     vault.paths.add(taskPath);
-    syncState.records.push(record(taskPath));
 
-    // When — the mismatch is reconciled
+    // When — the first observation is reconciled
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: true,
+      locationArchived: false,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — the pair is adopted as the baseline and nothing is transitioned
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: false, closed: true },
+      },
+    ]);
+    expect(port.closedCalls).toEqual([]);
+    expect(vault.moveCalls).toEqual([]);
+  });
+
+  it('applies a vault gesture to the board: the folder moved, the board follows', async () => {
+    // Given — a settled active project whose folder the user just moved to
+    // Archief
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(archivedTaskPath);
+
+    // When — the location change is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: true,
       closed: false,
       syncedAt,
     });
 
-    // Then — the board is closed, the folder moved and the record relocated
+    // Then — the board is closed to match, the folder is not moved again, and
+    // the settled baseline is stored
     expect(port.closedCalls).toEqual([
       { projectNodeId: 'PVT_123', closed: true },
     ]);
+    expect(vault.moveCalls).toEqual([]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: true, closed: true },
+      },
+    ]);
+  });
+
+  it('applies a vault gesture to the board: the folder moved back, the board reopens', async () => {
+    // Given — a settled archived project whose folder the user just moved back
+    // to Projecten
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: true,
+      closed: true,
+    });
+    vault.paths.add(taskPath);
+
+    // When — the location change is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: false,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — the board is reopened to match, the folder is not moved again
+    expect(port.closedCalls).toEqual([
+      { projectNodeId: 'PVT_123', closed: false },
+    ]);
+    expect(vault.moveCalls).toEqual([]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: false, closed: false },
+      },
+    ]);
+  });
+
+  it('applies a GitHub gesture to the vault: a closed board archives the folder', async () => {
+    // Given — a settled active project whose board was just closed on GitHub
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add('Projecten/Acme Widgets/_home.md');
+    vault.paths.add(taskPath);
+    syncState.records.push(record(taskPath));
+
+    // When — the board change is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: false,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — the folder moves to Archief, the Status records relocate, the
+    // board is left as it is, and the settled baseline is stored
+    expect(port.closedCalls).toEqual([]);
     expect([...vault.paths].sort()).toEqual([
       'Archief/Acme Widgets/_home.md',
       archivedTaskPath,
@@ -185,27 +296,35 @@ describe('ReconcileArchiveStateAction', () => {
     expect(syncState.saved).toEqual([
       { ...record(taskPath), notePath: archivedTaskPath },
     ]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: true, closed: true },
+      },
+    ]);
   });
 
-  it('unarchives: moves the folder, reopens the board and relocates the Status records', async () => {
-    // Given — an archived project whose board is still closed
+  it('applies a GitHub gesture to the vault: a reopened board unarchives the folder', async () => {
+    // Given — a settled archived project whose board was just reopened
     const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: true,
+      closed: true,
+    });
     vault.paths.add('Archief/Acme Widgets/_home.md');
     vault.paths.add(archivedTaskPath);
     syncState.records.push(record(archivedTaskPath));
 
-    // When — the mismatch is reconciled
+    // When — the board change is reconciled
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: false,
-      closed: true,
+      locationArchived: true,
+      closed: false,
       syncedAt,
     });
 
-    // Then — the folder moved back, the board reopened and the record relocated
-    expect(port.closedCalls).toEqual([
-      { projectNodeId: 'PVT_123', closed: false },
-    ]);
+    // Then — the folder moves back to Projecten, the Status records relocate
+    expect(port.closedCalls).toEqual([]);
     expect([...vault.paths].sort()).toEqual([
       'Projecten/Acme Widgets/_home.md',
       taskPath,
@@ -213,117 +332,156 @@ describe('ReconcileArchiveStateAction', () => {
     expect(syncState.saved).toEqual([
       { ...record(archivedTaskPath), notePath: taskPath },
     ]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: false, closed: false },
+      },
+    ]);
   });
 
-  it('does nothing when the vault and board already agree (archived and closed)', async () => {
-    // Given — an archived project whose board is closed
+  it('resolves a conflict in the vault’s favour: the board follows, no folder move', async () => {
+    // Given — a settled active project whose folder was moved to Archief and
+    // whose board was closed in the same window
     const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
     vault.paths.add(archivedTaskPath);
-    syncState.records.push(record(archivedTaskPath));
 
-    // When — the consistent state is reconciled
+    // When — the conflict is reconciled
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: true,
+      locationArchived: true,
       closed: true,
       syncedAt,
     });
 
-    // Then — nothing is written
-    expect(port.closedCalls).toEqual([]);
+    // Then — the vault wins: the board is closed to match and the folder is
+    // left where the user put it
+    expect(port.closedCalls).toEqual([
+      { projectNodeId: 'PVT_123', closed: true },
+    ]);
     expect(vault.moveCalls).toEqual([]);
-    expect(syncState.saved).toEqual([]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: true, closed: true },
+      },
+    ]);
   });
 
-  it('does nothing when the vault and board already agree (active and open)', async () => {
-    // Given — an active project whose board is open
+  it('does nothing when the observation matches the baseline', async () => {
+    // Given — a settled archived project
     const { action, port, vault, syncState } = setup();
-    vault.paths.add(taskPath);
-    syncState.records.push(record(taskPath));
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: true,
+      closed: true,
+    });
+    vault.paths.add(archivedTaskPath);
+    syncState.records.push(record(archivedTaskPath));
 
-    // When — the consistent state is reconciled
+    // When — the settled state is reconciled
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: false,
-      closed: false,
+      locationArchived: true,
+      closed: true,
       syncedAt,
     });
 
-    // Then — nothing is written
+    // Then — nothing is written, not even the baseline
     expect(port.closedCalls).toEqual([]);
     expect(vault.moveCalls).toEqual([]);
     expect(syncState.saved).toEqual([]);
+    expect(syncState.baselineSets).toEqual([]);
+  });
+
+  it('leaves the old baseline when the reconciliation throws', async () => {
+    // Given — a settled active project whose board was closed, and a vault
+    // move that fails
+    const { action, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(taskPath);
+    vault.failMove = true;
+
+    // When — the board change is reconciled and the move throws
+    await expect(
+      action.execute({
+        projectName: 'Acme Widgets',
+        locationArchived: false,
+        closed: true,
+        syncedAt,
+      }),
+    ).rejects.toThrow('move failed');
+
+    // Then — the old baseline stands, so the next tick retries
+    expect(syncState.baselines.get('Acme Widgets')).toEqual({
+      locationArchived: false,
+      closed: false,
+    });
+    expect(syncState.baselineSets).toEqual([]);
   });
 
   it('is idempotent: a second pass over the settled state writes nothing', async () => {
-    // Given — a project that has just been archived
+    // Given — a project that has just been archived by a board gesture
     const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
     vault.paths.add(taskPath);
     syncState.records.push(record(taskPath));
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: true,
-      closed: false,
+      locationArchived: false,
+      closed: true,
       syncedAt,
     });
+    const moves = vault.renames.length;
+    const saves = syncState.saved.length;
+    const baselineWrites = syncState.baselineSets.length;
 
     // When — the next tick sees the settled state (archived and closed)
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: true,
+      locationArchived: true,
       closed: true,
       syncedAt,
     });
 
     // Then — the first pass's writes stand and nothing more is written
-    expect(port.closedCalls).toHaveLength(1);
-    expect(vault.moveCalls).toHaveLength(1);
-    expect(syncState.saved).toHaveLength(1);
-  });
-
-  it('is idempotent: a repeated pass performs no folder or Status writes', async () => {
-    // Given — a project that has just been archived
-    const { action, vault, syncState } = setup();
-    vault.paths.add(taskPath);
-    syncState.records.push(record(taskPath));
-    await action.execute({
-      projectName: 'Acme Widgets',
-      archived: true,
-      closed: false,
-      syncedAt,
-    });
-    const moves = vault.renames.length;
-    const saves = syncState.saved.length;
-
-    // When — the same mismatch is reconciled again
-    await action.execute({
-      projectName: 'Acme Widgets',
-      archived: true,
-      closed: false,
-      syncedAt,
-    });
-
-    // Then — the move and the relocation are no-ops on already-correct state
+    expect(port.closedCalls).toEqual([]);
     expect(vault.renames).toHaveLength(moves);
     expect(syncState.saved).toHaveLength(saves);
+    expect(syncState.baselineSets).toHaveLength(baselineWrites);
   });
 
-  it('skips a project with no stored identity', async () => {
-    // Given — a project whose identity was never persisted
+  it('skips a transition for a project with no stored identity', async () => {
+    // Given — a settled project whose identity was never persisted, and a
+    // location change
     const { action, port, vault, syncState } = setup();
     syncState.identity = null;
-    vault.paths.add(taskPath);
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(archivedTaskPath);
 
-    // When — the mismatch is reconciled
+    // When — the location change is reconciled
     await action.execute({
       projectName: 'Acme Widgets',
-      archived: true,
+      locationArchived: true,
       closed: false,
       syncedAt,
     });
 
-    // Then — nothing is written
+    // Then — nothing is written and the baseline is left for a later retry
     expect(port.closedCalls).toEqual([]);
     expect(vault.moveCalls).toEqual([]);
+    expect(syncState.baselineSets).toEqual([]);
   });
 });

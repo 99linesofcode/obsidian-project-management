@@ -1,3 +1,4 @@
+import type { ArchiveBaselineData } from '../../Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { Status } from '../../Domain/Models/Status.js';
 import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
@@ -14,8 +15,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Implements the sync state port against a flat key/value store. Records are
-// namespaced by kind: status.<url>, identity.<projectName> and
-// projectUpdate.<projectName>.
+// namespaced by kind: status.<url>, identity.<projectName>,
+// projectUpdate.<projectName> and archiveBaseline.<projectName>.
 export class SyncStateAdapter implements SyncStatePort {
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -102,6 +103,32 @@ export class SyncStateAdapter implements SyncStatePort {
     const data = await this.storage.load();
     data[`projectUpdate.${projectName}`] = iso;
     await this.storage.save(data);
+  }
+
+  async getArchiveBaseline(
+    projectName: string,
+  ): Promise<ArchiveBaselineData | null> {
+    const data = await this.storage.load();
+    const raw = data[`archiveBaseline.${projectName}`];
+    return isRecord(raw) ? this.mapArchiveBaseline(raw) : null;
+  }
+
+  async setArchiveBaseline(
+    projectName: string,
+    baseline: ArchiveBaselineData,
+  ): Promise<void> {
+    const data = await this.storage.load();
+    data[`archiveBaseline.${projectName}`] = baseline;
+    await this.storage.save(data);
+  }
+
+  private mapArchiveBaseline(
+    raw: Record<string, unknown>,
+  ): ArchiveBaselineData {
+    return {
+      locationArchived: raw.locationArchived === true,
+      closed: raw.closed === true,
+    };
   }
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {

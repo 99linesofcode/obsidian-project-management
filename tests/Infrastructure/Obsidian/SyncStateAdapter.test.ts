@@ -248,4 +248,54 @@ describe('SyncStateAdapter', () => {
       'status.https://github.com/acme/widgets/issues/42': status,
     });
   });
+
+  it('round-trips an archive baseline under a namespaced key', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — a baseline is set then read back
+    await adapter.setArchiveBaseline('Acme Widgets', {
+      locationArchived: true,
+      closed: false,
+    });
+    const result = await adapter.getArchiveBaseline('Acme Widgets');
+
+    // Then — the baseline round-trips intact
+    expect(result).toEqual({ locationArchived: true, closed: false });
+  });
+
+  it('returns null for a project with no stored archive baseline', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — an unknown project is read
+    const result = await adapter.getArchiveBaseline('Other Project');
+
+    // Then — null is returned
+    expect(result).toBeNull();
+  });
+
+  it('keeps archive baselines distinct from the other records', async () => {
+    // Given — an empty storage
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — a baseline is written alongside a project update
+    await adapter.setArchiveBaseline('Acme Widgets', {
+      locationArchived: false,
+      closed: true,
+    });
+    await adapter.setLastProjectUpdate('Acme Widgets', '2026-09-18T10:00:00Z');
+
+    // Then — each lives under its own namespaced key
+    expect(snapshot()).toEqual({
+      'archiveBaseline.Acme Widgets': {
+        locationArchived: false,
+        closed: true,
+      },
+      'projectUpdate.Acme Widgets': '2026-09-18T10:00:00Z',
+    });
+  });
 });

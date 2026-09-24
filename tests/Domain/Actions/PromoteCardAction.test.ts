@@ -116,6 +116,10 @@ class FakeSyncState implements SyncStatePort {
   }
 
   async setLastProjectUpdate(): Promise<void> {}
+  async getArchiveBaseline(): Promise<null> {
+    return null;
+  }
+  async setArchiveBaseline(): Promise<void> {}
   identity = {
     repoUrl: 'https://github.com/acme/widgets',
     repoNodeId: 'R_kgDOAAAA',

@@ -4,19 +4,21 @@ import type { VaultPort } from '../Ports/VaultPort.js';
 
 export interface ReconcileArchiveStateInput {
   projectName: string;
-  archived: boolean;
+  locationArchived: boolean;
   closed: boolean;
   syncedAt: string;
 }
 
-// UC: reconcile a project's vault location with its GitHub board state. The
-// note's location is the archived flag (derived fresh each tick); the probe's
-// closed flag is the remote state. A mismatch means one side moved, and the
-// vault wins: the board is closed/opened and the folder is moved to match. The
-// move fires per-file rename events that the rename route follows
-// incrementally; the bulk Status relocation is the catch-all for anything the
-// events miss. Both are no-ops on already-correct state, so a settled project
-// writes nothing.
+// UC: reconcile a project's vault location with its GitHub board state through
+// a three-way merge against the last tick's observation (the baseline). The
+// baseline is what tells a vault gesture (the user moved the folder) apart from
+// a board gesture (someone closed or reopened the board) — a state pair alone
+// cannot. The vault is the source of truth: a location change wins and the
+// board follows; a board-only change moves the folder to match. A first
+// observation adopts the current pair without transitioning, so a project
+// discovered mid-life never self-transitions. The baseline is stored only after
+// a successful reconciliation, so a thrown run leaves the old baseline and the
+// next tick retries.
 export class ReconcileArchiveStateAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -25,48 +27,72 @@ export class ReconcileArchiveStateAction {
   ) {}
 
   async execute(input: ReconcileArchiveStateInput): Promise<void> {
-    if (input.archived === input.closed) {
+    const baseline = await this.syncState.getArchiveBaseline(input.projectName);
+    if (!baseline) {
+      await this.adopt(input);
       return;
     }
+
+    const locationChanged =
+      input.locationArchived !== baseline.locationArchived;
+    const boardChanged = input.closed !== baseline.closed;
+    if (!locationChanged && !boardChanged) {
+      return;
+    }
+
     const identity = await this.syncState.getIdentity(input.projectName);
     if (!identity?.projectNodeId) {
       return;
     }
-    if (input.archived) {
-      await this.archive(input.projectName, identity.projectNodeId);
+
+    if (locationChanged) {
+      await this.projectManagement.setProjectClosed(
+        identity.projectNodeId,
+        input.locationArchived,
+      );
     } else {
-      await this.unarchive(input.projectName, identity.projectNodeId);
+      await this.applyBoardToVault(input.projectName, input.closed);
     }
+
+    const reconciledLocation = locationChanged
+      ? input.locationArchived
+      : input.closed;
+    await this.syncState.setArchiveBaseline(input.projectName, {
+      locationArchived: reconciledLocation,
+      closed: reconciledLocation,
+    });
   }
 
-  private async archive(
-    projectName: string,
-    projectNodeId: string,
-  ): Promise<void> {
-    await this.projectManagement.setProjectClosed(projectNodeId, true);
-    await this.vault.moveFolder(
-      `Projecten/${projectName}`,
-      `Archief/${projectName}`,
-    );
-    await this.relocateStatuses(
-      `Projecten/${projectName}/`,
-      `Archief/${projectName}/`,
-    );
+  private async adopt(input: ReconcileArchiveStateInput): Promise<void> {
+    await this.syncState.setArchiveBaseline(input.projectName, {
+      locationArchived: input.locationArchived,
+      closed: input.closed,
+    });
   }
 
-  private async unarchive(
+  private async applyBoardToVault(
     projectName: string,
-    projectNodeId: string,
+    closed: boolean,
   ): Promise<void> {
-    await this.vault.moveFolder(
-      `Archief/${projectName}`,
-      `Projecten/${projectName}`,
-    );
-    await this.projectManagement.setProjectClosed(projectNodeId, false);
-    await this.relocateStatuses(
-      `Archief/${projectName}/`,
-      `Projecten/${projectName}/`,
-    );
+    if (closed) {
+      await this.vault.moveFolder(
+        `Projecten/${projectName}`,
+        `Archief/${projectName}`,
+      );
+      await this.relocateStatuses(
+        `Projecten/${projectName}/`,
+        `Archief/${projectName}/`,
+      );
+    } else {
+      await this.vault.moveFolder(
+        `Archief/${projectName}`,
+        `Projecten/${projectName}`,
+      );
+      await this.relocateStatuses(
+        `Archief/${projectName}/`,
+        `Projecten/${projectName}/`,
+      );
+    }
   }
 
   private async relocateStatuses(
