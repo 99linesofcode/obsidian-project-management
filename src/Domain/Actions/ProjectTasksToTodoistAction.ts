@@ -45,6 +45,10 @@ interface DesiredTask {
   sectionId: string | null;
   parentId: string | null;
   isCompleted: boolean;
+  // The lane the item sits in when the lane is controlled (a top-level task);
+  // null for a subtask, which inherits its parent's section (dt-02). Stamped as
+  // the per-field base so t5 can tell a remote lane drag from a vault change.
+  lane: string | null;
 }
 
 // UC: project the vault's tracked tasks onto their Todoist twins (t3). The
@@ -195,6 +199,7 @@ export class ProjectTasksToTodoistAction {
       sectionId: placement.sectionId,
       parentId: placement.parentId,
       isCompleted: item.lane === this.doneOptionName,
+      lane: placement.parentId === null ? item.lane : null,
     };
     const stored = await this.syncState.getTodoistState(item.notePath);
     const current = stored ? activeById.get(stored.todoistId) : undefined;
@@ -288,6 +293,9 @@ export class ProjectTasksToTodoistAction {
       notePath,
       lastSyncedHash: snapshotHash(desired),
       lastSyncedCompleted: desired.isCompleted,
+      lastSyncedContent: desired.content,
+      lastSyncedLane: desired.lane,
+      lastSyncedParent: desired.parentId,
     });
   }
 }

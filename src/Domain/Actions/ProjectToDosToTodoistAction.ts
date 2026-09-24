@@ -254,6 +254,11 @@ export class ProjectToDosToTodoistAction {
       notePath,
       lastSyncedHash: snapshotHash(desired),
       lastSyncedCompleted: desired.isCompleted,
+      lastSyncedContent: desired.content,
+      // A to-do is always a subtask: it inherits its parent's section, so the
+      // lane is not a controlled field for it (dt-02).
+      lastSyncedLane: null,
+      lastSyncedParent: desired.parentId,
     });
   }
 }

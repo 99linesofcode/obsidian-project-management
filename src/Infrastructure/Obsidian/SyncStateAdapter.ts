@@ -206,6 +206,21 @@ export class SyncStateAdapter implements SyncStatePort {
     state: TodoistStateData,
   ): Promise<void> {
     const data = await this.storage.load();
+    // An item is anchored by its todoistId; the notePath is only where it
+    // currently lives. A rename re-keys the record, so any other record for the
+    // same todoistId is evicted here rather than left as a stale anchor behind.
+    if (state.todoistId !== '') {
+      for (const [key, raw] of Object.entries(data)) {
+        if (
+          key !== `todoistItem.${notePath}` &&
+          key.startsWith('todoistItem.') &&
+          isRecord(raw) &&
+          raw.todoistId === state.todoistId
+        ) {
+          delete data[key];
+        }
+      }
+    }
     data[`todoistItem.${notePath}`] = state;
     await this.storage.save(data);
   }
@@ -218,13 +233,27 @@ export class SyncStateAdapter implements SyncStatePort {
   }
 
   private mapTodoistState(raw: Record<string, unknown>): TodoistStateData {
-    return {
+    const state: TodoistStateData = {
       todoistId: typeof raw.todoistId === 'string' ? raw.todoistId : '',
       notePath: typeof raw.notePath === 'string' ? raw.notePath : '',
       lastSyncedHash:
         typeof raw.lastSyncedHash === 'string' ? raw.lastSyncedHash : '',
       lastSyncedCompleted: raw.lastSyncedCompleted === true,
     };
+    // The per-field bases are optional: an old record simply lacks them.
+    if (typeof raw.lastSyncedContent === 'string') {
+      state.lastSyncedContent = raw.lastSyncedContent;
+    }
+    if (raw.lastSyncedLane === null || typeof raw.lastSyncedLane === 'string') {
+      state.lastSyncedLane = raw.lastSyncedLane;
+    }
+    if (
+      raw.lastSyncedParent === null ||
+      typeof raw.lastSyncedParent === 'string'
+    ) {
+      state.lastSyncedParent = raw.lastSyncedParent;
+    }
+    return state;
   }
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {

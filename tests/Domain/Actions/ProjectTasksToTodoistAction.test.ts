@@ -623,6 +623,9 @@ describe('ProjectTasksToTodoistAction', () => {
           notePath: slicePath,
           lastSyncedHash: expect.any(String),
           lastSyncedCompleted: false,
+          lastSyncedContent: 'Slice 1',
+          lastSyncedLane: 'Unshaped',
+          lastSyncedParent: null,
         },
       },
       {
@@ -632,6 +635,9 @@ describe('ProjectTasksToTodoistAction', () => {
           notePath: childPath,
           lastSyncedHash: expect.any(String),
           lastSyncedCompleted: false,
+          lastSyncedContent: 'Chore 1',
+          lastSyncedLane: null,
+          lastSyncedParent: 'T1',
         },
       },
       {
@@ -641,6 +647,9 @@ describe('ProjectTasksToTodoistAction', () => {
           notePath: topPath,
           lastSyncedHash: expect.any(String),
           lastSyncedCompleted: false,
+          lastSyncedContent: 'Bug 1',
+          lastSyncedLane: 'Unshaped',
+          lastSyncedParent: null,
         },
       },
     ]);

@@ -139,6 +139,10 @@ export class ApplyTodoistCompletionAction {
       notePath,
       lastSyncedHash: snapshotHash(task),
       lastSyncedCompleted: task.isCompleted,
+      lastSyncedContent: task.content,
+      // The item is a to-do: a subtask, so its lane is inherited (dt-02).
+      lastSyncedLane: null,
+      lastSyncedParent: task.parentId,
     });
   }
 }

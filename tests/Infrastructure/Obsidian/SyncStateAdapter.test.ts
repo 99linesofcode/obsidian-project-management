@@ -498,4 +498,64 @@ describe('SyncStateAdapter', () => {
       },
     ]);
   });
+
+  it('round-trips the per-field bases when present', async () => {
+    // Given — an item carrying the t5 per-field bases
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setTodoistState('a.md', {
+      todoistId: 'T1',
+      notePath: 'a.md',
+      lastSyncedHash: 'h1',
+      lastSyncedCompleted: false,
+      lastSyncedContent: 'Buy milk',
+      lastSyncedLane: 'Building',
+      lastSyncedParent: null,
+    });
+
+    // When — the item state is read back
+    const result = await adapter.getTodoistState('a.md');
+
+    // Then — the bases survive, including an explicit null lane/parent
+    expect(result).toEqual({
+      todoistId: 'T1',
+      notePath: 'a.md',
+      lastSyncedHash: 'h1',
+      lastSyncedCompleted: false,
+      lastSyncedContent: 'Buy milk',
+      lastSyncedLane: 'Building',
+      lastSyncedParent: null,
+    });
+  });
+
+  it('re-keys an item to its new note path, evicting the old record', async () => {
+    // Given — an item anchored at one path
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setTodoistState('old.md', {
+      todoistId: 'T1',
+      notePath: 'old.md',
+      lastSyncedHash: 'h1',
+      lastSyncedCompleted: false,
+    });
+
+    // When — the same item is set at a new path (a rename)
+    await adapter.setTodoistState('new.md', {
+      todoistId: 'T1',
+      notePath: 'new.md',
+      lastSyncedHash: 'h1',
+      lastSyncedCompleted: false,
+    });
+
+    // Then — only the new key survives; the old anchor is gone
+    expect(snapshot()).toEqual({
+      'todoistItem.new.md': {
+        todoistId: 'T1',
+        notePath: 'new.md',
+        lastSyncedHash: 'h1',
+        lastSyncedCompleted: false,
+      },
+    });
+    expect(await adapter.getTodoistState('old.md')).toBeNull();
+  });
 });

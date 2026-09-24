@@ -314,6 +314,9 @@ describe('ProjectToDosToTodoistAction', () => {
           notePath: todoPath,
           lastSyncedHash: expect.any(String),
           lastSyncedCompleted: false,
+          lastSyncedContent: 'Fix the widget',
+          lastSyncedLane: null,
+          lastSyncedParent: 'TASK',
         },
       },
     ]);
