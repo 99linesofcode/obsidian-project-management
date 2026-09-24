@@ -18,6 +18,7 @@ import {
 const TOKEN_PATH = '/home/shorty/.config/sops-nix/secrets/todoist_api_key';
 const BASE_URL = 'https://api.todoist.com/api/v1';
 const SCRATCH_PROJECT = 'OPM live probe';
+const ENSURE_PROJECT = 'OPM live probe ensure';
 const PROBE_LABEL = 'opm-live-probe';
 
 const findings = [];
@@ -61,10 +62,13 @@ async function rawRequest(token, method, path) {
   };
 }
 
-// Deletes the scratch project and the probe label. Raw requests, because the
+// Deletes the scratch projects and the probe label. Raw requests, because the
 // port deliberately has no deleteProject/deleteLabel operation.
-async function cleanup(token, projectId) {
-  if (projectId) {
+async function cleanup(token, projectIds) {
+  for (const projectId of projectIds) {
+    if (!projectId) {
+      continue;
+    }
     const status = await rawRequest(token, 'DELETE', `/projects/${projectId}`);
     record(
       'cleanup: delete scratch project',
@@ -94,6 +98,7 @@ async function main() {
   const token = readToken();
   const adapter = new TodoistAdapter(createTodoistTransport(token));
   let projectId;
+  let ensureProjectId;
 
   try {
     // --- Rate-limit headers (dt-12 finding 1) -----------------------------
@@ -263,6 +268,94 @@ async function main() {
       adapter.setProjectArchived(projectId, false),
     );
 
+    // --- Ensure-by-name flow (t2 project mirror) --------------------------
+    // The project mirror resolves a project by name before creating, so a name
+    // match is adopted rather than duplicated. This exercises the adapter
+    // operations that flow uses: create, resolve-by-name, rename, archive,
+    // unarchive, and resolve-by-name after a delete.
+    const ensureProject = await run('ensure: createProject', () =>
+      adapter.createProject(ENSURE_PROJECT),
+    );
+    ensureProjectId = ensureProject?.id;
+
+    await run('ensure: resolve by name', async () => {
+      const projects = await adapter.fetchProjects();
+      const found = projects.find(
+        (candidate) => candidate.name === ENSURE_PROJECT,
+      );
+      if (!found || found.id !== ensureProjectId) {
+        throw new Error('created project not resolvable by name');
+      }
+      return found.id;
+    });
+
+    await run('ensure: rename', () =>
+      adapter.updateProject(ensureProjectId, `${ENSURE_PROJECT} (renamed)`),
+    );
+    await run('ensure: resolve by renamed name', async () => {
+      const projects = await adapter.fetchProjects();
+      const found = projects.find(
+        (candidate) => candidate.name === `${ENSURE_PROJECT} (renamed)`,
+      );
+      if (!found || found.id !== ensureProjectId) {
+        throw new Error('renamed project not resolvable by name');
+      }
+      return found.id;
+    });
+
+    await run('ensure: archive', () =>
+      adapter.setProjectArchived(ensureProjectId, true),
+    );
+    await run('ensure: archived state visible', async () => {
+      // The list endpoint omits archived projects, so the archived state is
+      // read by id — the same path the project mirror uses.
+      const found = await adapter.fetchProject(ensureProjectId);
+      if (!found?.isArchived) {
+        throw new Error('project not archived in fetchProject');
+      }
+      return 'archived';
+    });
+
+    await run('ensure: unarchive', () =>
+      adapter.setProjectArchived(ensureProjectId, false),
+    );
+    await run('ensure: unarchived state visible', async () => {
+      const projects = await adapter.fetchProjects();
+      const found = projects.find(
+        (candidate) => candidate.id === ensureProjectId,
+      );
+      if (found?.isArchived) {
+        throw new Error('project still archived in fetchProjects');
+      }
+      return 'active';
+    });
+
+    await run('ensure: delete scratch project', async () => {
+      const status = await rawRequest(
+        token,
+        'DELETE',
+        `/projects/${ensureProjectId}`,
+      );
+      if (status.status >= 300) {
+        throw new Error(`delete failed with status ${status.status}`);
+      }
+      return `status ${status.status}`;
+    });
+    await run(
+      'ensure: resolve by name after delete returns nothing',
+      async () => {
+        const projects = await adapter.fetchProjects();
+        const found = projects.find(
+          (candidate) => candidate.name === `${ENSURE_PROJECT} (renamed)`,
+        );
+        if (found) {
+          throw new Error('deleted project still resolvable by name');
+        }
+        return 'not found';
+      },
+    );
+    ensureProjectId = undefined;
+
     // --- Delete cascade (dt-12 finding 2) ---------------------------------
     const cascadeParent = await run('createTask (cascade parent)', () =>
       adapter.createTask({ projectId, content: 'Cascade parent' }),
@@ -300,7 +393,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     try {
-      await cleanup(token, projectId);
+      await cleanup(token, [projectId, ensureProjectId]);
     } catch (error) {
       record(
         'cleanup failed',
