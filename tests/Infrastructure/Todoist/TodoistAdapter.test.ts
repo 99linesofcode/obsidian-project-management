@@ -517,6 +517,21 @@ describe('TodoistAdapter', () => {
     expect(calls[0]).toEqual({ method: 'DELETE', path: '/tasks/T1', body: '' });
   });
 
+  it('treats deleting an already-gone task as a no-op', async () => {
+    // Given — a 404 for a task that no longer exists
+    const { transport, calls } = fakeTransport([{ status: 404, json: null }]);
+    const adapter = new TodoistAdapter(transport);
+
+    // When — the adapter deletes the missing task
+    // Then — it resolves: the desired end state (the twin is gone) already holds
+    await expect(adapter.deleteTask('T-gone')).resolves.toBeUndefined();
+    expect(calls[0]).toEqual({
+      method: 'DELETE',
+      path: '/tasks/T-gone',
+      body: '',
+    });
+  });
+
   it('no-ops ensureLabel when the label already exists', async () => {
     // Given — a labels list already containing the label
     const { transport, calls } = fakeTransport([

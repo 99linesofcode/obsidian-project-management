@@ -114,6 +114,7 @@ class FakeSyncState implements SyncStatePort {
   projectState: TodoistProjectStateData | null = null;
   todoistItemStates = new Map<string, TodoistStateData>();
   todoistItemSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  todoistItemRemovals: string[] = [];
 
   async getTodoistProjectState(): Promise<TodoistProjectStateData | null> {
     return this.projectState;
@@ -131,6 +132,10 @@ class FakeSyncState implements SyncStatePort {
   }
   async listTodoistStates(): Promise<TodoistStateData[]> {
     return [...this.todoistItemStates.values()];
+  }
+  async removeTodoistState(notePath: string): Promise<void> {
+    this.todoistItemStates.delete(notePath);
+    this.todoistItemRemovals.push(notePath);
   }
 
   async get(): Promise<Status | null> {

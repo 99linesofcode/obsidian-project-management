@@ -12,9 +12,10 @@ import type { Status } from '../Models/Status.js';
 // remember the last reconciled archive observation (the three-way merge
 // baseline), remember an archived project's repository watch (the ETag and
 // newest-issue cursor), remember a project's Todoist bookkeeping (its lane
-// section map and completed-since cursor), and remember a mirrored item's
-// Todoist twin (its task id and last-synced snapshot hash). The data.json-backed
-// implementation lives in Infrastructure.
+// section map and completed-since cursor), remember a mirrored item's
+// Todoist twin (its task id and last-synced snapshot hash), and forget a
+// twin's record when the twin (or the vault note that anchored it) is gone.
+// The data.json-backed implementation lives in Infrastructure.
 export interface SyncStatePort {
   get(url: string): Promise<Status | null>;
   set(status: Status): Promise<void>;
@@ -44,5 +45,9 @@ export interface SyncStatePort {
   ): Promise<void>;
   getTodoistState(notePath: string): Promise<TodoistStateData | null>;
   setTodoistState(notePath: string, state: TodoistStateData): Promise<void>;
+  // Evicts a record cleanly. Deletion propagation (t6) needs a real removal:
+  // an overwritten empty record would linger as a stale anchor, and a stale
+  // anchor makes the next capture pass re-create the twin it should forget.
+  removeTodoistState(notePath: string): Promise<void>;
   listTodoistStates(): Promise<TodoistStateData[]>;
 }

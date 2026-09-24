@@ -136,6 +136,7 @@ class FakeSyncState implements SyncStatePort {
   async listTodoistStates(): Promise<[]> {
     return [];
   }
+  async removeTodoistState(): Promise<void> {}
 }
 
 class FakeProjectManagement implements ProjectManagementPort {

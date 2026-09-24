@@ -165,6 +165,7 @@ class FakeSyncState implements SyncStatePort {
   async listTodoistStates(): Promise<[]> {
     return [];
   }
+  async removeTodoistState(): Promise<void> {}
 }
 
 const syncedAt = '2026-09-24T12:00:00Z';

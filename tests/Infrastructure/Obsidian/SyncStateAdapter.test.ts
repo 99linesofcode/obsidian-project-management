@@ -558,4 +558,23 @@ describe('SyncStateAdapter', () => {
     });
     expect(await adapter.getTodoistState('old.md')).toBeNull();
   });
+
+  it('removes a Todoist item state by its note path', async () => {
+    // Given — a stored Todoist item state
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setTodoistState('a.md', {
+      todoistId: 'T1',
+      notePath: 'a.md',
+      lastSyncedHash: 'h1',
+      lastSyncedCompleted: false,
+    });
+
+    // When — the record is removed
+    await adapter.removeTodoistState('a.md');
+
+    // Then — it is gone outright, with no empty record left behind
+    expect(await adapter.getTodoistState('a.md')).toBeNull();
+    expect(snapshot()).toEqual({});
+  });
 });
