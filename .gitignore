@@ -9,15 +9,10 @@
 auth.json
 /node_modules
 
-# backend
-/vendor
-
 # logs
 npm-debug.log
 
 # cache
-/.phpunit.cache
-/.phpunit.result.cache
 /build
 
 # build output
@@ -28,11 +23,6 @@ npm-debug.log
 # editors
 /.vscode
 
-# laravel ide helper
-_ide_helper.php
-_ide_helper_models.php
-.phpstorm.meta.php
-
 # Playwright
 /test-results
 /playwright-report
@@ -40,14 +30,5 @@ _ide_helper_models.php
 /playwright/.cache
 /playwright/.auth
 
-# Pest
-/tests/Browser/Screenshots
-
-phpstan.neon
-phpunit.xml
-
-# Workbench
-/workbench/storage
-
-# test coverage
-/coverage
+# Obsidian
+data.json
