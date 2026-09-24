@@ -1,11 +1,13 @@
 import { Component } from 'obsidian';
 import type { HandleDeletedNoteAction } from '../../Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStatusAction.js';
+import type { ProbeProjectsAction } from '../../Domain/Actions/ProbeProjectsAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
 import type { RelinkRenamedTodoAction } from '../../Domain/Actions/RelinkRenamedTodoAction.js';
 import type { RelocateTaskStatusAction } from '../../Domain/Actions/RelocateTaskStatusAction.js';
 import type { SyncChecklistAction } from '../../Domain/Actions/SyncChecklistAction.js';
 import type { SyncProjectAction } from '../../Domain/Actions/SyncProjectAction.js';
+import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
 
 // Obsidian runs in a browser where window is the global; the node type
@@ -25,11 +27,13 @@ type SyncTrigger =
   | { kind: 'renamed'; oldPath: string; newPath: string };
 
 // Delivery mechanics only: turns a timer and vault note changes/deletions/
-// renames into per-project sync invocations. Zero decisions — the actions,
-// project list, interval and debounce are injected. Note changes and deletions
-// are debounced per project and serialised per project (a promise chain per
-// project name), so a poll tick and an edit-triggered reconcile never overlap
-// for the same project. A rename bypasses the debounce but still serialises.
+// renames into per-project sync invocations. Zero business decisions — the
+// actions, project list, interval and debounce are injected; the only choice
+// made here is gating the board fetch on the probed updatedAt. Note changes
+// and deletions are debounced per project and serialised per project (a
+// promise chain per project name), so a poll tick and an edit-triggered
+// reconcile never overlap for the same project. A rename bypasses the
+// debounce but still serialises.
 export class SyncScheduler extends Component {
   private readonly chains = new Map<string, Promise<void>>();
   private readonly debounceTimers = new Map<string, number>();
@@ -37,6 +41,8 @@ export class SyncScheduler extends Component {
 
   constructor(
     private readonly syncProject: SyncProjectAction,
+    private readonly probeProjects: ProbeProjectsAction,
+    private readonly syncState: SyncStatePort,
     projectNames: string[],
     private readonly intervalMs: number,
     private readonly vault: VaultPort,
@@ -89,10 +95,31 @@ export class SyncScheduler extends Component {
     });
   }
 
+  // Two-tier poll: one cheap fleet probe reads every project's updatedAt, then
+  // the expensive board fetch runs only for projects whose updatedAt moved
+  // since their last successful sync. The tracked-issue reconcile runs every
+  // tick regardless. The stored update advances only after a successful sync,
+  // so a failed sync retries the board fetch on the next tick.
   private async tick(): Promise<void> {
+    const states = await this.probeProjects.execute(this.projectNames);
+
     for (const projectName of this.projectNames) {
+      const state = states.get(projectName);
+      if (!state) {
+        continue;
+      }
+
       const syncedAt = new Date().toISOString();
-      await this.syncProject.execute({ projectName, syncedAt });
+      const lastUpdate = await this.syncState.getLastProjectUpdate(projectName);
+      const includeBoard = state.updatedAt !== lastUpdate;
+
+      try {
+        await this.syncProject.execute({ projectName, syncedAt, includeBoard });
+        await this.syncState.setLastProjectUpdate(projectName, state.updatedAt);
+      } catch {
+        // A failed sync must not advance the stored update, so the next tick
+        // sees the same updatedAt and retries the board fetch.
+      }
     }
   }
 

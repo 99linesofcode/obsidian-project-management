@@ -1,19 +1,24 @@
 import type { AttachProjectData } from '../DataTransferObjects/AttachProjectData.js';
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
+import type { ProjectStateData } from '../DataTransferObjects/ProjectStateData.js';
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 
 // The core's need: given a project note's sync frontmatter, resolve the
 // GitHub identities for that project, fetch the complete tracked issue set,
-// read/update a single task by its issue url, set a task's open/closed state,
-// and drive the project board (read its cards, set a card's Status, add an
-// issue to the board). Designed for the core, not to mimic GitHub's API.
-// Returns null when the provider is not ours to handle.
+// probe every project's lightweight state in one cheap query, read/update a
+// single task by its issue url, set a task's open/closed state, and drive the
+// project board (read its cards, set a card's Status, add an issue to the
+// board). Designed for the core, not to mimic GitHub's API. Returns null when
+// the provider is not ours to handle.
 export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
   fetchTrackedIssues(repoUrl: string): Promise<TaskData[]>;
+  fetchProjectStates(
+    projectNodeIds: string[],
+  ): Promise<Map<string, ProjectStateData>>;
   fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(

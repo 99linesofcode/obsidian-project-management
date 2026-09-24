@@ -68,6 +68,11 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   statuses = new Map<string, Status>();
   setCalls: Status[] = [];
   identity: ProjectIdentityData | null = null;
@@ -103,6 +108,9 @@ class FakeSyncState implements SyncStatePort {
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
 
   async fetchProjectIdentity(): Promise<null> {

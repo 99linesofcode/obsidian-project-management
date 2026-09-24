@@ -4,6 +4,7 @@ import type {
   ProjectIdentityData,
   ProjectStatusOption,
 } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { ProjectStateData } from '../../Domain/DataTransferObjects/ProjectStateData.js';
 import type { TaskData } from '../../Domain/DataTransferObjects/TaskData.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
@@ -337,6 +338,42 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
+  // One cheap query for every project's lightweight state: an aliased node
+  // field per id with no connections, so the fleet probe costs about a point
+  // per project instead of the board query's 30-50. A missing or invalid node
+  // (e.g. a deleted project) is skipped rather than failing the whole probe.
+  async fetchProjectStates(
+    projectNodeIds: string[],
+  ): Promise<Map<string, ProjectStateData>> {
+    const states = new Map<string, ProjectStateData>();
+    if (projectNodeIds.length === 0) {
+      return states;
+    }
+
+    const variables: Record<string, string> = {};
+    const fields = projectNodeIds.map((id, index) => {
+      variables[`id${index}`] = id;
+      return `p${index}: node(id: $id${index}) { ... on ProjectV2 { id updatedAt closed } }`;
+    });
+    const declarations = projectNodeIds
+      .map((_, index) => `$id${index}: ID!`)
+      .join(', ');
+    const query = `
+      query FleetState(${declarations}) {
+        ${fields.join('\n        ')}
+      }
+    `;
+
+    const data = await this.postQuery(query, variables);
+    for (const raw of Object.values(data)) {
+      const state = this.mapProjectState(raw);
+      if (state) {
+        states.set(state.projectId, state);
+      }
+    }
+    return states;
+  }
+
   async fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]> {
     const data = await this.postQuery(BOARD_ITEMS_QUERY, {
       projectId: projectNodeId,
@@ -404,6 +441,18 @@ export class GitHubAdapter implements ProjectManagementPort {
       );
     }
     return this.fetchTask(url);
+  }
+
+  private mapProjectState(raw: unknown): ProjectStateData | null {
+    if (
+      !isRecord(raw) ||
+      typeof raw.id !== 'string' ||
+      typeof raw.updatedAt !== 'string' ||
+      typeof raw.closed !== 'boolean'
+    ) {
+      return null;
+    }
+    return { projectId: raw.id, updatedAt: raw.updatedAt, closed: raw.closed };
   }
 
   private mapBoardItem(node: Record<string, unknown>): BoardItemData | null {

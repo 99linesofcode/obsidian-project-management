@@ -35,6 +35,9 @@ class FakeVault implements VaultPort {
 }
 
 class FakePort implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   result: ProjectIdentityData | null = null;
 
   async fetchProjectIdentity(): Promise<ProjectIdentityData | null> {

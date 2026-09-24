@@ -17,6 +17,7 @@ vi.mock('obsidian', () => {
 
 import { SyncScheduler } from '../../../src/App/Scheduling/SyncScheduler.js';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
+import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
@@ -30,10 +31,15 @@ import type { RelocateTaskStatusAction } from '../../../src/Domain/Actions/Reloc
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import {
+  GitHubAdapter,
+  type Transport,
+} from '../../../src/Infrastructure/GitHub/GitHubAdapter.js';
 
 // Fakes at the ports so the scheduler's per-project invocation is observable
 // through the real composed action, without touching Obsidian or GitHub.
@@ -79,6 +85,8 @@ class FakeVault implements VaultPort {
 
 class FakeSyncState implements SyncStatePort {
   identity: ProjectIdentityData | null = null;
+  lastUpdates = new Map<string, string>();
+  lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
 
   async get(): Promise<Status | null> {
     return null;
@@ -95,11 +103,21 @@ class FakeSyncState implements SyncStatePort {
   async list(): Promise<Status[]> {
     return [];
   }
+  async getLastProjectUpdate(projectName: string): Promise<string | null> {
+    return this.lastUpdates.get(projectName) ?? null;
+  }
+  async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
+    this.lastUpdateSets.push({ projectName, iso });
+    this.lastUpdates.set(projectName, iso);
+  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
   repoUrlCalls: string[] = [];
 
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
@@ -248,6 +266,158 @@ const fakeSyncProject = {
   execute: vi.fn(async () => {}),
 } as unknown as SyncProjectAction;
 
+// A probe fake for tests that never tick (their advanced timers stay inside the
+// poll interval). Tick tests supply their own probe.
+const idleProbe = {
+  execute: async () => new Map<string, ProjectStateData>(),
+} as unknown as ProbeProjectsAction;
+
+const idleSyncState = new FakeSyncState();
+
+// A routing fake transport: answers the fleet probe, the REST issue reads and
+// the board query from one canned set, and records every call so a test can
+// assert exactly which queries the poll issued.
+function routingTransport(options: {
+  states?: Record<string, unknown>;
+  issues?: unknown[];
+  boardItems?: unknown[];
+  issuesStatus?: number;
+}) {
+  const calls: Array<{ method: string; path?: string; body?: string }> = [];
+  const transport: Transport = {
+    async post(body) {
+      calls.push({ method: 'post', body });
+      if (body.includes('FleetState')) {
+        return { status: 200, json: { data: options.states ?? {} } };
+      }
+      return {
+        status: 200,
+        json: {
+          data: { node: { items: { nodes: options.boardItems ?? [] } } },
+        },
+      };
+    },
+    async get(path) {
+      calls.push({ method: 'get', path });
+      return {
+        status: options.issuesStatus ?? 200,
+        json: options.issues ?? [],
+      };
+    },
+    async patch(path, body) {
+      calls.push({ method: 'patch', path, body });
+      return { status: 200, json: {} };
+    },
+    async postPath(path, body) {
+      calls.push({ method: 'postPath', path, body });
+      return { status: 200, json: {} };
+    },
+  };
+  return { transport, calls };
+}
+
+function boardFetches(
+  calls: Array<{ method: string; body?: string }>,
+): Array<{ method: string; body?: string }> {
+  return calls.filter(
+    (call) => call.method === 'post' && call.body?.includes('BoardItems'),
+  );
+}
+
+function issueFetches(
+  calls: Array<{ method: string; path?: string }>,
+): Array<{ method: string; path?: string }> {
+  return calls.filter(
+    (call) => call.method === 'get' && call.path?.includes('/issues'),
+  );
+}
+
+// Builds a scheduler around the given tick dependencies, filling the note-event
+// seams with idle fakes the tick never touches.
+function schedulerWith(overrides: {
+  syncProject: SyncProjectAction;
+  probe: ProbeProjectsAction;
+  syncState: SyncStatePort;
+  projectNames: string[];
+}): SyncScheduler {
+  return new SyncScheduler(
+    overrides.syncProject,
+    overrides.probe,
+    overrides.syncState,
+    overrides.projectNames,
+    60_000,
+    new FakeVault(),
+    idleChecklist(),
+    idleMirror(),
+    new FakeReconcile() as unknown as ReconcileTaskAction,
+    new FakeHandleDeleted() as unknown as HandleDeletedNoteAction,
+    idleRelink(),
+    idleRelocate(),
+    0,
+  );
+}
+
+const projectIdentity: ProjectIdentityData = {
+  repoUrl: 'https://github.com/acme/widgets',
+  repoNodeId: 'R_kgDOAAAA',
+  projectNodeId: 'PVT_123',
+  statusFieldId: 'PVTF_456',
+  statusOptions: [
+    { id: 'PVTSSF_1', name: 'Unshaped' },
+    { id: 'PVTSSF_5', name: 'Shipped' },
+  ],
+};
+
+// Builds a full tick stack — real adapter, real probe and the real sync action
+// — over a fake transport, so a test observes the exact queries the poll issues.
+// A stored project update can be seeded to exercise the gate.
+function tickHarness(options: { transport: Transport; lastUpdate?: string }): {
+  scheduler: SyncScheduler;
+  syncState: FakeSyncState;
+} {
+  const vault = new FakeVault();
+  const syncState = new FakeSyncState();
+  syncState.identity = projectIdentity;
+  if (options.lastUpdate !== undefined) {
+    syncState.lastUpdates.set('Acme Widgets', options.lastUpdate);
+  }
+
+  const github = new GitHubAdapter(options.transport);
+  const createTaskNote = new CreateTaskNoteAction(
+    vault,
+    syncState,
+    'Templates/Task.md',
+  );
+  const applyRemoteChange = new ApplyRemoteChangeAction(
+    vault,
+    syncState,
+    createTaskNote,
+    new BoardStatusAction(syncState, github),
+    'Templates/Task.md',
+  );
+  const applyBoardChange = new ApplyBoardChangeAction(
+    syncState,
+    github,
+    vault,
+    'Done',
+  );
+  const syncProject = new SyncProjectAction(
+    github,
+    syncState,
+    applyRemoteChange,
+    createTaskNote,
+    applyBoardChange,
+    'Shipped',
+  );
+  const scheduler = schedulerWith({
+    syncProject,
+    probe: new ProbeProjectsAction(github, syncState),
+    syncState,
+    projectNames: ['Acme Widgets'],
+  });
+  return { scheduler, syncState };
+}
+
 // A fake delete handler that records its invocations, so the scheduler's
 // wiring of the delete path is observable.
 class FakeHandleDeleted {
@@ -320,8 +490,23 @@ describe('SyncScheduler', () => {
     );
     const reconcile = new FakeReconcile();
     const handleDeleted = new FakeHandleDeleted();
+    const probe = {
+      execute: async (projectNames: string[]) =>
+        new Map(
+          projectNames.map((projectName) => [
+            projectName,
+            {
+              projectId: 'PVT_123',
+              updatedAt: '2026-09-18T12:00:00Z',
+              closed: false,
+            },
+          ]),
+        ),
+    } as unknown as ProbeProjectsAction;
     const scheduler = new SyncScheduler(
       syncProject,
+      probe,
+      syncState,
       ['Acme Widgets', 'Other'],
       60_000,
       vault,
@@ -349,6 +534,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -383,6 +570,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -418,6 +607,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -451,6 +642,8 @@ describe('SyncScheduler', () => {
     const relocate = new FakeRelocateTaskStatus(events);
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -488,6 +681,8 @@ describe('SyncScheduler', () => {
     const relocate = new FakeRelocateTaskStatus(events);
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -525,6 +720,8 @@ describe('SyncScheduler', () => {
     const relocate = new FakeRelocateTaskStatus(events);
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -559,6 +756,8 @@ describe('SyncScheduler', () => {
     const relocate = new FakeRelocateTaskStatus(events);
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -590,6 +789,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -618,6 +819,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -649,6 +852,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -689,6 +894,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -721,6 +928,8 @@ describe('SyncScheduler', () => {
     const handleDeleted = new FakeHandleDeleted();
     const scheduler = new SyncScheduler(
       fakeSyncProject,
+      idleProbe,
+      idleSyncState,
       [],
       60_000,
       vault,
@@ -740,5 +949,126 @@ describe('SyncScheduler', () => {
 
     // Then — no delete handler is scheduled
     expect(handleDeleted.calls).toHaveLength(0);
+  });
+
+  it('gates the board fetch when the project updatedAt is unchanged', async () => {
+    // Given — a stored update equal to the probe's updatedAt
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const { scheduler } = tickHarness({
+      transport,
+      lastUpdate: '2026-09-18T10:00:00Z',
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the REST reconcile runs in full, but the board is never queried
+    expect(issueFetches(calls)).toHaveLength(1);
+    expect(boardFetches(calls)).toHaveLength(0);
+  });
+
+  it('fetches the board when the project updatedAt changed', async () => {
+    // Given — a stored update older than the probe's updatedAt
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T11:00:00Z', closed: false },
+      },
+    });
+    const { scheduler } = tickHarness({
+      transport,
+      lastUpdate: '2026-09-18T10:00:00Z',
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the board is fetched once
+    expect(boardFetches(calls)).toHaveLength(1);
+  });
+
+  it('fetches the board on the first run when no update is stored', async () => {
+    // Given — a project with no stored update
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const { scheduler } = tickHarness({ transport });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — everything is fetched, so the first run misses nothing
+    expect(boardFetches(calls)).toHaveLength(1);
+  });
+
+  it('stores the project update only after a successful sync', async () => {
+    // Given — a changed project
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T11:00:00Z', closed: false },
+      },
+    });
+    const { scheduler, syncState } = tickHarness({ transport });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the probe's updatedAt is persisted
+    expect(syncState.lastUpdateSets).toEqual([
+      { projectName: 'Acme Widgets', iso: '2026-09-18T11:00:00Z' },
+    ]);
+  });
+
+  it('leaves the stored update untouched when the sync throws', async () => {
+    // Given — a changed project whose issue read fails
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T11:00:00Z', closed: false },
+      },
+      issuesStatus: 500,
+    });
+    const { scheduler, syncState } = tickHarness({
+      transport,
+      lastUpdate: '2026-09-18T10:00:00Z',
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the old update is kept, so the board retries next tick
+    expect(syncState.lastUpdates.get('Acme Widgets')).toBe(
+      '2026-09-18T10:00:00Z',
+    );
+    expect(syncState.lastUpdateSets).toEqual([]);
+  });
+
+  it('settles: a second tick over an unchanged project fetches no board', async () => {
+    // Given — a project that does not change between ticks
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const { scheduler } = tickHarness({ transport });
+    scheduler.load();
+
+    // When — two ticks elapse
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the board is fetched only on the first tick, while the REST
+    // reconcile runs on both
+    expect(boardFetches(calls)).toHaveLength(1);
+    expect(issueFetches(calls)).toHaveLength(2);
   });
 });

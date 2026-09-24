@@ -9,6 +9,9 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 // writes the action asks for, so the action's own behaviour (identity lookup
 // → option mapping → board write, or silent skip) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   boardStatusCalls: Array<{
     projectNodeId: string;
     statusFieldId: string;
@@ -65,6 +68,11 @@ class FakeProjectManagement implements ProjectManagementPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   identity: ProjectIdentityData | null = null;
 
   async get(): Promise<null> {

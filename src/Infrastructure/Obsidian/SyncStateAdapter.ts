@@ -14,7 +14,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Implements the sync state port against a flat key/value store. Records are
-// namespaced by kind: status.<url> and identity.<projectName>.
+// namespaced by kind: status.<url>, identity.<projectName> and
+// projectUpdate.<projectName>.
 export class SyncStateAdapter implements SyncStatePort {
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -89,6 +90,18 @@ export class SyncStateAdapter implements SyncStatePort {
     const data = await this.storage.load();
     const raw = data[`identity.${projectName}`];
     return isRecord(raw) ? this.mapIdentity(raw) : null;
+  }
+
+  async getLastProjectUpdate(projectName: string): Promise<string | null> {
+    const data = await this.storage.load();
+    const raw = data[`projectUpdate.${projectName}`];
+    return typeof raw === 'string' ? raw : null;
+  }
+
+  async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
+    const data = await this.storage.load();
+    data[`projectUpdate.${projectName}`] = iso;
+    await this.storage.save(data);
   }
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {

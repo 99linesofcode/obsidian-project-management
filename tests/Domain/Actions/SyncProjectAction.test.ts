@@ -64,6 +64,11 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   statuses = new Map<string, Status>();
   identity: ProjectIdentityData | null = null;
 
@@ -97,6 +102,9 @@ class FakeSyncState implements SyncStatePort {
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   tasks: TaskData[] = [];
   repoUrlCalls: string[] = [];
   boardItems: BoardItemData[] = [];
@@ -182,6 +190,7 @@ const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
   statusName: 'Building',
+  includeBoard: true,
 };
 
 const taskA: TaskData = {
@@ -542,5 +551,27 @@ describe('SyncProjectAction', () => {
     await expect(action.execute(context)).rejects.toThrow(/no repo url/);
     expect(projectManagement.repoUrlCalls).toEqual([]);
     expect(projectManagement.boardItemsCalls).toEqual([]);
+  });
+
+  it('skips the board fetch and its bookkeeping when the board is excluded', async () => {
+    // Given — a tracked task missing from the board, which bookkeeping would add
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [taskA];
+    projectManagement.boardItems = [];
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced without the board
+    await action.execute({ ...context, includeBoard: false });
+
+    // Then — the tracked set is still reconciled, but the board is never touched
+    expect(projectManagement.repoUrlCalls).toEqual([
+      'https://github.com/acme/widgets',
+    ]);
+    expect(vault.created).toHaveLength(1);
+    expect(projectManagement.boardItemsCalls).toEqual([]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
   });
 });

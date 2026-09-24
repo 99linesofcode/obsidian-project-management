@@ -17,6 +17,7 @@ import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js
 import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
+import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
@@ -157,6 +158,7 @@ export default class ProjectManagementPlugin extends Plugin {
       vault,
       new AttachProjectAction(github),
     );
+    const probeProjects = new ProbeProjectsAction(github, syncState);
 
     const syncChecklist = new SyncChecklistAction(
       vault,
@@ -196,6 +198,8 @@ export default class ProjectManagementPlugin extends Plugin {
     // once the vault's project notes are discovered after layout is ready.
     const scheduler = new SyncScheduler(
       syncProject,
+      probeProjects,
+      syncState,
       [],
       this.settings.pollIntervalMinutes * 60 * 1000,
       vault,

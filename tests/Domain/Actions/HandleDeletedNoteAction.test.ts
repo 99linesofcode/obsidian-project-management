@@ -12,6 +12,9 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 // action asks for, so the action's own behaviour (find → close → board →
 // remove) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
 
@@ -69,6 +72,11 @@ class FakeProjectManagement implements ProjectManagementPort {
 }
 
 class FakeSyncState implements SyncStatePort {
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+
+  async setLastProjectUpdate(): Promise<void> {}
   statuses = new Map<string, Status>();
   removed: string[] = [];
   identity: ProjectIdentityData | null = null;

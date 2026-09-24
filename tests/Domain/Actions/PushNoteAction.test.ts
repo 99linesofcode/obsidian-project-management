@@ -7,6 +7,9 @@ import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectMan
 // canned updated task, so the action's own behaviour (PATCH + return) is
 // what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   updateCalls: Array<{ url: string; input: { title: string; body: string } }> =
     [];
   updated: TaskData = {
