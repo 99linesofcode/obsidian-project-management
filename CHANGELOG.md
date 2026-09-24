@@ -1,3 +1,31 @@
+# [0.2.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.1.1...v0.2.0) (2026-09-24)
+
+
+### Bug Fixes
+
+* board cards for new issues, placed in the right lane ([d1991fc](https://github.com/99linesofcode/obsidian-project-management/commit/d1991fc69a0273643a64ab97b0a7d5bfb23679e0))
+* reconcile archive state through a three-way baseline merge ([7bf5d8b](https://github.com/99linesofcode/obsidian-project-management/commit/7bf5d8bf74f646fed85bb3cff49d3f14764e6a05))
+* route created notes through the checklist sync chain ([27bd0e3](https://github.com/99linesofcode/obsidian-project-management/commit/27bd0e3681a2a0aee97afdb15fe0d02fe3ab6184))
+
+
+### Features
+
+* archive projects by folder location, mirrored to the board ([cd7e181](https://github.com/99linesofcode/obsidian-project-management/commit/cd7e1819768c20b066eccee7d7dc5e11cdd2ce8c))
+* follow to-do and task-note renames ([88d3251](https://github.com/99linesofcode/obsidian-project-management/commit/88d325199db056109b5ce7612753bada99925dfc))
+* lock unshipped issue conversations when a project archives ([80cdb4f](https://github.com/99linesofcode/obsidian-project-management/commit/80cdb4fa2fe9bac36a2fd3cbeb75cdddf7c0664e))
+* probe project state before fetching boards ([23cbb97](https://github.com/99linesofcode/obsidian-project-management/commit/23cbb97c3419ddea205ee305b51b1edba11c12a3))
+* project checklist links between vault notes and issue bodies ([abb4216](https://github.com/99linesofcode/obsidian-project-management/commit/abb4216dd36ff11863b95dc3c4ed5f4c51c03d61))
+* propagate checklist text changes to the linked to-do ([82ab238](https://github.com/99linesofcode/obsidian-project-management/commit/82ab23848fc1bee6d3cdb6758436cec8ddc686f1))
+* reconcile the full tracked issue set on every poll ([59aa1e5](https://github.com/99linesofcode/obsidian-project-management/commit/59aa1e56a6bd0e47d37ca0837dc344390bd6d4cd))
+* render task notes from a configurable template ([b1479e7](https://github.com/99linesofcode/obsidian-project-management/commit/b1479e78e1a259b137a34133295c3c670c0720bd))
+* sync every typed issue, not only tasks ([e0d90f9](https://github.com/99linesofcode/obsidian-project-management/commit/e0d90f93c34662a968c47c2eaa5cceff6be69c92))
+* sync task-note checklists with vault to-dos ([914e591](https://github.com/99linesofcode/obsidian-project-management/commit/914e59111146f7230345b8e8a56201e778f4015f))
+* to-do note domain layer (checklist parser, mapper, parser) ([e97dde0](https://github.com/99linesofcode/obsidian-project-management/commit/e97dde075c1cf20c1265f34889f219ab4f0be074))
+* to-do notes carry the Todos.base category and datetime completion ([6995255](https://github.com/99linesofcode/obsidian-project-management/commit/6995255777c3810470d5aa002679ea087f71448e))
+* watch archived repositories and re-activate on new issues ([3278089](https://github.com/99linesofcode/obsidian-project-management/commit/3278089536fda83e70561a8d54b713de82fea556))
+
+
+
 ## [0.1.1](https://github.com/99linesofcode/obsidian-project-management/compare/v0.1.0...v0.1.1) (2026-09-24)
 
 
