@@ -3,6 +3,7 @@ import { ApplyBoardChangeAction } from '../../../src/Domain/Actions/ApplyBoardCh
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import { withStatus } from '../../../src/Domain/Notes/TaskNoteParser.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
@@ -62,6 +63,7 @@ class FakeSyncState implements SyncStatePort {
   async setArchiveBaseline(): Promise<void> {}
   statuses = new Map<string, Status>();
   setCalls: Status[] = [];
+  identity: ProjectIdentityData | null = null;
 
   async get(url: string): Promise<Status | null> {
     return this.statuses.get(url) ?? null;
@@ -78,8 +80,8 @@ class FakeSyncState implements SyncStatePort {
     return [];
   }
   async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<null> {
-    return null;
+  async getIdentity(): Promise<ProjectIdentityData | null> {
+    return this.identity;
   }
 }
 
@@ -119,8 +121,25 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchBoardItems(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async setBoardStatus(): Promise<void> {
-    throw new Error('not used in this test');
+  boardStatusCalls: Array<{
+    projectNodeId: string;
+    statusFieldId: string;
+    issueUrl: string;
+    optionId: string;
+  }> = [];
+
+  async setBoardStatus(
+    projectNodeId: string,
+    statusFieldId: string,
+    issueUrl: string,
+    optionId: string,
+  ): Promise<void> {
+    this.boardStatusCalls.push({
+      projectNodeId,
+      statusFieldId,
+      issueUrl,
+      optionId,
+    });
   }
   async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
@@ -141,6 +160,19 @@ class FakeProjectManagement implements ProjectManagementPort {
 
 const url = 'https://github.com/acme/widgets/issues/42';
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
+const identity: ProjectIdentityData = {
+  repoUrl: 'https://github.com/acme/widgets',
+  repoNodeId: 'R_kgDOAAAA',
+  projectNodeId: 'PVT_123',
+  statusFieldId: 'PVTF_456',
+  statusOptions: [
+    { id: 'PVTSSF_1', name: 'Unshaped' },
+    { id: 'PVTSSF_2', name: 'Shaping' },
+    { id: 'PVTSSF_3', name: 'Shaped' },
+    { id: 'PVTSSF_4', name: 'Building' },
+    { id: 'PVTSSF_5', name: 'Shipped' },
+  ],
+};
 const noteContent = [
   '---',
   'categories: [taken]',
@@ -320,10 +352,11 @@ describe('ApplyBoardChangeAction', () => {
     expect(syncState.setCalls).toEqual([]);
   });
 
-  it('skips an item with no Status value set', async () => {
-    // Given — a board card with no Status option name
+  it('leaves a no-status card untouched when its issue has no status record', async () => {
+    // Given — a board card with no Status value whose issue is untracked
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
+    syncState.identity = identity;
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -334,9 +367,62 @@ describe('ApplyBoardChangeAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — nothing happens
+    // Then — nothing happens: no lane to backfill from
+    expect(projectManagement.stateCalls).toEqual([]);
+    expect(projectManagement.boardStatusCalls).toEqual([]);
+    expect(vault.written).toEqual([]);
+    expect(syncState.setCalls).toEqual([]);
+  });
+
+  it('backfills the lane of a no-status card from its tracked record', async () => {
+    // Given — a board card with no Status value whose record knows its lane
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'Building' }));
+    const projectManagement = new FakeProjectManagement();
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the board change is applied
+    await action.execute({
+      projectName: 'Acme Widgets',
+      item: { itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url },
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — the card is moved into the record's lane, issue and note untouched
+    expect(projectManagement.boardStatusCalls).toEqual([
+      {
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        issueUrl: url,
+        optionId: 'PVTSSF_4',
+      },
+    ]);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(vault.written).toEqual([]);
+    expect(syncState.setCalls).toEqual([]);
+  });
+
+  it('leaves a card that already has a lane to the normal path', async () => {
+    // Given — a card with a lane that matches its record
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'Building' }));
+    const projectManagement = new FakeProjectManagement();
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the board change is applied
+    await action.execute({
+      projectName: 'Acme Widgets',
+      item: makeItem({ statusOptionName: 'Building' }),
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — the backfill never runs; the board and record already agree
+    expect(projectManagement.boardStatusCalls).toEqual([]);
+    expect(projectManagement.stateCalls).toEqual([]);
     expect(syncState.setCalls).toEqual([]);
   });
 

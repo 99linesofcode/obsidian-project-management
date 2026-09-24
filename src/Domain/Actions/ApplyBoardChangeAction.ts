@@ -1,3 +1,4 @@
+import { boardOptionIDByName } from '../Board/boardOptionIDByName.js';
 import { stateFromStatus } from '../Board/stateFromStatus.js';
 import { withStatus } from '../Notes/TaskNoteParser.js';
 import { hash } from '../Notes/hash.js';
@@ -18,8 +19,9 @@ export interface ApplyBoardChangeInput {
 // Status option name becomes the note's status verbatim, and the issue state
 // follows the lane's done-ness (the done lane closes the issue, every other
 // lane reopens it) — but only when done-ness actually changes; a move between
-// non-done lanes never touches the issue. Draft cards, cards with no Status
-// value, and untracked issues are skipped.
+// non-done lanes never touches the issue. A card with no Status value but a
+// tracked record is backfilled into the record's lane; draft cards and
+// untracked issues are skipped.
 export class ApplyBoardChangeAction {
   constructor(
     private readonly syncState: SyncStatePort,
@@ -30,12 +32,20 @@ export class ApplyBoardChangeAction {
 
   async execute(input: ApplyBoardChangeInput): Promise<void> {
     const { item } = input;
-    if (!item.issueUrl || item.statusOptionName === undefined) {
+    if (!item.issueUrl) {
       return;
     }
 
     const status = await this.syncState.get(item.issueUrl);
     if (!status) {
+      return;
+    }
+
+    // A card with no Status value sits outside every lane; the vault's record
+    // knows the lane it belongs in, so backfill it. Drafts (no issue url) and
+    // untracked issues stay skipped.
+    if (item.statusOptionName === undefined) {
+      await this.backfillLane(input.projectName, status);
       return;
     }
 
@@ -96,5 +106,29 @@ export class ApplyBoardChangeAction {
       lastSyncedStatus: statusName,
       lastSyncedTitle: updated ? updated.title : status.lastSyncedTitle,
     });
+  }
+
+  // Moves a card that has no lane into the lane its tracked record holds. The
+  // record's lane is the source: the note already carries it. A record with no
+  // lane, or a project with no stored identity, leaves the card untouched.
+  private async backfillLane(
+    projectName: string,
+    status: Status,
+  ): Promise<void> {
+    if (!status.lastSyncedStatus) {
+      return;
+    }
+
+    const identity = await this.syncState.getIdentity(projectName);
+    if (!identity) {
+      return;
+    }
+
+    await this.projectManagement.setBoardStatus(
+      identity.projectNodeId,
+      identity.statusFieldId,
+      status.url,
+      boardOptionIDByName(identity.statusOptions, status.lastSyncedStatus),
+    );
   }
 }

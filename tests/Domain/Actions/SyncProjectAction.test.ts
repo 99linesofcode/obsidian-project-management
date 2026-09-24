@@ -559,8 +559,9 @@ describe('SyncProjectAction', () => {
     expect(projectManagement.boardItemsCalls).toEqual([]);
   });
 
-  it('skips the board fetch and its bookkeeping when the board is excluded', async () => {
-    // Given — a tracked task missing from the board, which bookkeeping would add
+  it('adds a new typed issue and sets its default lane when the board gate is closed', async () => {
+    // Given — a newly tracked open issue with no status record yet, and a board
+    // that has not moved (its updatedAt would not open the probe gate)
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
@@ -569,14 +570,78 @@ describe('SyncProjectAction', () => {
     projectManagement.boardItems = [];
     const action = makeAction(vault, syncState, projectManagement);
 
-    // When — the project is synced without the board
+    // When — the project is synced without the board gate
     await action.execute({ ...context, includeBoard: false });
 
-    // Then — the tracked set is still reconciled, but the board is never touched
+    // Then — the membership gap opens the board half anyway: the card is added
+    // and placed in the default lane (the open issue's implied lane)
+    expect(vault.created).toHaveLength(1);
+    expect(projectManagement.boardItemsCalls).toEqual(['PVT_123']);
+    expect(projectManagement.addBoardItemCalls).toEqual([
+      { projectNodeId: 'PVT_123', issueUrl: taskA.url },
+    ]);
+    expect(projectManagement.boardStatusCalls).toEqual([
+      {
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        issueUrl: taskA.url,
+        optionId: 'PVTSSF_1',
+      },
+    ]);
+  });
+
+  it('adds a new closed issue and sets its done lane when the board gate is closed', async () => {
+    // Given — a newly tracked closed issue with no status record yet
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const closed: TaskData = { ...taskA, state: 'closed' };
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [closed];
+    projectManagement.boardItems = [];
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced without the board gate
+    await action.execute({ ...context, includeBoard: false });
+
+    // Then — the added card sits in the done lane
+    expect(projectManagement.boardStatusCalls).toEqual([
+      {
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        issueUrl: closed.url,
+        optionId: 'PVTSSF_5',
+      },
+    ]);
+  });
+
+  it('fetches nothing when the board is excluded and every tracked issue is known', async () => {
+    // Given — a fully tracked issue whose note and record are already in step
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const { path: pathA } = TaskNoteMapper.map(taskA, context);
+    syncState.statuses.set(taskA.url, {
+      url: taskA.url,
+      remoteId: taskA.remoteId,
+      notePath: pathA,
+      lastSyncedBodyHash: hash(taskA.body),
+      lastSyncedRemoteUpdatedAt: taskA.updatedAt,
+      lastSyncedStatus: 'Unshaped',
+      lastSyncedTitle: taskA.title,
+    });
+    vault.notes.set(pathA, TaskNoteMapper.map(taskA, context).content);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [taskA];
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced without the board gate
+    await action.execute({ ...context, includeBoard: false });
+
+    // Then — the settled set leaves the board untouched: no membership gap
     expect(projectManagement.repoUrlCalls).toEqual([
       'https://github.com/acme/widgets',
     ]);
-    expect(vault.created).toHaveLength(1);
     expect(projectManagement.boardItemsCalls).toEqual([]);
     expect(projectManagement.addBoardItemCalls).toEqual([]);
   });
