@@ -68,9 +68,7 @@ describe('VaultAdapter.onNoteChanged', () => {
     );
 
     // Then — the change callback receives the created note's path
-    expect(changed).toEqual([
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    ]);
+    expect(changed).toEqual(['Projecten/Acme Widgets/taken/42-fix-the-bug.md']);
   });
 
   it('routes a modified task note under Projecten through the change callback', () => {
@@ -84,9 +82,7 @@ describe('VaultAdapter.onNoteChanged', () => {
     );
 
     // Then — the change callback receives the modified note's path
-    expect(changed).toEqual([
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    ]);
+    expect(changed).toEqual(['Projecten/Acme Widgets/taken/42-fix-the-bug.md']);
   });
 
   it('ignores created notes outside Projecten', () => {
@@ -105,7 +101,10 @@ describe('VaultAdapter.onNoteChanged', () => {
     const { vault, changed } = setup();
 
     // When — a non-markdown file is created under Projecten
-    vault.fire('create', new TFile('Projecten/Acme Widgets/board.canvas', 'canvas'));
+    vault.fire(
+      'create',
+      new TFile('Projecten/Acme Widgets/board.canvas', 'canvas'),
+    );
 
     // Then — the change callback is not invoked
     expect(changed).toEqual([]);

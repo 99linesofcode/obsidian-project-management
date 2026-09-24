@@ -295,10 +295,10 @@ describe('SyncScheduler', () => {
       statusFieldId: 'PVTF_456',
       statusOptions: [
         { id: 'PVTSSF_1', name: 'Unshaped' },
-      { id: 'PVTSSF_2', name: 'Shaping' },
-      { id: 'PVTSSF_3', name: 'Shaped' },
-      { id: 'PVTSSF_4', name: 'Building' },
-      { id: 'PVTSSF_5', name: 'Shipped' },
+        { id: 'PVTSSF_2', name: 'Shaping' },
+        { id: 'PVTSSF_3', name: 'Shaped' },
+        { id: 'PVTSSF_4', name: 'Building' },
+        { id: 'PVTSSF_5', name: 'Shipped' },
       ],
     };
     const projectManagement = new FakeProjectManagement();
@@ -486,9 +486,7 @@ describe('SyncScheduler', () => {
 
     // Then — the relink action runs with both paths, the relocate does not
     expect(events).toEqual(['relink']);
-    expect(relink.calls[0]!.oldPath).toBe(
-      'Projecten/Acme Widgets/todos/fi.md',
-    );
+    expect(relink.calls[0]!.oldPath).toBe('Projecten/Acme Widgets/todos/fi.md');
     expect(relink.calls[0]!.newPath).toBe(
       'Projecten/Acme Widgets/todos/fix-the-bug.md',
     );

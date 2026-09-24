@@ -3,7 +3,9 @@ import { statusNameFromState } from '../../../src/Domain/Board/statusNameFromSta
 
 describe('statusNameFromState', () => {
   it('puts a closed issue in the done lane', () => {
-    expect(statusNameFromState('closed', 'Shipped', 'Unshaped')).toBe('Shipped');
+    expect(statusNameFromState('closed', 'Shipped', 'Unshaped')).toBe(
+      'Shipped',
+    );
   });
 
   it('puts an open issue in the default lane', () => {

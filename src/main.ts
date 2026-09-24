@@ -166,7 +166,11 @@ export default class ProjectManagementPlugin extends Plugin {
     const relinkRenamedTodo = new RelinkRenamedTodoAction(vault);
     const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
 
-    const promoteIssue = new PromoteIssueAction(github, syncState, createTaskNote);
+    const promoteIssue = new PromoteIssueAction(
+      github,
+      syncState,
+      createTaskNote,
+    );
     const promoteToTask = new PromoteToTaskCommand(
       () => this.projectNames,
       syncState,
@@ -175,7 +179,11 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     promoteToTask.register(this);
 
-    const promoteCard = new PromoteCardAction(github, syncState, createTaskNote);
+    const promoteCard = new PromoteCardAction(
+      github,
+      syncState,
+      createTaskNote,
+    );
     const promoteCardToIssue = new PromoteCardToIssueCommand(
       () => this.projectNames,
       syncState,

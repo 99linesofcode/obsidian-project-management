@@ -87,7 +87,9 @@ export class ApplyBoardChangeAction {
       url: status.url,
       remoteId: status.remoteId,
       notePath: status.notePath,
-      lastSyncedBodyHash: updated ? hash(updated.body) : status.lastSyncedBodyHash,
+      lastSyncedBodyHash: updated
+        ? hash(updated.body)
+        : status.lastSyncedBodyHash,
       lastSyncedRemoteUpdatedAt: updated
         ? updated.updatedAt
         : status.lastSyncedRemoteUpdatedAt,

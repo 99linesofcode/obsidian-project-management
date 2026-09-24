@@ -257,9 +257,7 @@ describe('toIssueBody', () => {
 
     // Then — only the real checklist line loses its link
     expect(issue).toBe(
-      ['Intro', '```', '- [ ] [[p|Inside]]', '```', '- [ ] Outside'].join(
-        '\n',
-      ),
+      ['Intro', '```', '- [ ] [[p|Inside]]', '```', '- [ ] Outside'].join('\n'),
     );
   });
 });

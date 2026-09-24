@@ -128,11 +128,7 @@ describe('TaskNoteMapper.render', () => {
 
   it('replaces {{time}} with the sync time', () => {
     // Given — a template that stamps both date and time on a kept field
-    const stamped = [
-      '---',
-      'created: {{date}} {{time}}',
-      '---',
-    ].join('\n');
+    const stamped = ['---', 'created: {{date}} {{time}}', '---'].join('\n');
 
     // When — the task is rendered through the template
     const { content } = TaskNoteMapper.render(stamped, task, context);
@@ -167,7 +163,11 @@ describe('TaskNoteMapper.render', () => {
     // Given — a template without a frontmatter block
 
     // When — the task is rendered through it
-    const { content } = TaskNoteMapper.render('no frontmatter here', task, context);
+    const { content } = TaskNoteMapper.render(
+      'no frontmatter here',
+      task,
+      context,
+    );
 
     // Then — the output equals the built-in mapping
     expect(content).toBe(TaskNoteMapper.map(task, context).content);
