@@ -19,6 +19,7 @@ export interface ProjectManagementPort {
   fetchProjectStates(
     projectNodeIds: string[],
   ): Promise<Map<string, ProjectStateData>>;
+  setProjectClosed(projectNodeId: string, closed: boolean): Promise<void>;
   fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(

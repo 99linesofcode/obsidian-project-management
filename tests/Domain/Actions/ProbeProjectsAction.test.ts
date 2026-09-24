@@ -40,6 +40,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   probeCalls: string[][] = [];
   states = new Map<string, ProjectStateData>();
 
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(
     projectNodeIds: string[],
   ): Promise<Map<string, ProjectStateData>> {

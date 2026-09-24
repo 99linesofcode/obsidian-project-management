@@ -27,6 +27,7 @@ class FakeVault implements VaultPort {
     throw new Error('not used in this test');
   }
 
+  async moveFolder(): Promise<void> {}
   async renameNote(): Promise<void> {
     throw new Error('not used in this test');
   }

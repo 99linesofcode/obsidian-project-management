@@ -24,6 +24,7 @@ class FakeVault implements VaultPort {
     this.written.push({ path, content });
   }
 
+  async moveFolder(): Promise<void> {}
   async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }

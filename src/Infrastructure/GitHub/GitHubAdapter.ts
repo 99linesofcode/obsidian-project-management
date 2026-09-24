@@ -157,6 +157,14 @@ const CONVERT_DRAFT_ISSUE_MUTATION = `
   }
 `;
 
+const SET_PROJECT_CLOSED_MUTATION = `
+  mutation SetProjectClosed($projectId: ID!, $closed: Boolean!) {
+    updateProjectV2(input: { projectId: $projectId, closed: $closed }) {
+      projectV2 { id }
+    }
+  }
+`;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -372,6 +380,16 @@ export class GitHubAdapter implements ProjectManagementPort {
       }
     }
     return states;
+  }
+
+  async setProjectClosed(
+    projectNodeId: string,
+    closed: boolean,
+  ): Promise<void> {
+    await this.postQuery(SET_PROJECT_CLOSED_MUTATION, {
+      projectId: projectNodeId,
+      closed,
+    });
   }
 
   async fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]> {

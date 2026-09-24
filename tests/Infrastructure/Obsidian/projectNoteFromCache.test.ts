@@ -7,7 +7,7 @@ import { projectNoteFromCache } from '../../../src/Infrastructure/Obsidian/proje
 // awkward to fake (the adapter's other methods are covered in the
 // integration pass).
 describe('projectNoteFromCache', () => {
-  it('maps a note carrying pm frontmatter to a project note', () => {
+  it('maps an active note under Projecten to a project note', () => {
     // Given — a project home note whose frontmatter declares pm: github
     const path = 'Projecten/Acme Widgets/_home.md';
     const frontmatter = {
@@ -23,10 +23,42 @@ describe('projectNoteFromCache', () => {
     expect(note).toEqual({
       path,
       projectName: 'Acme Widgets',
+      archived: false,
       pm: 'github',
       url: 'https://github.com/acme/widgets',
       board: 'https://github.com/orgs/acme/projects/1',
     });
+  });
+
+  it('maps an archived note under Archief to an archived project note', () => {
+    // Given — a project home note that has been moved to the archive
+    const path = 'Archief/Acme Widgets/_home.md';
+    const frontmatter = { pm: 'github' };
+
+    // When — the cache entry is mapped
+    const note = projectNoteFromCache(path, frontmatter);
+
+    // Then — the project name is the folder segment and the note is archived
+    expect(note).toEqual({
+      path,
+      projectName: 'Acme Widgets',
+      archived: true,
+      pm: 'github',
+      url: '',
+      board: '',
+    });
+  });
+
+  it('returns null for a pm note outside Projecten and Archief', () => {
+    // Given — a pm note that lives somewhere else entirely
+    const path = 'Notes/Acme Widgets/_home.md';
+    const frontmatter = { pm: 'github' };
+
+    // When — the cache entry is mapped
+    const note = projectNoteFromCache(path, frontmatter);
+
+    // Then — it is not a project note (no empty-name project is discovered)
+    expect(note).toBeNull();
   });
 
   it('returns null for a note without a pm property', () => {

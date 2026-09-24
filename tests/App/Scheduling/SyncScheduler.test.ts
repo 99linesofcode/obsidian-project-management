@@ -18,6 +18,7 @@ vi.mock('obsidian', () => {
 import { SyncScheduler } from '../../../src/App/Scheduling/SyncScheduler.js';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
 import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
+import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
@@ -31,6 +32,7 @@ import type { RelocateTaskStatusAction } from '../../../src/Domain/Actions/Reloc
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
@@ -47,15 +49,20 @@ class FakeVault implements VaultPort {
   noteChangedCb: ((path: string) => void) | null = null;
   noteDeletedCb: ((path: string) => void) | null = null;
   noteRenamedCb: ((oldPath: string, newPath: string) => void) | null = null;
+  projectNotes: ProjectNoteData[] = [];
+  moveCalls: Array<{ from: string; to: string }> = [];
 
   async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
   }
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
+  async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
+    this.moveCalls.push({ from: fromPrefix, to: toPrefix });
+  }
   async renameNote(): Promise<void> {}
-  async findProjectNotes(): Promise<never> {
-    throw new Error('not used in this test');
+  async findProjectNotes(): Promise<ProjectNoteData[]> {
+    return this.projectNotes;
   }
   async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
@@ -115,6 +122,7 @@ class FakeSyncState implements SyncStatePort {
 class FakeProjectManagement implements ProjectManagementPort {
   repoUrlCalls: string[] = [];
 
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -274,6 +282,25 @@ const idleProbe = {
 
 const idleSyncState = new FakeSyncState();
 
+// An archive-reconcile fake for tests that never tick; tick tests that exercise
+// a transition supply their own recording fake.
+const idleReconcileArchive = {
+  execute: async () => {},
+} as unknown as ReconcileArchiveStateAction;
+
+// A project note in the shape findProjectNotes returns, for seeding the tick's
+// location-derived project list.
+function projectNote(projectName: string, archived: boolean): ProjectNoteData {
+  return {
+    path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    projectName,
+    archived,
+    pm: 'github',
+    url: 'https://github.com/acme/widgets',
+    board: 'https://github.com/orgs/acme/projects/1',
+  };
+}
+
 // A routing fake transport: answers the fleet probe, the REST issue reads and
 // the board query from one canned set, and records every call so a test can
 // assert exactly which queries the poll issued.
@@ -338,15 +365,16 @@ function schedulerWith(overrides: {
   syncProject: SyncProjectAction;
   probe: ProbeProjectsAction;
   syncState: SyncStatePort;
-  projectNames: string[];
+  vault?: FakeVault | undefined;
+  reconcileArchive?: ReconcileArchiveStateAction | undefined;
 }): SyncScheduler {
   return new SyncScheduler(
     overrides.syncProject,
     overrides.probe,
+    overrides.reconcileArchive ?? idleReconcileArchive,
     overrides.syncState,
-    overrides.projectNames,
     60_000,
-    new FakeVault(),
+    overrides.vault ?? new FakeVault(),
     idleChecklist(),
     idleMirror(),
     new FakeReconcile() as unknown as ReconcileTaskAction,
@@ -371,11 +399,18 @@ const projectIdentity: ProjectIdentityData = {
 // Builds a full tick stack — real adapter, real probe and the real sync action
 // — over a fake transport, so a test observes the exact queries the poll issues.
 // A stored project update can be seeded to exercise the gate.
-function tickHarness(options: { transport: Transport; lastUpdate?: string }): {
+function tickHarness(options: {
+  transport: Transport;
+  lastUpdate?: string;
+  archived?: boolean;
+  reconcileArchive?: ReconcileArchiveStateAction;
+}): {
   scheduler: SyncScheduler;
   syncState: FakeSyncState;
+  vault: FakeVault;
 } {
   const vault = new FakeVault();
+  vault.projectNotes = [projectNote('Acme Widgets', options.archived ?? false)];
   const syncState = new FakeSyncState();
   syncState.identity = projectIdentity;
   if (options.lastUpdate !== undefined) {
@@ -413,9 +448,10 @@ function tickHarness(options: { transport: Transport; lastUpdate?: string }): {
     syncProject,
     probe: new ProbeProjectsAction(github, syncState),
     syncState,
-    projectNames: ['Acme Widgets'],
+    vault,
+    reconcileArchive: options.reconcileArchive,
   });
-  return { scheduler, syncState };
+  return { scheduler, syncState, vault };
 }
 
 // A fake delete handler that records its invocations, so the scheduler's
@@ -426,6 +462,26 @@ class FakeHandleDeleted {
   async execute(input: {
     notePath: string;
     projectName: string;
+  }): Promise<void> {
+    this.calls.push(input);
+  }
+}
+
+// A fake archive reconcile that records its invocations, so the scheduler's
+// tick-time transition is observable.
+class FakeReconcileArchive {
+  calls: Array<{
+    projectName: string;
+    archived: boolean;
+    closed: boolean;
+    syncedAt: string;
+  }> = [];
+
+  async execute(input: {
+    projectName: string;
+    archived: boolean;
+    closed: boolean;
+    syncedAt: string;
   }): Promise<void> {
     this.calls.push(input);
   }
@@ -447,6 +503,10 @@ describe('SyncScheduler', () => {
   it('invokes the sync action once per project on each tick', async () => {
     // Given — a scheduler wired to two projects on a 60s interval
     const vault = new FakeVault();
+    vault.projectNotes = [
+      projectNote('Acme Widgets', false),
+      projectNote('Other', false),
+    ];
     const syncState = new FakeSyncState();
     syncState.identity = {
       repoUrl: 'https://github.com/acme/widgets',
@@ -506,8 +566,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       syncProject,
       probe,
+      idleReconcileArchive,
       syncState,
-      ['Acme Widgets', 'Other'],
       60_000,
       vault,
       idleChecklist(),
@@ -535,8 +595,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -571,8 +631,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       checklist as unknown as SyncChecklistAction,
@@ -608,8 +668,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -643,8 +703,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -682,8 +742,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -721,8 +781,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -757,8 +817,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -790,8 +850,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -820,8 +880,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -853,8 +913,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -895,8 +955,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -929,8 +989,8 @@ describe('SyncScheduler', () => {
     const scheduler = new SyncScheduler(
       fakeSyncProject,
       idleProbe,
+      idleReconcileArchive,
       idleSyncState,
-      [],
       60_000,
       vault,
       idleChecklist(),
@@ -1070,5 +1130,84 @@ describe('SyncScheduler', () => {
     // reconcile runs on both
     expect(boardFetches(calls)).toHaveLength(1);
     expect(issueFetches(calls)).toHaveLength(2);
+  });
+
+  it('freezes an archived project: no transition and no sync', async () => {
+    // Given — an archived project whose board is closed (consistent)
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: true },
+      },
+    });
+    const reconcileArchive = new FakeReconcileArchive();
+    const { scheduler } = tickHarness({
+      transport,
+      archived: true,
+      reconcileArchive:
+        reconcileArchive as unknown as ReconcileArchiveStateAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — nothing is reconciled and neither issues nor board are fetched
+    expect(reconcileArchive.calls).toEqual([]);
+    expect(issueFetches(calls)).toHaveLength(0);
+    expect(boardFetches(calls)).toHaveLength(0);
+  });
+
+  it('transitions an active project whose board is closed, deferring its sync', async () => {
+    // Given — an active project whose board was closed on GitHub
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: true },
+      },
+    });
+    const reconcileArchive = new FakeReconcileArchive();
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileArchive:
+        reconcileArchive as unknown as ReconcileArchiveStateAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the transition ran (the vault wins) and the sync is deferred
+    expect(reconcileArchive.calls).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        archived: false,
+        closed: true,
+        syncedAt: expect.any(String),
+      },
+    ]);
+    expect(issueFetches(calls)).toHaveLength(0);
+    expect(boardFetches(calls)).toHaveLength(0);
+  });
+
+  it('syncs a normal active project without a transition', async () => {
+    // Given — an active project whose board is open (consistent)
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const reconcileArchive = new FakeReconcileArchive();
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileArchive:
+        reconcileArchive as unknown as ReconcileArchiveStateAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — no transition ran and the tracked set was reconciled
+    expect(reconcileArchive.calls).toEqual([]);
+    expect(issueFetches(calls)).toHaveLength(1);
   });
 });

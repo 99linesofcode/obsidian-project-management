@@ -9,6 +9,7 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 // writes the action asks for, so the action's own behaviour (identity lookup
 // → option mapping → board write, or silent skip) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }

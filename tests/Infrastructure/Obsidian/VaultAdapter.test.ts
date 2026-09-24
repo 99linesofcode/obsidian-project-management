@@ -16,6 +16,10 @@ const { TFile } = vi.hoisted(() => {
 
 vi.mock('obsidian', () => ({ TFile }));
 
+// The hoisted TFile is a value; this alias gives the instance type for the
+// fake vault's annotations.
+type TFileInstance = InstanceType<typeof TFile>;
+
 import type { App, EventRef } from 'obsidian';
 import { VaultAdapter } from '../../../src/Infrastructure/Obsidian/VaultAdapter.js';
 
@@ -166,5 +170,104 @@ describe('VaultAdapter.onNoteRenamed', () => {
 
     // Then — the callback is not invoked
     expect(renamed).toEqual([]);
+  });
+});
+
+// A fake vault with a flat file list and a folder set, so the adapter's
+// moveFolder can be exercised: it filters getFiles() by prefix, renames each
+// through fileManager.renameFile, and creates destination folders as needed.
+class MoveVault {
+  files: TFileInstance[];
+  folders = new Set<string>();
+  renames: Array<{ from: string; to: string }> = [];
+
+  constructor(paths: string[]) {
+    this.files = paths.map(
+      (path) => new TFile(path, path.split('.').pop() ?? ''),
+    );
+  }
+
+  getFiles(): TFileInstance[] {
+    return this.files;
+  }
+
+  getAbstractFileByPath(path: string): TFileInstance | null {
+    return this.files.find((file) => file.path === path) ?? null;
+  }
+
+  getFolderByPath(path: string): unknown {
+    return this.folders.has(path) ? {} : null;
+  }
+
+  async createFolder(path: string): Promise<void> {
+    this.folders.add(path);
+  }
+
+  fileManager = {
+    renameFile: async (file: TFileInstance, newPath: string): Promise<void> => {
+      this.renames.push({ from: file.path, to: newPath });
+      file.path = newPath;
+    },
+  };
+}
+
+function moveSetup(paths: string[]) {
+  const vault = new MoveVault(paths);
+  const app = { vault, fileManager: vault.fileManager } as unknown as App;
+  const adapter = new VaultAdapter(app, () => {});
+  return { vault, adapter };
+}
+
+describe('VaultAdapter.moveFolder', () => {
+  it('moves every file under the prefix, any extension, preserving relative paths', async () => {
+    // Given — a project folder holding markdown, a .base file and an image,
+    // plus a sibling project that must not move
+    const { vault, adapter } = moveSetup([
+      'Projecten/Acme Widgets/_home.md',
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+      'Projecten/Acme Widgets/board.base',
+      'Projecten/Acme Widgets/images/diagram.png',
+      'Projecten/Other/_home.md',
+    ]);
+
+    // When — the project folder is moved to the archive
+    await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
+
+    // Then — every file moved, its relative path intact, the sibling untouched
+    expect(vault.files.map((file) => file.path).sort()).toEqual([
+      'Archief/Acme Widgets/_home.md',
+      'Archief/Acme Widgets/board.base',
+      'Archief/Acme Widgets/images/diagram.png',
+      'Archief/Acme Widgets/taken/42-fix-the-bug.md',
+      'Archief/Acme Widgets/todos/fix-the-bug.md',
+      'Projecten/Other/_home.md',
+    ]);
+  });
+
+  it('creates the destination folder chain before renaming', async () => {
+    // Given — a nested task note whose destination folders do not exist
+    const { vault, adapter } = moveSetup([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+
+    // When — the project folder is moved to the archive
+    await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
+
+    // Then — the whole destination chain was created
+    expect(vault.folders.has('Archief')).toBe(true);
+    expect(vault.folders.has('Archief/Acme Widgets')).toBe(true);
+    expect(vault.folders.has('Archief/Acme Widgets/taken')).toBe(true);
+  });
+
+  it('is a no-op when no file lives under the prefix', async () => {
+    // Given — a vault with no files under the source prefix
+    const { vault, adapter } = moveSetup(['Projecten/Other/_home.md']);
+
+    // When — the missing project folder is moved
+    await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
+
+    // Then — nothing is renamed
+    expect(vault.renames).toEqual([]);
   });
 });
