@@ -21,6 +21,8 @@ import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAc
 import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
 import type { ReconcileTodoistProjectAction } from '../../../src/Domain/Actions/ReconcileTodoistProjectAction.js';
 import type { ProjectTasksToTodoistAction } from '../../../src/Domain/Actions/ProjectTasksToTodoistAction.js';
+import type { ProjectToDosToTodoistAction } from '../../../src/Domain/Actions/ProjectToDosToTodoistAction.js';
+import type { ApplyTodoistCompletionAction } from '../../../src/Domain/Actions/ApplyTodoistCompletionAction.js';
 import type { WatchArchivedProjectAction } from '../../../src/Domain/Actions/WatchArchivedProjectAction.js';
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
@@ -333,6 +335,17 @@ const idleProjectTasks = {
   execute: async () => {},
 } as unknown as ProjectTasksToTodoistAction;
 
+// A to-do completion-pull fake and a to-do projection fake for tests that never
+// tick; tick tests that exercise the to-do half supply their own recording
+// fakes.
+const idleApplyCompletion = {
+  execute: async () => {},
+} as unknown as ApplyTodoistCompletionAction;
+
+const idleProjectToDos = {
+  execute: async () => {},
+} as unknown as ProjectToDosToTodoistAction;
+
 // A watch fake for tests that never tick; tick tests that exercise the watch
 // supply their own recording fake.
 function idleWatch(): WatchArchivedProjectAction {
@@ -429,6 +442,8 @@ function schedulerWith(overrides: {
   reconcileArchive?: ReconcileArchiveStateAction | undefined;
   reconcileTodoist?: ReconcileTodoistProjectAction | undefined;
   projectTasks?: ProjectTasksToTodoistAction | undefined;
+  applyCompletion?: ApplyTodoistCompletionAction | undefined;
+  projectToDos?: ProjectToDosToTodoistAction | undefined;
   watch?: WatchArchivedProjectAction | undefined;
 }): SyncScheduler {
   return new SyncScheduler(
@@ -437,6 +452,8 @@ function schedulerWith(overrides: {
     overrides.reconcileArchive ?? idleReconcileArchive,
     overrides.reconcileTodoist ?? idleReconcileTodoist,
     overrides.projectTasks ?? idleProjectTasks,
+    overrides.applyCompletion ?? idleApplyCompletion,
+    overrides.projectToDos ?? idleProjectToDos,
     overrides.watch ?? idleWatch(),
     overrides.syncState,
     60_000,
@@ -472,6 +489,8 @@ function tickHarness(options: {
   reconcileArchive?: ReconcileArchiveStateAction;
   reconcileTodoist?: ReconcileTodoistProjectAction;
   projectTasks?: ProjectTasksToTodoistAction;
+  applyCompletion?: ApplyTodoistCompletionAction;
+  projectToDos?: ProjectToDosToTodoistAction;
   watch?: WatchArchivedProjectAction;
 }): {
   scheduler: SyncScheduler;
@@ -521,6 +540,8 @@ function tickHarness(options: {
     reconcileArchive: options.reconcileArchive,
     reconcileTodoist: options.reconcileTodoist,
     projectTasks: options.projectTasks,
+    applyCompletion: options.applyCompletion,
+    projectToDos: options.projectToDos,
     watch: options.watch,
   });
   return { scheduler, syncState, vault };
@@ -606,12 +627,50 @@ class FakeProjectTasks {
   calls: Array<{ projectName: string; projectId: string; syncedAt: string }> =
     [];
 
+  constructor(private readonly events: string[] = []) {}
+
   async execute(input: {
     projectName: string;
     projectId: string;
     syncedAt: string;
   }): Promise<void> {
     this.calls.push(input);
+    this.events.push('projectTasks');
+  }
+}
+
+// A fake to-do completion pull and a fake to-do projection, recording their
+// invocations (and order, via a shared events array), so the scheduler's to-do
+// chaining and its apply-before-project ordering are observable.
+class FakeApplyCompletion {
+  calls: Array<{ projectName: string; projectId: string; syncedAt: string }> =
+    [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: {
+    projectName: string;
+    projectId: string;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('applyCompletion');
+  }
+}
+
+class FakeProjectToDos {
+  calls: Array<{ projectName: string; projectId: string; syncedAt: string }> =
+    [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: {
+    projectName: string;
+    projectId: string;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('projectToDos');
   }
 }
 
@@ -697,6 +756,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       syncState,
       60_000,
@@ -729,6 +790,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -768,6 +831,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -808,6 +873,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -846,6 +913,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -888,6 +957,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -930,6 +1001,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -969,6 +1042,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1005,6 +1080,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1038,6 +1115,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1074,6 +1153,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1119,6 +1200,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1156,6 +1239,8 @@ describe('SyncScheduler', () => {
       idleReconcileArchive,
       idleReconcileTodoist,
       idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1484,6 +1569,78 @@ describe('SyncScheduler', () => {
     // Then — the lifecycle ran but the projection was gated off
     expect(reconcileTodoist.calls).toHaveLength(1);
     expect(projectTasks.calls).toEqual([]);
+  });
+
+  it('pulls to-do completions before pushing the to-do projection', async () => {
+    // Given — an active project with a GitHub attach
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const events: string[] = [];
+    const reconcileTodoist = new FakeReconcileTodoist();
+    const projectTasks = new FakeProjectTasks(events);
+    const applyCompletion = new FakeApplyCompletion(events);
+    const projectToDos = new FakeProjectToDos(events);
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+      projectTasks: projectTasks as unknown as ProjectTasksToTodoistAction,
+      applyCompletion:
+        applyCompletion as unknown as ApplyTodoistCompletionAction,
+      projectToDos: projectToDos as unknown as ProjectToDosToTodoistAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the task projection runs, then the completion pull, then the to-do
+    // projection, so the vault absorbs remote changes before pushing its own
+    expect(events).toEqual(['projectTasks', 'applyCompletion', 'projectToDos']);
+    expect(applyCompletion.calls[0]).toEqual({
+      projectName: 'Acme Widgets',
+      projectId: 'P1',
+      syncedAt: expect.any(String),
+    });
+    expect(projectToDos.calls[0]).toEqual({
+      projectName: 'Acme Widgets',
+      projectId: 'P1',
+      syncedAt: expect.any(String),
+    });
+  });
+
+  it('skips the to-do completion pull and projection when frozen-archived', async () => {
+    // Given — an archived project whose lifecycle returns null (frozen)
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: true },
+      },
+    });
+    const reconcileTodoist = new FakeReconcileTodoist();
+    reconcileTodoist.frozen = true;
+    const applyCompletion = new FakeApplyCompletion();
+    const projectToDos = new FakeProjectToDos();
+    const { scheduler } = tickHarness({
+      transport,
+      archived: true,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+      applyCompletion:
+        applyCompletion as unknown as ApplyTodoistCompletionAction,
+      projectToDos: projectToDos as unknown as ProjectToDosToTodoistAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the freeze gates the whole to-do half off
+    expect(reconcileTodoist.calls).toHaveLength(1);
+    expect(applyCompletion.calls).toEqual([]);
+    expect(projectToDos.calls).toEqual([]);
   });
 
   it('mirrors an archived project to Todoist and still watches it', async () => {

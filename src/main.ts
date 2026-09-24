@@ -8,6 +8,7 @@ import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompletionAction.js';
 import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
@@ -20,6 +21,7 @@ import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
 import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodoistAction.js';
+import { ProjectToDosToTodoistAction } from './Domain/Actions/ProjectToDosToTodoistAction.js';
 import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
@@ -217,6 +219,16 @@ export default class ProjectManagementPlugin extends Plugin {
       new EnsureTodoistSectionsAction(todoist),
       this.settings.doneOptionName,
     );
+    const applyTodoistCompletion = new ApplyTodoistCompletionAction(
+      todoist,
+      vault,
+      syncState,
+    );
+    const projectToDosToTodoist = new ProjectToDosToTodoistAction(
+      todoist,
+      vault,
+      syncState,
+    );
 
     const syncChecklist = new SyncChecklistAction(
       vault,
@@ -260,6 +272,8 @@ export default class ProjectManagementPlugin extends Plugin {
       reconcileArchiveState,
       reconcileTodoistProject,
       projectTasksToTodoist,
+      applyTodoistCompletion,
+      projectToDosToTodoist,
       watchArchivedProject,
       syncState,
       this.settings.pollIntervalMinutes * 60 * 1000,

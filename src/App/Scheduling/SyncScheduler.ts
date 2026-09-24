@@ -1,8 +1,10 @@
 import { Component } from 'obsidian';
+import type { ApplyTodoistCompletionAction } from '../../Domain/Actions/ApplyTodoistCompletionAction.js';
 import type { HandleDeletedNoteAction } from '../../Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../Domain/Actions/ProbeProjectsAction.js';
 import type { ProjectTasksToTodoistAction } from '../../Domain/Actions/ProjectTasksToTodoistAction.js';
+import type { ProjectToDosToTodoistAction } from '../../Domain/Actions/ProjectToDosToTodoistAction.js';
 import type { ReconcileArchiveStateAction } from '../../Domain/Actions/ReconcileArchiveStateAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
 import type { ReconcileTodoistProjectAction } from '../../Domain/Actions/ReconcileTodoistProjectAction.js';
@@ -59,6 +61,8 @@ export class SyncScheduler extends Component {
     private readonly reconcileArchiveState: ReconcileArchiveStateAction,
     private readonly reconcileTodoistProject: ReconcileTodoistProjectAction,
     private readonly projectTasksToTodoist: ProjectTasksToTodoistAction,
+    private readonly applyTodoistCompletion: ApplyTodoistCompletionAction,
+    private readonly projectToDosToTodoist: ProjectToDosToTodoistAction,
     private readonly watchArchivedProject: WatchArchivedProjectAction,
     private readonly syncState: SyncStatePort,
     private readonly intervalMs: number,
@@ -281,10 +285,14 @@ export class SyncScheduler extends Component {
   }
 
   // The Todoist half of the tick: mirror the project's lifecycle, then project
-  // its tracked tasks. The lifecycle action returns the project id when the
-  // project is active and null when it is frozen-archived, so the freeze gates
-  // the task projection too (dt-10). A failure is swallowed so the GitHub
-  // half's outcome is never affected; the next tick retries.
+  // its tracked tasks and their to-dos. The lifecycle action returns the
+  // project id when the project is active and null when it is frozen-archived,
+  // so the freeze gates the whole projection too (dt-10). The to-do completion
+  // pull runs before the to-do projection: the vault absorbs remote completions
+  // and reopens first, then the projection pushes the settled vault state, so a
+  // remote reopen is never clobbered by a vault-side completion push. A failure
+  // is swallowed so the GitHub half's outcome is never affected; the next tick
+  // retries.
   private async runTodoistHalf(
     projectName: string,
     trigger: Extract<SyncTrigger, { kind: 'tick' }>,
@@ -300,6 +308,16 @@ export class SyncScheduler extends Component {
         return;
       }
       await this.projectTasksToTodoist.execute({
+        projectName,
+        projectId,
+        syncedAt: trigger.syncedAt,
+      });
+      await this.applyTodoistCompletion.execute({
+        projectName,
+        projectId,
+        syncedAt: trigger.syncedAt,
+      });
+      await this.projectToDosToTodoist.execute({
         projectName,
         projectId,
         syncedAt: trigger.syncedAt,
