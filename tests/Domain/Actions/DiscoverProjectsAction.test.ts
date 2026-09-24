@@ -37,6 +37,7 @@ class FakeVault implements VaultPort {
 
 class FakePort implements ProjectManagementPort {
   async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }

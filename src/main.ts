@@ -164,6 +164,7 @@ export default class ProjectManagementPlugin extends Plugin {
       github,
       vault,
       syncState,
+      this.settings.doneOptionName,
     );
 
     const syncChecklist = new SyncChecklistAction(

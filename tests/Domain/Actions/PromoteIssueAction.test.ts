@@ -16,6 +16,7 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // under test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
   async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }

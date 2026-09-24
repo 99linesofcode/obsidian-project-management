@@ -127,6 +127,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   repoUrlCalls: string[] = [];
 
   async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }

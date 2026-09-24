@@ -1,3 +1,4 @@
+import type { Status } from '../Models/Status.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
@@ -19,11 +20,20 @@ export interface ReconcileArchiveStateInput {
 // discovered mid-life never self-transitions. The baseline is stored only after
 // a successful reconciliation, so a thrown run leaves the old baseline and the
 // next tick retries.
+//
+// A genuine archive — the reconciled location is archived where the baseline
+// was not — locks every tracked issue's conversation that is not yet shipped,
+// after the vault move and Status relocation so a failure retries from a
+// consistent place. The vault decides "shipped": a record whose last synced
+// Status is the done lane stays unlocked. The lock pass runs before the
+// baseline write, so a failed lock leaves the baseline unwritten and the next
+// tick re-runs the whole reconciliation; re-locking is idempotent on GitHub.
 export class ReconcileArchiveStateAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
+    private readonly doneOptionName: string,
   ) {}
 
   async execute(input: ReconcileArchiveStateInput): Promise<void> {
@@ -57,10 +67,32 @@ export class ReconcileArchiveStateAction {
     const reconciledLocation = locationChanged
       ? input.locationArchived
       : input.closed;
+    if (reconciledLocation && !baseline.locationArchived) {
+      await this.lockUnshippedIssues(input.projectName);
+    }
+
     await this.syncState.setArchiveBaseline(input.projectName, {
       locationArchived: reconciledLocation,
       closed: reconciledLocation,
     });
+  }
+
+  private async lockUnshippedIssues(projectName: string): Promise<void> {
+    for (const status of await this.trackedIssues(projectName)) {
+      if (status.lastSyncedStatus === this.doneOptionName) {
+        continue;
+      }
+      const task = await this.projectManagement.fetchTask(status.url);
+      await this.projectManagement.lockIssue(task.nodeId);
+    }
+  }
+
+  private async trackedIssues(projectName: string): Promise<Status[]> {
+    // Either prefix: the relocation may or may not have run for a record yet.
+    const prefixes = [`Projecten/${projectName}/`, `Archief/${projectName}/`];
+    return (await this.syncState.list()).filter((status) =>
+      prefixes.some((prefix) => status.notePath.startsWith(prefix)),
+    );
   }
 
   private async adopt(input: ReconcileArchiveStateInput): Promise<void> {
