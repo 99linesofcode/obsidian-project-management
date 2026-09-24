@@ -2,8 +2,9 @@
 
 An Obsidian plugin that syncs vault project management with GitHub Projects —
 the vault is the system of record. Project notes anchor GitHub repos and
-project boards; promoted issues become task notes in the vault; edits, status
-changes, and deletions propagate in both directions.
+project boards; every issue carrying a `type:` label (task, bug, chore, slice,
+…) becomes a task note in the vault; edits, status changes, and deletions
+propagate in both directions.
 
 **Status:** v1 in active development. The sync engine, GitHub adapter, and
 scheduler are in place; project discovery and the full sync loop are being

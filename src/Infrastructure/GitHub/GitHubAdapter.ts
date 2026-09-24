@@ -210,24 +210,28 @@ export class GitHubAdapter implements ProjectManagementPort {
 
     return response.json
       .filter(isRecord)
-      .filter((issue) => this.isTaskIssue(issue))
+      .filter((issue) => this.isTrackedIssue(issue))
       .map((issue) => this.mapIssue(issue));
   }
 
-  private isTaskIssue(issue: Record<string, unknown>): boolean {
-    // v1 materialises tasks only; type: slice arrives with the v2 slices ticket.
+  private isTrackedIssue(issue: Record<string, unknown>): boolean {
+    // The vault is the source of truth: every issue carrying a type label
+    // (type: task, type: bug, type: chore, type: slice, ...) is tracked.
     if (!Array.isArray(issue.labels)) {
       return false;
     }
     return issue.labels.some(
-      (label) => isRecord(label) && label.name === 'type: task',
+      (label) =>
+        isRecord(label) &&
+        typeof label.name === 'string' &&
+        label.name.startsWith('type:'),
     );
   }
 
   async fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
-    // Open issues only; the client-side filter keeps issues that are neither a
-    // task nor a slice, so the promote modal only offers what can be promoted.
+    // Open issues only; the client-side filter keeps untyped issues, so the
+    // promote modal only offers what can be promoted.
     const path = `/repos/${repo.owner}/${repo.name}/issues?state=open&per_page=100`;
 
     const response = await this.transport.get(path);
@@ -256,7 +260,8 @@ export class GitHubAdapter implements ProjectManagementPort {
         (label): label is { name: string } => typeof label.name === 'string',
       )
       .map((label) => label.name);
-    return !names.includes('type: task') && !names.includes('type: slice');
+    // A typed issue is already tracked, so promoting it would double-track it.
+    return !names.some((name) => name.startsWith('type:'));
   }
 
   async addLabel(url: string, label: string): Promise<void> {
