@@ -490,6 +490,7 @@ describe('ProjectTasksToTodoistAction', () => {
       todoistId: 'T1',
       notePath: slicePath,
       lastSyncedHash: 'stale',
+      lastSyncedCompleted: false,
     });
     taskManager.tasks.push({
       id: 'T1',
@@ -524,6 +525,7 @@ describe('ProjectTasksToTodoistAction', () => {
       todoistId: 'T1',
       notePath: slicePath,
       lastSyncedHash: 'stale',
+      lastSyncedCompleted: false,
     });
     taskManager.tasks.push({
       id: 'T1',
@@ -559,6 +561,7 @@ describe('ProjectTasksToTodoistAction', () => {
       todoistId: 'T1',
       notePath: topPath,
       lastSyncedHash: 'stale',
+      lastSyncedCompleted: false,
     });
     taskManager.tasks.push({
       id: 'T1',
@@ -619,6 +622,7 @@ describe('ProjectTasksToTodoistAction', () => {
           todoistId: 'T1',
           notePath: slicePath,
           lastSyncedHash: expect.any(String),
+          lastSyncedCompleted: false,
         },
       },
       {
@@ -627,6 +631,7 @@ describe('ProjectTasksToTodoistAction', () => {
           todoistId: 'T2',
           notePath: childPath,
           lastSyncedHash: expect.any(String),
+          lastSyncedCompleted: false,
         },
       },
       {
@@ -635,6 +640,7 @@ describe('ProjectTasksToTodoistAction', () => {
           todoistId: 'T3',
           notePath: topPath,
           lastSyncedHash: expect.any(String),
+          lastSyncedCompleted: false,
         },
       },
     ]);

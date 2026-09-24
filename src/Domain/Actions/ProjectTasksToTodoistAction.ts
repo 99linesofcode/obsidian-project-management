@@ -287,6 +287,7 @@ export class ProjectTasksToTodoistAction {
       todoistId,
       notePath,
       lastSyncedHash: snapshotHash(desired),
+      lastSyncedCompleted: desired.isCompleted,
     });
   }
 }

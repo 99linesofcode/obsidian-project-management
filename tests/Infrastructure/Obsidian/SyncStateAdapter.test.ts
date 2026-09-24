@@ -427,6 +427,7 @@ describe('SyncStateAdapter', () => {
       todoistId: 'T1',
       notePath: 'Projecten/Acme Widgets/taken/42-bug.md',
       lastSyncedHash: 'abc123',
+      lastSyncedCompleted: false,
     });
     const result = await adapter.getTodoistState(
       'Projecten/Acme Widgets/taken/42-bug.md',
@@ -437,12 +438,14 @@ describe('SyncStateAdapter', () => {
       todoistId: 'T1',
       notePath: 'Projecten/Acme Widgets/taken/42-bug.md',
       lastSyncedHash: 'abc123',
+      lastSyncedCompleted: false,
     });
     expect(snapshot()).toEqual({
       'todoistItem.Projecten/Acme Widgets/taken/42-bug.md': {
         todoistId: 'T1',
         notePath: 'Projecten/Acme Widgets/taken/42-bug.md',
         lastSyncedHash: 'abc123',
+        lastSyncedCompleted: false,
       },
     });
   });
@@ -467,11 +470,13 @@ describe('SyncStateAdapter', () => {
       todoistId: 'T1',
       notePath: 'a.md',
       lastSyncedHash: 'h1',
+      lastSyncedCompleted: false,
     });
     await adapter.setTodoistState('b.md', {
       todoistId: 'T2',
       notePath: 'b.md',
       lastSyncedHash: 'h2',
+      lastSyncedCompleted: true,
     });
 
     // When — the item states are listed
@@ -479,8 +484,18 @@ describe('SyncStateAdapter', () => {
 
     // Then — both are returned
     expect(result).toEqual([
-      { todoistId: 'T1', notePath: 'a.md', lastSyncedHash: 'h1' },
-      { todoistId: 'T2', notePath: 'b.md', lastSyncedHash: 'h2' },
+      {
+        todoistId: 'T1',
+        notePath: 'a.md',
+        lastSyncedHash: 'h1',
+        lastSyncedCompleted: false,
+      },
+      {
+        todoistId: 'T2',
+        notePath: 'b.md',
+        lastSyncedHash: 'h2',
+        lastSyncedCompleted: true,
+      },
     ]);
   });
 });
