@@ -1,6 +1,7 @@
 import type { ArchiveBaselineData } from '../DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import type { TodoistProjectStateData } from '../DataTransferObjects/TodoistProjectStateData.js';
+import type { TodoistStateData } from '../DataTransferObjects/TodoistStateData.js';
 import type { WatchStateData } from '../DataTransferObjects/WatchStateData.js';
 import type { Status } from '../Models/Status.js';
 
@@ -10,9 +11,10 @@ import type { Status } from '../Models/Status.js';
 // last remote updatedAt the poll saw for a project (the board-fetch gate),
 // remember the last reconciled archive observation (the three-way merge
 // baseline), remember an archived project's repository watch (the ETag and
-// newest-issue cursor), and remember a project's Todoist bookkeeping (its lane
-// section map and completed-since cursor). The data.json-backed implementation
-// lives in Infrastructure.
+// newest-issue cursor), remember a project's Todoist bookkeeping (its lane
+// section map and completed-since cursor), and remember a mirrored item's
+// Todoist twin (its task id and last-synced snapshot hash). The data.json-backed
+// implementation lives in Infrastructure.
 export interface SyncStatePort {
   get(url: string): Promise<Status | null>;
   set(status: Status): Promise<void>;
@@ -40,4 +42,7 @@ export interface SyncStatePort {
     projectName: string,
     state: TodoistProjectStateData,
   ): Promise<void>;
+  getTodoistState(notePath: string): Promise<TodoistStateData | null>;
+  setTodoistState(notePath: string, state: TodoistStateData): Promise<void>;
+  listTodoistStates(): Promise<TodoistStateData[]>;
 }

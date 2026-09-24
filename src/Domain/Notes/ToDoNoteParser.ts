@@ -1,3 +1,4 @@
+import { parseAffiliation } from './parseAffiliation.js';
 import { splitFrontmatter } from './splitFrontmatter.js';
 
 export interface ParsedToDoNote {
@@ -25,14 +26,6 @@ export const ToDoNoteParser = {
     };
   },
 };
-
-// The affiliation is a quoted wikilink list; we keep each link verbatim.
-function parseAffiliation(raw: string | undefined): string[] {
-  if (raw === undefined) {
-    return [];
-  }
-  return [...raw.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
-}
 
 // Rewrites the frontmatter status and completed lines of a to-do note,
 // preserving the body and every other frontmatter field. Mirrors withStatus

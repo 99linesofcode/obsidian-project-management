@@ -1,9 +1,12 @@
+import { parseAffiliation } from './parseAffiliation.js';
 import { splitFrontmatter } from './splitFrontmatter.js';
 
 export interface ParsedTaskNote {
   url: string;
   status: string;
   body: string;
+  // The affiliation wikilinks, project first then the slice (when nested).
+  affiliation: string[];
 }
 
 // Reads a task note back into its sync fields. Returns null when the note has
@@ -20,7 +23,12 @@ export const TaskNoteParser = {
       return null;
     }
     const status = split.fields.get('status') ?? '';
-    return { url, status, body: split.body };
+    return {
+      url,
+      status,
+      body: split.body,
+      affiliation: parseAffiliation(split.fields.get('affiliation')),
+    };
   },
 };
 

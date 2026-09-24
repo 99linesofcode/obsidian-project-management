@@ -416,4 +416,71 @@ describe('SyncStateAdapter', () => {
       },
     });
   });
+
+  it('round-trips a Todoist item state under a namespaced key', async () => {
+    // Given — an empty storage
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — a Todoist item state is set then read back
+    await adapter.setTodoistState('Projecten/Acme Widgets/taken/42-bug.md', {
+      todoistId: 'T1',
+      notePath: 'Projecten/Acme Widgets/taken/42-bug.md',
+      lastSyncedHash: 'abc123',
+    });
+    const result = await adapter.getTodoistState(
+      'Projecten/Acme Widgets/taken/42-bug.md',
+    );
+
+    // Then — the state round-trips intact under its own key
+    expect(result).toEqual({
+      todoistId: 'T1',
+      notePath: 'Projecten/Acme Widgets/taken/42-bug.md',
+      lastSyncedHash: 'abc123',
+    });
+    expect(snapshot()).toEqual({
+      'todoistItem.Projecten/Acme Widgets/taken/42-bug.md': {
+        todoistId: 'T1',
+        notePath: 'Projecten/Acme Widgets/taken/42-bug.md',
+        lastSyncedHash: 'abc123',
+      },
+    });
+  });
+
+  it('returns null for a note with no Todoist item state', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — an unknown note path is read
+    const result = await adapter.getTodoistState('Projecten/Other/taken/x.md');
+
+    // Then — null is returned, so the caller creates the twin
+    expect(result).toBeNull();
+  });
+
+  it('lists every Todoist item state', async () => {
+    // Given — two mirrored items
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setTodoistState('a.md', {
+      todoistId: 'T1',
+      notePath: 'a.md',
+      lastSyncedHash: 'h1',
+    });
+    await adapter.setTodoistState('b.md', {
+      todoistId: 'T2',
+      notePath: 'b.md',
+      lastSyncedHash: 'h2',
+    });
+
+    // When — the item states are listed
+    const result = await adapter.listTodoistStates();
+
+    // Then — both are returned
+    expect(result).toEqual([
+      { todoistId: 'T1', notePath: 'a.md', lastSyncedHash: 'h1' },
+      { todoistId: 'T2', notePath: 'b.md', lastSyncedHash: 'h2' },
+    ]);
+  });
 });

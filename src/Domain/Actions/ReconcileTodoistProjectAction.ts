@@ -1,5 +1,5 @@
-import { fillFrontmatterFields } from '../Notes/fillFrontmatterFields.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
+import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
@@ -25,6 +25,10 @@ export interface ReconcileTodoistProjectInput {
 // rename or bookkeeping. The freeze is a skip, not an error — the next tick
 // re-checks, and unarchiving resumes the sync. The per-project bookkeeping
 // record is created on first sight and survives the freeze.
+//
+// The action returns the Todoist project id when the project is active, and
+// null when it is frozen or skipped. The scheduler uses that signal to gate the
+// task projection (t3): a frozen project accepts no task writes either.
 export class ReconcileTodoistProjectAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
@@ -32,10 +36,10 @@ export class ReconcileTodoistProjectAction {
     private readonly syncState: SyncStatePort,
   ) {}
 
-  async execute(input: ReconcileTodoistProjectInput): Promise<void> {
+  async execute(input: ReconcileTodoistProjectInput): Promise<string | null> {
     const note = await this.vault.getNoteByPath(input.notePath);
     if (!note) {
-      return;
+      return null;
     }
 
     const anchor = splitFrontmatter(note.content)?.fields.get('todoist') ?? '';
@@ -55,14 +59,20 @@ export class ReconcileTodoistProjectAction {
     // The anchor is the identity: stamp it when the note has none, or when it
     // points at a project that no longer exists and a name match took over.
     if (anchor !== project.id) {
-      await this.stampAnchor(input.notePath, note.content, project.id);
+      await stampFrontmatterField(
+        this.vault,
+        input.notePath,
+        note.content,
+        'todoist',
+        project.id,
+      );
     }
 
     // Frozen while archived: the folder and the project already agree, so
     // there is nothing to transition and no write is allowed. Skip with a note
     // rather than erroring, mirroring the GitHub-side freeze.
     if (input.locationArchived && project.isArchived) {
-      return;
+      return null;
     }
 
     if (project.name !== input.projectName) {
@@ -79,7 +89,7 @@ export class ReconcileTodoistProjectAction {
     // A project that just archived is frozen from here on; bookkeeping waits
     // for the unarchive.
     if (input.locationArchived) {
-      return;
+      return null;
     }
 
     const state = await this.syncState.getTodoistProjectState(
@@ -91,31 +101,7 @@ export class ReconcileTodoistProjectAction {
         lastCompletedPoll: input.syncedAt,
       });
     }
-  }
 
-  // Writes the project id into the note's frontmatter, in place when the field
-  // is declared and appended otherwise. A note without a frontmatter block
-  // cannot carry the anchor and is left untouched.
-  private async stampAnchor(
-    notePath: string,
-    content: string,
-    projectId: string,
-  ): Promise<void> {
-    const lines = content.split('\n');
-    if (lines[0] !== '---') {
-      return;
-    }
-    const closing = lines.indexOf('---', 1);
-    if (closing === -1) {
-      return;
-    }
-    const frontmatter = fillFrontmatterFields(
-      lines.slice(0, closing + 1),
-      new Map([['todoist', projectId]]),
-    );
-    await this.vault.writeNote(
-      notePath,
-      [...frontmatter, ...lines.slice(closing + 1)].join('\n'),
-    );
+    return project.id;
   }
 }

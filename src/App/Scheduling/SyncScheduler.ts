@@ -2,6 +2,7 @@ import { Component } from 'obsidian';
 import type { HandleDeletedNoteAction } from '../../Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../Domain/Actions/ProbeProjectsAction.js';
+import type { ProjectTasksToTodoistAction } from '../../Domain/Actions/ProjectTasksToTodoistAction.js';
 import type { ReconcileArchiveStateAction } from '../../Domain/Actions/ReconcileArchiveStateAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
 import type { ReconcileTodoistProjectAction } from '../../Domain/Actions/ReconcileTodoistProjectAction.js';
@@ -57,6 +58,7 @@ export class SyncScheduler extends Component {
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileArchiveState: ReconcileArchiveStateAction,
     private readonly reconcileTodoistProject: ReconcileTodoistProjectAction,
+    private readonly projectTasksToTodoist: ProjectTasksToTodoistAction,
     private readonly watchArchivedProject: WatchArchivedProjectAction,
     private readonly syncState: SyncStatePort,
     private readonly intervalMs: number,
@@ -278,18 +280,28 @@ export class SyncScheduler extends Component {
     }
   }
 
-  // The Todoist half of the tick: mirror the project's lifecycle. A failure is
-  // swallowed so the GitHub half's outcome is never affected; the next tick
-  // retries.
+  // The Todoist half of the tick: mirror the project's lifecycle, then project
+  // its tracked tasks. The lifecycle action returns the project id when the
+  // project is active and null when it is frozen-archived, so the freeze gates
+  // the task projection too (dt-10). A failure is swallowed so the GitHub
+  // half's outcome is never affected; the next tick retries.
   private async runTodoistHalf(
     projectName: string,
     trigger: Extract<SyncTrigger, { kind: 'tick' }>,
   ): Promise<void> {
     try {
-      await this.reconcileTodoistProject.execute({
+      const projectId = await this.reconcileTodoistProject.execute({
         projectName,
         notePath: trigger.notePath,
         locationArchived: trigger.locationArchived,
+        syncedAt: trigger.syncedAt,
+      });
+      if (projectId === null) {
+        return;
+      }
+      await this.projectTasksToTodoist.execute({
+        projectName,
+        projectId,
         syncedAt: trigger.syncedAt,
       });
     } catch {
