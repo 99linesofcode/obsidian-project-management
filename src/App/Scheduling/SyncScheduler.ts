@@ -7,6 +7,7 @@ import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStat
 import type { ProbeProjectsAction } from '../../Domain/Actions/ProbeProjectsAction.js';
 import type { ProjectTasksToTodoistAction } from '../../Domain/Actions/ProjectTasksToTodoistAction.js';
 import type { ProjectToDosToTodoistAction } from '../../Domain/Actions/ProjectToDosToTodoistAction.js';
+import type { PropagateTodoistDeletionsAction } from '../../Domain/Actions/PropagateTodoistDeletionsAction.js';
 import type { ReconcileArchiveStateAction } from '../../Domain/Actions/ReconcileArchiveStateAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
 import type { ReconcileTodoistProjectAction } from '../../Domain/Actions/ReconcileTodoistProjectAction.js';
@@ -67,6 +68,7 @@ export class SyncScheduler extends Component {
     private readonly projectTasksToTodoist: ProjectTasksToTodoistAction,
     private readonly applyTodoistCompletion: ApplyTodoistCompletionAction,
     private readonly projectToDosToTodoist: ProjectToDosToTodoistAction,
+    private readonly propagateTodoistDeletions: PropagateTodoistDeletionsAction,
     private readonly watchArchivedProject: WatchArchivedProjectAction,
     private readonly syncState: SyncStatePort,
     private readonly intervalMs: number,
@@ -208,10 +210,18 @@ export class SyncScheduler extends Component {
       return this.runTick(projectName, trigger);
     }
     if (trigger.kind === 'delete') {
-      return this.handleDeletedNote.execute({
-        notePath: trigger.path,
-        projectName,
-      });
+      // The Todoist twin is deleted whatever the GitHub handler's outcome: the
+      // sweep is independent, and isolating it keeps a GitHub failure from
+      // stranding the twin until the next tick.
+      try {
+        await this.handleDeletedNote.execute({
+          notePath: trigger.path,
+          projectName,
+        });
+      } finally {
+        await this.propagateTodoistDeletions.execute({ projectName });
+      }
+      return;
     }
     if (trigger.kind === 'mirror') {
       return this.mirrorTodoStatus.execute({
@@ -297,8 +307,11 @@ export class SyncScheduler extends Component {
   // pushes, so a remote change is never clobbered by a vault-side push — the
   // same apply-before-project invariant t4 established for completions. The
   // to-do completion pull then runs before the to-do projection for the same
-  // reason. A failure is swallowed so the GitHub half's outcome is never
-  // affected; the next tick retries.
+  // reason. Deletion propagation closes the tick (t6, spec step 7): twins whose
+  // notes are gone are removed after the projections, and the action deletes
+  // each twin before evicting its record, so a deleted note's twin never
+  // lingers into the next tick's capture pass. A failure is swallowed so the
+  // GitHub half's outcome is never affected; the next tick retries.
   private async runTodoistHalf(
     projectName: string,
     trigger: Extract<SyncTrigger, { kind: 'tick' }>,
@@ -338,6 +351,10 @@ export class SyncScheduler extends Component {
         projectId,
         syncedAt: trigger.syncedAt,
       });
+      // Deletion propagation runs last (spec reconcile step 7): the vault-side
+      // projections have already pushed their state, and the twin-then-record
+      // ordering inside the action keeps an evicted anchor from resurrecting.
+      await this.propagateTodoistDeletions.execute({ projectName });
     } catch {
       // A Todoist failure must never break the GitHub half.
     }
