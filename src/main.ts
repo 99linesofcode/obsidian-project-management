@@ -98,13 +98,18 @@ export default class ProjectManagementPlugin extends Plugin {
     );
 
     const github = new GitHubAdapter(transport);
-    const createTaskNote = new CreateTaskNoteAction(vault, syncState);
+    const createTaskNote = new CreateTaskNoteAction(
+      vault,
+      syncState,
+      this.settings.taskTemplatePath,
+    );
     const boardStatus = new BoardStatusAction(syncState, github);
     const applyRemoteChange = new ApplyRemoteChangeAction(
       vault,
       syncState,
       createTaskNote,
       boardStatus,
+      this.settings.taskTemplatePath,
     );
     const pushNote = new PushNoteAction(github);
     const propagateStatus = new PropagateStatusAction(

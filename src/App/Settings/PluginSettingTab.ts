@@ -6,13 +6,15 @@ export interface ProjectManagementSettings {
   pollIntervalMinutes: number;
   doneOptionName: string;
   debounceSeconds: number;
+  taskTemplatePath: string;
 }
 
 export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   githubToken: '',
   pollIntervalMinutes: 5,
-  doneOptionName: 'Done',
+  doneOptionName: 'Shipped',
   debounceSeconds: 2,
+  taskTemplatePath: 'Templates/Task.md',
 };
 
 export class ProjectManagementSettingTab extends PluginSettingTab {
@@ -82,6 +84,21 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
               this.plugin.settings.debounceSeconds = parsed;
               await this.plugin.saveSettings();
             }
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName('Task template')
+      .setDesc(
+        'Vault path to the template new task notes render from. {{date}} and {{time}} resolve to the sync stamp; url, status, synced and affiliation are filled by the sync. Falls back to the built-in frontmatter when the file is missing.',
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('Templates/Task.md')
+          .setValue(this.plugin.settings.taskTemplatePath)
+          .onChange(async (value) => {
+            this.plugin.settings.taskTemplatePath = value.trim();
+            await this.plugin.saveSettings();
           }),
       );
   }

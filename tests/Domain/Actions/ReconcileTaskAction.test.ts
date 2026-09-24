@@ -225,12 +225,17 @@ function makeAction(
   syncState: FakeSyncState,
   projectManagement: FakeProjectManagement,
 ) {
-  const createTaskNote = new CreateTaskNoteAction(vault, syncState);
+  const createTaskNote = new CreateTaskNoteAction(
+    vault,
+    syncState,
+    'Templates/Task.md',
+  );
   const applyRemoteChange = new ApplyRemoteChangeAction(
     vault,
     syncState,
     createTaskNote,
     new BoardStatusAction(syncState, projectManagement),
+    'Templates/Task.md',
   );
   const pushNote = new PushNoteAction(projectManagement);
   const propagateStatus = new PropagateStatusAction(

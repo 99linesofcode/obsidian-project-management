@@ -140,7 +140,7 @@ function makeAction(
   return new PromoteIssueAction(
     port,
     syncState,
-    new CreateTaskNoteAction(vault, syncState),
+    new CreateTaskNoteAction(vault, syncState, 'Templates/Task.md'),
   );
 }
 
