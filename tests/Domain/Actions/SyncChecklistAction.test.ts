@@ -11,6 +11,7 @@ class FakeVault implements VaultPort {
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
   written: Array<{ path: string; content: string }> = [];
+  renamed: Array<{ oldPath: string; newPath: string }> = [];
   trashed: string[] = [];
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
@@ -28,8 +29,14 @@ class FakeVault implements VaultPort {
     this.written.push({ path, content });
   }
 
-  async renameNote(): Promise<never> {
-    throw new Error('not used in this test');
+  async renameNote(oldPath: string, newPath: string): Promise<void> {
+    const content = this.notes.get(oldPath);
+    if (content === undefined) {
+      return;
+    }
+    this.notes.delete(oldPath);
+    this.notes.set(newPath, content);
+    this.renamed.push({ oldPath, newPath });
   }
 
   async listNotesInFolder(folder: string): Promise<string[]> {
@@ -252,6 +259,151 @@ describe('SyncChecklistAction', () => {
     // Then — the other task's to-do is untouched
     expect(vault.trashed).toEqual([]);
     expect(vault.notes.has(otherPath)).toBe(true);
+  });
+
+  it('renames the to-do when the item text drifts from its filename', async () => {
+    // Given — a linked item whose to-do filename is a stale slug
+    const vault = new FakeVault();
+    const stalePath = 'Projecten/Acme Widgets/todos/fi.md';
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${stalePath}|Fix the bug]]`));
+    const todoContent = ToDoNoteMapper.map(input, {
+      syncedAt,
+      statusName: 'open',
+    }).content;
+    vault.notes.set(stalePath, todoContent);
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+
+    // When — the checklist is synced
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — the to-do is renamed to the item's slug, its content unchanged
+    expect(vault.renamed).toEqual([{ oldPath: stalePath, newPath: todoPath }]);
+    expect(vault.notes.get(todoPath)).toBe(todoContent);
+    expect(vault.notes.has(stalePath)).toBe(false);
+
+    // And the parent line points at the new path
+    expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
+      `- [ ] [[${todoPath}|Fix the bug]]`,
+    );
+  });
+
+  it('leaves a to-do whose filename already matches the item text', async () => {
+    // Given — a linked item whose to-do filename is the exact slug
+    const vault = new FakeVault();
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${todoPath}|Fix the bug]]`));
+    vault.notes.set(
+      todoPath,
+      ToDoNoteMapper.map(input, { syncedAt, statusName: 'open' }).content,
+    );
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+
+    // When — the checklist is synced
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — nothing is renamed or rewritten
+    expect(vault.renamed).toEqual([]);
+    expect(vault.written).toEqual([]);
+  });
+
+  it('leaves a collision-suffixed to-do alone', async () => {
+    // Given — the second "test" item's to-do carries the -2 collision suffix
+    const vault = new FakeVault();
+    const collisionPath = 'Projecten/Acme Widgets/todos/test-2.md';
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${collisionPath}|test]]`));
+    vault.notes.set(
+      collisionPath,
+      ToDoNoteMapper.map(
+        { title: 'test', projectName, taskLink },
+        { syncedAt, statusName: 'open' },
+      ).content,
+    );
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+
+    // When — the checklist is synced
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — the suffix is tolerated, not read as drift
+    expect(vault.renamed).toEqual([]);
+    expect(vault.written).toEqual([]);
+  });
+
+  it('suffixes the rename target when the slug is already taken', async () => {
+    // Given — a drifted to-do and another note already on the target slug
+    const vault = new FakeVault();
+    const stalePath = 'Projecten/Acme Widgets/todos/fi.md';
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${stalePath}|Fix the bug]]`));
+    vault.notes.set(
+      stalePath,
+      ToDoNoteMapper.map(input, { syncedAt, statusName: 'open' }).content,
+    );
+    vault.notes.set(todoPath, 'already here');
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+
+    // When — the checklist is synced
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — the rename lands on the next free slug and the line follows
+    const suffixed = 'Projecten/Acme Widgets/todos/fix-the-bug-2.md';
+    expect(vault.renamed).toEqual([
+      { oldPath: stalePath, newPath: suffixed },
+    ]);
+    expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
+      `- [ ] [[${suffixed}|Fix the bug]]`,
+    );
+  });
+
+  it('rewrites the parent body once when promotion and drift both change links', async () => {
+    // Given — a note with an unlinked item and a drifted linked item
+    const vault = new FakeVault();
+    const stalePath = 'Projecten/Acme Widgets/todos/fi.md';
+    vault.notes.set(
+      taskPath,
+      taskNote(
+        ['- [ ] New item', `- [ ] [[${stalePath}|Fix the bug]]`].join('\n'),
+      ),
+    );
+    vault.notes.set(
+      stalePath,
+      ToDoNoteMapper.map(input, { syncedAt, statusName: 'open' }).content,
+    );
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+
+    // When — the checklist is synced
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — the parent body is written exactly once, carrying both links
+    const parentWrites = vault.written.filter(
+      (entry) => entry.path === taskPath,
+    );
+    expect(parentWrites).toHaveLength(1);
+    expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
+      [
+        '- [ ] [[Projecten/Acme Widgets/todos/new-item.md|New item]]',
+        `- [ ] [[${todoPath}|Fix the bug]]`,
+      ].join('\n'),
+    );
+  });
+
+  it('performs zero writes on a second pass after a drift rename', async () => {
+    // Given — a note whose to-do was renamed on the first pass
+    const vault = new FakeVault();
+    const stalePath = 'Projecten/Acme Widgets/todos/fi.md';
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${stalePath}|Fix the bug]]`));
+    vault.notes.set(
+      stalePath,
+      ToDoNoteMapper.map(input, { syncedAt, statusName: 'open' }).content,
+    );
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // When — the settled note is synced again (the echo from the rewrite)
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — the second pass renames nothing and writes nothing
+    expect(vault.renamed).toHaveLength(1);
+    expect(vault.written).toHaveLength(1);
+    expect(vault.created).toHaveLength(0);
+    expect(vault.trashed).toHaveLength(0);
   });
 
   it('performs zero writes on a second, settled pass', async () => {
