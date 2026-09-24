@@ -85,6 +85,9 @@ class FakeTaskManager implements TaskManagerPort {
   async createSection(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async updateSection(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchActiveTasks(): Promise<TodoistTaskData[]> {
     return [];
   }
@@ -155,6 +158,13 @@ class FakeSyncState implements SyncStatePort {
     this.todoistSets.push({ projectName, state });
     this.todoistStates.set(projectName, state);
   }
+  async getTodoistState(): Promise<null> {
+    return null;
+  }
+  async setTodoistState(): Promise<void> {}
+  async listTodoistStates(): Promise<[]> {
+    return [];
+  }
 }
 
 const syncedAt = '2026-09-24T12:00:00Z';
@@ -194,7 +204,7 @@ describe('ReconcileTodoistProjectAction', () => {
     vault.notes.set(notePath, note());
 
     // When — the project is mirrored
-    await action.execute({
+    const result = await action.execute({
       projectName: 'Acme Widgets',
       notePath,
       locationArchived: false,
@@ -204,6 +214,8 @@ describe('ReconcileTodoistProjectAction', () => {
     // Then — a project is created and its id is stamped into the note
     expect(taskManager.createCalls).toEqual(['Acme Widgets']);
     expect(vault.writes).toEqual([{ path: notePath, content: note('P-new') }]);
+    // And the active project id is returned, so the task projection runs
+    expect(result).toBe('P-new');
     // And the bookkeeping record is created
     expect(syncState.todoistSets).toEqual([
       {
@@ -306,7 +318,7 @@ describe('ReconcileTodoistProjectAction', () => {
     taskManager.projects.push(project({ name: 'Old Name', isArchived: true }));
 
     // When — the project is mirrored
-    await action.execute({
+    const result = await action.execute({
       projectName: 'Acme Widgets',
       notePath,
       locationArchived: true,
@@ -317,6 +329,8 @@ describe('ReconcileTodoistProjectAction', () => {
     expect(taskManager.updateCalls).toEqual([]);
     expect(taskManager.archiveCalls).toEqual([]);
     expect(syncState.todoistSets).toEqual([]);
+    // And the freeze returns null, so the task projection is gated off
+    expect(result).toBeNull();
   });
 
   it('re-stamps the anchor when it points at a project that no longer exists', async () => {

@@ -29,6 +29,13 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setTodoistProjectState(): Promise<void> {}
+  async getTodoistState(): Promise<null> {
+    return null;
+  }
+  async setTodoistState(): Promise<void> {}
+  async listTodoistStates(): Promise<[]> {
+    return [];
+  }
 
   async setArchiveBaseline(): Promise<void> {}
   records: Status[] = [];

@@ -28,11 +28,12 @@ describe('TaskNoteParser', () => {
     // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — url, status and body are preserved
+    // Then — url, status, body and affiliation are preserved
     expect(parsed).toEqual({
       url: task.url,
       status: 'Building',
       body: task.body,
+      affiliation: ['[[Acme Widgets]]'],
     });
   });
 

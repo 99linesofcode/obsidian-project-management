@@ -11,6 +11,7 @@ import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeActio
 import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
+import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
@@ -18,6 +19,7 @@ import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
+import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodoistAction.js';
 import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
@@ -207,6 +209,14 @@ export default class ProjectManagementPlugin extends Plugin {
       vault,
       syncState,
     );
+    const projectTasksToTodoist = new ProjectTasksToTodoistAction(
+      todoist,
+      github,
+      vault,
+      syncState,
+      new EnsureTodoistSectionsAction(todoist),
+      this.settings.doneOptionName,
+    );
 
     const syncChecklist = new SyncChecklistAction(
       vault,
@@ -249,6 +259,7 @@ export default class ProjectManagementPlugin extends Plugin {
       probeProjects,
       reconcileArchiveState,
       reconcileTodoistProject,
+      projectTasksToTodoist,
       watchArchivedProject,
       syncState,
       this.settings.pollIntervalMinutes * 60 * 1000,

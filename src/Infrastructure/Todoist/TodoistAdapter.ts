@@ -121,6 +121,12 @@ export class TodoistAdapter implements TaskManagerPort {
     return this.mapSection(this.requireRecord(response, 'create section'));
   }
 
+  // Renames a section in place. The update endpoint takes the new name; the
+  // section id is stable, so a lane rename keeps its section (dt-07).
+  async updateSection(id: string, name: string): Promise<void> {
+    await this.postOk(`/sections/${id}`, { name }, 'update section');
+  }
+
   async fetchActiveTasks(projectId: string): Promise<TodoistTaskData[]> {
     const raw = await this.getList(
       `/tasks?project_id=${encodeURIComponent(projectId)}`,

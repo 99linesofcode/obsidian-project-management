@@ -22,6 +22,9 @@ export interface TaskManagerPort {
   setProjectArchived(id: string, archived: boolean): Promise<void>;
   fetchSections(projectId: string): Promise<TodoistSectionData[]>;
   createSection(projectId: string, name: string): Promise<TodoistSectionData>;
+  // Renames a section in place. A lane rename keeps its section (dt-07), so the
+  // section follows the board's option name rather than being duplicated.
+  updateSection(id: string, name: string): Promise<void>;
   fetchActiveTasks(projectId: string): Promise<TodoistTaskData[]>;
   fetchCompletedTasks(
     projectId: string,

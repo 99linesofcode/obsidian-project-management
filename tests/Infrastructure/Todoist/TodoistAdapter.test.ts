@@ -245,6 +245,24 @@ describe('TodoistAdapter', () => {
     });
   });
 
+  it('renames a section in place', async () => {
+    // Given — an update response
+    const { transport, calls } = fakeTransport([
+      { status: 200, json: section({ id: 'S1', name: 'Backlog' }) },
+    ]);
+    const adapter = new TodoistAdapter(transport);
+
+    // When — the adapter renames the section
+    await adapter.updateSection('S1', 'Backlog');
+
+    // Then — the POST targeted the section with the new name
+    expect(calls[0]).toEqual({
+      method: 'POST',
+      path: '/sections/S1',
+      body: JSON.stringify({ name: 'Backlog' }),
+    });
+  });
+
   it('fetches active tasks and maps section, parent and labels', async () => {
     // Given — an active task list with a top-level and a nested task
     const { transport, calls } = fakeTransport([

@@ -1,6 +1,7 @@
 import type { ArchiveBaselineData } from '../../Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TodoistProjectStateData } from '../../Domain/DataTransferObjects/TodoistProjectStateData.js';
+import type { TodoistStateData } from '../../Domain/DataTransferObjects/TodoistStateData.js';
 import type { WatchStateData } from '../../Domain/DataTransferObjects/WatchStateData.js';
 import type { Status } from '../../Domain/Models/Status.js';
 import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
@@ -19,7 +20,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // Implements the sync state port against a flat key/value store. Records are
 // namespaced by kind: status.<url>, identity.<projectName>,
 // projectUpdate.<projectName>, archiveBaseline.<projectName>,
-// watch.<projectName> and todoistProject.<projectName>.
+// watch.<projectName>, todoistProject.<projectName> and
+// todoistItem.<notePath>.
 export class SyncStateAdapter implements SyncStatePort {
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -190,6 +192,37 @@ export class SyncStateAdapter implements SyncStatePort {
       sections,
       lastCompletedPoll:
         typeof raw.lastCompletedPoll === 'string' ? raw.lastCompletedPoll : '',
+    };
+  }
+
+  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+    const data = await this.storage.load();
+    const raw = data[`todoistItem.${notePath}`];
+    return isRecord(raw) ? this.mapTodoistState(raw) : null;
+  }
+
+  async setTodoistState(
+    notePath: string,
+    state: TodoistStateData,
+  ): Promise<void> {
+    const data = await this.storage.load();
+    data[`todoistItem.${notePath}`] = state;
+    await this.storage.save(data);
+  }
+
+  async listTodoistStates(): Promise<TodoistStateData[]> {
+    const data = await this.storage.load();
+    return Object.entries(data)
+      .filter(([key, raw]) => key.startsWith('todoistItem.') && isRecord(raw))
+      .map(([, raw]) => this.mapTodoistState(raw as Record<string, unknown>));
+  }
+
+  private mapTodoistState(raw: Record<string, unknown>): TodoistStateData {
+    return {
+      todoistId: typeof raw.todoistId === 'string' ? raw.todoistId : '',
+      notePath: typeof raw.notePath === 'string' ? raw.notePath : '',
+      lastSyncedHash:
+        typeof raw.lastSyncedHash === 'string' ? raw.lastSyncedHash : '',
     };
   }
 
