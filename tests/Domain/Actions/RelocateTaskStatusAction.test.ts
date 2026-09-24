@@ -24,10 +24,6 @@ class FakeSyncState implements SyncStatePort {
   async list(): Promise<Status[]> {
     return this.records;
   }
-  async getLastPoll(): Promise<string | null> {
-    return null;
-  }
-  async setLastPoll(): Promise<void> {}
   async setIdentity(): Promise<void> {}
   async getIdentity(): Promise<ProjectIdentityData | null> {
     return null;

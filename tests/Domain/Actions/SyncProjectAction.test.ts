@@ -65,8 +65,6 @@ class FakeVault implements VaultPort {
 
 class FakeSyncState implements SyncStatePort {
   statuses = new Map<string, Status>();
-  lastPoll: string | null = null;
-  lastPollCalls: Array<{ projectName: string; iso: string }> = [];
   identity: ProjectIdentityData | null = null;
 
   async get(url: string): Promise<Status | null> {
@@ -89,14 +87,6 @@ class FakeSyncState implements SyncStatePort {
     return [...this.statuses.values()];
   }
 
-  async getLastPoll(): Promise<string | null> {
-    return this.lastPoll;
-  }
-
-  async setLastPoll(projectName: string, iso: string): Promise<void> {
-    this.lastPollCalls.push({ projectName, iso });
-  }
-
   async setIdentity(): Promise<void> {
     throw new Error('not used in this test');
   }
@@ -109,7 +99,6 @@ class FakeSyncState implements SyncStatePort {
 class FakeProjectManagement implements ProjectManagementPort {
   tasks: TaskData[] = [];
   repoUrlCalls: string[] = [];
-  sinceCalls: Array<string | undefined> = [];
   boardItems: BoardItemData[] = [];
   boardItemsCalls: string[] = [];
   addBoardItemCalls: Array<{ projectNodeId: string; issueUrl: string }> = [];
@@ -119,12 +108,8 @@ class FakeProjectManagement implements ProjectManagementPort {
     return null;
   }
 
-  async fetchChangedTasks(
-    repoUrl: string,
-    since?: string,
-  ): Promise<TaskData[]> {
+  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
     this.repoUrlCalls.push(repoUrl);
-    this.sinceCalls.push(since);
     return this.tasks;
   }
 
@@ -269,11 +254,10 @@ function makeAction(
 }
 
 describe('SyncProjectAction', () => {
-  it('fetches since the last poll, applies existing and creates new, then advances the cursor', async () => {
-    // Given — a last poll cursor, one task with a changed status and one new
+  it('reconciles the full tracked set, applying existing and creating new', async () => {
+    // Given — one task with a changed status and one new
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.lastPoll = '2026-09-18T10:00:00Z';
     syncState.identity = identity;
     const { path: pathA } = TaskNoteMapper.map(taskA, context);
     syncState.statuses.set(taskA.url, {
@@ -297,11 +281,10 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     await action.execute(context);
 
-    // Then — tasks are fetched since the last poll, for the identity's repo
+    // Then — the full tracked set is fetched for the identity's repo
     expect(projectManagement.repoUrlCalls).toEqual([
       'https://github.com/acme/widgets',
     ]);
-    expect(projectManagement.sinceCalls).toEqual(['2026-09-18T10:00:00Z']);
     // And the existing task is applied (rewritten) while the new one is created
     expect(vault.written).toHaveLength(1);
     expect(vault.written[0]!.path).toBe(pathA);
@@ -309,10 +292,6 @@ describe('SyncProjectAction', () => {
     expect(vault.created[0]!.path).toBe(
       TaskNoteMapper.map(taskB, context).path,
     );
-    // And the cursor is advanced to the sync time
-    expect(syncState.lastPollCalls).toEqual([
-      { projectName: 'Acme Widgets', iso: '2026-09-18T12:00:00Z' },
-    ]);
   });
 
   it('skips tasks without a type label — only typed tasks are tracked', async () => {
@@ -338,21 +317,59 @@ describe('SyncProjectAction', () => {
     expect(vault.written).toHaveLength(0);
   });
 
-  it('passes undefined through when no last poll exists', async () => {
-    // Given — no last poll cursor yet
+  it('materializes a quiet typed issue whose update predates the poll', async () => {
+    // Given — a typed issue last updated long before this poll, with no
+    // stored status record (it went quiet before the type filter widened)
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.lastPoll = null;
     syncState.identity = identity;
+    const quiet: TaskData = {
+      ...taskA,
+      updatedAt: '2026-09-01T00:00:00Z',
+      labels: ['type: bug'],
+    };
     const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [];
+    projectManagement.tasks = [quiet];
     const action = makeAction(vault, syncState, projectManagement);
 
-    // When — the project is synced
+    // When — a normal poll runs
     await action.execute(context);
 
-    // Then — the since cursor is undefined (first poll fetches everything)
-    expect(projectManagement.sinceCalls).toEqual([undefined]);
+    // Then — the quiet issue materializes, because every poll reconciles the
+    // complete tracked set rather than only what changed since a cursor
+    expect(vault.created).toHaveLength(1);
+    expect(vault.created[0]!.path).toBe(
+      TaskNoteMapper.map(quiet, context).path,
+    );
+  });
+
+  it('performs no writes on a second poll over a settled project', async () => {
+    // Given — a tracked issue already on the board in its implied lane
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [taskA];
+    projectManagement.boardItems = [
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: taskA.url,
+        statusOptionName: 'Unshaped',
+      },
+    ];
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is polled twice
+    await action.execute(context);
+    expect(vault.created).toHaveLength(1);
+    vault.created = [];
+    vault.written = [];
+    await action.execute(context);
+
+    // Then — the settled second poll writes nothing: the sync state is the diff
+    expect(vault.created).toHaveLength(0);
+    expect(vault.written).toHaveLength(0);
   });
 
   it('applies board-driven changes when the board disagrees with the issue', async () => {
@@ -388,6 +405,34 @@ describe('SyncProjectAction', () => {
 
     // Then — the board items are fetched once and the issue is closed
     expect(projectManagement.boardItemsCalls).toEqual(['PVT_123']);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: taskA.url, state: 'closed' },
+    ]);
+  });
+
+  it("materializes a board card's issue before the board loop applies its lane", async () => {
+    // Given — a tracked issue with no status record yet, whose card is Done
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.tasks = [taskA];
+    projectManagement.boardItems = [
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: taskA.url,
+        statusOptionName: 'Done',
+      },
+    ];
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(context);
+
+    // Then — the task loop materialized the issue first, so the board loop
+    // could close it; a board-first order would have skipped the untracked card
+    expect(vault.created).toHaveLength(1);
     expect(projectManagement.stateCalls).toEqual([
       { url: taskA.url, state: 'closed' },
     ]);
@@ -477,7 +522,7 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     // Then — the poll is skipped with a clear error rather than crashing
     await expect(action.execute(context)).rejects.toThrow(/no repo url/);
-    expect(projectManagement.sinceCalls).toEqual([]);
+    expect(projectManagement.repoUrlCalls).toEqual([]);
     expect(projectManagement.boardItemsCalls).toEqual([]);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(projectManagement.addBoardItemCalls).toEqual([]);
@@ -495,7 +540,7 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     // Then — the poll is skipped with a clear error rather than crashing
     await expect(action.execute(context)).rejects.toThrow(/no repo url/);
-    expect(projectManagement.sinceCalls).toEqual([]);
+    expect(projectManagement.repoUrlCalls).toEqual([]);
     expect(projectManagement.boardItemsCalls).toEqual([]);
   });
 });

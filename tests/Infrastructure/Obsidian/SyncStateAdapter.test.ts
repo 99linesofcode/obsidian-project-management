@@ -58,44 +58,17 @@ describe('SyncStateAdapter', () => {
     expect(result).toBeNull();
   });
 
-  it('round-trips the last poll cursor per project', async () => {
-    // Given — an empty storage
-    const { storage } = fakeStorage();
-    const adapter = new SyncStateAdapter(storage);
-
-    // When — a last poll is set then read back
-    await adapter.setLastPoll('Acme Widgets', '2026-09-18T12:00:00Z');
-    const result = await adapter.getLastPoll('Acme Widgets');
-
-    // Then — the cursor round-trips
-    expect(result).toBe('2026-09-18T12:00:00Z');
-  });
-
-  it('returns null for a project with no last poll', async () => {
-    // Given — an empty storage
-    const { storage } = fakeStorage();
-    const adapter = new SyncStateAdapter(storage);
-
-    // When — an unknown project is read
-    const result = await adapter.getLastPoll('Other Project');
-
-    // Then — null is returned
-    expect(result).toBeNull();
-  });
-
-  it('keeps status and last poll records distinct under their namespaced keys', async () => {
+  it('keeps status records under their namespaced key', async () => {
     // Given — an empty storage
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
-    // When — both a status and a last poll are written
+    // When — a status is written
     await adapter.set(status);
-    await adapter.setLastPoll('Acme Widgets', '2026-09-18T12:00:00Z');
 
-    // Then — they live under separate namespaced keys
+    // Then — it lives under its namespaced key
     expect(snapshot()).toEqual({
       'status.https://github.com/acme/widgets/issues/42': status,
-      'lastPoll.Acme Widgets': '2026-09-18T12:00:00Z',
     });
   });
 
@@ -203,7 +176,7 @@ describe('SyncStateAdapter', () => {
     expect(result).toBeNull();
   });
 
-  it('keeps identities distinct from status and last poll records', async () => {
+  it('keeps identities distinct from status records', async () => {
     // Given — an empty storage
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
@@ -215,16 +188,14 @@ describe('SyncStateAdapter', () => {
       statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     };
 
-    // When — an identity is written alongside a status and last poll
+    // When — an identity is written alongside a status
     await adapter.setIdentity('Acme Widgets', identity);
     await adapter.set(status);
-    await adapter.setLastPoll('Acme Widgets', '2026-09-18T12:00:00Z');
 
     // Then — each lives under its own namespaced key
     expect(snapshot()).toEqual({
       'identity.Acme Widgets': identity,
       'status.https://github.com/acme/widgets/issues/42': status,
-      'lastPoll.Acme Widgets': '2026-09-18T12:00:00Z',
     });
   });
 });

@@ -78,7 +78,6 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  lastPollCalls: Array<{ projectName: string; iso: string }> = [];
   identity: ProjectIdentityData | null = null;
 
   async get(): Promise<Status | null> {
@@ -89,12 +88,6 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async remove(): Promise<void> {}
-  async getLastPoll(): Promise<string | null> {
-    return null;
-  }
-  async setLastPoll(projectName: string, iso: string): Promise<void> {
-    this.lastPollCalls.push({ projectName, iso });
-  }
   async setIdentity(): Promise<void> {}
   async getIdentity(): Promise<ProjectIdentityData | null> {
     return this.identity;
@@ -105,16 +98,13 @@ class FakeSyncState implements SyncStatePort {
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
-  sinceCalls: string[] = [];
+  repoUrlCalls: string[] = [];
 
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchChangedTasks(
-    _repoUrl: string,
-    since: string,
-  ): Promise<TaskData[]> {
-    this.sinceCalls.push(since);
+  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
+    this.repoUrlCalls.push(repoUrl);
     return [];
   }
   async fetchTask(): Promise<TaskData> {
@@ -348,11 +338,8 @@ describe('SyncScheduler', () => {
     // When — one interval elapses
     await vi.advanceTimersByTimeAsync(60_000);
 
-    // Then — the action ran once per project, each with a fresh cursor
-    expect(projectManagement.sinceCalls).toHaveLength(2);
-    expect(syncState.lastPollCalls).toHaveLength(2);
-    expect(syncState.lastPollCalls[0]!.projectName).toBe('Acme Widgets');
-    expect(syncState.lastPollCalls[1]!.projectName).toBe('Other');
+    // Then — the action ran once per project, each fetching the tracked set
+    expect(projectManagement.repoUrlCalls).toHaveLength(2);
   });
 
   it('derives the project name from a note change and reconciles it', async () => {
