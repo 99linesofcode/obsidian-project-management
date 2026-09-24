@@ -161,6 +161,9 @@ class FakeSyncState implements SyncStatePort {
   async listTodoistStates(): Promise<TodoistStateData[]> {
     return [...this.todoistItemStates.values()];
   }
+  async removeTodoistState(notePath: string): Promise<void> {
+    this.todoistItemStates.delete(notePath);
+  }
 
   async get(): Promise<Status | null> {
     return null;

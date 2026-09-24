@@ -232,6 +232,15 @@ export class SyncStateAdapter implements SyncStatePort {
       .map(([, raw]) => this.mapTodoistState(raw as Record<string, unknown>));
   }
 
+  // Deletes the record outright, rather than overwriting it with an empty one:
+  // deletion propagation needs the anchor gone so the next capture pass does
+  // not treat the (deleted) twin as an existing mirror.
+  async removeTodoistState(notePath: string): Promise<void> {
+    const data = await this.storage.load();
+    delete data[`todoistItem.${notePath}`];
+    await this.storage.save(data);
+  }
+
   private mapTodoistState(raw: Record<string, unknown>): TodoistStateData {
     const state: TodoistStateData = {
       todoistId: typeof raw.todoistId === 'string' ? raw.todoistId : '',

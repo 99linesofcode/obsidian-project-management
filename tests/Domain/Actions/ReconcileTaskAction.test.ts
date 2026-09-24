@@ -98,6 +98,7 @@ class FakeSyncState implements SyncStatePort {
   async listTodoistStates(): Promise<[]> {
     return [];
   }
+  async removeTodoistState(): Promise<void> {}
 
   async setArchiveBaseline(): Promise<void> {}
   statuses = new Map<string, Status>();

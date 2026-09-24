@@ -218,6 +218,14 @@ export class TodoistAdapter implements TaskManagerPort {
 
   async deleteTask(id: string): Promise<void> {
     const response = await this.transport.delete(`/tasks/${id}`);
+    // Deleting an already-gone twin is the desired end state, not a failure:
+    // vault-deletion propagation must be able to evict its bookkeeping even
+    // when the twin was removed on the Todoist side first. Any other non-2xx
+    // (auth, network, server) still throws, so the record survives and the
+    // next tick retries.
+    if (response.status === 404) {
+      return;
+    }
     this.assertOk(response, 'delete task');
   }
 
