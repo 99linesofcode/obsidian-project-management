@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   githubToken: '',
   pollIntervalMinutes: 5,
   doneOptionName: 'Shipped',
-  debounceSeconds: 2,
+  debounceSeconds: 5,
   taskTemplatePath: 'Templates/Task.md',
   todoTemplatePath: 'Templates/ToDo.md',
 };

@@ -23,18 +23,21 @@ import { VaultAdapter } from '../../../src/Infrastructure/Obsidian/VaultAdapter.
 // test fire an event at them, so the adapter's filter and routing are what's
 // under test.
 class FakeVault {
-  private readonly handlers = new Map<string, Array<(file: unknown) => void>>();
+  private readonly handlers = new Map<
+    string,
+    Array<(...args: unknown[]) => void>
+  >();
 
-  on(event: string, handler: (file: unknown) => void): EventRef {
+  on(event: string, handler: (...args: unknown[]) => void): EventRef {
     const handlers = this.handlers.get(event) ?? [];
     handlers.push(handler);
     this.handlers.set(event, handlers);
     return {} as EventRef;
   }
 
-  fire(event: string, file: unknown): void {
+  fire(event: string, ...args: unknown[]): void {
     for (const handler of this.handlers.get(event) ?? []) {
-      handler(file);
+      handler(...args);
     }
   }
 }
@@ -45,8 +48,12 @@ function setup() {
   const registered: EventRef[] = [];
   const adapter = new VaultAdapter(app, (ref) => registered.push(ref));
   const changed: string[] = [];
+  const renamed: Array<{ oldPath: string; newPath: string }> = [];
   adapter.onNoteChanged((path) => changed.push(path));
-  return { vault, registered, changed };
+  adapter.onNoteRenamed((oldPath, newPath) =>
+    renamed.push({ oldPath, newPath }),
+  );
+  return { vault, registered, changed, renamed };
 }
 
 describe('VaultAdapter.onNoteChanged', () => {
@@ -105,12 +112,60 @@ describe('VaultAdapter.onNoteChanged', () => {
   });
 
   it('registers every subscription for cleanup on unload', () => {
-    // Given — an adapter subscribed to note changes
+    // Given — an adapter subscribed to note changes and renames
     const { registered } = setup();
 
     // When — the subscriptions are registered
-    // Then — both the modify and create subscriptions are handed to the
+    // Then — the modify, create and rename subscriptions are handed to the
     // plugin's registerEvent for cleanup
-    expect(registered).toHaveLength(2);
+    expect(registered).toHaveLength(3);
+  });
+});
+
+describe('VaultAdapter.onNoteRenamed', () => {
+  it('routes a renamed task note under Projecten through the rename callback', () => {
+    // Given — an adapter subscribed to note renames
+    const { vault, renamed } = setup();
+
+    // When — a task note under Projecten is renamed
+    vault.fire(
+      'rename',
+      new TFile('Projecten/Acme Widgets/taken/42-fix-the-bug.md', 'md'),
+      'Projecten/Acme Widgets/taken/42-old.md',
+    );
+
+    // Then — the callback receives both the old and the new path
+    expect(renamed).toEqual([
+      {
+        oldPath: 'Projecten/Acme Widgets/taken/42-old.md',
+        newPath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+      },
+    ]);
+  });
+
+  it('ignores renames outside Projecten', () => {
+    // Given — an adapter subscribed to note renames
+    const { vault, renamed } = setup();
+
+    // When — a note outside Projecten is renamed
+    vault.fire('rename', new TFile('Notes/random.md', 'md'), 'Notes/old.md');
+
+    // Then — the callback is not invoked
+    expect(renamed).toEqual([]);
+  });
+
+  it('ignores renamed non-markdown files under Projecten', () => {
+    // Given — an adapter subscribed to note renames
+    const { vault, renamed } = setup();
+
+    // When — a non-markdown file is renamed under Projecten
+    vault.fire(
+      'rename',
+      new TFile('Projecten/Acme Widgets/board.canvas', 'canvas'),
+      'Projecten/Acme Widgets/old.canvas',
+    );
+
+    // Then — the callback is not invoked
+    expect(renamed).toEqual([]);
   });
 });

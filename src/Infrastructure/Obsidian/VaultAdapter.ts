@@ -115,4 +115,19 @@ export class VaultAdapter implements VaultPort {
     });
     this.registerEvent(eventRef);
   }
+
+  onNoteRenamed(cb: (oldPath: string, newPath: string) => void): void {
+    // Only task notes under Projecten/ are synced; everything else is ignored.
+    // The file is the note at its new path, so the filter reads the new path.
+    const eventRef = this.app.vault.on('rename', (file, oldPath) => {
+      if (
+        file instanceof TFile &&
+        file.extension === 'md' &&
+        file.path.startsWith('Projecten/')
+      ) {
+        cb(oldPath, file.path);
+      }
+    });
+    this.registerEvent(eventRef);
+  }
 }

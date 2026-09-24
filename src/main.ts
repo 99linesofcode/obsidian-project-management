@@ -18,6 +18,8 @@ import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
+import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
+import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
@@ -161,6 +163,8 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.todoTemplatePath,
     );
     const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
+    const relinkRenamedTodo = new RelinkRenamedTodoAction(vault);
+    const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
 
     const promoteIssue = new PromoteIssueAction(github, syncState, createTaskNote);
     const promoteToTask = new PromoteToTaskCommand(
@@ -191,6 +195,8 @@ export default class ProjectManagementPlugin extends Plugin {
       mirrorTodoStatus,
       reconcileTask,
       handleDeletedNote,
+      relinkRenamedTodo,
+      relocateTaskStatus,
       this.settings.debounceSeconds * 1000,
     );
     this.addChild(scheduler);

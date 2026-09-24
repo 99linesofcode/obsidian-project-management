@@ -60,6 +60,7 @@ class FakeVault implements VaultPort {
   onNoteDeleted(): void {
     throw new Error('not used in this test');
   }
+  onNoteRenamed(): void {}
 }
 
 class FakeSyncState implements SyncStatePort {

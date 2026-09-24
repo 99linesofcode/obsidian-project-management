@@ -2,6 +2,8 @@ import { Component } from 'obsidian';
 import type { HandleDeletedNoteAction } from '../../Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStatusAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
+import type { RelinkRenamedTodoAction } from '../../Domain/Actions/RelinkRenamedTodoAction.js';
+import type { RelocateTaskStatusAction } from '../../Domain/Actions/RelocateTaskStatusAction.js';
 import type { SyncChecklistAction } from '../../Domain/Actions/SyncChecklistAction.js';
 import type { SyncProjectAction } from '../../Domain/Actions/SyncProjectAction.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
@@ -16,12 +18,18 @@ declare const window: {
   clearTimeout(id: number): void;
 };
 
-// Delivery mechanics only: turns a timer and vault note changes/deletions
-// into per-project sync invocations. Zero decisions — the actions, project
-// list, interval and debounce are injected. Note changes and deletions are
-// debounced per project and serialised per project (a promise chain per
+// The work a trigger asks for. A rename carries both paths; every other kind
+// carries the single path that changed.
+type SyncTrigger =
+  | { kind: 'reconcile' | 'delete' | 'mirror'; path: string }
+  | { kind: 'renamed'; oldPath: string; newPath: string };
+
+// Delivery mechanics only: turns a timer and vault note changes/deletions/
+// renames into per-project sync invocations. Zero decisions — the actions,
+// project list, interval and debounce are injected. Note changes and deletions
+// are debounced per project and serialised per project (a promise chain per
 // project name), so a poll tick and an edit-triggered reconcile never overlap
-// for the same project.
+// for the same project. A rename bypasses the debounce but still serialises.
 export class SyncScheduler extends Component {
   private readonly chains = new Map<string, Promise<void>>();
   private readonly debounceTimers = new Map<string, number>();
@@ -36,6 +44,8 @@ export class SyncScheduler extends Component {
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     private readonly reconcileTask: ReconcileTaskAction,
     private readonly handleDeletedNote: HandleDeletedNoteAction,
+    private readonly relinkRenamedTodo: RelinkRenamedTodoAction,
+    private readonly relocateTaskStatus: RelocateTaskStatusAction,
     private readonly debounceMs: number,
   ) {
     super();
@@ -66,6 +76,15 @@ export class SyncScheduler extends Component {
       const projectName = this.projectNameFromPath(path);
       if (projectName) {
         this.schedule('delete', projectName, path);
+      }
+    });
+
+    // A rename bypasses the debounce: coalescing would drop intermediate
+    // old-paths and strand links. It still serialises on the per-project chain.
+    this.vault.onNoteRenamed((oldPath, newPath) => {
+      const projectName = this.projectNameFromPath(newPath);
+      if (projectName) {
+        this.enqueue(projectName, { kind: 'renamed', oldPath, newPath });
       }
     });
   }
@@ -107,34 +126,50 @@ export class SyncScheduler extends Component {
     }
     const timer = window.setTimeout(() => {
       this.debounceTimers.delete(key);
-      this.enqueue(kind, projectName, path);
+      this.enqueue(projectName, { kind, path });
     }, this.debounceMs);
     this.debounceTimers.set(key, timer);
   }
 
-  private enqueue(
-    kind: 'reconcile' | 'delete' | 'mirror',
-    projectName: string,
-    path: string,
-  ): void {
+  private enqueue(projectName: string, trigger: SyncTrigger): void {
     const previous = this.chains.get(projectName) ?? Promise.resolve();
-    const next = previous.then(() => this.run(kind, projectName, path));
+    const next = previous.then(() => this.run(projectName, trigger));
     this.chains.set(projectName, next);
   }
 
-  private async run(
-    kind: 'reconcile' | 'delete' | 'mirror',
-    projectName: string,
-    path: string,
-  ): Promise<void> {
+  private async run(projectName: string, trigger: SyncTrigger): Promise<void> {
     const syncedAt = new Date().toISOString();
-    if (kind === 'delete') {
-      return this.handleDeletedNote.execute({ notePath: path, projectName });
+    if (trigger.kind === 'delete') {
+      return this.handleDeletedNote.execute({
+        notePath: trigger.path,
+        projectName,
+      });
     }
-    if (kind === 'mirror') {
-      return this.mirrorTodoStatus.execute({ todoPath: path, syncedAt });
+    if (trigger.kind === 'mirror') {
+      return this.mirrorTodoStatus.execute({
+        todoPath: trigger.path,
+        syncedAt,
+      });
     }
-    return this.reconcileTaskNote(path, projectName, syncedAt);
+    if (trigger.kind === 'renamed') {
+      return this.relocateRenamed(trigger.oldPath, trigger.newPath, syncedAt);
+    }
+    return this.reconcileTaskNote(trigger.path, projectName, syncedAt);
+  }
+
+  // A rename is routed by the note's new path: a to-do relinks its parent line,
+  // a task note moves its Status record. Any other Projecten path is ignored.
+  private async relocateRenamed(
+    oldPath: string,
+    newPath: string,
+    syncedAt: string,
+  ): Promise<void> {
+    if (newPath.includes('/todos/')) {
+      return this.relinkRenamedTodo.execute({ oldPath, newPath, syncedAt });
+    }
+    if (newPath.includes('/taken/')) {
+      return this.relocateTaskStatus.execute({ oldPath, newPath });
+    }
   }
 
   // A task note's checklist is synced first so the body the reconcile pushes
