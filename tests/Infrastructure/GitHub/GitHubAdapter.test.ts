@@ -8,9 +8,12 @@ import type { AttachProjectData } from '../../../src/Domain/DataTransferObjects/
 // A fake transport at the boundary: returns canned responses in call order
 // and records the request bodies/paths, so the adapter's mapping is what's
 // under test — never a real GitHub call.
-function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
+function fakeTransport(
+  responses: Array<{ status: number; json: unknown; etag?: string }>,
+) {
   const bodies: string[] = [];
   const paths: string[] = [];
+  const etags: Array<string | undefined> = [];
   const transport: Transport = {
     async post(body) {
       bodies.push(body);
@@ -22,6 +25,15 @@ function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
     },
     async get(path) {
       paths.push(path);
+      const next = responses.shift();
+      if (!next) {
+        throw new Error('fake transport: no more responses queued');
+      }
+      return next;
+    },
+    async getConditional(path, etag) {
+      paths.push(path);
+      etags.push(etag);
       const next = responses.shift();
       if (!next) {
         throw new Error('fake transport: no more responses queued');
@@ -47,7 +59,7 @@ function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
       return next;
     },
   };
-  return { transport, bodies, paths };
+  return { transport, bodies, paths, etags };
 }
 
 const repoResponse = {
@@ -379,6 +391,108 @@ describe('GitHubAdapter', () => {
       '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
       '/repos/acme/widgets/issues?state=all&per_page=100&page=2',
     ]);
+  });
+
+  it('reads the newest issue activity through a conditional request', async () => {
+    // Given — a REST response with a PR and two issues, newest first
+    const issuesResponse = {
+      status: 200,
+      json: [
+        {
+          number: 50,
+          created_at: '2026-09-20T10:00:00Z',
+          pull_request: { url: 'https://api.github.com/pulls/50' },
+        },
+        { number: 49, created_at: '2026-09-19T10:00:00Z' },
+        { number: 48, created_at: '2026-09-18T10:00:00Z' },
+      ],
+      etag: 'W/"abc"',
+    };
+    const { transport, paths, etags } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reads the latest activity with a stored etag
+    const result = await adapter.fetchLatestIssueActivity(
+      'https://github.com/acme/widgets',
+      'W/"old"',
+    );
+
+    // Then — the newest non-PR issue's created_at is surfaced with the new etag
+    expect(result).toEqual({
+      changed: true,
+      newestCreatedAt: '2026-09-19T10:00:00Z',
+      etag: 'W/"abc"',
+    });
+    // And the conditional read targeted the newest issues and carried the etag
+    expect(paths[0]).toBe(
+      '/repos/acme/widgets/issues?state=all&sort=created&direction=desc&per_page=10',
+    );
+    expect(etags[0]).toBe('W/"old"');
+  });
+
+  it('reports no change on a 304 without reading the body', async () => {
+    // Given — a conditional read that answers 304
+    const { transport } = fakeTransport([{ status: 304, json: {} }]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reads the latest activity
+    const result = await adapter.fetchLatestIssueActivity(
+      'https://github.com/acme/widgets',
+      'W/"abc"',
+    );
+
+    // Then — nothing changed and no cursor is surfaced
+    expect(result).toEqual({
+      changed: false,
+      newestCreatedAt: null,
+      etag: null,
+    });
+  });
+
+  it('reports a change with no cursor when only pull requests are newest', async () => {
+    // Given — a REST response whose newest entries are all pull requests
+    const issuesResponse = {
+      status: 200,
+      json: [
+        { number: 50, created_at: '2026-09-20T10:00:00Z', pull_request: {} },
+        { number: 49, created_at: '2026-09-19T10:00:00Z', pull_request: {} },
+      ],
+      etag: 'W/"abc"',
+    };
+    const { transport } = fakeTransport([issuesResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reads the latest activity
+    const result = await adapter.fetchLatestIssueActivity(
+      'https://github.com/acme/widgets',
+    );
+
+    // Then — the repo changed but there is no issue cursor
+    expect(result).toEqual({
+      changed: true,
+      newestCreatedAt: null,
+      etag: 'W/"abc"',
+    });
+  });
+
+  it('reports a change with no cursor when the repository has no issues', async () => {
+    // Given — an empty REST response
+    const { transport } = fakeTransport([
+      { status: 200, json: [], etag: 'W/"abc"' },
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reads the latest activity
+    const result = await adapter.fetchLatestIssueActivity(
+      'https://github.com/acme/widgets',
+    );
+
+    // Then — the repo changed but there is no issue cursor
+    expect(result).toEqual({
+      changed: true,
+      newestCreatedAt: null,
+      etag: 'W/"abc"',
+    });
   });
 
   it('maps a closed issue to a closed task state', async () => {

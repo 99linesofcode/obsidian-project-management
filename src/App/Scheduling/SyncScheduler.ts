@@ -8,6 +8,7 @@ import type { RelinkRenamedTodoAction } from '../../Domain/Actions/RelinkRenamed
 import type { RelocateTaskStatusAction } from '../../Domain/Actions/RelocateTaskStatusAction.js';
 import type { SyncChecklistAction } from '../../Domain/Actions/SyncChecklistAction.js';
 import type { SyncProjectAction } from '../../Domain/Actions/SyncProjectAction.js';
+import type { WatchArchivedProjectAction } from '../../Domain/Actions/WatchArchivedProjectAction.js';
 import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
 
@@ -51,6 +52,7 @@ export class SyncScheduler extends Component {
     private readonly syncProject: SyncProjectAction,
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileArchiveState: ReconcileArchiveStateAction,
+    private readonly watchArchivedProject: WatchArchivedProjectAction,
     private readonly syncState: SyncStatePort,
     private readonly intervalMs: number,
     private readonly vault: VaultPort,
@@ -103,8 +105,9 @@ export class SyncScheduler extends Component {
   // is archived, one under Projecten/ is active — so a folder move is picked up
   // without any stored flag. Every project is reconciled first through the
   // baseline merge (the vault wins a conflict), then only active projects sync;
-  // archived projects are frozen. The stored update advances only after a
-  // successful sync, so a failed sync retries the board fetch on the next tick.
+  // archived projects are frozen but watched, so a new issue re-activates them.
+  // The stored update advances only after a successful sync, so a failed sync
+  // retries the board fetch on the next tick.
   private async tick(): Promise<void> {
     const notes = await this.vault.findProjectNotes();
     const active = new Set<string>();
@@ -199,12 +202,13 @@ export class SyncScheduler extends Component {
   }
 
   // A tick reconciles the archive state first through the baseline merge (the
-  // vault wins a conflict), then syncs only active projects whose board is
-  // open. An archived project is frozen: no issue reconcile, no board fetch, no
-  // bookkeeping. A project whose board was closed is transitioned this tick and
+  // vault wins a conflict), then routes by the project's location. An archived
+  // project is frozen — no issue reconcile, no board fetch — but its repository
+  // is watched: a cheap conditional read re-activates it when a new issue
+  // appears. A project whose board was closed is transitioned this tick and
   // synced on the next one, once the probe sees the reopened board. The
-  // transition and the sync ride the same per-project chain, so they never
-  // interleave.
+  // transition, the watch and the sync ride the same per-project chain, so they
+  // never interleave.
   private async runTick(
     projectName: string,
     trigger: Extract<SyncTrigger, { kind: 'tick' }>,
@@ -215,7 +219,13 @@ export class SyncScheduler extends Component {
       closed: trigger.closed,
       syncedAt: trigger.syncedAt,
     });
-    if (trigger.locationArchived || trigger.closed) {
+    if (trigger.locationArchived) {
+      return this.watchArchivedProject.execute({
+        projectName,
+        syncedAt: trigger.syncedAt,
+      });
+    }
+    if (trigger.closed) {
       return;
     }
 

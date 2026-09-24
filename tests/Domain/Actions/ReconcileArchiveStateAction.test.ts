@@ -103,6 +103,15 @@ class FakeSyncState implements SyncStatePort {
   ): Promise<ArchiveBaselineData | null> {
     return this.baselines.get(projectName) ?? null;
   }
+  async getWatchState(): Promise<{
+    etag: string | null;
+    cursor: string | null;
+  }> {
+    return { etag: null, cursor: null };
+  }
+
+  async setWatchState(): Promise<void> {}
+
   async setArchiveBaseline(
     projectName: string,
     baseline: ArchiveBaselineData,
@@ -168,6 +177,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async setBoardStatus(): Promise<void> {}
   async addBoardItem(): Promise<void> {}
   async addLabel(): Promise<void> {}
+  async fetchLatestIssueActivity(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -718,5 +731,35 @@ describe('ReconcileArchiveStateAction', () => {
       locationArchived: false,
       closed: false,
     });
+  });
+
+  it('re-activates a project: folder back, board reopened, baseline active', async () => {
+    // Given — an archived project with a relocated Status record
+    const { action, port, vault, syncState } = setup();
+    vault.paths.add('Archief/Acme Widgets/_home.md');
+    vault.paths.add(archivedTaskPath);
+    syncState.records.push(record(archivedTaskPath));
+
+    // When — the project is re-activated
+    await action.reactivate('Acme Widgets');
+
+    // Then — the folder moves back, the board reopens, the Status records
+    // relocate, and the baseline settles to active
+    expect([...vault.paths].sort()).toEqual([
+      'Projecten/Acme Widgets/_home.md',
+      taskPath,
+    ]);
+    expect(port.closedCalls).toEqual([
+      { projectNodeId: 'PVT_123', closed: false },
+    ]);
+    expect(syncState.saved).toEqual([
+      { ...record(archivedTaskPath), notePath: taskPath },
+    ]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: false, closed: false },
+      },
+    ]);
   });
 });

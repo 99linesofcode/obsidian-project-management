@@ -10,11 +10,18 @@ import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagement
 
 // The transport the adapter talks through, injected so tests can fake it.
 // GraphQL goes over POST, the REST reads over GET, the REST update over
-// PATCH. The adapter stays token-agnostic; production wiring injects a
-// transport that adds the Authorization header.
+// PATCH. getConditional is the watched-repo read: it carries an If-None-Match
+// header when an etag is given and surfaces the response's etag, so a quiet
+// repository answers 304 without spending rate limit. The adapter stays
+// token-agnostic; production wiring injects a transport that adds the
+// Authorization header.
 export interface Transport {
   post(body: string): Promise<{ status: number; json: unknown }>;
   get(path: string): Promise<{ status: number; json: unknown }>;
+  getConditional(
+    path: string,
+    etag?: string,
+  ): Promise<{ status: number; json: unknown; etag?: string }>;
   patch(path: string, body: string): Promise<{ status: number; json: unknown }>;
   postPath(
     path: string,
@@ -246,6 +253,50 @@ export class GitHubAdapter implements ProjectManagementPort {
         typeof label.name === 'string' &&
         label.name.startsWith('type:'),
     );
+  }
+
+  // The watched-repo read: the newest issues by creation date, through a
+  // conditional request. A 304 means nothing changed since the stored etag and
+  // costs no rate limit. The issues REST endpoint returns pull requests too,
+  // and a PR is not an issue, so entries carrying a pull_request key are
+  // filtered out before the newest created_at is read.
+  async fetchLatestIssueActivity(
+    repoUrl: string,
+    etag?: string,
+  ): Promise<{
+    changed: boolean;
+    newestCreatedAt: string | null;
+    etag: string | null;
+  }> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const path = `/repos/${repo.owner}/${repo.name}/issues?state=all&sort=created&direction=desc&per_page=10`;
+
+    const response = await this.transport.getConditional(path, etag);
+    if (response.status === 304) {
+      return { changed: false, newestCreatedAt: null, etag: null };
+    }
+    if (response.status !== 200) {
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
+    }
+    if (!Array.isArray(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+
+    const issues = response.json
+      .filter(isRecord)
+      .filter((entry) => !('pull_request' in entry));
+    const newest = issues[0];
+    const newestCreatedAt =
+      newest && typeof newest.created_at === 'string'
+        ? newest.created_at
+        : null;
+    return {
+      changed: true,
+      newestCreatedAt,
+      etag: response.etag ?? null,
+    };
   }
 
   async fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]> {

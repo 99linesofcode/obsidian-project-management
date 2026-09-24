@@ -1,5 +1,6 @@
 import type { ArchiveBaselineData } from '../../Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { WatchStateData } from '../../Domain/DataTransferObjects/WatchStateData.js';
 import type { Status } from '../../Domain/Models/Status.js';
 import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
 
@@ -16,7 +17,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // Implements the sync state port against a flat key/value store. Records are
 // namespaced by kind: status.<url>, identity.<projectName>,
-// projectUpdate.<projectName> and archiveBaseline.<projectName>.
+// projectUpdate.<projectName>, archiveBaseline.<projectName> and
+// watch.<projectName>.
 export class SyncStateAdapter implements SyncStatePort {
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -128,6 +130,30 @@ export class SyncStateAdapter implements SyncStatePort {
     return {
       locationArchived: raw.locationArchived === true,
       closed: raw.closed === true,
+    };
+  }
+
+  async getWatchState(projectName: string): Promise<WatchStateData> {
+    const data = await this.storage.load();
+    const raw = data[`watch.${projectName}`];
+    return isRecord(raw)
+      ? this.mapWatchState(raw)
+      : { etag: null, cursor: null };
+  }
+
+  async setWatchState(
+    projectName: string,
+    state: WatchStateData,
+  ): Promise<void> {
+    const data = await this.storage.load();
+    data[`watch.${projectName}`] = state;
+    await this.storage.save(data);
+  }
+
+  private mapWatchState(raw: Record<string, unknown>): WatchStateData {
+    return {
+      etag: typeof raw.etag === 'string' ? raw.etag : null,
+      cursor: typeof raw.cursor === 'string' ? raw.cursor : null,
     };
   }
 
