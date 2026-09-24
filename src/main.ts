@@ -24,6 +24,7 @@ import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
 import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodoistAction.js';
 import { ProjectToDosToTodoistAction } from './Domain/Actions/ProjectToDosToTodoistAction.js';
+import { PropagateTodoistDeletionsAction } from './Domain/Actions/PropagateTodoistDeletionsAction.js';
 import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
@@ -231,6 +232,15 @@ export default class ProjectManagementPlugin extends Plugin {
       vault,
       syncState,
     );
+    // t6: a deleted note's twin is removed, subtree included, and its records
+    // evicted. Keyed on the note's absence, so a completed twin (absent from
+    // the active set) is never deleted, and a remotely deleted twin is
+    // self-healed by the projection.
+    const propagateTodoistDeletions = new PropagateTodoistDeletionsAction(
+      todoist,
+      vault,
+      syncState,
+    );
 
     const syncChecklist = new SyncChecklistAction(
       vault,
@@ -299,6 +309,7 @@ export default class ProjectManagementPlugin extends Plugin {
       projectTasksToTodoist,
       applyTodoistCompletion,
       projectToDosToTodoist,
+      propagateTodoistDeletions,
       watchArchivedProject,
       syncState,
       this.settings.pollIntervalMinutes * 60 * 1000,

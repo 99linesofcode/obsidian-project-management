@@ -22,6 +22,7 @@ import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/Re
 import type { ReconcileTodoistProjectAction } from '../../../src/Domain/Actions/ReconcileTodoistProjectAction.js';
 import type { ProjectTasksToTodoistAction } from '../../../src/Domain/Actions/ProjectTasksToTodoistAction.js';
 import type { ProjectToDosToTodoistAction } from '../../../src/Domain/Actions/ProjectToDosToTodoistAction.js';
+import type { PropagateTodoistDeletionsAction } from '../../../src/Domain/Actions/PropagateTodoistDeletionsAction.js';
 import type { ApplyTodoistCompletionAction } from '../../../src/Domain/Actions/ApplyTodoistCompletionAction.js';
 import type { ApplyTodoistRemoteChangesAction } from '../../../src/Domain/Actions/ApplyTodoistRemoteChangesAction.js';
 import type { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/CaptureTodoistCreationsAction.js';
@@ -359,6 +360,12 @@ const idleProjectToDos = {
   execute: async () => {},
 } as unknown as ProjectToDosToTodoistAction;
 
+// A deletion-propagation fake for tests that never tick; tick and delete tests
+// that exercise it supply their own recording fake.
+const idlePropagateDeletions = {
+  execute: async () => {},
+} as unknown as PropagateTodoistDeletionsAction;
+
 // A watch fake for tests that never tick; tick tests that exercise the watch
 // supply their own recording fake.
 function idleWatch(): WatchArchivedProjectAction {
@@ -459,6 +466,7 @@ function schedulerWith(overrides: {
   projectTasks?: ProjectTasksToTodoistAction | undefined;
   applyCompletion?: ApplyTodoistCompletionAction | undefined;
   projectToDos?: ProjectToDosToTodoistAction | undefined;
+  propagateDeletions?: PropagateTodoistDeletionsAction | undefined;
   watch?: WatchArchivedProjectAction | undefined;
 }): SyncScheduler {
   return new SyncScheduler(
@@ -471,6 +479,7 @@ function schedulerWith(overrides: {
     overrides.projectTasks ?? idleProjectTasks,
     overrides.applyCompletion ?? idleApplyCompletion,
     overrides.projectToDos ?? idleProjectToDos,
+    overrides.propagateDeletions ?? idlePropagateDeletions,
     overrides.watch ?? idleWatch(),
     overrides.syncState,
     60_000,
@@ -510,6 +519,7 @@ function tickHarness(options: {
   projectTasks?: ProjectTasksToTodoistAction;
   applyCompletion?: ApplyTodoistCompletionAction;
   projectToDos?: ProjectToDosToTodoistAction;
+  propagateDeletions?: PropagateTodoistDeletionsAction;
   watch?: WatchArchivedProjectAction;
 }): {
   scheduler: SyncScheduler;
@@ -563,6 +573,7 @@ function tickHarness(options: {
     projectTasks: options.projectTasks,
     applyCompletion: options.applyCompletion,
     projectToDos: options.projectToDos,
+    propagateDeletions: options.propagateDeletions,
     watch: options.watch,
   });
   return { scheduler, syncState, vault };
@@ -578,6 +589,20 @@ class FakeHandleDeleted {
     projectName: string;
   }): Promise<void> {
     this.calls.push(input);
+  }
+}
+
+// A fake deletion propagation that records its invocations (and order, via a
+// shared events array), so the scheduler's wiring of the Todoist deletion sweep
+// — the delete event and the end of the tick — is observable.
+class FakePropagateDeletions {
+  calls: Array<{ projectName: string }> = [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: { projectName: string }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('propagateDeletions');
   }
 }
 
@@ -816,6 +841,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       syncState,
       60_000,
@@ -852,6 +878,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -895,6 +922,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -939,6 +967,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -981,6 +1010,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1027,6 +1057,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1073,6 +1104,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1116,6 +1148,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1156,6 +1189,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1193,6 +1227,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1233,6 +1268,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1282,6 +1318,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1323,6 +1360,7 @@ describe('SyncScheduler', () => {
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
+      idlePropagateDeletions,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1343,6 +1381,86 @@ describe('SyncScheduler', () => {
 
     // Then — no delete handler is scheduled
     expect(handleDeleted.calls).toHaveLength(0);
+  });
+
+  it('propagates Todoist deletions when a note is deleted', async () => {
+    // Given — a scheduler wired to observe the Todoist deletion sweep
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
+    const propagateDeletions = new FakePropagateDeletions();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      idleProbe,
+      idleReconcileArchive,
+      idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
+      idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
+      propagateDeletions as unknown as PropagateTodoistDeletionsAction,
+      idleWatch(),
+      idleSyncState,
+      60_000,
+      vault,
+      idleChecklist(),
+      idleMirror(),
+      reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
+      0,
+    );
+    scheduler.load();
+
+    // When — a task note under Projecten is deleted
+    vault.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — both the GitHub handler and the Todoist deletion sweep ran
+    expect(handleDeleted.calls).toHaveLength(1);
+    expect(propagateDeletions.calls).toEqual([{ projectName: 'Acme Widgets' }]);
+  });
+
+  it('ignores deletions under Archief, so a frozen project is never swept', async () => {
+    // Given — a scheduler wired to observe deletions
+    const vault = new FakeVault();
+    const reconcile = new FakeReconcile();
+    const handleDeleted = new FakeHandleDeleted();
+    const propagateDeletions = new FakePropagateDeletions();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      idleProbe,
+      idleReconcileArchive,
+      idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
+      idleProjectTasks,
+      idleApplyCompletion,
+      idleProjectToDos,
+      propagateDeletions as unknown as PropagateTodoistDeletionsAction,
+      idleWatch(),
+      idleSyncState,
+      60_000,
+      vault,
+      idleChecklist(),
+      idleMirror(),
+      reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
+      idleRelink(),
+      idleRelocate(),
+      0,
+    );
+    scheduler.load();
+
+    // When — an archived project's note is deleted
+    vault.fireNoteDeleted('Archief/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — neither handler runs: the freeze is a skip, not an error
+    expect(handleDeleted.calls).toHaveLength(0);
+    expect(propagateDeletions.calls).toHaveLength(0);
   });
 
   it('gates the board fetch when the project updatedAt is unchanged', async () => {
@@ -1776,6 +1894,74 @@ describe('SyncScheduler', () => {
     expect(reconcileTodoist.calls).toHaveLength(1);
     expect(applyCompletion.calls).toEqual([]);
     expect(projectToDos.calls).toEqual([]);
+  });
+
+  it('propagates deletions last in the Todoist half, after every projection', async () => {
+    // Given — an active project with a GitHub attach
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const events: string[] = [];
+    const reconcileTodoist = new FakeReconcileTodoist();
+    const projectTasks = new FakeProjectTasks(events);
+    const applyCompletion = new FakeApplyCompletion(events);
+    const projectToDos = new FakeProjectToDos(events);
+    const propagateDeletions = new FakePropagateDeletions(events);
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+      projectTasks: projectTasks as unknown as ProjectTasksToTodoistAction,
+      applyCompletion:
+        applyCompletion as unknown as ApplyTodoistCompletionAction,
+      projectToDos: projectToDos as unknown as ProjectToDosToTodoistAction,
+      propagateDeletions:
+        propagateDeletions as unknown as PropagateTodoistDeletionsAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — deletion propagation closes the tick (spec reconcile step 7): a
+    // deleted note's twin never lingers into the next tick's capture pass
+    expect(events).toEqual([
+      'projectTasks',
+      'applyCompletion',
+      'projectToDos',
+      'propagateDeletions',
+    ]);
+    expect(propagateDeletions.calls).toEqual([{ projectName: 'Acme Widgets' }]);
+  });
+
+  it('skips deletion propagation when the project is frozen-archived', async () => {
+    // Given — an archived project whose lifecycle returns null (frozen)
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: true },
+      },
+    });
+    const reconcileTodoist = new FakeReconcileTodoist();
+    reconcileTodoist.frozen = true;
+    const propagateDeletions = new FakePropagateDeletions();
+    const { scheduler } = tickHarness({
+      transport,
+      archived: true,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+      propagateDeletions:
+        propagateDeletions as unknown as PropagateTodoistDeletionsAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the freeze gates the deletion sweep off with the rest of the half
+    expect(reconcileTodoist.calls).toHaveLength(1);
+    expect(propagateDeletions.calls).toEqual([]);
   });
 
   it('mirrors an archived project to Todoist and still watches it', async () => {
