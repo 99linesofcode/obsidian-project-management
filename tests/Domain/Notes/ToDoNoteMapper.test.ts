@@ -38,6 +38,7 @@ describe('ToDoNoteMapper', () => {
     expect(content).toBe(
       [
         '---',
+        'categories: ["[[Todos.base|Todos]]"]',
         'affiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]"]',
         'status: open',
         'completed:',
@@ -45,6 +46,16 @@ describe('ToDoNoteMapper', () => {
         '',
       ].join('\n'),
     );
+  });
+
+  it('carries the Todos base category as the first frontmatter line', () => {
+    // Given — an open to-do and its project context
+
+    // When — the note is mapped
+    const { content } = ToDoNoteMapper.map(input, context);
+
+    // Then — the built-in fallback lands the note in the Todos base
+    expect(content.split('\n')[1]).toBe('categories: ["[[Todos.base|Todos]]"]');
   });
 
   it('adds the parent to-do to the affiliation when nested', () => {
