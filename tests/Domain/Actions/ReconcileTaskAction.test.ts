@@ -37,6 +37,7 @@ class FakeVault implements VaultPort {
     this.written.push({ path, content });
   }
 
+  async moveFolder(): Promise<void> {}
   async renameNote(oldPath: string, newPath: string): Promise<void> {
     const content = this.notes.get(oldPath);
     if (content !== undefined) {
@@ -120,6 +121,7 @@ class FakeSyncState implements SyncStatePort {
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }

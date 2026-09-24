@@ -30,12 +30,7 @@ export class VaultAdapter implements VaultPort {
   async createNote(path: string, content: string): Promise<void> {
     // Obsidian's create throws when the parent folder is missing, so build
     // the folder chain first (mkdir -p semantics), then create the note.
-    for (const folder of folderChainForPath(path)) {
-      if (!this.app.vault.getFolderByPath(folder)) {
-        await this.app.vault.createFolder(folder);
-      }
-    }
-
+    await this.ensureFolders(path);
     await this.app.vault.create(path, content);
   }
 
@@ -51,7 +46,30 @@ export class VaultAdapter implements VaultPort {
   async renameNote(oldPath: string, newPath: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(oldPath);
     if (file instanceof TFile) {
+      // A rename into a folder that does not exist yet throws, so build the
+      // destination chain first (mkdir -p semantics).
+      await this.ensureFolders(newPath);
       await this.app.fileManager.renameFile(file, newPath);
+    }
+  }
+
+  async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
+    const from = fromPrefix.endsWith('/') ? fromPrefix : `${fromPrefix}/`;
+    const to = toPrefix.endsWith('/') ? toPrefix : `${toPrefix}/`;
+    // Every file type moves — project folders hold .base files and images too.
+    const files = this.app.vault
+      .getFiles()
+      .filter((file) => file.path.startsWith(from));
+    for (const file of files) {
+      await this.renameNote(file.path, `${to}${file.path.slice(from.length)}`);
+    }
+  }
+
+  private async ensureFolders(path: string): Promise<void> {
+    for (const folder of folderChainForPath(path)) {
+      if (!this.app.vault.getFolderByPath(folder)) {
+        await this.app.vault.createFolder(folder);
+      }
     }
   }
 
@@ -73,7 +91,7 @@ export class VaultAdapter implements VaultPort {
 
   async findProjectNotes(): Promise<ProjectNoteData[]> {
     // Reads each markdown file's frontmatter cache (no full-file reads) and
-    // keeps only the notes that declare a pm property.
+    // keeps the notes that declare a pm property under Projecten/ or Archief/.
     const notes: ProjectNoteData[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);

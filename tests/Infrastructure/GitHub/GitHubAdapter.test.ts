@@ -964,6 +964,40 @@ describe('GitHubAdapter', () => {
     );
   });
 
+  it('closes a project via updateProjectV2', async () => {
+    // Given — a transport that accepts the project mutation
+    const mutationResponse = {
+      status: 200,
+      json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
+    };
+    const { transport, bodies } = fakeTransport([mutationResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter closes the project
+    await adapter.setProjectClosed('PVT_123', true);
+
+    // Then — the mutation targets the project and the closed flag
+    expect(bodies[0]).toContain('SetProjectClosed');
+    expect(bodies[0]).toContain('"projectId":"PVT_123"');
+    expect(bodies[0]).toContain('"closed":true');
+  });
+
+  it('reopens a project via updateProjectV2', async () => {
+    // Given — a transport that accepts the project mutation
+    const mutationResponse = {
+      status: 200,
+      json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
+    };
+    const { transport, bodies } = fakeTransport([mutationResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reopens the project
+    await adapter.setProjectClosed('PVT_123', false);
+
+    // Then — the mutation carries the open flag
+    expect(bodies[0]).toContain('"closed":false');
+  });
+
   it('probes every project in one aliased query, keyed by node id', async () => {
     // Given — a transport returning one aliased node field per project
     const fleetResponse = {

@@ -18,6 +18,7 @@ import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
+import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
@@ -159,6 +160,11 @@ export default class ProjectManagementPlugin extends Plugin {
       new AttachProjectAction(github),
     );
     const probeProjects = new ProbeProjectsAction(github, syncState);
+    const reconcileArchiveState = new ReconcileArchiveStateAction(
+      github,
+      vault,
+      syncState,
+    );
 
     const syncChecklist = new SyncChecklistAction(
       vault,
@@ -194,13 +200,13 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     promoteCardToIssue.register(this);
 
-    // v1 wiring: the scheduler starts inert (no projects) and is populated
-    // once the vault's project notes are discovered after layout is ready.
+    // v1 wiring: the scheduler starts inert and discovers the vault's project
+    // notes on every tick, so a folder move is picked up without a stored list.
     const scheduler = new SyncScheduler(
       syncProject,
       probeProjects,
+      reconcileArchiveState,
       syncState,
-      [],
       this.settings.pollIntervalMinutes * 60 * 1000,
       vault,
       syncChecklist,
@@ -214,20 +220,20 @@ export default class ProjectManagementPlugin extends Plugin {
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
-      void this.discoverAndSync(discoverProjects, syncState, scheduler);
+      void this.discoverAndSync(discoverProjects, syncState);
     });
 
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
   }
 
-  // Discovers the vault's synced projects, persists their identities for
-  // later board operations, and hands the project names to the scheduler so
-  // its tick syncs each discovered project. Discovery must never crash the
-  // plugin: unexpected failures and per-note errors surface as notices.
+  // Discovers the vault's synced projects and persists their identities for
+  // later board operations. The scheduler derives its project list from the
+  // notes' locations each tick, so discovery only needs to seed the identities.
+  // Discovery must never crash the plugin: unexpected failures and per-note
+  // errors surface as notices.
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
-    scheduler: SyncScheduler,
   ): Promise<void> {
     try {
       const { projects, errors } = await discoverProjects.execute();
@@ -235,7 +241,6 @@ export default class ProjectManagementPlugin extends Plugin {
         await syncState.setIdentity(project.projectName, project.identity);
       }
       this.projectNames = projects.map((project) => project.projectName);
-      scheduler.setProjectNames(projects.map((project) => project.projectName));
       if (errors.length > 0) {
         new Notice(
           `Project discovery: ${errors.length} project(s) could not be attached`,

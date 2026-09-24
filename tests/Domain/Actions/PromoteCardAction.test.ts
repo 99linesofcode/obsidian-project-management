@@ -15,6 +15,7 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // behaviour (convert the card, then materialise the fetched task) is what's
 // under test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -82,6 +83,7 @@ class FakeVault implements VaultPort {
     throw new Error('not used in this test');
   }
 
+  async moveFolder(): Promise<void> {}
   async renameNote(): Promise<void> {
     throw new Error('not used in this test');
   }

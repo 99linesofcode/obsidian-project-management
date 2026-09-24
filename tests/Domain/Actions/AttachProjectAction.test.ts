@@ -7,6 +7,7 @@ import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectMan
 // A fake port at the boundary: records what the action asked for and returns
 // a canned identity, so the action's own behaviour is what's under test.
 class FakePort implements ProjectManagementPort {
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }

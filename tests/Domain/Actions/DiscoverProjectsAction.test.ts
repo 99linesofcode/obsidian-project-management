@@ -22,6 +22,7 @@ class FakeVault implements VaultPort {
   }
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
+  async moveFolder(): Promise<void> {}
   async renameNote(): Promise<void> {}
   async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
@@ -35,6 +36,7 @@ class FakeVault implements VaultPort {
 }
 
 class FakePort implements ProjectManagementPort {
+  async setProjectClosed(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -91,6 +93,7 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
   return {
     path: 'Projecten/Acme Widgets/_home.md',
     projectName: 'Acme Widgets',
+    archived: false,
     pm: 'github',
     url: 'https://github.com/acme/widgets',
     board: 'https://github.com/orgs/acme/projects/1',
