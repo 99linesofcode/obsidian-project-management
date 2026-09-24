@@ -87,7 +87,9 @@ export class VaultAdapter implements VaultPort {
 
   onNoteChanged(cb: (path: string) => void): void {
     // Only task notes under Projecten/ are synced; everything else is ignored.
-    const eventRef = this.app.vault.on('modify', (file) => {
+    // Both modify and create are watched: a note the plugin materialises during
+    // a poll tick fires 'create', not 'modify', and must enter the same chain.
+    const handler = (file: unknown): void => {
       if (
         file instanceof TFile &&
         file.extension === 'md' &&
@@ -95,8 +97,9 @@ export class VaultAdapter implements VaultPort {
       ) {
         cb(file.path);
       }
-    });
-    this.registerEvent(eventRef);
+    };
+    this.registerEvent(this.app.vault.on('modify', handler));
+    this.registerEvent(this.app.vault.on('create', handler));
   }
 
   onNoteDeleted(cb: (path: string) => void): void {
