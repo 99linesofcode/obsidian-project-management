@@ -7,6 +7,7 @@ export interface ProjectManagementSettings {
   doneOptionName: string;
   debounceSeconds: number;
   taskTemplatePath: string;
+  todoTemplatePath: string;
 }
 
 export const DEFAULT_SETTINGS: ProjectManagementSettings = {
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   doneOptionName: 'Shipped',
   debounceSeconds: 2,
   taskTemplatePath: 'Templates/Task.md',
+  todoTemplatePath: 'Templates/ToDo.md',
 };
 
 export class ProjectManagementSettingTab extends PluginSettingTab {
@@ -98,6 +100,21 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.taskTemplatePath)
           .onChange(async (value) => {
             this.plugin.settings.taskTemplatePath = value.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName('To-do template')
+      .setDesc(
+        'Vault path to the template new to-do notes render from. {{date}} and {{time}} resolve to the sync stamp; affiliation, status and completed are filled by the sync. Falls back to the built-in frontmatter when the file is missing.',
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('Templates/ToDo.md')
+          .setValue(this.plugin.settings.todoTemplatePath)
+          .onChange(async (value) => {
+            this.plugin.settings.todoTemplatePath = value.trim();
             await this.plugin.saveSettings();
           }),
       );

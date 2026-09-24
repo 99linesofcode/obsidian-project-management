@@ -23,6 +23,12 @@ class FakeVault implements VaultPort {
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
   async renameNote(): Promise<void> {}
+  async listNotesInFolder(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async trashNote(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   onNoteChanged(): void {}
   onNoteDeleted(): void {}
 }

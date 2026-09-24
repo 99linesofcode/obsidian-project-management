@@ -4,7 +4,10 @@ import {
   type ToDoNoteContext,
   type ToDoNoteInput,
 } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
-import { ToDoNoteParser } from '../../../src/Domain/Notes/ToDoNoteParser.js';
+import {
+  ToDoNoteParser,
+  withToDoStatus,
+} from '../../../src/Domain/Notes/ToDoNoteParser.js';
 
 const input: ToDoNoteInput = {
   title: 'Fix the bug',
@@ -266,5 +269,53 @@ describe('ToDoNoteParser', () => {
 
     // Then — it is not recognised as a to-do note
     expect(parsed).toBeNull();
+  });
+});
+
+describe('withToDoStatus', () => {
+  const settled = [
+    '---',
+    'categories: ["[[Todos.base|Todos]]"]',
+    'affiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]"]',
+    'status: open',
+    'completed:',
+    'tags: []',
+    '---',
+    'Body stays put.',
+  ].join('\n');
+
+  it('rewrites status and completed, preserving the other fields and body', () => {
+    // Given — an open to-do note
+
+    // When — it is marked completed with a full ISO stamp
+    const updated = withToDoStatus(
+      settled,
+      'completed',
+      '2026-09-18T13:00:00Z',
+    );
+
+    // Then — only status and completed change
+    const parsed = ToDoNoteParser.parse(updated);
+    expect(parsed?.status).toBe('completed');
+    expect(parsed?.completed).toBe('2026-09-18T13:00:00Z');
+    expect(updated).toContain('tags: []');
+    expect(updated).toContain('Body stays put.');
+  });
+
+  it('empties the completed stamp when reopening', () => {
+    // Given — a completed to-do note
+    const completed = withToDoStatus(
+      settled,
+      'completed',
+      '2026-09-18T13:00:00Z',
+    );
+
+    // When — it is reopened
+    const reopened = withToDoStatus(completed, 'open', null);
+
+    // Then — the status is open and the stamp is cleared
+    const parsed = ToDoNoteParser.parse(reopened);
+    expect(parsed?.status).toBe('open');
+    expect(parsed?.completed).toBeNull();
   });
 });

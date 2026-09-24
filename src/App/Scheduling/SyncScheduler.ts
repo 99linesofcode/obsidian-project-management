@@ -1,6 +1,8 @@
 import { Component } from 'obsidian';
 import type { HandleDeletedNoteAction } from '../../Domain/Actions/HandleDeletedNoteAction.js';
+import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStatusAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
+import type { SyncChecklistAction } from '../../Domain/Actions/SyncChecklistAction.js';
 import type { SyncProjectAction } from '../../Domain/Actions/SyncProjectAction.js';
 import type { VaultPort } from '../../Domain/Ports/VaultPort.js';
 
@@ -30,6 +32,8 @@ export class SyncScheduler extends Component {
     projectNames: string[],
     private readonly intervalMs: number,
     private readonly vault: VaultPort,
+    private readonly syncChecklist: SyncChecklistAction,
+    private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     private readonly reconcileTask: ReconcileTaskAction,
     private readonly handleDeletedNote: HandleDeletedNoteAction,
     private readonly debounceMs: number,
@@ -54,7 +58,7 @@ export class SyncScheduler extends Component {
     this.vault.onNoteChanged((path) => {
       const projectName = this.projectNameFromPath(path);
       if (projectName) {
-        this.schedule('reconcile', projectName, path);
+        this.schedule(this.kindFor(path), projectName, path);
       }
     });
 
@@ -82,11 +86,17 @@ export class SyncScheduler extends Component {
     return segments[1] ?? null;
   }
 
+  // A to-do note change mirrors onto its parent task note; every other
+  // Projecten change goes through the reconcile path.
+  private kindFor(path: string): 'reconcile' | 'mirror' {
+    return path.includes('/todos/') ? 'mirror' : 'reconcile';
+  }
+
   // Debounces per project and per kind, so a modify and a delete for the same
   // project don't coalesce into one action; both still serialise on the same
   // per-project chain.
   private schedule(
-    kind: 'reconcile' | 'delete',
+    kind: 'reconcile' | 'delete' | 'mirror',
     projectName: string,
     path: string,
   ): void {
@@ -103,21 +113,43 @@ export class SyncScheduler extends Component {
   }
 
   private enqueue(
-    kind: 'reconcile' | 'delete',
+    kind: 'reconcile' | 'delete' | 'mirror',
     projectName: string,
     path: string,
   ): void {
     const previous = this.chains.get(projectName) ?? Promise.resolve();
-    const next = previous.then(() => {
-      if (kind === 'delete') {
-        return this.handleDeletedNote.execute({ notePath: path, projectName });
-      }
-      return this.reconcileTask.execute({
-        notePath: path,
-        projectName,
-        syncedAt: new Date().toISOString(),
-      });
-    });
+    const next = previous.then(() => this.run(kind, projectName, path));
     this.chains.set(projectName, next);
+  }
+
+  private async run(
+    kind: 'reconcile' | 'delete' | 'mirror',
+    projectName: string,
+    path: string,
+  ): Promise<void> {
+    const syncedAt = new Date().toISOString();
+    if (kind === 'delete') {
+      return this.handleDeletedNote.execute({ notePath: path, projectName });
+    }
+    if (kind === 'mirror') {
+      return this.mirrorTodoStatus.execute({ todoPath: path, syncedAt });
+    }
+    return this.reconcileTaskNote(path, projectName, syncedAt);
+  }
+
+  // A task note's checklist is synced first so the body the reconcile pushes
+  // carries the to-do links. The checklist sync may rewrite the note, which
+  // re-fires this trigger; that second pass is a no-op (the sync settles), so
+  // the chain always comes to rest. Any other Projecten note skips the
+  // checklist sync and reconciles directly.
+  private async reconcileTaskNote(
+    notePath: string,
+    projectName: string,
+    syncedAt: string,
+  ): Promise<void> {
+    if (notePath.includes('/taken/')) {
+      await this.syncChecklist.execute({ notePath, projectName, syncedAt });
+    }
+    await this.reconcileTask.execute({ notePath, projectName, syncedAt });
   }
 }

@@ -12,11 +12,13 @@ import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
+import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
 import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
+import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import {
@@ -154,6 +156,12 @@ export default class ProjectManagementPlugin extends Plugin {
       new AttachProjectAction(github),
     );
 
+    const syncChecklist = new SyncChecklistAction(
+      vault,
+      this.settings.todoTemplatePath,
+    );
+    const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
+
     const promoteIssue = new PromoteIssueAction(github, syncState, createTaskNote);
     const promoteToTask = new PromoteToTaskCommand(
       () => this.projectNames,
@@ -179,6 +187,8 @@ export default class ProjectManagementPlugin extends Plugin {
       [],
       this.settings.pollIntervalMinutes * 60 * 1000,
       vault,
+      syncChecklist,
+      mirrorTodoStatus,
       reconcileTask,
       handleDeletedNote,
       this.settings.debounceSeconds * 1000,

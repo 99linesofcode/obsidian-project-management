@@ -55,6 +55,22 @@ export class VaultAdapter implements VaultPort {
     }
   }
 
+  async listNotesInFolder(folder: string): Promise<string[]> {
+    const prefix = folder.endsWith('/') ? folder : `${folder}/`;
+    return this.app.vault
+      .getMarkdownFiles()
+      .filter((file) => file.path.startsWith(prefix))
+      .map((file) => file.path);
+  }
+
+  async trashNote(path: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (file instanceof TFile) {
+      // system: false keeps the file in the vault-internal .trash, recoverable.
+      await this.app.vault.trash(file, false);
+    }
+  }
+
   async findProjectNotes(): Promise<ProjectNoteData[]> {
     // Reads each markdown file's frontmatter cache (no full-file reads) and
     // keeps only the notes that declare a pm property.

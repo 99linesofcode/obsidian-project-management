@@ -34,6 +34,12 @@ class FakeVault implements VaultPort {
   async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async listNotesInFolder(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async trashNote(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   onNoteChanged(): void {
     throw new Error('not used in this test');
   }
