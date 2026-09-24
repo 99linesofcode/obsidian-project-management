@@ -3,6 +3,7 @@ import type ProjectManagementPlugin from '../../main.js';
 
 export interface ProjectManagementSettings {
   githubToken: string;
+  todoistToken: string;
   pollIntervalMinutes: number;
   doneOptionName: string;
   debounceSeconds: number;
@@ -12,6 +13,7 @@ export interface ProjectManagementSettings {
 
 export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   githubToken: '',
+  todoistToken: '',
   pollIntervalMinutes: 5,
   doneOptionName: 'Shipped',
   debounceSeconds: 5,
@@ -41,6 +43,20 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.githubToken)
           .onChange(async (value) => {
             this.plugin.settings.githubToken = value.trim();
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('Todoist token')
+      .setDesc('Personal API token used to talk to the Todoist API.')
+      .addText((text) => {
+        text.inputEl.type = 'password';
+        text
+          .setPlaceholder('your Todoist API token')
+          .setValue(this.plugin.settings.todoistToken)
+          .onChange(async (value) => {
+            this.plugin.settings.todoistToken = value.trim();
             await this.plugin.saveSettings();
           });
       });
