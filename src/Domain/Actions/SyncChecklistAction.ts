@@ -21,10 +21,9 @@ export interface SyncChecklistInput {
 
 // UC: keep a task note's markdown checklist and the project's vault-only to-do
 // notes in step. The checklist line is the source of truth: an unlinked line is
-// promoted to a to-do, a checked line completes its to-do, and removing the
-// line trashes the note (renaming an item deletes the old to-do and creates a
-// new one — the title is the identity). The action settles: its own rewrites
-// re-trigger it, and the second pass writes nothing.
+// promoted to a to-do, a checked line completes its to-do, a renamed line
+// renames its to-do, and removing the line trashes the note. The action
+// settles: its own rewrites re-trigger it, and the second pass writes nothing.
 export class SyncChecklistAction {
   constructor(
     private readonly vault: VaultPort,
@@ -42,20 +41,16 @@ export class SyncChecklistAction {
     const taskLink = taskLinkFromPath(input.notePath);
     const template = await this.readTemplate();
 
-    const promoted = await this.promoteUnlinked(
-      input,
-      taskLink,
-      template,
-      items,
-    );
-    if (promoted) {
+    const promoted = await this.promoteUnlinked(input, taskLink, template, items);
+    const relinked = await this.mirrorLinked(input, taskLink, template, items);
+
+    if (promoted || relinked) {
       await this.vault.writeNote(
         input.notePath,
         withBody(note.content, renderChecklist(body, items)),
       );
     }
 
-    await this.mirrorLinked(input, taskLink, template, items);
     await this.removeDropped(input, taskLink, items);
   }
 
@@ -93,21 +88,24 @@ export class SyncChecklistAction {
   }
 
   // A linked item mirrors onto its to-do: a missing note is re-created at the
-  // linked path (a dangling link is a to-do to restore, not to forget), and an
-  // existing one follows the checkbox. A to-do with nothing to change is left
+  // linked path (a dangling link is a to-do to restore, not to forget), a
+  // drifted filename is renamed to the item's slug, and an existing one follows
+  // the checkbox. Returns whether a rename changed a link, so the caller
+  // rewrites the parent body once. A to-do with nothing to change is left
   // alone — that is what lets the scheduler's echo settle.
   private async mirrorLinked(
     input: SyncChecklistInput,
     taskLink: string,
     template: string | null,
     items: ChecklistItem[],
-  ): Promise<void> {
+  ): Promise<boolean> {
+    let relinked = false;
+
     for (const item of items) {
       if (item.linkPath === undefined) {
         continue;
       }
-      const path = item.linkPath;
-      const note = await this.vault.getNoteByPath(path);
+      const note = await this.vault.getNoteByPath(item.linkPath);
 
       if (!note) {
         const created = ToDoNoteMapper.render(
@@ -115,7 +113,7 @@ export class SyncChecklistAction {
           { title: item.text, projectName: input.projectName, taskLink },
           toDoContext(input.syncedAt, item.checked),
         );
-        await this.vault.createNote(path, created.content);
+        await this.vault.createNote(item.linkPath, created.content);
         continue;
       }
 
@@ -123,18 +121,30 @@ export class SyncChecklistAction {
       if (!parsed) {
         continue;
       }
+
+      if (isDrifted(slugify(item.text), stemOf(item.linkPath))) {
+        const newPath = await this.freePath(
+          todoPath(input.projectName, item.text),
+        );
+        await this.vault.renameNote(item.linkPath, newPath);
+        item.linkPath = newPath;
+        relinked = true;
+      }
+
       if (item.checked && parsed.status !== 'completed') {
         await this.vault.writeNote(
-          path,
+          item.linkPath,
           withToDoStatus(note.content, 'completed', input.syncedAt),
         );
       } else if (!item.checked && parsed.status === 'completed') {
         await this.vault.writeNote(
-          path,
+          item.linkPath,
           withToDoStatus(note.content, 'open', null),
         );
       }
     }
+
+    return relinked;
   }
 
   // A to-do this task owns but no line links to is orphaned: move it to the
@@ -185,6 +195,22 @@ export class SyncChecklistAction {
 function taskLinkFromPath(notePath: string): string {
   const basename = notePath.split('/').pop() ?? '';
   return basename.replace(/\.md$/, '');
+}
+
+// A to-do's filename stem: its basename without the .md extension.
+function stemOf(path: string): string {
+  const basename = path.split('/').pop() ?? '';
+  return basename.replace(/\.md$/, '');
+}
+
+// Drift exists only when the item's slug matches neither the to-do's stem nor
+// the stem with a trailing -<number> collision suffix stripped. The suffix
+// tolerance is essential: a collision-named to-do (test-2.md for the second
+// "test" item) must not read as drift, or every pass renames it forever. The
+// rule is ambiguous by design — the text "test 2" and a collision suffix are
+// indistinguishable by slug — and that ambiguity is accepted.
+function isDrifted(slug: string, stem: string): boolean {
+  return slug !== stem && slug !== stem.replace(/-\d+$/, '');
 }
 
 function todoPath(projectName: string, title: string): string {
