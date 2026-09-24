@@ -4,6 +4,7 @@ import type { MirrorTodoStatusAction } from '../../Domain/Actions/MirrorTodoStat
 import type { ProbeProjectsAction } from '../../Domain/Actions/ProbeProjectsAction.js';
 import type { ReconcileArchiveStateAction } from '../../Domain/Actions/ReconcileArchiveStateAction.js';
 import type { ReconcileTaskAction } from '../../Domain/Actions/ReconcileTaskAction.js';
+import type { ReconcileTodoistProjectAction } from '../../Domain/Actions/ReconcileTodoistProjectAction.js';
 import type { RelinkRenamedTodoAction } from '../../Domain/Actions/RelinkRenamedTodoAction.js';
 import type { RelocateTaskStatusAction } from '../../Domain/Actions/RelocateTaskStatusAction.js';
 import type { SyncChecklistAction } from '../../Domain/Actions/SyncChecklistAction.js';
@@ -23,14 +24,17 @@ declare const window: {
 };
 
 // The work a trigger asks for. A rename carries both paths; a tick carries the
-// probed remote state and the location-derived archived flag; every other kind
+// project note's path, the location-derived archived flag, whether the project
+// has a probed GitHub state, and the probed remote state; every other kind
 // carries the single path that changed.
 type SyncTrigger =
   | { kind: 'reconcile' | 'delete' | 'mirror'; path: string }
   | { kind: 'renamed'; oldPath: string; newPath: string }
   | {
       kind: 'tick';
+      notePath: string;
       locationArchived: boolean;
+      hasGithub: boolean;
       closed: boolean;
       updatedAt: string;
       syncedAt: string;
@@ -52,6 +56,7 @@ export class SyncScheduler extends Component {
     private readonly syncProject: SyncProjectAction,
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileArchiveState: ReconcileArchiveStateAction,
+    private readonly reconcileTodoistProject: ReconcileTodoistProjectAction,
     private readonly watchArchivedProject: WatchArchivedProjectAction,
     private readonly syncState: SyncStatePort,
     private readonly intervalMs: number,
@@ -108,27 +113,36 @@ export class SyncScheduler extends Component {
   // archived projects are frozen but watched, so a new issue re-activates them.
   // The stored update advances only after a successful sync, so a failed sync
   // retries the board fetch on the next tick.
+  //
+  // Every discovered project gets a tick, not only the probed ones: a project
+  // without a GitHub attach still mirrors to Todoist (dt-03), so it is enqueued
+  // with hasGithub false and the GitHub half skips it.
   private async tick(): Promise<void> {
     const notes = await this.vault.findProjectNotes();
     const active = new Set<string>();
     const archived = new Set<string>();
+    const noteByProject = new Map<string, (typeof notes)[number]>();
     for (const note of notes) {
       (note.archived ? archived : active).add(note.projectName);
+      noteByProject.set(note.projectName, note);
     }
     const projectNames = [...new Set([...active, ...archived])];
 
     const states = await this.probeProjects.execute(projectNames);
 
     for (const projectName of projectNames) {
-      const state = states.get(projectName);
-      if (!state) {
+      const note = noteByProject.get(projectName);
+      if (!note) {
         continue;
       }
+      const state = states.get(projectName);
       this.enqueue(projectName, {
         kind: 'tick',
+        notePath: note.path,
         locationArchived: archived.has(projectName),
-        closed: state.closed,
-        updatedAt: state.updatedAt,
+        hasGithub: state !== undefined,
+        closed: state?.closed ?? false,
+        updatedAt: state?.updatedAt ?? '',
         syncedAt: new Date().toISOString(),
       });
     }
@@ -201,18 +215,38 @@ export class SyncScheduler extends Component {
     return this.reconcileTaskNote(trigger.path, projectName, syncedAt);
   }
 
-  // A tick reconciles the archive state first through the baseline merge (the
-  // vault wins a conflict), then routes by the project's location. An archived
-  // project is frozen — no issue reconcile, no board fetch — but its repository
-  // is watched: a cheap conditional read re-activates it when a new issue
-  // appears. A project whose board was closed is transitioned this tick and
-  // synced on the next one, once the probe sees the reopened board. The
-  // transition, the watch and the sync ride the same per-project chain, so they
+  // A tick runs the GitHub half and the Todoist half. The GitHub half reconciles
+  // the archive state first through the baseline merge (the vault wins a
+  // conflict), then routes by the project's location: an archived project is
+  // frozen — no issue reconcile, no board fetch — but its repository is
+  // watched, so a new issue re-activates it; a project whose board was closed
+  // is transitioned this tick and synced on the next one, once the probe sees
+  // the reopened board. The Todoist half then mirrors the project lifecycle
+  // (ensure, rename, archive/unarchive) and runs for every project, including
+  // archived ones and ones without a GitHub attach. It is isolated: a Todoist
+  // failure is caught so it can never break the GitHub half. The transition,
+  // the watch, the sync and the mirror ride the same per-project chain, so they
   // never interleave.
   private async runTick(
     projectName: string,
     trigger: Extract<SyncTrigger, { kind: 'tick' }>,
   ): Promise<void> {
+    try {
+      await this.runGithubHalf(projectName, trigger);
+    } finally {
+      await this.runTodoistHalf(projectName, trigger);
+    }
+  }
+
+  private async runGithubHalf(
+    projectName: string,
+    trigger: Extract<SyncTrigger, { kind: 'tick' }>,
+  ): Promise<void> {
+    // A project without a probed GitHub state has no board to reconcile; the
+    // Todoist half still mirrors it.
+    if (!trigger.hasGithub) {
+      return;
+    }
     await this.reconcileArchiveState.execute({
       projectName,
       locationArchived: trigger.locationArchived,
@@ -241,6 +275,25 @@ export class SyncScheduler extends Component {
     } catch {
       // A failed sync must not advance the stored update, so the next tick
       // sees the same updatedAt and retries the board fetch.
+    }
+  }
+
+  // The Todoist half of the tick: mirror the project's lifecycle. A failure is
+  // swallowed so the GitHub half's outcome is never affected; the next tick
+  // retries.
+  private async runTodoistHalf(
+    projectName: string,
+    trigger: Extract<SyncTrigger, { kind: 'tick' }>,
+  ): Promise<void> {
+    try {
+      await this.reconcileTodoistProject.execute({
+        projectName,
+        notePath: trigger.notePath,
+        locationArchived: trigger.locationArchived,
+        syncedAt: trigger.syncedAt,
+      });
+    } catch {
+      // A Todoist failure must never break the GitHub half.
     }
   }
 

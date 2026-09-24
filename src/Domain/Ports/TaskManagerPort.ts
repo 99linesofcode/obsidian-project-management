@@ -12,6 +12,11 @@ import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js'
 // Designed for the core, not to mimic the Todoist API.
 export interface TaskManagerPort {
   fetchProjects(): Promise<TodoistProjectData[]>;
+  // Fetches one project by id, or null when it no longer exists. The list
+  // endpoint omits archived projects, so this is the only way to read an
+  // archived project's state (and to tell a deleted anchor from an archived
+  // one) — the live probe found the list gap.
+  fetchProject(id: string): Promise<TodoistProjectData | null>;
   createProject(name: string): Promise<TodoistProjectData>;
   updateProject(id: string, name: string): Promise<void>;
   setProjectArchived(id: string, archived: boolean): Promise<void>;

@@ -124,6 +124,11 @@ class FakeSyncState implements SyncStatePort {
     this.watchSets.push({ projectName, state });
     this.watchStates.set(projectName, state);
   }
+
+  async getTodoistProjectState(): Promise<null> {
+    return null;
+  }
+  async setTodoistProjectState(): Promise<void> {}
 }
 
 class FakeProjectManagement implements ProjectManagementPort {

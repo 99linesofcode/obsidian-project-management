@@ -20,6 +20,7 @@ import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
 import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
 import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
+import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
@@ -32,6 +33,10 @@ import {
 } from './Infrastructure/GitHub/GitHubAdapter.js';
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
 import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
+import {
+  TodoistAdapter,
+  createTodoistTransport,
+} from './Infrastructure/Todoist/TodoistAdapter.js';
 import { PromoteToTaskCommand } from './App/Commands/PromoteToTaskCommand.js';
 import { PromoteCardToIssueCommand } from './App/Commands/PromoteCardToIssueCommand.js';
 
@@ -192,6 +197,17 @@ export default class ProjectManagementPlugin extends Plugin {
       reconcileArchiveState,
     );
 
+    // The Todoist half of the tick: the adapter is token-bound through its
+    // transport, so a missing token surfaces as a failed request, not a crash.
+    const todoist = new TodoistAdapter(
+      createTodoistTransport(this.settings.todoistToken),
+    );
+    const reconcileTodoistProject = new ReconcileTodoistProjectAction(
+      todoist,
+      vault,
+      syncState,
+    );
+
     const syncChecklist = new SyncChecklistAction(
       vault,
       this.settings.todoTemplatePath,
@@ -232,6 +248,7 @@ export default class ProjectManagementPlugin extends Plugin {
       syncProject,
       probeProjects,
       reconcileArchiveState,
+      reconcileTodoistProject,
       watchArchivedProject,
       syncState,
       this.settings.pollIntervalMinutes * 60 * 1000,

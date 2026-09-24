@@ -357,4 +357,63 @@ describe('SyncStateAdapter', () => {
       },
     });
   });
+
+  it('round-trips a Todoist project state under a namespaced key', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — a Todoist project state is set then read back
+    await adapter.setTodoistProjectState('Acme Widgets', {
+      sections: { Unshaped: 'S1', Shipped: 'S2' },
+      lastCompletedPoll: '2026-09-18T10:00:00Z',
+    });
+    const result = await adapter.getTodoistProjectState('Acme Widgets');
+
+    // Then — the state round-trips intact
+    expect(result).toEqual({
+      sections: { Unshaped: 'S1', Shipped: 'S2' },
+      lastCompletedPoll: '2026-09-18T10:00:00Z',
+    });
+  });
+
+  it('returns null for a project with no Todoist state', async () => {
+    // Given — an empty storage
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — an unknown project is read
+    const result = await adapter.getTodoistProjectState('Other Project');
+
+    // Then — null is returned, so the caller creates the record
+    expect(result).toBeNull();
+  });
+
+  it('keeps Todoist project states distinct from the other records', async () => {
+    // Given — an empty storage
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — a Todoist project state is written alongside a watch state
+    await adapter.setTodoistProjectState('Acme Widgets', {
+      sections: {},
+      lastCompletedPoll: '2026-09-18T10:00:00Z',
+    });
+    await adapter.setWatchState('Acme Widgets', {
+      etag: 'W/"abc"',
+      cursor: '2026-09-18T10:00:00Z',
+    });
+
+    // Then — each lives under its own namespaced key
+    expect(snapshot()).toEqual({
+      'todoistProject.Acme Widgets': {
+        sections: {},
+        lastCompletedPoll: '2026-09-18T10:00:00Z',
+      },
+      'watch.Acme Widgets': {
+        etag: 'W/"abc"',
+        cursor: '2026-09-18T10:00:00Z',
+      },
+    });
+  });
 });
