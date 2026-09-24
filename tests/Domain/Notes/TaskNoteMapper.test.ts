@@ -85,3 +85,101 @@ describe('TaskNoteMapper', () => {
     expect(second.path).toBe(first.path);
   });
 });
+
+describe('TaskNoteMapper.render', () => {
+  // The user's template: empty sync fields the plugin fills, vault-owned
+  // fields it keeps, and a {{date}} placeholder for the created date.
+  const template = [
+    '---',
+    'affiliation: []',
+    'url:',
+    'status:',
+    'synced:',
+    'created: {{date}}',
+    'categories:',
+    '  - "[[Tasks.base|Tasks]]"',
+    'tags: []',
+    '---',
+  ].join('\n');
+
+  it('renders the template frontmatter, filling the sync fields', () => {
+    // Given — a template with empty sync fields and vault-owned fields
+
+    // When — the task is rendered through the template
+    const { content } = TaskNoteMapper.render(template, task, context);
+
+    // Then — the sync fields are filled, the vault fields kept, the body appended
+    expect(content).toBe(
+      [
+        '---',
+        'affiliation: ["[[Acme Widgets]]"]',
+        'url: https://github.com/acme/widgets/issues/42',
+        'status: Building',
+        'synced: 2026-09-18T12:00:00Z',
+        'created: 2026-09-18',
+        'categories:',
+        '  - "[[Tasks.base|Tasks]]"',
+        'tags: []',
+        '---',
+        'The bug happens when the widget is resized.',
+      ].join('\n'),
+    );
+  });
+
+  it('replaces {{time}} with the sync time', () => {
+    // Given — a template that stamps both date and time on a kept field
+    const stamped = [
+      '---',
+      'created: {{date}} {{time}}',
+      '---',
+    ].join('\n');
+
+    // When — the task is rendered through the template
+    const { content } = TaskNoteMapper.render(stamped, task, context);
+
+    // Then — the placeholder resolves to the sync date and time
+    expect(content).toContain('created: 2026-09-18 12:00');
+  });
+
+  it('appends sync fields the template does not define', () => {
+    // Given — a template that only carries status and created
+    const minimal = ['---', 'status:', 'created: {{date}}', '---'].join('\n');
+
+    // When — the task is rendered through the template
+    const { content } = TaskNoteMapper.render(minimal, task, context);
+
+    // Then — the missing sync fields are appended to the frontmatter
+    expect(content).toBe(
+      [
+        '---',
+        'status: Building',
+        'created: 2026-09-18',
+        'url: https://github.com/acme/widgets/issues/42',
+        'synced: 2026-09-18T12:00:00Z',
+        'affiliation: ["[[Acme Widgets]]"]',
+        '---',
+        'The bug happens when the widget is resized.',
+      ].join('\n'),
+    );
+  });
+
+  it('falls back to the built-in frontmatter when the template has none', () => {
+    // Given — a template without a frontmatter block
+
+    // When — the task is rendered through it
+    const { content } = TaskNoteMapper.render('no frontmatter here', task, context);
+
+    // Then — the output equals the built-in mapping
+    expect(content).toBe(TaskNoteMapper.map(task, context).content);
+  });
+
+  it('falls back to the built-in frontmatter when no template is given', () => {
+    // Given — no template (file missing or not configured)
+
+    // When — the task is rendered without one
+    const { content } = TaskNoteMapper.render(null, task, context);
+
+    // Then — the output equals the built-in mapping
+    expect(content).toBe(TaskNoteMapper.map(task, context).content);
+  });
+});

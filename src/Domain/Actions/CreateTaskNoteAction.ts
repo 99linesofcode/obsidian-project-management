@@ -19,10 +19,12 @@ export class CreateTaskNoteAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
+    private readonly taskTemplatePath: string,
   ) {}
 
   async execute(input: CreateTaskNoteInput): Promise<void> {
-    const { path, content } = TaskNoteMapper.map(input.task, {
+    const template = await this.readTemplate();
+    const { path, content } = TaskNoteMapper.render(template, input.task, {
       projectName: input.projectName,
       syncedAt: input.syncedAt,
       statusName: input.statusName,
@@ -45,5 +47,12 @@ export class CreateTaskNoteAction {
       lastSyncedTitle: input.task.title,
     };
     await this.syncState.set(status);
+  }
+
+  // The template note's content, or null when it does not exist — render
+  // falls back to the built-in frontmatter.
+  private async readTemplate(): Promise<string | null> {
+    const note = await this.vault.getNoteByPath(this.taskTemplatePath);
+    return note?.content ?? null;
   }
 }

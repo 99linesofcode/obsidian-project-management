@@ -10,14 +10,16 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 // Fakes at the ports: record what the action asked for, so the action's own
 // behaviour (create + record, or no-op) is what's under test.
 class FakeVault implements VaultPort {
-  existing: { content: string } | null = null;
+  notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
 
-  async getNoteByPath(): Promise<{ content: string } | null> {
-    return this.existing;
+  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+    const content = this.notes.get(path);
+    return content === undefined ? null : { content };
   }
 
   async createNote(path: string, content: string): Promise<void> {
+    this.notes.set(path, content);
     this.created.push({ path, content });
   }
 
@@ -93,12 +95,27 @@ const task: TaskData = {
   labels: [],
 };
 
+const templatePath = 'Templates/Task.md';
+
+const template = [
+  '---',
+  'affiliation: []',
+  'url:',
+  'status:',
+  'synced:',
+  'created: {{date}}',
+  'categories:',
+  '  - "[[Tasks.base|Tasks]]"',
+  'tags: []',
+  '---',
+].join('\n');
+
 describe('CreateTaskNoteAction', () => {
   it('creates the note and writes the status record', async () => {
     // Given — a vault with no existing note and an empty sync state
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    const action = new CreateTaskNoteAction(vault, syncState);
+    const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
     // When — the action materialises the task note
     await action.execute({
@@ -129,12 +146,64 @@ describe('CreateTaskNoteAction', () => {
     ]);
   });
 
+  it('renders the note from the vault template', async () => {
+    // Given — a vault holding the task template
+    const vault = new FakeVault();
+    vault.notes.set(templatePath, template);
+    const syncState = new FakeSyncState();
+    const action = new CreateTaskNoteAction(vault, syncState, templatePath);
+
+    // When — the action materialises the task note
+    await action.execute({
+      task,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'Building',
+    });
+
+    // Then — the note content is the rendered template
+    const { path, content } = TaskNoteMapper.render(template, task, {
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'Building',
+    });
+    expect(vault.created).toEqual([{ path, content }]);
+  });
+
+  it('falls back to the built-in frontmatter when the template is missing', async () => {
+    // Given — a vault without the template note
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const action = new CreateTaskNoteAction(vault, syncState, templatePath);
+
+    // When — the action materialises the task note
+    await action.execute({
+      task,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'Building',
+    });
+
+    // Then — the note content is the built-in mapping
+    const { path, content } = TaskNoteMapper.map(task, {
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'Building',
+    });
+    expect(vault.created).toEqual([{ path, content }]);
+  });
+
   it('is a no-op when the note already exists', async () => {
     // Given — a vault that already holds the note
     const vault = new FakeVault();
-    vault.existing = { content: 'already there' };
+    const { path } = TaskNoteMapper.map(task, {
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+      statusName: 'Building',
+    });
+    vault.notes.set(path, 'already there');
     const syncState = new FakeSyncState();
-    const action = new CreateTaskNoteAction(vault, syncState);
+    const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
     // When — the action runs
     await action.execute({

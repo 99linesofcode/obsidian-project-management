@@ -181,13 +181,18 @@ function makeAction(
   syncState: FakeSyncState,
   projectManagement: FakeProjectManagement,
 ) {
-  const createTaskNote = new CreateTaskNoteAction(vault, syncState);
+  const createTaskNote = new CreateTaskNoteAction(
+    vault,
+    syncState,
+    'Templates/Task.md',
+  );
   const boardStatus = new BoardStatusAction(syncState, projectManagement);
   return new ApplyRemoteChangeAction(
     vault,
     syncState,
     createTaskNote,
     boardStatus,
+    'Templates/Task.md',
   );
 }
 
@@ -282,6 +287,42 @@ describe('ApplyRemoteChangeAction', () => {
     // And a status record is written
     expect(syncState.setCalls).toHaveLength(1);
     expect(syncState.setCalls[0]!.notePath).toBe(path);
+  });
+
+  it('rewrites the note through the template on a remote change', async () => {
+    // Given — a synced note and a vault holding the task template
+    const vault = new FakeVault();
+    const template = [
+      '---',
+      'affiliation: []',
+      'url:',
+      'status:',
+      'synced:',
+      'created: {{date}}',
+      'categories:',
+      '  - "[[Tasks.base|Tasks]]"',
+      'tags: []',
+      '---',
+    ].join('\n');
+    vault.notes.set('Templates/Task.md', template);
+    const syncState = new FakeSyncState();
+    const status = makeStatus();
+    syncState.statuses.set(task.url, status);
+    const { path, content } = TaskNoteMapper.map(task, context);
+    vault.notes.set(path, content);
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
+    const changed: TaskData = {
+      ...task,
+      body: 'The bug now also happens on resize.',
+      updatedAt: '2026-09-18T11:00:00Z',
+    };
+
+    // When — the remote change is applied
+    await action.execute({ task: changed, ...context });
+
+    // Then — the note is rewritten with the rendered template content
+    const { content: newContent } = TaskNoteMapper.render(template, changed, context);
+    expect(vault.written).toEqual([{ path, content: newContent }]);
   });
 
   it('mirrors a remote status flip onto the board', async () => {
