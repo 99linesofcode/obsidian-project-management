@@ -169,6 +169,23 @@ async function main() {
       record('section name collision', 'ok', 'rejected as expected');
     }
 
+    // --- Section rename (t3 lane rename) ----------------------------------
+    // A lane rename keeps its section: the projection renames the section in
+    // place rather than creating a duplicate beside the stale one.
+    await run('updateSection (rename)', () =>
+      adapter.updateSection(section2?.id, 'Probe lane 2 renamed'),
+    );
+    await run('updateSection (renamed name visible)', async () => {
+      const sections = await adapter.fetchSections(projectId);
+      const renamed = sections.find(
+        (candidate) => candidate.id === section2?.id,
+      );
+      if (renamed?.name !== 'Probe lane 2 renamed') {
+        throw new Error('section rename not visible in fetchSections');
+      }
+      return renamed.name;
+    });
+
     // --- Tasks ------------------------------------------------------------
     const task = await run('createTask (top-level, sectioned)', () =>
       adapter.createTask({
