@@ -170,7 +170,7 @@ const task: TaskData = {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-        statusName: 'Building',
+  statusName: 'Building',
 };
 
 function makeStatus(overrides: Partial<Status> = {}): Status {
@@ -332,7 +332,11 @@ describe('ApplyRemoteChangeAction', () => {
     await action.execute({ task: changed, ...context });
 
     // Then — the note is rewritten with the rendered template content
-    const { content: newContent } = TaskNoteMapper.render(template, changed, context);
+    const { content: newContent } = TaskNoteMapper.render(
+      template,
+      changed,
+      context,
+    );
     expect(vault.written).toEqual([{ path, content: newContent }]);
   });
 

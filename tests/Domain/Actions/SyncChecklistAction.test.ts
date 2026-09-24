@@ -345,9 +345,7 @@ describe('SyncChecklistAction', () => {
 
     // Then — the rename lands on the next free slug and the line follows
     const suffixed = 'Projecten/Acme Widgets/todos/fix-the-bug-2.md';
-    expect(vault.renamed).toEqual([
-      { oldPath: stalePath, newPath: suffixed },
-    ]);
+    expect(vault.renamed).toEqual([{ oldPath: stalePath, newPath: suffixed }]);
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
       `- [ ] [[${suffixed}|Fix the bug]]`,
     );

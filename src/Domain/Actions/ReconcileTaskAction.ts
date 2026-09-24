@@ -94,7 +94,12 @@ export class ReconcileTaskAction {
         title: titleChanged ? currentTitle : status.lastSyncedTitle,
         body: parsed.body,
       });
-      await this.refreshBaseline(status, updated, input.notePath, input.projectName);
+      await this.refreshBaseline(
+        status,
+        updated,
+        input.notePath,
+        input.projectName,
+      );
     } else if (verdict.body === 'pull') {
       await this.applyRemoteChange.execute({
         task: remote,
@@ -162,10 +167,7 @@ export class ReconcileTaskAction {
       notePath,
       lastSyncedBodyHash: hash(updated.body),
       lastSyncedRemoteUpdatedAt: updated.updatedAt,
-      lastSyncedStatus: await this.statusNameFor(
-        updated.state,
-        projectName,
-      ),
+      lastSyncedStatus: await this.statusNameFor(updated.state, projectName),
       lastSyncedTitle: updated.title,
     });
   }

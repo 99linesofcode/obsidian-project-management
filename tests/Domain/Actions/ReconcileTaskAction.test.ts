@@ -101,10 +101,10 @@ class FakeSyncState implements SyncStatePort {
       statusFieldId: 'PVTF_456',
       statusOptions: [
         { id: 'PVTSSF_1', name: 'Unshaped' },
-      { id: 'PVTSSF_2', name: 'Shaping' },
-      { id: 'PVTSSF_3', name: 'Shaped' },
-      { id: 'PVTSSF_4', name: 'Building' },
-      { id: 'PVTSSF_5', name: 'Shipped' },
+        { id: 'PVTSSF_2', name: 'Shaping' },
+        { id: 'PVTSSF_3', name: 'Shaped' },
+        { id: 'PVTSSF_4', name: 'Building' },
+        { id: 'PVTSSF_5', name: 'Shipped' },
       ],
     };
   }
@@ -501,9 +501,9 @@ describe('ReconcileTaskAction', () => {
 
     // Then — the remote change is applied (the note is rewritten with the new status)
     const { content: closedContent } = TaskNoteMapper.map(
-        { ...task, state: 'closed' },
-        { ...context, statusName: 'Shipped' },
-      );
+      { ...task, state: 'closed' },
+      { ...context, statusName: 'Shipped' },
+    );
     expect(vault.written).toEqual([{ path, content: closedContent }]);
     // And the baseline mirrors the remote status
     expect(syncState.setCalls).toHaveLength(1);
@@ -517,7 +517,10 @@ describe('ReconcileTaskAction', () => {
     syncState.statuses.set(task.url, makeStatus());
     vault.notes.set(
       path,
-      TaskNoteMapper.map({ ...task, state: 'closed' }, { ...context, statusName: 'Shipped' }).content,
+      TaskNoteMapper.map(
+        { ...task, state: 'closed' },
+        { ...context, statusName: 'Shipped' },
+      ).content,
     );
     const projectManagement = new FakeProjectManagement();
     projectManagement.updated = {
@@ -548,7 +551,10 @@ describe('ReconcileTaskAction', () => {
     syncState.statuses.set(task.url, makeStatus());
     vault.notes.set(
       path,
-      TaskNoteMapper.map({ ...task, state: 'closed' }, { ...context, statusName: 'Shipped' }).content,
+      TaskNoteMapper.map(
+        { ...task, state: 'closed' },
+        { ...context, statusName: 'Shipped' },
+      ).content,
     );
     const projectManagement = new FakeProjectManagement();
     projectManagement.remote = {

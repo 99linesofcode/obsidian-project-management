@@ -156,12 +156,12 @@ describe('HandleDeletedNoteAction', () => {
       projectNodeId: 'PVT_123',
       statusFieldId: 'PVTF_456',
       statusOptions: [
-    { id: 'PVTSSF_1', name: 'Unshaped' },
-      { id: 'PVTSSF_2', name: 'Shaping' },
-      { id: 'PVTSSF_3', name: 'Shaped' },
-      { id: 'PVTSSF_4', name: 'Building' },
-      { id: 'PVTSSF_5', name: 'Shipped' },
-  ],
+        { id: 'PVTSSF_1', name: 'Unshaped' },
+        { id: 'PVTSSF_2', name: 'Shaping' },
+        { id: 'PVTSSF_3', name: 'Shaped' },
+        { id: 'PVTSSF_4', name: 'Building' },
+        { id: 'PVTSSF_5', name: 'Shipped' },
+      ],
     };
     const action = makeAction(syncState, projectManagement);
 

@@ -41,7 +41,12 @@ export class SyncChecklistAction {
     const taskLink = taskLinkFromPath(input.notePath);
     const template = await this.readTemplate();
 
-    const promoted = await this.promoteUnlinked(input, taskLink, template, items);
+    const promoted = await this.promoteUnlinked(
+      input,
+      taskLink,
+      template,
+      items,
+    );
     const relinked = await this.mirrorLinked(input, taskLink, template, items);
 
     if (promoted || relinked) {

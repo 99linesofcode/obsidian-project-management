@@ -196,7 +196,7 @@ class FakeProjectManagement implements ProjectManagementPort {
 const context = {
   projectName: 'Acme Widgets',
   syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
+  statusName: 'Building',
 };
 
 const taskA: TaskData = {
@@ -228,10 +228,10 @@ const identity: ProjectIdentityData = {
   statusFieldId: 'PVTF_456',
   statusOptions: [
     { id: 'PVTSSF_1', name: 'Unshaped' },
-      { id: 'PVTSSF_2', name: 'Shaping' },
-      { id: 'PVTSSF_3', name: 'Shaped' },
-      { id: 'PVTSSF_4', name: 'Building' },
-      { id: 'PVTSSF_5', name: 'Shipped' },
+    { id: 'PVTSSF_2', name: 'Shaping' },
+    { id: 'PVTSSF_3', name: 'Shaped' },
+    { id: 'PVTSSF_4', name: 'Building' },
+    { id: 'PVTSSF_5', name: 'Shipped' },
   ],
 };
 
@@ -332,7 +332,9 @@ describe('SyncProjectAction', () => {
 
     // Then — only the typed task materializes; the untyped one is ignored
     expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(TaskNoteMapper.map(typed, context).path);
+    expect(vault.created[0]!.path).toBe(
+      TaskNoteMapper.map(typed, context).path,
+    );
     expect(vault.written).toHaveLength(0);
   });
 

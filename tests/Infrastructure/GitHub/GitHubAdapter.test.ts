@@ -187,7 +187,10 @@ describe('GitHubAdapter', () => {
     expect(result).not.toBeNull();
     expect(result!.statusFieldId).toBe('PVTF_456');
     expect(result!.statusOptions).toHaveLength(2);
-    expect(result!.statusOptions[0]).toEqual({ id: 'PVTSSF_1', name: 'Unshaped' });
+    expect(result!.statusOptions[0]).toEqual({
+      id: 'PVTSSF_1',
+      name: 'Unshaped',
+    });
   });
 
   it('throws when the project has no Status field', async () => {

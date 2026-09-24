@@ -183,10 +183,7 @@ describe('ApplyBoardChangeAction', () => {
     // Given — a tracked issue whose card moved to Unshaped while the baseline
     // says Building; both lanes are non-done, so the issue is untouched
     const vault = new FakeVault();
-    vault.notes.set(
-      notePath,
-      withStatus(noteContent, 'Building'),
-    );
+    vault.notes.set(notePath, withStatus(noteContent, 'Building'));
     const syncState = new FakeSyncState();
     syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'Building' }));
     const projectManagement = new FakeProjectManagement();
@@ -249,10 +246,7 @@ describe('ApplyBoardChangeAction', () => {
     const vault = new FakeVault();
     vault.notes.set(notePath, withStatus(noteContent, 'done'));
     const syncState = new FakeSyncState();
-    syncState.statuses.set(
-      url,
-      makeStatus({ lastSyncedStatus: 'Shipped' }),
-    );
+    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'Shipped' }));
     const projectManagement = new FakeProjectManagement();
     projectManagement.updated = { ...projectManagement.updated, state: 'open' };
     const action = makeAction(vault, syncState, projectManagement);
@@ -279,10 +273,7 @@ describe('ApplyBoardChangeAction', () => {
     const vault = new FakeVault();
     vault.notes.set(notePath, withStatus(noteContent, 'Shipped'));
     const syncState = new FakeSyncState();
-    syncState.statuses.set(
-      url,
-      makeStatus({ lastSyncedStatus: 'Shipped' }),
-    );
+    syncState.statuses.set(url, makeStatus({ lastSyncedStatus: 'Shipped' }));
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
 

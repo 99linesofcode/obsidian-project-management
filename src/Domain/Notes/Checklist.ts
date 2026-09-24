@@ -153,7 +153,9 @@ function indentDepth(indent: string): number {
 
 function renderItem(item: ChecklistItem): string {
   const content =
-    item.linkPath === undefined ? item.text : `[[${item.linkPath}|${item.text}]]`;
+    item.linkPath === undefined
+      ? item.text
+      : `[[${item.linkPath}|${item.text}]]`;
   return renderLine(item.depth, item.checked, content);
 }
 

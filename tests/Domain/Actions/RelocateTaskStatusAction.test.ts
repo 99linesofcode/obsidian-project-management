@@ -60,7 +60,9 @@ describe('RelocateTaskStatusAction', () => {
     await action.execute({ oldPath, newPath });
 
     // Then — the record is saved under the new path, its fields intact
-    expect(syncState.saved).toEqual([{ ...record(oldPath), notePath: newPath }]);
+    expect(syncState.saved).toEqual([
+      { ...record(oldPath), notePath: newPath },
+    ]);
   });
 
   it('does nothing when no record matches the old path', async () => {
