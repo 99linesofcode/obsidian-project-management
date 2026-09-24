@@ -1,5 +1,6 @@
 import type { ArchiveBaselineData } from '../DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
+import type { TodoistProjectStateData } from '../DataTransferObjects/TodoistProjectStateData.js';
 import type { WatchStateData } from '../DataTransferObjects/WatchStateData.js';
 import type { Status } from '../Models/Status.js';
 
@@ -8,9 +9,10 @@ import type { Status } from '../Models/Status.js';
 // is gone), remove it, persist a project's resolved identities, remember the
 // last remote updatedAt the poll saw for a project (the board-fetch gate),
 // remember the last reconciled archive observation (the three-way merge
-// baseline), and remember an archived project's repository watch (the ETag and
-// newest-issue cursor). The data.json-backed implementation lives in
-// Infrastructure.
+// baseline), remember an archived project's repository watch (the ETag and
+// newest-issue cursor), and remember a project's Todoist bookkeeping (its lane
+// section map and completed-since cursor). The data.json-backed implementation
+// lives in Infrastructure.
 export interface SyncStatePort {
   get(url: string): Promise<Status | null>;
   set(status: Status): Promise<void>;
@@ -31,4 +33,11 @@ export interface SyncStatePort {
   ): Promise<void>;
   getWatchState(projectName: string): Promise<WatchStateData>;
   setWatchState(projectName: string, state: WatchStateData): Promise<void>;
+  getTodoistProjectState(
+    projectName: string,
+  ): Promise<TodoistProjectStateData | null>;
+  setTodoistProjectState(
+    projectName: string,
+    state: TodoistProjectStateData,
+  ): Promise<void>;
 }

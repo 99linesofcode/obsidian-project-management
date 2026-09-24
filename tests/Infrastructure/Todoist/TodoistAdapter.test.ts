@@ -117,6 +117,34 @@ describe('TodoistAdapter', () => {
     expect(calls[1]!.path).toBe('/projects?cursor=abc');
   });
 
+  it('fetches a single project by id, archived state included', async () => {
+    // Given — a single-project response for an archived project
+    const { transport, calls } = fakeTransport([
+      { status: 200, json: project({ id: 'P2', is_archived: true }) },
+    ]);
+    const adapter = new TodoistAdapter(transport);
+
+    // When — the adapter fetches the project by id
+    const result = await adapter.fetchProject('P2');
+
+    // Then — the archived project is mapped
+    expect(result).toEqual({ id: 'P2', name: 'Widgets', isArchived: true });
+    // And the GET targeted the project
+    expect(calls[0]).toEqual({ method: 'GET', path: '/projects/P2', body: '' });
+  });
+
+  it('returns null when a project no longer exists', async () => {
+    // Given — a 404 for a deleted project
+    const { transport } = fakeTransport([{ status: 404, json: null }]);
+    const adapter = new TodoistAdapter(transport);
+
+    // When — the adapter fetches the missing project
+    const result = await adapter.fetchProject('P-gone');
+
+    // Then — null is returned, so the caller can re-resolve by name
+    expect(result).toBeNull();
+  });
+
   it('creates a project and maps the created record', async () => {
     // Given — a create response
     const { transport, calls } = fakeTransport([

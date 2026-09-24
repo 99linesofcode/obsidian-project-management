@@ -1,5 +1,6 @@
 import type { ArchiveBaselineData } from '../../Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { TodoistProjectStateData } from '../../Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { WatchStateData } from '../../Domain/DataTransferObjects/WatchStateData.js';
 import type { Status } from '../../Domain/Models/Status.js';
 import type { SyncStatePort } from '../../Domain/Ports/SyncStatePort.js';
@@ -17,8 +18,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // Implements the sync state port against a flat key/value store. Records are
 // namespaced by kind: status.<url>, identity.<projectName>,
-// projectUpdate.<projectName>, archiveBaseline.<projectName> and
-// watch.<projectName>.
+// projectUpdate.<projectName>, archiveBaseline.<projectName>,
+// watch.<projectName> and todoistProject.<projectName>.
 export class SyncStateAdapter implements SyncStatePort {
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -154,6 +155,41 @@ export class SyncStateAdapter implements SyncStatePort {
     return {
       etag: typeof raw.etag === 'string' ? raw.etag : null,
       cursor: typeof raw.cursor === 'string' ? raw.cursor : null,
+    };
+  }
+
+  async getTodoistProjectState(
+    projectName: string,
+  ): Promise<TodoistProjectStateData | null> {
+    const data = await this.storage.load();
+    const raw = data[`todoistProject.${projectName}`];
+    return isRecord(raw) ? this.mapTodoistProjectState(raw) : null;
+  }
+
+  async setTodoistProjectState(
+    projectName: string,
+    state: TodoistProjectStateData,
+  ): Promise<void> {
+    const data = await this.storage.load();
+    data[`todoistProject.${projectName}`] = state;
+    await this.storage.save(data);
+  }
+
+  private mapTodoistProjectState(
+    raw: Record<string, unknown>,
+  ): TodoistProjectStateData {
+    const sections: Record<string, string> = {};
+    if (isRecord(raw.sections)) {
+      for (const [name, id] of Object.entries(raw.sections)) {
+        if (typeof id === 'string') {
+          sections[name] = id;
+        }
+      }
+    }
+    return {
+      sections,
+      lastCompletedPoll:
+        typeof raw.lastCompletedPoll === 'string' ? raw.lastCompletedPoll : '',
     };
   }
 

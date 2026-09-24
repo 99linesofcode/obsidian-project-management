@@ -72,6 +72,16 @@ export class TodoistAdapter implements TaskManagerPort {
     return raw.map((project) => this.mapProject(project));
   }
 
+  // The list endpoint omits archived projects, so a single fetch is the only
+  // way to read one. A 404 means the project is gone (deleted), not archived.
+  async fetchProject(id: string): Promise<TodoistProjectData | null> {
+    const response = await this.transport.get(`/projects/${id}`);
+    if (response.status === 404) {
+      return null;
+    }
+    return this.mapProject(this.requireRecord(response, 'fetch project'));
+  }
+
   async createProject(name: string): Promise<TodoistProjectData> {
     const response = await this.transport.post(
       '/projects',

@@ -82,6 +82,11 @@ class FakeSyncState implements SyncStatePort {
 
   async setWatchState(): Promise<void> {}
 
+  async getTodoistProjectState(): Promise<null> {
+    return null;
+  }
+  async setTodoistProjectState(): Promise<void> {}
+
   async setArchiveBaseline(): Promise<void> {}
   statuses = new Map<string, Status>();
   identity: ProjectIdentityData | null = null;

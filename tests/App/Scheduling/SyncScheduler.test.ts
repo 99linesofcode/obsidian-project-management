@@ -19,6 +19,7 @@ import { SyncScheduler } from '../../../src/App/Scheduling/SyncScheduler.js';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
 import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
 import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
+import type { ReconcileTodoistProjectAction } from '../../../src/Domain/Actions/ReconcileTodoistProjectAction.js';
 import type { WatchArchivedProjectAction } from '../../../src/Domain/Actions/WatchArchivedProjectAction.js';
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
@@ -129,6 +130,11 @@ class FakeSyncState implements SyncStatePort {
   }
 
   async setWatchState(): Promise<void> {}
+
+  async getTodoistProjectState(): Promise<null> {
+    return null;
+  }
+  async setTodoistProjectState(): Promise<void> {}
 
   async setArchiveBaseline(): Promise<void> {}
 }
@@ -307,6 +313,12 @@ const idleReconcileArchive = {
   execute: async () => {},
 } as unknown as ReconcileArchiveStateAction;
 
+// A Todoist project-mirror fake for tests that never tick; tick tests that
+// exercise the Todoist half supply their own recording fake.
+const idleReconcileTodoist = {
+  execute: async () => {},
+} as unknown as ReconcileTodoistProjectAction;
+
 // A watch fake for tests that never tick; tick tests that exercise the watch
 // supply their own recording fake.
 function idleWatch(): WatchArchivedProjectAction {
@@ -401,12 +413,14 @@ function schedulerWith(overrides: {
   syncState: SyncStatePort;
   vault?: FakeVault | undefined;
   reconcileArchive?: ReconcileArchiveStateAction | undefined;
+  reconcileTodoist?: ReconcileTodoistProjectAction | undefined;
   watch?: WatchArchivedProjectAction | undefined;
 }): SyncScheduler {
   return new SyncScheduler(
     overrides.syncProject,
     overrides.probe,
     overrides.reconcileArchive ?? idleReconcileArchive,
+    overrides.reconcileTodoist ?? idleReconcileTodoist,
     overrides.watch ?? idleWatch(),
     overrides.syncState,
     60_000,
@@ -440,6 +454,7 @@ function tickHarness(options: {
   lastUpdate?: string;
   archived?: boolean;
   reconcileArchive?: ReconcileArchiveStateAction;
+  reconcileTodoist?: ReconcileTodoistProjectAction;
   watch?: WatchArchivedProjectAction;
 }): {
   scheduler: SyncScheduler;
@@ -487,6 +502,7 @@ function tickHarness(options: {
     syncState,
     vault,
     reconcileArchive: options.reconcileArchive,
+    reconcileTodoist: options.reconcileTodoist,
     watch: options.watch,
   });
   return { scheduler, syncState, vault };
@@ -535,6 +551,31 @@ class FakeWatchArchivedProject {
     syncedAt: string;
   }): Promise<void> {
     this.calls.push(input);
+  }
+}
+
+// A fake Todoist project-mirror that records its invocations (and can be made
+// to throw), so the scheduler's Todoist half and its failure isolation are
+// observable.
+class FakeReconcileTodoist {
+  calls: Array<{
+    projectName: string;
+    notePath: string;
+    locationArchived: boolean;
+    syncedAt: string;
+  }> = [];
+  fail = false;
+
+  async execute(input: {
+    projectName: string;
+    notePath: string;
+    locationArchived: boolean;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    if (this.fail) {
+      throw new Error('todoist failed');
+    }
   }
 }
 
@@ -618,6 +659,7 @@ describe('SyncScheduler', () => {
       syncProject,
       probe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       syncState,
       60_000,
@@ -648,6 +690,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -685,6 +728,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -723,6 +767,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -759,6 +804,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -799,6 +845,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -839,6 +886,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -876,6 +924,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -910,6 +959,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -941,6 +991,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -975,6 +1026,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1018,6 +1070,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1053,6 +1106,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleReconcileTodoist,
       idleWatch(),
       idleSyncState,
       60_000,
@@ -1294,6 +1348,116 @@ describe('SyncScheduler', () => {
         syncedAt: expect.any(String),
       },
     ]);
+    expect(issueFetches(calls)).toHaveLength(1);
+  });
+
+  it('mirrors the project to Todoist on every tick, after the GitHub half', async () => {
+    // Given — an active project with a GitHub attach
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const reconcileTodoist = new FakeReconcileTodoist();
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the Todoist half ran with the note path and the location signal
+    expect(reconcileTodoist.calls).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        notePath: 'Projecten/Acme Widgets/_home.md',
+        locationArchived: false,
+        syncedAt: expect.any(String),
+      },
+    ]);
+  });
+
+  it('mirrors an archived project to Todoist and still watches it', async () => {
+    // Given — an archived project whose board is closed (consistent)
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: true },
+      },
+    });
+    const reconcileTodoist = new FakeReconcileTodoist();
+    const watch = new FakeWatchArchivedProject();
+    const { scheduler } = tickHarness({
+      transport,
+      archived: true,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+      watch: watch as unknown as WatchArchivedProjectAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the Todoist half still ran (to archive the project) alongside the
+    // GitHub watch
+    expect(reconcileTodoist.calls).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        notePath: 'Archief/Acme Widgets/_home.md',
+        locationArchived: true,
+        syncedAt: expect.any(String),
+      },
+    ]);
+    expect(watch.calls).toHaveLength(1);
+  });
+
+  it('mirrors a project without a GitHub attach, skipping the GitHub half', async () => {
+    // Given — a project note with no stored identity, so the probe returns no
+    // state for it
+    const { transport, calls } = routingTransport({});
+    const reconcileTodoist = new FakeReconcileTodoist();
+    const { scheduler, syncState } = tickHarness({
+      transport,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+    });
+    // No stored identity: the project has no GitHub attach.
+    syncState.identity = null;
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the Todoist half ran and no GitHub request was made
+    expect(reconcileTodoist.calls).toHaveLength(1);
+    expect(issueFetches(calls)).toHaveLength(0);
+    expect(boardFetches(calls)).toHaveLength(0);
+  });
+
+  it('isolates a Todoist failure from the GitHub half', async () => {
+    // Given — an active project whose Todoist mirror throws
+    const { transport, calls } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const reconcileTodoist = new FakeReconcileTodoist();
+    reconcileTodoist.fail = true;
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the GitHub half still fetched the tracked set
+    expect(reconcileTodoist.calls).toHaveLength(1);
     expect(issueFetches(calls)).toHaveLength(1);
   });
 });
