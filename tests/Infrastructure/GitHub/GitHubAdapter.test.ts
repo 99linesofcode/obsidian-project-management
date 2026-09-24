@@ -221,8 +221,8 @@ describe('GitHubAdapter', () => {
     await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/Status/);
   });
 
-  it('maps raw issues onto TaskData and filters out non-task issues', async () => {
-    // Given — a REST response mixing a task issue with a non-task issue
+  it('keeps issues carrying any type label — task, bug, chore, slice', async () => {
+    // Given — a REST response mixing every type label with an untyped issue
     const issuesResponse = {
       status: 200,
       json: [
@@ -241,10 +241,40 @@ describe('GitHubAdapter', () => {
           number: 43,
           node_id: 'I_kwDOAAAA43',
           title: 'A slice',
-          body: 'Not a task.',
+          body: 'A slice of the feature.',
           state: 'open',
           updated_at: '2026-09-18T11:00:00Z',
           labels: [{ name: 'type: slice' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/44',
+          number: 44,
+          node_id: 'I_kwDOAAAA44',
+          title: 'A defect',
+          body: 'Something is broken.',
+          state: 'open',
+          updated_at: '2026-09-18T12:00:00Z',
+          labels: [{ name: 'type: bug' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/45',
+          number: 45,
+          node_id: 'I_kwDOAAAA45',
+          title: 'A chore',
+          body: 'Routine upkeep.',
+          state: 'open',
+          updated_at: '2026-09-18T13:00:00Z',
+          labels: [{ name: 'type: chore' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/46',
+          number: 46,
+          node_id: 'I_kwDOAAAA46',
+          title: 'Untyped',
+          body: 'No type label.',
+          state: 'open',
+          updated_at: '2026-09-18T14:00:00Z',
+          labels: [{ name: 'bug' }],
         },
       ],
     };
@@ -257,28 +287,29 @@ describe('GitHubAdapter', () => {
       '2026-09-18T00:00:00Z',
     );
 
-    // Then — only the type: task issue is surfaced, mapped onto TaskData
-    expect(result).toEqual([
-      {
-        url: 'https://github.com/acme/widgets/issues/42',
-        remoteId: 42,
-        nodeId: 'I_kwDOAAAA42',
-        title: 'Fix the Bug!',
-        body: 'The bug happens when the widget is resized.',
-        state: 'open',
-        updatedAt: '2026-09-18T10:00:00Z',
-        labels: ['type: task', 'bug'],
-      },
-    ]);
+    // Then — every typed issue is surfaced, mapped onto TaskData
+    expect(result.map((task) => task.remoteId)).toEqual([42, 43, 44, 45]);
+    expect(result[0]).toEqual({
+      url: 'https://github.com/acme/widgets/issues/42',
+      remoteId: 42,
+      nodeId: 'I_kwDOAAAA42',
+      title: 'Fix the Bug!',
+      body: 'The bug happens when the widget is resized.',
+      state: 'open',
+      updatedAt: '2026-09-18T10:00:00Z',
+      labels: ['type: task', 'bug'],
+    });
+    // And the untyped issue is filtered out
+    expect(result.some((task) => task.remoteId === 46)).toBe(false);
     // And the REST path targeted the bound repo with the since cursor
     expect(paths[0]).toBe(
       '/repos/acme/widgets/issues?state=all&since=2026-09-18T00%3A00%3A00Z&per_page=100',
     );
   });
 
-  it('does not materialise an issue carrying the no-space task label', async () => {
+  it('treats the legacy no-space type label as typed', async () => {
     // Given — a REST response with an issue labelled type:task (no space),
-    // which predates the spaced convention
+    // which predates the spaced convention but still names a type
     const issuesResponse = {
       status: 200,
       json: [
@@ -303,8 +334,8 @@ describe('GitHubAdapter', () => {
       '2026-09-18T00:00:00Z',
     );
 
-    // Then — the no-space issue is not surfaced as a task
-    expect(result).toEqual([]);
+    // Then — the issue is surfaced, since any type: label marks it tracked
+    expect(result.map((task) => task.remoteId)).toEqual([42]);
   });
 
   it('omits the since filter when no cursor is given', async () => {
@@ -719,8 +750,9 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
-  it('lists open issues that carry neither the task nor the slice label', async () => {
-    // Given — a REST response mixing a task, a slice, and an unlabeled issue
+  it('lists open issues that carry no type label', async () => {
+    // Given — a REST response mixing typed issues (task, slice, bug, chore)
+    // with an unlabeled one
     const issuesResponse = {
       status: 200,
       json: [
@@ -739,7 +771,7 @@ describe('GitHubAdapter', () => {
           number: 43,
           node_id: 'I_kwDOAAAA43',
           title: 'A slice',
-          body: 'Not a task.',
+          body: 'A slice of the feature.',
           state: 'open',
           updated_at: '2026-09-18T11:00:00Z',
           labels: [{ name: 'type: slice' }],
@@ -748,10 +780,30 @@ describe('GitHubAdapter', () => {
           html_url: 'https://github.com/acme/widgets/issues/44',
           number: 44,
           node_id: 'I_kwDOAAAA44',
+          title: 'A defect',
+          body: 'Something is broken.',
+          state: 'open',
+          updated_at: '2026-09-18T12:00:00Z',
+          labels: [{ name: 'type: bug' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/45',
+          number: 45,
+          node_id: 'I_kwDOAAAA45',
+          title: 'A chore',
+          body: 'Routine upkeep.',
+          state: 'open',
+          updated_at: '2026-09-18T13:00:00Z',
+          labels: [{ name: 'type: chore' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/46',
+          number: 46,
+          node_id: 'I_kwDOAAAA46',
           title: 'An idea',
           body: 'No labels yet.',
           state: 'open',
-          updated_at: '2026-09-18T12:00:00Z',
+          updated_at: '2026-09-18T14:00:00Z',
           labels: [],
         },
       ],
@@ -767,13 +819,13 @@ describe('GitHubAdapter', () => {
     // Then — only the unlabeled issue is surfaced, mapped onto TaskData
     expect(result).toEqual([
       {
-        url: 'https://github.com/acme/widgets/issues/44',
-        remoteId: 44,
-        nodeId: 'I_kwDOAAAA44',
+        url: 'https://github.com/acme/widgets/issues/46',
+        remoteId: 46,
+        nodeId: 'I_kwDOAAAA46',
         title: 'An idea',
         body: 'No labels yet.',
         state: 'open',
-        updatedAt: '2026-09-18T12:00:00Z',
+        updatedAt: '2026-09-18T14:00:00Z',
         labels: [],
       },
     ]);
@@ -781,8 +833,8 @@ describe('GitHubAdapter', () => {
     expect(paths[0]).toBe('/repos/acme/widgets/issues?state=open&per_page=100');
   });
 
-  it('excludes issues that carry the task label from the unpromoted list', async () => {
-    // Given — a REST response with only a type: task issue
+  it('excludes issues carrying any type label from the unpromoted list', async () => {
+    // Given — a REST response with one issue per type label
     const issuesResponse = {
       status: 200,
       json: [
@@ -796,34 +848,35 @@ describe('GitHubAdapter', () => {
           updated_at: '2026-09-18T10:00:00Z',
           labels: [{ name: 'type: task' }],
         },
-      ],
-    };
-    const { transport } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport);
-
-    // When — the adapter lists unpromoted issues
-    const result = await adapter.fetchUnpromotedIssues(
-      'https://github.com/acme/widgets',
-    );
-
-    // Then — the labelled task is not surfaced
-    expect(result).toEqual([]);
-  });
-
-  it('excludes issues that carry the slice label from the unpromoted list', async () => {
-    // Given — a REST response with only a type: slice issue
-    const issuesResponse = {
-      status: 200,
-      json: [
         {
           html_url: 'https://github.com/acme/widgets/issues/43',
           number: 43,
           node_id: 'I_kwDOAAAA43',
           title: 'A slice',
-          body: 'Not a task.',
+          body: 'A slice of the feature.',
           state: 'open',
           updated_at: '2026-09-18T11:00:00Z',
           labels: [{ name: 'type: slice' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/44',
+          number: 44,
+          node_id: 'I_kwDOAAAA44',
+          title: 'A defect',
+          body: 'Something is broken.',
+          state: 'open',
+          updated_at: '2026-09-18T12:00:00Z',
+          labels: [{ name: 'type: bug' }],
+        },
+        {
+          html_url: 'https://github.com/acme/widgets/issues/45',
+          number: 45,
+          node_id: 'I_kwDOAAAA45',
+          title: 'A chore',
+          body: 'Routine upkeep.',
+          state: 'open',
+          updated_at: '2026-09-18T13:00:00Z',
+          labels: [{ name: 'type: chore' }],
         },
       ],
     };
@@ -835,7 +888,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets',
     );
 
-    // Then — the slice is not surfaced
+    // Then — none are surfaced; every typed issue is already tracked
     expect(result).toEqual([]);
   });
 
