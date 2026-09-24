@@ -599,4 +599,64 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes).toEqual([]);
     expect(syncState.todoistItemSets).toEqual([]);
   });
+
+  it('evicts the record of a twin deleted in Todoist so the projection re-creates it', async () => {
+    // Given — a note that survives whose twin is in neither fetched set
+    const { action, vault, syncState } = setup();
+    const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
+    vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
+    syncState.todoistItemStates.set(taskPath, state(taskPath));
+
+    // When — the verdict runs
+    await action.execute({ projectName, projectId, syncedAt });
+
+    // Then — the record is evicted (not deleted in the vault, not applied), so
+    // the projection re-creates the twin later in this same tick (vault wins)
+    expect(syncState.todoistItemRemovals).toEqual([taskPath]);
+    expect(vault.writes).toEqual([]);
+    expect(vault.renames).toEqual([]);
+  });
+
+  it('keeps the record when the twin completed (present in the completed window)', async () => {
+    // Given — a to-do whose twin is absent from the active set but completed
+    const { action, vault, taskManager, syncState } = setup();
+    const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
+    vault.notes.set(
+      todoPath,
+      taskNote('open', ['[[Acme Widgets]]', '[[42-chore-1]]'], null),
+    );
+    syncState.todoistItemStates.set(
+      todoPath,
+      state(todoPath, {
+        todoistId: 'T2',
+        lastSyncedContent: 'Fix the bug',
+        lastSyncedParent: 'TASK',
+      }),
+    );
+    taskManager.completed = [
+      twin('T2', 'Fix the bug', { parentId: 'TASK', isCompleted: true }),
+    ];
+
+    // When — the verdict runs
+    await action.execute({ projectName, projectId, syncedAt });
+
+    // Then — completion is not a deletion: the record survives untouched
+    expect(syncState.todoistItemRemovals).toEqual([]);
+    expect(syncState.todoistItemStates.has(todoPath)).toBe(true);
+  });
+
+  it('leaves a missing note to the deletion action', async () => {
+    // Given — a deleted note whose twin is gone too
+    const { action, syncState } = setup();
+    const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
+    syncState.todoistItemStates.set(taskPath, state(taskPath));
+
+    // When — the verdict runs
+    await action.execute({ projectName, projectId, syncedAt });
+
+    // Then — nothing is evicted here; PropagateTodoistDeletionsAction owns the
+    // vault-deletion direction (and evicts the record with the twin)
+    expect(syncState.todoistItemRemovals).toEqual([]);
+    expect(syncState.todoistItemStates.has(taskPath)).toBe(true);
+  });
 });
