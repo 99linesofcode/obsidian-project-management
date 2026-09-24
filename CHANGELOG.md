@@ -1,4 +1,13 @@
-# 0.1.0 (2026-09-21)
+## [0.1.1](https://github.com/99linesofcode/obsidian-project-management/compare/v0.1.0...v0.1.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deps:** bump devshell from `27205da` to `231cbce` ([#35](https://github.com/99linesofcode/obsidian-project-management/issues/35)) ([dabda91](https://github.com/99linesofcode/obsidian-project-management/commit/dabda91225726e2e84d34f686ddfe803c201308b))
+
+
+
+# [0.1.0](https://github.com/99linesofcode/obsidian-project-management/compare/6eed1fe2dc2ec35e50a0aca1e130381c23ac2a9e...v0.1.0) (2026-09-21)
 
 
 ### Bug Fixes
