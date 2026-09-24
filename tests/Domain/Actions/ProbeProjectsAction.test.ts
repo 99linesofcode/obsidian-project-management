@@ -34,6 +34,10 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setLastProjectUpdate(): Promise<void> {}
+  async getArchiveBaseline(): Promise<null> {
+    return null;
+  }
+  async setArchiveBaseline(): Promise<void> {}
 }
 
 class FakeProjectManagement implements ProjectManagementPort {

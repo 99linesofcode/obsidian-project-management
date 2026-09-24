@@ -29,7 +29,7 @@ type SyncTrigger =
   | { kind: 'renamed'; oldPath: string; newPath: string }
   | {
       kind: 'tick';
-      archived: boolean;
+      locationArchived: boolean;
       closed: boolean;
       updatedAt: string;
       syncedAt: string;
@@ -101,10 +101,10 @@ export class SyncScheduler extends Component {
   // whose updatedAt moved since their last successful sync. The project list is
   // derived fresh each tick from the notes' locations — a note under Archief/
   // is archived, one under Projecten/ is active — so a folder move is picked up
-  // without any stored flag. A location/closed mismatch is reconciled first
-  // (the vault wins), then only active projects sync; archived projects are
-  // frozen. The stored update advances only after a successful sync, so a
-  // failed sync retries the board fetch on the next tick.
+  // without any stored flag. Every project is reconciled first through the
+  // baseline merge (the vault wins a conflict), then only active projects sync;
+  // archived projects are frozen. The stored update advances only after a
+  // successful sync, so a failed sync retries the board fetch on the next tick.
   private async tick(): Promise<void> {
     const notes = await this.vault.findProjectNotes();
     const active = new Set<string>();
@@ -123,7 +123,7 @@ export class SyncScheduler extends Component {
       }
       this.enqueue(projectName, {
         kind: 'tick',
-        archived: archived.has(projectName),
+        locationArchived: archived.has(projectName),
         closed: state.closed,
         updatedAt: state.updatedAt,
         syncedAt: new Date().toISOString(),
@@ -198,25 +198,24 @@ export class SyncScheduler extends Component {
     return this.reconcileTaskNote(trigger.path, projectName, syncedAt);
   }
 
-  // A tick reconciles the archive state first (the vault wins a mismatch),
-  // then syncs only active projects whose board is open. An archived project is
-  // frozen: no issue reconcile, no board fetch, no bookkeeping. A project whose
-  // board was closed is transitioned this tick and synced on the next one, once
-  // the probe sees the reopened board. The transition and the sync ride the
-  // same per-project chain, so they never interleave.
+  // A tick reconciles the archive state first through the baseline merge (the
+  // vault wins a conflict), then syncs only active projects whose board is
+  // open. An archived project is frozen: no issue reconcile, no board fetch, no
+  // bookkeeping. A project whose board was closed is transitioned this tick and
+  // synced on the next one, once the probe sees the reopened board. The
+  // transition and the sync ride the same per-project chain, so they never
+  // interleave.
   private async runTick(
     projectName: string,
     trigger: Extract<SyncTrigger, { kind: 'tick' }>,
   ): Promise<void> {
-    if (trigger.archived !== trigger.closed) {
-      await this.reconcileArchiveState.execute({
-        projectName,
-        archived: trigger.archived,
-        closed: trigger.closed,
-        syncedAt: trigger.syncedAt,
-      });
-    }
-    if (trigger.archived || trigger.closed) {
+    await this.reconcileArchiveState.execute({
+      projectName,
+      locationArchived: trigger.locationArchived,
+      closed: trigger.closed,
+      syncedAt: trigger.syncedAt,
+    });
+    if (trigger.locationArchived || trigger.closed) {
       return;
     }
 

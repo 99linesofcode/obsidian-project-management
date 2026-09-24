@@ -117,6 +117,10 @@ class FakeSyncState implements SyncStatePort {
     this.lastUpdateSets.push({ projectName, iso });
     this.lastUpdates.set(projectName, iso);
   }
+  async getArchiveBaseline(): Promise<null> {
+    return null;
+  }
+  async setArchiveBaseline(): Promise<void> {}
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
@@ -468,18 +472,18 @@ class FakeHandleDeleted {
 }
 
 // A fake archive reconcile that records its invocations, so the scheduler's
-// tick-time transition is observable.
+// tick-time baseline merge is observable.
 class FakeReconcileArchive {
   calls: Array<{
     projectName: string;
-    archived: boolean;
+    locationArchived: boolean;
     closed: boolean;
     syncedAt: string;
   }> = [];
 
   async execute(input: {
     projectName: string;
-    archived: boolean;
+    locationArchived: boolean;
     closed: boolean;
     syncedAt: string;
   }): Promise<void> {
@@ -1132,7 +1136,7 @@ describe('SyncScheduler', () => {
     expect(issueFetches(calls)).toHaveLength(2);
   });
 
-  it('freezes an archived project: no transition and no sync', async () => {
+  it('freezes an archived project: it reconciles but never syncs', async () => {
     // Given — an archived project whose board is closed (consistent)
     const { transport, calls } = routingTransport({
       states: {
@@ -1151,13 +1155,21 @@ describe('SyncScheduler', () => {
     // When — one tick elapses
     await vi.advanceTimersByTimeAsync(60_000);
 
-    // Then — nothing is reconciled and neither issues nor board are fetched
-    expect(reconcileArchive.calls).toEqual([]);
+    // Then — the settled state is reconciled (a no-op) and neither issues nor
+    // board are fetched
+    expect(reconcileArchive.calls).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        locationArchived: true,
+        closed: true,
+        syncedAt: expect.any(String),
+      },
+    ]);
     expect(issueFetches(calls)).toHaveLength(0);
     expect(boardFetches(calls)).toHaveLength(0);
   });
 
-  it('transitions an active project whose board is closed, deferring its sync', async () => {
+  it('reconciles an active project whose board is closed, deferring its sync', async () => {
     // Given — an active project whose board was closed on GitHub
     const { transport, calls } = routingTransport({
       states: {
@@ -1175,11 +1187,12 @@ describe('SyncScheduler', () => {
     // When — one tick elapses
     await vi.advanceTimersByTimeAsync(60_000);
 
-    // Then — the transition ran (the vault wins) and the sync is deferred
+    // Then — the baseline merge ran (the board gesture archives the folder) and
+    // the sync is deferred
     expect(reconcileArchive.calls).toEqual([
       {
         projectName: 'Acme Widgets',
-        archived: false,
+        locationArchived: false,
         closed: true,
         syncedAt: expect.any(String),
       },
@@ -1188,7 +1201,7 @@ describe('SyncScheduler', () => {
     expect(boardFetches(calls)).toHaveLength(0);
   });
 
-  it('syncs a normal active project without a transition', async () => {
+  it('reconciles and syncs a normal active project', async () => {
     // Given — an active project whose board is open (consistent)
     const { transport, calls } = routingTransport({
       states: {
@@ -1206,8 +1219,16 @@ describe('SyncScheduler', () => {
     // When — one tick elapses
     await vi.advanceTimersByTimeAsync(60_000);
 
-    // Then — no transition ran and the tracked set was reconciled
-    expect(reconcileArchive.calls).toEqual([]);
+    // Then — the settled state is reconciled (a no-op) and the tracked set is
+    // reconciled
+    expect(reconcileArchive.calls).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        locationArchived: false,
+        closed: false,
+        syncedAt: expect.any(String),
+      },
+    ]);
     expect(issueFetches(calls)).toHaveLength(1);
   });
 });
