@@ -443,6 +443,35 @@ describe('ProjectTasksToTodoistAction', () => {
     expect(vault.notes.get(topPath)).toContain('todoist: T3');
   });
 
+  it('re-creates the twin when its record is gone, re-stamping a stale anchor (self-heal)', async () => {
+    // Given — a tracked task whose note still carries a stale anchor but whose
+    // sync-state record was evicted (its Todoist twin was deleted)
+    const { action, vault, taskManager, projectManagement, syncState } =
+      setup();
+    projectManagement.issues = [issue(topUrl, 'Bug 1', 'bug')];
+    vault.notes.set(
+      topPath,
+      [
+        '---',
+        `url: ${topUrl}`,
+        'status: Unshaped',
+        'affiliation: ["[[Acme Widgets]]"]',
+        'todoist: GONE',
+        '---',
+        'Body.',
+      ].join('\n'),
+    );
+    syncState.statuses.set(topUrl, statusRecord(topUrl, topPath));
+
+    // When — the tasks are projected
+    await action.execute({ projectName, projectId, syncedAt });
+
+    // Then — a fresh twin is created (vault wins) and the stale anchor replaced
+    expect(taskManager.createTaskCalls).toHaveLength(1);
+    expect(vault.notes.get(topPath)).toContain('todoist: T1');
+    expect(vault.notes.get(topPath)).not.toContain('todoist: GONE');
+  });
+
   it('lands a subtask under its slice without its own section', async () => {
     // Given — a slice and a chore affiliated to it
     const { action, vault, taskManager, projectManagement, syncState } =

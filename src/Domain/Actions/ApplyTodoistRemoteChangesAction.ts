@@ -56,7 +56,10 @@ interface VerdictContext {
 // remote value is not applied and the projection re-pushes the vault state on
 // this tick; the snapshot is re-stamped either way so the next poll does not
 // re-trigger. Completion is owned by ApplyTodoistCompletionAction (t4) and is
-// not revisited here.
+// not revisited here. A twin absent from both the active set and the completed
+// window is a Todoist-side deletion when its note survives (t6): the record is
+// evicted so the projection re-creates the twin in the same tick (vault wins);
+// a missing note is left to PropagateTodoistDeletionsAction.
 export class ApplyTodoistRemoteChangesAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
@@ -115,7 +118,16 @@ export class ApplyTodoistRemoteChangesAction {
     for (const state of states) {
       const twin = twinById.get(state.todoistId);
       if (!twin) {
-        // Absent from both sets: completed outside the window or deleted (t6).
+        // Absent from both the active set and the completed-since window. A
+        // missing note is a vault deletion (PropagateTodoistDeletionsAction
+        // owns it, later in the same tick). When the note survives, the twin
+        // was deleted on the Todoist side: that is not a vault deletion and not
+        // a completion (a completion would be in the completed window). The
+        // vault wins, so the record is evicted and the projection re-creates
+        // the twin later in this same tick — the self-heal.
+        if (await this.vault.getNoteByPath(state.notePath)) {
+          await this.syncState.removeTodoistState(state.notePath);
+        }
         continue;
       }
       await this.applyVerdict(state, twin, context);
