@@ -5,6 +5,7 @@ import {
   toIssueBody,
   withChecklistLinks,
 } from '../../../src/Domain/Notes/Checklist.js';
+import { slugify } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 
 describe('parseChecklist', () => {
   it('parses flat items in document order with their checked state', () => {
@@ -317,5 +318,29 @@ describe('withChecklistLinks', () => {
     expect(linked).toBe(
       ['Intro', '- [ ] [[Projecten/X/task|Task]]', 'Outro'].join('\n'),
     );
+  });
+});
+
+describe('checklist projection round-trip', () => {
+  it('re-links a projected body back to the original for known to-dos', () => {
+    // Given — a linked note body and a resolver that knows each to-do path
+    const linked = [
+      'Intro',
+      '- [ ] [[Projecten/X/todos/fix-the-bug.md|Fix the bug]]',
+      '- [x] [[Projecten/X/todos/ship-it.md|Ship it]]',
+      'Outro',
+    ].join('\n');
+    const paths = new Map([
+      ['fix-the-bug', 'Projecten/X/todos/fix-the-bug.md'],
+      ['ship-it', 'Projecten/X/todos/ship-it.md'],
+    ]);
+    const resolve = (text: string) => paths.get(slugify(text)) ?? null;
+
+    // When — the body is projected for the issue and then re-linked
+    const issue = toIssueBody(linked);
+    const relinked = withChecklistLinks(issue, resolve);
+
+    // Then — the linked body round-trips unchanged
+    expect(relinked).toBe(linked);
   });
 });

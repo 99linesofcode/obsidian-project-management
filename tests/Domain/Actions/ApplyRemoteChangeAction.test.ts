@@ -3,6 +3,7 @@ import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemote
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
+import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
@@ -47,8 +48,9 @@ class FakeVault implements VaultPort {
     throw new Error('not used in this test');
   }
 
-  async listNotesInFolder(): Promise<never> {
-    throw new Error('not used in this test');
+  async listNotesInFolder(folder: string): Promise<string[]> {
+    const prefix = folder.endsWith('/') ? folder : `${folder}/`;
+    return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
   }
 
   async trashNote(): Promise<never> {
@@ -366,5 +368,87 @@ describe('ApplyRemoteChangeAction', () => {
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: task.url, statusOptionId: 'PVTSSF_3' },
     ]);
+  });
+
+  it('re-links checklist items when the remote body changes', async () => {
+    // Given — a synced note and a to-do note for the item the remote added
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const status = makeStatus();
+    syncState.statuses.set(task.url, status);
+    const { path, content } = TaskNoteMapper.map(task, context);
+    vault.notes.set(path, content);
+    vault.notes.set(
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+      ToDoNoteMapper.map(
+        {
+          title: 'Fix the bug',
+          projectName: 'Acme Widgets',
+          taskLink: '42-fix-the-bug',
+        },
+        { syncedAt: context.syncedAt, statusName: 'open' },
+      ).content,
+    );
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
+    const changed: TaskData = {
+      ...task,
+      body: '- [ ] Fix the bug',
+      updatedAt: '2026-09-18T11:00:00Z',
+    };
+
+    // When — the remote change is applied
+    await action.execute({ task: changed, ...context });
+
+    // Then — the note body carries the to-do link
+    const linkedBody =
+      '- [ ] [[Projecten/Acme Widgets/todos/fix-the-bug.md|Fix the bug]]';
+    const { content: newContent } = TaskNoteMapper.map(
+      { ...changed, body: linkedBody },
+      context,
+    );
+    expect(vault.written).toEqual([{ path, content: newContent }]);
+    // And the baseline still hashes the raw remote body
+    expect(syncState.setCalls[0]!.lastSyncedBodyHash).toBe(hash(changed.body));
+  });
+
+  it('re-links surviving items and leaves unknown ones unlinked', async () => {
+    // Given — a synced note and a to-do for one of two remote checklist items
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const status = makeStatus();
+    syncState.statuses.set(task.url, status);
+    const { path, content } = TaskNoteMapper.map(task, context);
+    vault.notes.set(path, content);
+    vault.notes.set(
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+      ToDoNoteMapper.map(
+        {
+          title: 'Fix the bug',
+          projectName: 'Acme Widgets',
+          taskLink: '42-fix-the-bug',
+        },
+        { syncedAt: context.syncedAt, statusName: 'open' },
+      ).content,
+    );
+    const action = makeAction(vault, syncState, new FakeProjectManagement());
+    const changed: TaskData = {
+      ...task,
+      body: ['- [ ] New item', '- [x] Fix the bug'].join('\n'),
+      updatedAt: '2026-09-18T11:00:00Z',
+    };
+
+    // When — the remote change is applied
+    await action.execute({ task: changed, ...context });
+
+    // Then — the known item is re-linked and the unknown one stays unlinked
+    const linkedBody = [
+      '- [ ] New item',
+      '- [x] [[Projecten/Acme Widgets/todos/fix-the-bug.md|Fix the bug]]',
+    ].join('\n');
+    const { content: newContent } = TaskNoteMapper.map(
+      { ...changed, body: linkedBody },
+      context,
+    );
+    expect(vault.written).toEqual([{ path, content: newContent }]);
   });
 });

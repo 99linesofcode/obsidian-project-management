@@ -95,4 +95,32 @@ describe('PushNoteAction', () => {
     // And the updated task is returned for the caller to refresh its baseline
     expect(result).toBe(port.updated);
   });
+
+  it('strips checklist wikilinks before pushing the body', async () => {
+    // Given — a note body whose checklist items link to vault to-dos
+    const port = new FakeProjectManagement();
+    const action = new PushNoteAction(port);
+
+    // When — the note is pushed
+    await action.execute({
+      url: 'https://github.com/acme/widgets/issues/42',
+      title: 'fix the widget',
+      body: [
+        'Intro',
+        '- [ ] [[Projecten/Acme Widgets/todos/fix-the-bug.md|Fix the bug]]',
+        '- [x] Plain',
+      ].join('\n'),
+    });
+
+    // Then — the issue receives the checklist without the vault-only links
+    expect(port.updateCalls).toEqual([
+      {
+        url: 'https://github.com/acme/widgets/issues/42',
+        input: {
+          title: 'fix the widget',
+          body: ['Intro', '- [ ] Fix the bug', '- [x] Plain'].join('\n'),
+        },
+      },
+    ]);
+  });
 });
