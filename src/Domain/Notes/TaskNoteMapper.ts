@@ -1,4 +1,6 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import { fillFrontmatterFields } from './fillFrontmatterFields.js';
+import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
 
 export interface TaskNoteContext {
   projectName: string;
@@ -76,9 +78,7 @@ function taskNotePath(task: TaskData, context: TaskNoteContext): string {
 }
 
 // Sync-owned frontmatter fields, in append order when a template omits one.
-const MANAGED_FIELD_ORDER = ['url', 'status', 'synced', 'affiliation'];
-
-function managedFieldValues(
+function managedValues(
   task: TaskData,
   context: TaskNoteContext,
 ): Map<string, string> {
@@ -107,46 +107,9 @@ function renderTemplate(
   }
 
   const stamped = replaceTimestampPlaceholders(template, context.syncedAt);
-  const frontmatter = fillManagedFields(
+  const frontmatter = fillFrontmatterFields(
     stamped.split('\n').slice(0, closing + 1),
-    task,
-    context,
+    managedValues(task, context),
   );
   return [...frontmatter, task.body].join('\n');
-}
-
-// Resolves the template placeholders to the sync stamp's date and time.
-function replaceTimestampPlaceholders(
-  template: string,
-  syncedAt: string,
-): string {
-  return template
-    .replaceAll('{{date}}', syncedAt.slice(0, 10))
-    .replaceAll('{{time}}', syncedAt.slice(11, 16));
-}
-
-// Fills the sync-owned fields into the frontmatter: a field the template
-// declares (even empty) gets its value in place; a missing one is appended
-// before the closing delimiter.
-function fillManagedFields(
-  lines: string[],
-  task: TaskData,
-  context: TaskNoteContext,
-): string[] {
-  const values = managedFieldValues(task, context);
-  const filled = [...lines];
-  const missing: string[] = [];
-
-  for (const key of MANAGED_FIELD_ORDER) {
-    const index = filled.findIndex((line) => line.startsWith(`${key}:`));
-    if (index === -1) {
-      missing.push(key);
-      continue;
-    }
-    filled[index] = `${key}: ${values.get(key)}`;
-  }
-
-  const appended = missing.map((key) => `${key}: ${values.get(key)}`);
-  filled.splice(filled.length - 1, 0, ...appended);
-  return filled;
 }
