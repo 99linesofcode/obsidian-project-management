@@ -7,10 +7,10 @@ import type { TaskData } from '../DataTransferObjects/TaskData.js';
 // The core's need: given a project note's sync frontmatter, resolve the
 // GitHub identities for that project, fetch the complete tracked issue set,
 // probe every project's lightweight state in one cheap query, read/update a
-// single task by its issue url, set a task's open/closed state, and drive the
-// project board (read its cards, set a card's Status, add an issue to the
-// board). Designed for the core, not to mimic GitHub's API. Returns null when
-// the provider is not ours to handle.
+// single task by its issue url, set a task's open/closed state, lock an
+// issue's conversation, and drive the project board (read its cards, set a
+// card's Status, add an issue to the board). Designed for the core, not to
+// mimic GitHub's API. Returns null when the provider is not ours to handle.
 export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
@@ -20,6 +20,7 @@ export interface ProjectManagementPort {
     projectNodeIds: string[],
   ): Promise<Map<string, ProjectStateData>>;
   setProjectClosed(projectNodeId: string, closed: boolean): Promise<void>;
+  lockIssue(nodeId: string): Promise<void>;
   fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(

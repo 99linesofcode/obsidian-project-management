@@ -998,6 +998,28 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('"closed":false');
   });
 
+  it('locks an issue conversation via lockLockable', async () => {
+    // Given — a transport that accepts the lock mutation
+    const mutationResponse = {
+      status: 200,
+      json: {
+        data: { lockLockable: { lockedRecord: { locked: true } } },
+      },
+    };
+    const { transport, bodies } = fakeTransport([mutationResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter locks the issue
+    await adapter.lockIssue('I_kwDOAAAA42');
+
+    // Then — the mutation targets the issue, and omits lockReason because the
+    // archived case is not one of the enum's reasons
+    expect(bodies[0]).toContain('lockLockable');
+    expect(bodies[0]).toContain('lockableId: $nodeId');
+    expect(bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
+    expect(bodies[0]).not.toContain('lockReason');
+  });
+
   it('probes every project in one aliased query, keyed by node id', async () => {
     // Given — a transport returning one aliased node field per project
     const fleetResponse = {

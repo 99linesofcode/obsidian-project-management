@@ -165,6 +165,17 @@ const SET_PROJECT_CLOSED_MUTATION = `
   }
 `;
 
+// lockReason is omitted: the enum (RESOLVED/OFF_TOPIC/TOO_HEATED/SPAM) has no
+// "archived" reason, and the schema makes it optional. Re-locking an
+// already-locked issue is a no-op, so the archive retry is safe.
+const LOCK_ISSUE_MUTATION = `
+  mutation LockIssue($nodeId: ID!) {
+    lockLockable(input: { lockableId: $nodeId }) {
+      lockedRecord { ... on Issue { locked } }
+    }
+  }
+`;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -390,6 +401,10 @@ export class GitHubAdapter implements ProjectManagementPort {
       projectId: projectNodeId,
       closed,
     });
+  }
+
+  async lockIssue(nodeId: string): Promise<void> {
+    await this.postQuery(LOCK_ISSUE_MUTATION, { nodeId });
   }
 
   async fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]> {

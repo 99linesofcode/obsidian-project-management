@@ -114,12 +114,21 @@ class FakeSyncState implements SyncStatePort {
 
 class FakeProjectManagement implements ProjectManagementPort {
   closedCalls: Array<{ projectNodeId: string; closed: boolean }> = [];
+  lockedNodeIds: string[] = [];
+  failLock = false;
 
   async setProjectClosed(
     projectNodeId: string,
     closed: boolean,
   ): Promise<void> {
     this.closedCalls.push({ projectNodeId, closed });
+  }
+
+  async lockIssue(nodeId: string): Promise<void> {
+    if (this.failLock) {
+      throw new Error('lock failed');
+    }
+    this.lockedNodeIds.push(nodeId);
   }
 
   async fetchProjectStates(): Promise<Map<string, ProjectStateData>> {
@@ -134,8 +143,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchUnpromotedIssues(): Promise<TaskData[]> {
     return [];
   }
-  async fetchTask(): Promise<never> {
-    throw new Error('not used in this test');
+  async fetchTask(url: string): Promise<TaskData> {
+    const number = Number(url.split('/').pop());
+    return {
+      url,
+      remoteId: number,
+      nodeId: `I_kwDOAAAA${number}`,
+      title: 'Fix the bug',
+      body: '',
+      state: 'open',
+      updatedAt: '2026-09-18T11:00:00Z',
+      labels: [],
+    };
   }
   async updateTask(): Promise<never> {
     throw new Error('not used in this test');
@@ -157,16 +176,18 @@ class FakeProjectManagement implements ProjectManagementPort {
 const syncedAt = '2026-09-24T12:00:00Z';
 const taskPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const archivedTaskPath = 'Archief/Acme Widgets/taken/42-fix-the-bug.md';
+const issueUrl = 'https://github.com/acme/widgets/issues/42';
 
-function record(notePath: string): Status {
+function record(notePath: string, overrides: Partial<Status> = {}): Status {
   return {
-    url: 'https://github.com/acme/widgets/issues/42',
+    url: issueUrl,
     remoteId: 42,
     notePath,
     lastSyncedBodyHash: 'abc',
     lastSyncedRemoteUpdatedAt: '2026-09-18T11:00:00Z',
     lastSyncedStatus: 'Building',
     lastSyncedTitle: 'Fix the bug',
+    ...overrides,
   };
 }
 
@@ -174,7 +195,12 @@ function setup() {
   const vault = new FakeVault();
   const syncState = new FakeSyncState();
   const port = new FakeProjectManagement();
-  const action = new ReconcileArchiveStateAction(port, vault, syncState);
+  const action = new ReconcileArchiveStateAction(
+    port,
+    vault,
+    syncState,
+    'Shipped',
+  );
   return { action, port, vault, syncState };
 }
 
@@ -483,5 +509,214 @@ describe('ReconcileArchiveStateAction', () => {
     expect(port.closedCalls).toEqual([]);
     expect(vault.moveCalls).toEqual([]);
     expect(syncState.baselineSets).toEqual([]);
+  });
+
+  it('locks unshipped issues when a GitHub gesture archives the project', async () => {
+    // Given — a settled active project whose board was just closed on GitHub
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(taskPath);
+    syncState.records.push(record(taskPath));
+
+    // When — the board change is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: false,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — the unshipped issue's conversation is locked with the nodeId the
+    // fetch returned, and the settled baseline is stored
+    expect(port.lockedNodeIds).toEqual(['I_kwDOAAAA42']);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: true, closed: true },
+      },
+    ]);
+  });
+
+  it('locks unshipped issues when a vault gesture archives the project', async () => {
+    // Given — a settled active project whose folder the user just moved to
+    // Archief, so no board move is needed
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(archivedTaskPath);
+    syncState.records.push(record(archivedTaskPath));
+
+    // When — the location change is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: true,
+      closed: false,
+      syncedAt,
+    });
+
+    // Then — the unshipped issue's conversation is locked
+    expect(port.lockedNodeIds).toEqual(['I_kwDOAAAA42']);
+  });
+
+  it('skips shipped issues when archiving: the vault decides done', async () => {
+    // Given — an active project holding one unshipped and one shipped issue
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(taskPath);
+    syncState.records.push(record(taskPath));
+    syncState.records.push(
+      record('Projecten/Acme Widgets/taken/43-shipped.md', {
+        url: 'https://github.com/acme/widgets/issues/43',
+        remoteId: 43,
+        lastSyncedStatus: 'Shipped',
+      }),
+    );
+
+    // When — the project is archived
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: false,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — only the unshipped issue is locked
+    expect(port.lockedNodeIds).toEqual(['I_kwDOAAAA42']);
+  });
+
+  it('locks only the archived project’s issues', async () => {
+    // Given — an active project plus an unrelated project's record
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(taskPath);
+    syncState.records.push(record(taskPath));
+    syncState.records.push(
+      record('Projecten/Other Project/taken/99-elsewhere.md', {
+        url: 'https://github.com/acme/widgets/issues/99',
+        remoteId: 99,
+      }),
+    );
+
+    // When — the project is archived
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: false,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — only the archived project's issue is locked
+    expect(port.lockedNodeIds).toEqual(['I_kwDOAAAA42']);
+  });
+
+  it('does not lock when a project is unarchived', async () => {
+    // Given — a settled archived project whose board was just reopened
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: true,
+      closed: true,
+    });
+    vault.paths.add(archivedTaskPath);
+    syncState.records.push(record(archivedTaskPath));
+
+    // When — the board change is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: true,
+      closed: false,
+      syncedAt,
+    });
+
+    // Then — nothing is locked (and nothing is unlocked)
+    expect(port.lockedNodeIds).toEqual([]);
+  });
+
+  it('does not lock on first-run adoption', async () => {
+    // Given — a project discovered mid-life with no baseline
+    const { action, port, vault, syncState } = setup();
+    vault.paths.add(archivedTaskPath);
+    syncState.records.push(record(archivedTaskPath));
+
+    // When — the first observation is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: true,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — the pair is adopted and nothing is locked
+    expect(port.lockedNodeIds).toEqual([]);
+    expect(syncState.baselineSets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        baseline: { locationArchived: true, closed: true },
+      },
+    ]);
+  });
+
+  it('does not lock on an already-archived no-op pass', async () => {
+    // Given — a settled archived project
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: true,
+      closed: true,
+    });
+    vault.paths.add(archivedTaskPath);
+    syncState.records.push(record(archivedTaskPath));
+
+    // When — the settled state is reconciled
+    await action.execute({
+      projectName: 'Acme Widgets',
+      locationArchived: true,
+      closed: true,
+      syncedAt,
+    });
+
+    // Then — nothing is locked and nothing is written
+    expect(port.lockedNodeIds).toEqual([]);
+    expect(syncState.baselineSets).toEqual([]);
+  });
+
+  it('leaves the baseline unwritten when a lock fails, so the next tick retries', async () => {
+    // Given — a settled active project whose board was closed, and a lock that
+    // fails
+    const { action, port, vault, syncState } = setup();
+    syncState.baselines.set('Acme Widgets', {
+      locationArchived: false,
+      closed: false,
+    });
+    vault.paths.add(taskPath);
+    syncState.records.push(record(taskPath));
+    port.failLock = true;
+
+    // When — the board change is reconciled and the lock throws
+    await expect(
+      action.execute({
+        projectName: 'Acme Widgets',
+        locationArchived: false,
+        closed: true,
+        syncedAt,
+      }),
+    ).rejects.toThrow('lock failed');
+
+    // Then — the old baseline stands, so the next tick retries the whole
+    // reconciliation
+    expect(syncState.baselineSets).toEqual([]);
+    expect(syncState.baselines.get('Acme Widgets')).toEqual({
+      locationArchived: false,
+      closed: false,
+    });
   });
 });

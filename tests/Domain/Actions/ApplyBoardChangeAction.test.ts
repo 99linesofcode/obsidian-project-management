@@ -87,6 +87,7 @@ class FakeSyncState implements SyncStatePort {
 
 class FakeProjectManagement implements ProjectManagementPort {
   async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }
