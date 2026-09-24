@@ -89,14 +89,6 @@ class FakeSyncState implements SyncStatePort {
     throw new Error('not used in this test');
   }
 
-  async getLastPoll(): Promise<string | null> {
-    return null;
-  }
-
-  async setLastPoll(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
   async setIdentity(): Promise<void> {
     throw new Error('not used in this test');
   }
@@ -116,7 +108,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchChangedTasks(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<TaskData[]> {
     return [];
   }
   async fetchTask(): Promise<TaskData> {

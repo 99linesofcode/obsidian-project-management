@@ -24,7 +24,7 @@ class FakeProjectManagement implements ProjectManagementPort {
     return null;
   }
 
-  async fetchChangedTasks(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<TaskData[]> {
     return [];
   }
 

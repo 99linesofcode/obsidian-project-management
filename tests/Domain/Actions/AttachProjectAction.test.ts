@@ -17,7 +17,7 @@ class FakePort implements ProjectManagementPort {
     return this.result;
   }
 
-  async fetchChangedTasks(): Promise<never> {
+  async fetchTrackedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }
 

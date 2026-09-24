@@ -12,14 +12,14 @@ export interface SyncProjectInput {
   syncedAt: string;
 }
 
-// UC3/UC8/UC9: sync one project. Fetches the tasks changed since the last
-// poll and mirrors each onto its note — applying changes to existing notes,
-// creating notes for newly promoted issues — then reconciles the board: the
-// board's Status drives the issue and note (UC8), and every tracked task
-// missing from the board is added to it (UC9). Finally advances the poll
-// cursor. The poll needs the project's repo url, so a project without a
-// stored identity (or one lacking a repo url) is skipped with a clear error
-// rather than crashing.
+// UC3/UC8/UC9: sync one project. Fetches the complete tracked issue set and
+// mirrors each onto its note — applying changes to existing notes, creating
+// notes for newly promoted issues — then reconciles the board: the board's
+// Status drives the issue and note (UC8), and every tracked task missing from
+// the board is added to it (UC9). The sync state is the diff: an issue whose
+// last update predates the previous poll still materializes. The poll needs
+// the project's repo url, so a project without a stored identity (or one
+// lacking a repo url) is skipped with a clear error rather than crashing.
 export class SyncProjectAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -38,15 +38,11 @@ export class SyncProjectAction {
       );
     }
 
-    // The first poll has no cursor yet, so since is undefined and the filter
-    // is omitted to fetch everything. GitHub's since filter silently matches
-    // nothing for epoch-era timestamps (verified 2026-09-19), so a sentinel
-    // epoch cursor would materialise nothing.
-    const since =
-      (await this.syncState.getLastPoll(input.projectName)) ?? undefined;
-    // Only tasks carrying a type label are tracked; the rest never sync.
+    // Every poll reconciles the complete tracked set; the sync state is the
+    // diff, so an issue that went quiet before its type label was added still
+    // materializes. Only tasks carrying a type label are tracked.
     const tasks = (
-      await this.projectManagement.fetchChangedTasks(identity.repoUrl, since)
+      await this.projectManagement.fetchTrackedIssues(identity.repoUrl)
     ).filter((task) => hasTypeLabel(task.labels));
 
     // The lane a task's issue state implies when the board is not the
@@ -109,7 +105,5 @@ export class SyncProjectAction {
         );
       }
     }
-
-    await this.syncState.setLastPoll(input.projectName, input.syncedAt);
   }
 }

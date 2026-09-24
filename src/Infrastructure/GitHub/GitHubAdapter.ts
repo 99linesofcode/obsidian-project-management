@@ -186,32 +186,30 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchChangedTasks(
-    repoUrl: string,
-    since?: string,
-  ): Promise<TaskData[]> {
+  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
-    // Single page is fine for v1: the since cursor bounds the result set and
-    // per_page=100 covers a typical poll window. Pagination lands with the
-    // v2 slices ticket if a project outgrows one page.
-    const filter =
-      since === undefined
-        ? 'state=all'
-        : `state=all&since=${encodeURIComponent(since)}`;
-    const path = `/repos/${repo.owner}/${repo.name}/issues?${filter}&per_page=100`;
+    const issues: Record<string, unknown>[] = [];
 
-    const response = await this.transport.get(path);
-    if (response.status !== 200) {
-      throw new Error(
-        `GitHubAdapter: REST request failed with status ${response.status}`,
-      );
-    }
-    if (!Array.isArray(response.json)) {
-      throw new Error('GitHubAdapter: unexpected REST response shape');
+    for (let page = 1; ; page++) {
+      const path = `/repos/${repo.owner}/${repo.name}/issues?state=all&per_page=100&page=${page}`;
+      const response = await this.transport.get(path);
+      if (response.status !== 200) {
+        throw new Error(
+          `GitHubAdapter: REST request failed with status ${response.status}`,
+        );
+      }
+      if (!Array.isArray(response.json)) {
+        throw new Error('GitHubAdapter: unexpected REST response shape');
+      }
+
+      const pageIssues = response.json.filter(isRecord);
+      issues.push(...pageIssues);
+      if (pageIssues.length < 100) {
+        break;
+      }
     }
 
-    return response.json
-      .filter(isRecord)
+    return issues
       .filter((issue) => this.isTrackedIssue(issue))
       .map((issue) => this.mapIssue(issue));
   }

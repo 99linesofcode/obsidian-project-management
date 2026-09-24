@@ -19,7 +19,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchChangedTasks(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<TaskData[]> {
     return [];
   }
   async fetchTask(): Promise<TaskData> {
@@ -78,10 +78,6 @@ class FakeSyncState implements SyncStatePort {
   async list(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async getLastPoll(): Promise<string | null> {
-    return null;
-  }
-  async setLastPoll(): Promise<void> {}
   async setIdentity(): Promise<void> {}
   async getIdentity(): Promise<ProjectIdentityData | null> {
     return this.identity;

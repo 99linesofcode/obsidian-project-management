@@ -4,7 +4,7 @@ import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentity
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 
 // The core's need: given a project note's sync frontmatter, resolve the
-// GitHub identities for that project, fetch the tasks changed since a cursor,
+// GitHub identities for that project, fetch the complete tracked issue set,
 // read/update a single task by its issue url, set a task's open/closed state,
 // and drive the project board (read its cards, set a card's Status, add an
 // issue to the board). Designed for the core, not to mimic GitHub's API.
@@ -13,7 +13,7 @@ export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
-  fetchChangedTasks(repoUrl: string, since?: string): Promise<TaskData[]>;
+  fetchTrackedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
   fetchTask(url: string): Promise<TaskData>;
   updateTask(

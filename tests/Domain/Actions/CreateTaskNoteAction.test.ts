@@ -72,14 +72,6 @@ class FakeSyncState implements SyncStatePort {
     throw new Error('not used in this test');
   }
 
-  async getLastPoll(): Promise<string | null> {
-    return null;
-  }
-
-  async setLastPoll(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
   async setIdentity(): Promise<void> {
     throw new Error('not used in this test');
   }

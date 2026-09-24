@@ -102,6 +102,20 @@ const orgProjectResponse = {
   },
 };
 
+// A typed issue in GitHub's REST shape, for building multi-page responses.
+function issue(number: number) {
+  return {
+    html_url: `https://github.com/acme/widgets/issues/${number}`,
+    number,
+    node_id: `I_kwDOAAAA${number}`,
+    title: `Issue ${number}`,
+    body: `Body ${number}`,
+    state: 'open',
+    updated_at: '2026-09-18T10:00:00Z',
+    labels: [{ name: 'type: task' }],
+  };
+}
+
 describe('GitHubAdapter', () => {
   it('resolves identities for a user board url', async () => {
     // Given — a user-scoped board and a transport that resolves it
@@ -284,10 +298,9 @@ describe('GitHubAdapter', () => {
     const { transport, paths } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches changed tasks since a cursor
-    const result = await adapter.fetchChangedTasks(
+    // When — the adapter fetches the tracked issues
+    const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
-      '2026-09-18T00:00:00Z',
     );
 
     // Then — every typed issue is surfaced, mapped onto TaskData
@@ -304,9 +317,9 @@ describe('GitHubAdapter', () => {
     });
     // And the untyped issue is filtered out
     expect(result.some((task) => task.remoteId === 46)).toBe(false);
-    // And the REST path targeted the bound repo with the since cursor
+    // And the REST path targeted the bound repo's first page
     expect(paths[0]).toBe(
-      '/repos/acme/widgets/issues?state=all&since=2026-09-18T00%3A00%3A00Z&per_page=100',
+      '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
     );
   });
 
@@ -331,30 +344,41 @@ describe('GitHubAdapter', () => {
     const { transport } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches changed tasks
-    const result = await adapter.fetchChangedTasks(
+    // When — the adapter fetches the tracked issues
+    const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
-      '2026-09-18T00:00:00Z',
     );
 
     // Then — the issue is surfaced, since any type: label marks it tracked
     expect(result.map((task) => task.remoteId)).toEqual([42]);
   });
 
-  it('omits the since filter when no cursor is given', async () => {
-    // Given — a REST response and a transport that records the requested path
-    const issuesResponse = { status: 200, json: [] };
-    const { transport, paths } = fakeTransport([issuesResponse]);
+  it('concatenates every page of tracked issues', async () => {
+    // Given — a first page at the per_page cap and a short second page
+    const firstPage = Array.from({ length: 100 }, (_, index) =>
+      issue(index + 1),
+    );
+    const secondPage = [issue(101), issue(102)];
+    const { transport, paths } = fakeTransport([
+      { status: 200, json: firstPage },
+      { status: 200, json: secondPage },
+    ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches changed tasks with no since cursor
-    const result = await adapter.fetchChangedTasks(
+    // When — the adapter fetches the tracked issues
+    const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — the since filter is omitted from the requested path
-    expect(paths[0]).toBe('/repos/acme/widgets/issues?state=all&per_page=100');
-    expect(result).toEqual([]);
+    // Then — both pages are concatenated in order
+    expect(result.map((task) => task.remoteId)).toEqual(
+      Array.from({ length: 102 }, (_, index) => index + 1),
+    );
+    // And the adapter walked the pages until the short one
+    expect(paths).toEqual([
+      '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
+      '/repos/acme/widgets/issues?state=all&per_page=100&page=2',
+    ]);
   });
 
   it('maps a closed issue to a closed task state', async () => {
@@ -377,10 +401,9 @@ describe('GitHubAdapter', () => {
     const { transport } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches changed tasks
-    const result = await adapter.fetchChangedTasks(
+    // When — the adapter fetches the tracked issues
+    const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
-      '2026-09-18T00:00:00Z',
     );
 
     // Then — the state is closed
@@ -919,9 +942,9 @@ describe('GitHubAdapter', () => {
 
     // When — a repo-scoped call is made with the empty url
     // Then — it fails with a clear error, not a raw TypeError
-    await expect(
-      adapter.fetchChangedTasks('', '2026-09-18T00:00:00Z'),
-    ).rejects.toThrow(/invalid repo url/);
+    await expect(adapter.fetchTrackedIssues('')).rejects.toThrow(
+      /invalid repo url/,
+    );
   });
 
   it('reports an invalid board url clearly instead of a TypeError', async () => {

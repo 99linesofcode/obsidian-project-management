@@ -14,8 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Implements the sync state port against a flat key/value store. Records are
-// namespaced so status and last-poll cursors never collide: status.<url> and
-// lastPoll.<projectName>.
+// namespaced by kind: status.<url> and identity.<projectName>.
 export class SyncStateAdapter implements SyncStatePort {
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -75,18 +74,6 @@ export class SyncStateAdapter implements SyncStatePort {
       lastSyncedTitle:
         typeof raw.lastSyncedTitle === 'string' ? raw.lastSyncedTitle : '',
     };
-  }
-
-  async getLastPoll(projectName: string): Promise<string | null> {
-    const data = await this.storage.load();
-    const raw = data[`lastPoll.${projectName}`];
-    return typeof raw === 'string' ? raw : null;
-  }
-
-  async setLastPoll(projectName: string, iso: string): Promise<void> {
-    const data = await this.storage.load();
-    data[`lastPoll.${projectName}`] = iso;
-    await this.storage.save(data);
   }
 
   async setIdentity(
