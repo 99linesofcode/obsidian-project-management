@@ -9,8 +9,10 @@ import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
 import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompletionAction.js';
+import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRemoteChangesAction.js';
 import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
+import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCreationsAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
@@ -235,8 +237,29 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.todoTemplatePath,
     );
     const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
-    const relinkRenamedTodo = new RelinkRenamedTodoAction(vault);
+    const relinkRenamedTodo = new RelinkRenamedTodoAction(vault, syncState);
     const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
+
+    // t5: absorb the remote side before the projections push. The verdict
+    // action applies content/lane/parent changes; the creation action captures
+    // Todoist-created items per the dt-06 table. Both reuse the rename and
+    // status machinery the vault-driven paths use.
+    const applyTodoistRemoteChanges = new ApplyTodoistRemoteChangesAction(
+      todoist,
+      vault,
+      syncState,
+      propagateStatus,
+      relocateTaskStatus,
+      relinkRenamedTodo,
+      this.settings.doneOptionName,
+    );
+    const captureTodoistCreations = new CaptureTodoistCreationsAction(
+      todoist,
+      vault,
+      syncState,
+      this.settings.todoTemplatePath,
+      this.settings.doneOptionName,
+    );
 
     const promoteIssue = new PromoteIssueAction(
       github,
@@ -271,6 +294,8 @@ export default class ProjectManagementPlugin extends Plugin {
       probeProjects,
       reconcileArchiveState,
       reconcileTodoistProject,
+      applyTodoistRemoteChanges,
+      captureTodoistCreations,
       projectTasksToTodoist,
       applyTodoistCompletion,
       projectToDosToTodoist,

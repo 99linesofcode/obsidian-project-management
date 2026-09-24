@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { RelinkRenamedTodoAction } from '../../../src/Domain/Actions/RelinkRenamedTodoAction.js';
 import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
+import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
+import type { Status } from '../../../src/Domain/Models/Status.js';
+import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
@@ -46,6 +51,59 @@ class FakeVault implements VaultPort {
   onNoteRenamed(): void {}
 }
 
+// A sync-state fake that only exercises the Todoist item bookkeeping the
+// relink now moves; every other method is inert.
+class FakeSyncState implements SyncStatePort {
+  todoistItemStates = new Map<string, TodoistStateData>();
+  todoistItemSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+
+  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+    return this.todoistItemStates.get(notePath) ?? null;
+  }
+  async setTodoistState(
+    notePath: string,
+    state: TodoistStateData,
+  ): Promise<void> {
+    this.todoistItemSets.push({ notePath, state });
+    this.todoistItemStates.set(notePath, state);
+  }
+
+  async get(): Promise<Status | null> {
+    return null;
+  }
+  async set(): Promise<void> {}
+  async findByNotePath(): Promise<Status | null> {
+    return null;
+  }
+  async remove(): Promise<void> {}
+  async list(): Promise<Status[]> {
+    return [];
+  }
+  async listTodoistStates(): Promise<TodoistStateData[]> {
+    return [...this.todoistItemStates.values()];
+  }
+  async setIdentity(): Promise<void> {}
+  async getIdentity(): Promise<ProjectIdentityData | null> {
+    return null;
+  }
+  async getLastProjectUpdate(): Promise<string | null> {
+    return null;
+  }
+  async setLastProjectUpdate(): Promise<void> {}
+  async getArchiveBaseline(): Promise<null> {
+    return null;
+  }
+  async setArchiveBaseline(): Promise<void> {}
+  async getWatchState(): Promise<{ etag: null; cursor: null }> {
+    return { etag: null, cursor: null };
+  }
+  async setWatchState(): Promise<void> {}
+  async getTodoistProjectState(): Promise<TodoistProjectStateData | null> {
+    return null;
+  }
+  async setTodoistProjectState(): Promise<void> {}
+}
+
 const projectName = 'Acme Widgets';
 const taskPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const taskLink = '42-fix-the-bug';
@@ -82,7 +140,7 @@ describe('RelinkRenamedTodoAction', () => {
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
-    const action = new RelinkRenamedTodoAction(vault);
+    const action = new RelinkRenamedTodoAction(vault, new FakeSyncState());
 
     // When — the rename is followed
     await action.execute({ oldPath, newPath, syncedAt });
@@ -99,7 +157,7 @@ describe('RelinkRenamedTodoAction', () => {
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${newPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
-    const action = new RelinkRenamedTodoAction(vault);
+    const action = new RelinkRenamedTodoAction(vault, new FakeSyncState());
 
     // When — the rename echo arrives
     await action.execute({ oldPath, newPath, syncedAt });
@@ -112,7 +170,7 @@ describe('RelinkRenamedTodoAction', () => {
     // Given — a parent line whose renamed to-do no longer exists
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
-    const action = new RelinkRenamedTodoAction(vault);
+    const action = new RelinkRenamedTodoAction(vault, new FakeSyncState());
 
     // When — the rename is followed
     await action.execute({ oldPath, newPath, syncedAt });
@@ -125,12 +183,43 @@ describe('RelinkRenamedTodoAction', () => {
     // Given — a to-do whose parent task note does not exist
     const vault = new FakeVault();
     vault.notes.set(newPath, toDoNote());
-    const action = new RelinkRenamedTodoAction(vault);
+    const action = new RelinkRenamedTodoAction(vault, new FakeSyncState());
 
     // When — the rename is followed
     await action.execute({ oldPath, newPath, syncedAt });
 
     // Then — no write happens
     expect(vault.written).toEqual([]);
+  });
+
+  it("moves the to-do's Todoist bookkeeping to the new path", async () => {
+    // Given — a to-do with a TodoistState record at its old path
+    const vault = new FakeVault();
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
+    vault.notes.set(newPath, toDoNote());
+    const syncState = new FakeSyncState();
+    syncState.todoistItemStates.set(oldPath, {
+      todoistId: 'T9',
+      notePath: oldPath,
+      lastSyncedHash: 'abc',
+      lastSyncedCompleted: false,
+    });
+    const action = new RelinkRenamedTodoAction(vault, syncState);
+
+    // When — the rename is followed
+    await action.execute({ oldPath, newPath, syncedAt });
+
+    // Then — the record is re-keyed to the new path
+    expect(syncState.todoistItemSets).toEqual([
+      {
+        notePath: newPath,
+        state: {
+          todoistId: 'T9',
+          notePath: newPath,
+          lastSyncedHash: 'abc',
+          lastSyncedCompleted: false,
+        },
+      },
+    ]);
   });
 });
