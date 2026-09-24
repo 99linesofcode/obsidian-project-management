@@ -77,6 +77,15 @@ class FakeSyncState implements SyncStatePort {
   async getArchiveBaseline(): Promise<null> {
     return null;
   }
+  async getWatchState(): Promise<{
+    etag: string | null;
+    cursor: string | null;
+  }> {
+    return { etag: null, cursor: null };
+  }
+
+  async setWatchState(): Promise<void> {}
+
   async setArchiveBaseline(): Promise<void> {}
   statuses = new Map<string, Status>();
   setCalls: Status[] = [];
@@ -155,6 +164,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 
   async addLabel(): Promise<void> {
+    throw new Error('not used in this test');
+  }
+
+  async fetchLatestIssueActivity(): Promise<never> {
     throw new Error('not used in this test');
   }
 

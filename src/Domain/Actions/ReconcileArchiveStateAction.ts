@@ -77,6 +77,29 @@ export class ReconcileArchiveStateAction {
     });
   }
 
+  // The one unarchive implementation: move the folder back to Projecten,
+  // reopen the board, relocate the Status records, and settle the baseline to
+  // active. The watch action calls this when a new issue re-activates a frozen
+  // project; the baseline-merge path reuses the same vault mechanics through
+  // moveToActive. A project with no stored identity cannot be reopened and is
+  // skipped, leaving the caller to retry.
+  async reactivate(projectName: string): Promise<void> {
+    const identity = await this.syncState.getIdentity(projectName);
+    if (!identity?.projectNodeId) {
+      return;
+    }
+
+    await this.moveToActive(projectName);
+    await this.projectManagement.setProjectClosed(
+      identity.projectNodeId,
+      false,
+    );
+    await this.syncState.setArchiveBaseline(projectName, {
+      locationArchived: false,
+      closed: false,
+    });
+  }
+
   private async lockUnshippedIssues(projectName: string): Promise<void> {
     for (const status of await this.trackedIssues(projectName)) {
       if (status.lastSyncedStatus === this.doneOptionName) {
@@ -116,15 +139,19 @@ export class ReconcileArchiveStateAction {
         `Archief/${projectName}/`,
       );
     } else {
-      await this.vault.moveFolder(
-        `Archief/${projectName}`,
-        `Projecten/${projectName}`,
-      );
-      await this.relocateStatuses(
-        `Archief/${projectName}/`,
-        `Projecten/${projectName}/`,
-      );
+      await this.moveToActive(projectName);
     }
+  }
+
+  private async moveToActive(projectName: string): Promise<void> {
+    await this.vault.moveFolder(
+      `Archief/${projectName}`,
+      `Projecten/${projectName}`,
+    );
+    await this.relocateStatuses(
+      `Archief/${projectName}/`,
+      `Projecten/${projectName}/`,
+    );
   }
 
   private async relocateStatuses(

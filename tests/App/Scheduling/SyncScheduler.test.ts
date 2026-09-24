@@ -19,6 +19,7 @@ import { SyncScheduler } from '../../../src/App/Scheduling/SyncScheduler.js';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
 import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
 import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
+import type { WatchArchivedProjectAction } from '../../../src/Domain/Actions/WatchArchivedProjectAction.js';
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
@@ -120,6 +121,15 @@ class FakeSyncState implements SyncStatePort {
   async getArchiveBaseline(): Promise<null> {
     return null;
   }
+  async getWatchState(): Promise<{
+    etag: string | null;
+    cursor: string | null;
+  }> {
+    return { etag: null, cursor: null };
+  }
+
+  async setWatchState(): Promise<void> {}
+
   async setArchiveBaseline(): Promise<void> {}
 }
 
@@ -162,6 +172,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addLabel(): Promise<void> {
     throw new Error('not used in this test');
   }
+  async fetchLatestIssueActivity(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -293,6 +307,14 @@ const idleReconcileArchive = {
   execute: async () => {},
 } as unknown as ReconcileArchiveStateAction;
 
+// A watch fake for tests that never tick; tick tests that exercise the watch
+// supply their own recording fake.
+function idleWatch(): WatchArchivedProjectAction {
+  return {
+    execute: async () => {},
+  } as unknown as WatchArchivedProjectAction;
+}
+
 // A project note in the shape findProjectNotes returns, for seeding the tick's
 // location-derived project list.
 function projectNote(projectName: string, archived: boolean): ProjectNoteData {
@@ -336,6 +358,13 @@ function routingTransport(options: {
         json: options.issues ?? [],
       };
     },
+    async getConditional(path, _etag) {
+      calls.push({ method: 'getConditional', path });
+      return {
+        status: options.issuesStatus ?? 200,
+        json: options.issues ?? [],
+      };
+    },
     async patch(path, body) {
       calls.push({ method: 'patch', path, body });
       return { status: 200, json: {} };
@@ -372,11 +401,13 @@ function schedulerWith(overrides: {
   syncState: SyncStatePort;
   vault?: FakeVault | undefined;
   reconcileArchive?: ReconcileArchiveStateAction | undefined;
+  watch?: WatchArchivedProjectAction | undefined;
 }): SyncScheduler {
   return new SyncScheduler(
     overrides.syncProject,
     overrides.probe,
     overrides.reconcileArchive ?? idleReconcileArchive,
+    overrides.watch ?? idleWatch(),
     overrides.syncState,
     60_000,
     overrides.vault ?? new FakeVault(),
@@ -409,6 +440,7 @@ function tickHarness(options: {
   lastUpdate?: string;
   archived?: boolean;
   reconcileArchive?: ReconcileArchiveStateAction;
+  watch?: WatchArchivedProjectAction;
 }): {
   scheduler: SyncScheduler;
   syncState: FakeSyncState;
@@ -455,6 +487,7 @@ function tickHarness(options: {
     syncState,
     vault,
     reconcileArchive: options.reconcileArchive,
+    watch: options.watch,
   });
   return { scheduler, syncState, vault };
 }
@@ -486,6 +519,19 @@ class FakeReconcileArchive {
     projectName: string;
     locationArchived: boolean;
     closed: boolean;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+  }
+}
+
+// A fake watch action that records its invocations, so the scheduler's routing
+// of archived projects to the watch is observable.
+class FakeWatchArchivedProject {
+  calls: Array<{ projectName: string; syncedAt: string }> = [];
+
+  async execute(input: {
+    projectName: string;
     syncedAt: string;
   }): Promise<void> {
     this.calls.push(input);
@@ -572,6 +618,7 @@ describe('SyncScheduler', () => {
       syncProject,
       probe,
       idleReconcileArchive,
+      idleWatch(),
       syncState,
       60_000,
       vault,
@@ -601,6 +648,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -637,6 +685,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -674,6 +723,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -709,6 +759,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -748,6 +799,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -787,6 +839,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -823,6 +876,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -856,6 +910,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -886,6 +941,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -919,6 +975,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -961,6 +1018,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -995,6 +1053,7 @@ describe('SyncScheduler', () => {
       fakeSyncProject,
       idleProbe,
       idleReconcileArchive,
+      idleWatch(),
       idleSyncState,
       60_000,
       vault,
@@ -1137,7 +1196,7 @@ describe('SyncScheduler', () => {
     expect(issueFetches(calls)).toHaveLength(2);
   });
 
-  it('freezes an archived project: it reconciles but never syncs', async () => {
+  it('routes an archived project to the watch and never syncs it', async () => {
     // Given — an archived project whose board is closed (consistent)
     const { transport, calls } = routingTransport({
       states: {
@@ -1145,19 +1204,21 @@ describe('SyncScheduler', () => {
       },
     });
     const reconcileArchive = new FakeReconcileArchive();
+    const watch = new FakeWatchArchivedProject();
     const { scheduler } = tickHarness({
       transport,
       archived: true,
       reconcileArchive:
         reconcileArchive as unknown as ReconcileArchiveStateAction,
+      watch: watch as unknown as WatchArchivedProjectAction,
     });
     scheduler.load();
 
     // When — one tick elapses
     await vi.advanceTimersByTimeAsync(60_000);
 
-    // Then — the settled state is reconciled (a no-op) and neither issues nor
-    // board are fetched
+    // Then — the settled state is reconciled (a no-op), the repository is
+    // watched, and neither issues nor board are fetched
     expect(reconcileArchive.calls).toEqual([
       {
         projectName: 'Acme Widgets',
@@ -1165,6 +1226,9 @@ describe('SyncScheduler', () => {
         closed: true,
         syncedAt: expect.any(String),
       },
+    ]);
+    expect(watch.calls).toEqual([
+      { projectName: 'Acme Widgets', syncedAt: expect.any(String) },
     ]);
     expect(issueFetches(calls)).toHaveLength(0);
     expect(boardFetches(calls)).toHaveLength(0);

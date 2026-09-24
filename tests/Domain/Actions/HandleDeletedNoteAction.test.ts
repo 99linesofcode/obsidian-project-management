@@ -68,6 +68,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
 
+  async fetchLatestIssueActivity(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -82,6 +86,15 @@ class FakeSyncState implements SyncStatePort {
   async getArchiveBaseline(): Promise<null> {
     return null;
   }
+  async getWatchState(): Promise<{
+    etag: string | null;
+    cursor: string | null;
+  }> {
+    return { etag: null, cursor: null };
+  }
+
+  async setWatchState(): Promise<void> {}
+
   async setArchiveBaseline(): Promise<void> {}
   statuses = new Map<string, Status>();
   removed: string[] = [];

@@ -24,6 +24,7 @@ import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoActio
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
+import { WatchArchivedProjectAction } from './Domain/Actions/WatchArchivedProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import {
   GitHubAdapter,
@@ -59,6 +60,25 @@ function createTransport(token: string): Transport {
         headers: { Authorization: `Bearer ${token}` },
       });
       return { status: response.status, json: response.json };
+    },
+    async getConditional(path, etag) {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (etag) {
+        headers['If-None-Match'] = etag;
+      }
+      // throw: false so a 304 comes back as a response rather than an error.
+      const response = await requestUrl({
+        url: `https://api.github.com${path}`,
+        method: 'GET',
+        headers,
+        throw: false,
+      });
+      const responseEtag = response.headers['etag'];
+      return responseEtag === undefined
+        ? { status: response.status, json: response.json }
+        : { status: response.status, json: response.json, etag: responseEtag };
     },
     async patch(path, body) {
       const response = await requestUrl({
@@ -166,6 +186,11 @@ export default class ProjectManagementPlugin extends Plugin {
       syncState,
       this.settings.doneOptionName,
     );
+    const watchArchivedProject = new WatchArchivedProjectAction(
+      github,
+      syncState,
+      reconcileArchiveState,
+    );
 
     const syncChecklist = new SyncChecklistAction(
       vault,
@@ -207,6 +232,7 @@ export default class ProjectManagementPlugin extends Plugin {
       syncProject,
       probeProjects,
       reconcileArchiveState,
+      watchArchivedProject,
       syncState,
       this.settings.pollIntervalMinutes * 60 * 1000,
       vault,

@@ -32,6 +32,10 @@ class FakePort implements ProjectManagementPort {
     labels: [],
   };
 
+  async fetchLatestIssueActivity(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async promoteCard(itemId: string, repoNodeId: string): Promise<TaskData> {
     this.promoted.push({ itemId, repoNodeId });
     return this.task;
@@ -120,6 +124,15 @@ class FakeSyncState implements SyncStatePort {
   async getArchiveBaseline(): Promise<null> {
     return null;
   }
+  async getWatchState(): Promise<{
+    etag: string | null;
+    cursor: string | null;
+  }> {
+    return { etag: null, cursor: null };
+  }
+
+  async setWatchState(): Promise<void> {}
+
   async setArchiveBaseline(): Promise<void> {}
   identity = {
     repoUrl: 'https://github.com/acme/widgets',
