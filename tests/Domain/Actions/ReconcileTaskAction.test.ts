@@ -50,8 +50,8 @@ class FakeVault implements VaultPort {
     throw new Error('not used in this test');
   }
 
-  async listNotesInFolder(): Promise<never> {
-    throw new Error('not used in this test');
+  async listNotesInFolder(): Promise<string[]> {
+    return [];
   }
 
   async trashNote(): Promise<never> {
@@ -321,6 +321,73 @@ describe('ReconcileTaskAction', () => {
     expect(vault.written).toEqual([]);
     expect(vault.renamed).toEqual([]);
     expect(syncState.setCalls).toEqual([]);
+  });
+
+  it('does not push when a linked checklist projects to the remote body', async () => {
+    // Given — a synced note whose linked checklist projects to the remote body
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const remoteBody = '- [ ] Fix the bug';
+    const linkedBody =
+      '- [ ] [[Projecten/Acme Widgets/todos/fix-the-bug.md|Fix the bug]]';
+    syncState.statuses.set(
+      task.url,
+      makeStatus({ lastSyncedBodyHash: hash(remoteBody) }),
+    );
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, body: linkedBody }, context).content,
+    );
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.remote = { ...task, body: remoteBody };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the note edit is reconciled
+    await action.execute({ notePath: path, ...context });
+
+    // Then — the projection matches the baseline, so nothing is pushed
+    expect(projectManagement.updateCalls).toEqual([]);
+    expect(syncState.setCalls).toEqual([]);
+  });
+
+  it('pushes a linked checklist edit as the stripped issue body', async () => {
+    // Given — a synced note whose linked checklist text the user edited
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const remoteBody = '- [ ] Fix the bug';
+    const linkedBody =
+      '- [ ] [[Projecten/Acme Widgets/todos/fix-the-bug.md|Fix the bug now]]';
+    syncState.statuses.set(
+      task.url,
+      makeStatus({ lastSyncedBodyHash: hash(remoteBody) }),
+    );
+    vault.notes.set(
+      path,
+      TaskNoteMapper.map({ ...task, body: linkedBody }, context).content,
+    );
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.remote = { ...task, body: remoteBody };
+    projectManagement.updated = {
+      ...task,
+      body: '- [ ] Fix the bug now',
+      updatedAt: '2026-09-18T12:30:00Z',
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the note edit is reconciled
+    await action.execute({ notePath: path, ...context });
+
+    // Then — the issue receives the stripped checklist, not the wikilink
+    expect(projectManagement.updateCalls).toEqual([
+      {
+        url: task.url,
+        input: { title: task.title, body: '- [ ] Fix the bug now' },
+      },
+    ]);
+    // And the baseline hashes the raw remote body
+    expect(syncState.setCalls[0]!.lastSyncedBodyHash).toBe(
+      hash('- [ ] Fix the bug now'),
+    );
   });
 
   it('pushes the slug-derived title when the note was renamed', async () => {

@@ -1,6 +1,8 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { Status } from '../Models/Status.js';
-import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
+import { withChecklistLinks } from '../Notes/Checklist.js';
+import { TaskNoteMapper, slugify } from '../Notes/TaskNoteMapper.js';
+import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { hash } from '../Notes/hash.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -43,7 +45,13 @@ export class ApplyRemoteChangeAction {
     }
 
     const template = await this.readTemplate();
-    const { path, content } = TaskNoteMapper.render(template, input.task, {
+    // The note body is the remote body with vault links re-attached, so a
+    // remote-driven rewrite keeps the checklist items linked to their to-dos.
+    const linkedTask: TaskData = {
+      ...input.task,
+      body: await this.linkedBody(input.task.body, input.projectName),
+    };
+    const { path, content } = TaskNoteMapper.render(template, linkedTask, {
       projectName: input.projectName,
       syncedAt: input.syncedAt,
       statusName: input.statusName,
@@ -100,5 +108,40 @@ export class ApplyRemoteChangeAction {
   private async readTemplate(): Promise<string | null> {
     const note = await this.vault.getNoteByPath(this.taskTemplatePath);
     return note?.content ?? null;
+  }
+
+  // Re-attaches vault links to the remote body's checklist items. A to-do's
+  // title is only recoverable from its filename slug, so an item links to the
+  // first to-do whose filename stem equals slugify(item text); an item with no
+  // matching to-do stays unlinked and re-promotes through the checklist
+  // lifecycle on the next pass.
+  private async linkedBody(body: string, projectName: string): Promise<string> {
+    const bySlug = await this.todoPathsBySlug(projectName);
+    return withChecklistLinks(
+      body,
+      (text) => bySlug.get(slugify(text)) ?? null,
+    );
+  }
+
+  // The project's to-do paths keyed by filename stem. Only notes that parse as
+  // to-dos are considered; on a slug collision the first path wins.
+  private async todoPathsBySlug(
+    projectName: string,
+  ): Promise<Map<string, string>> {
+    const bySlug = new Map<string, string>();
+    const folder = `Projecten/${projectName}/todos`;
+
+    for (const path of await this.vault.listNotesInFolder(folder)) {
+      const note = await this.vault.getNoteByPath(path);
+      if (!note || ToDoNoteParser.parse(note.content) === null) {
+        continue;
+      }
+      const stem = path.split('/').pop()?.replace(/\.md$/, '') ?? '';
+      if (!bySlug.has(stem)) {
+        bySlug.set(stem, path);
+      }
+    }
+
+    return bySlug;
   }
 }

@@ -1,5 +1,6 @@
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { Status } from '../Models/Status.js';
+import { toIssueBody } from '../Notes/Checklist.js';
 import { TaskNoteParser, withStatus } from '../Notes/TaskNoteParser.js';
 import { slugify, titleFromNotePath } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
@@ -63,8 +64,11 @@ export class ReconcileTaskAction {
 
     const currentTitle = titleFromNotePath(input.notePath, status.remoteId);
 
+    // The note side is projected for the issue before it meets the baseline:
+    // the baseline hashes the raw remote body, so a linked checklist must be
+    // stripped to compare like with like.
     const observed = new ObservedState(
-      { body: parsed.body, status: parsed.status },
+      { body: toIssueBody(parsed.body), status: parsed.status },
       {
         body: remote.body,
         status: await this.statusNameFor(remote.state, input.projectName),

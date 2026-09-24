@@ -45,8 +45,8 @@ class FakeVault implements VaultPort {
     throw new Error('not used in this test');
   }
 
-  async listNotesInFolder(): Promise<never> {
-    throw new Error('not used in this test');
+  async listNotesInFolder(): Promise<string[]> {
+    return [];
   }
 
   async trashNote(): Promise<never> {
