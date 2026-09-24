@@ -55,11 +55,17 @@ interface VerdictContext {
 // A field changed on both sides is a conflict: the vault wins (dt-01), so the
 // remote value is not applied and the projection re-pushes the vault state on
 // this tick; the snapshot is re-stamped either way so the next poll does not
-// re-trigger. Completion is owned by ApplyTodoistCompletionAction (t4) and is
-// not revisited here. A twin absent from both the active set and the completed
-// window is a Todoist-side deletion when its note survives (t6): the record is
-// evicted so the projection re-creates the twin in the same tick (vault wins);
-// a missing note is left to PropagateTodoistDeletionsAction.
+// re-trigger. A task twin that is active again while the snapshot says completed
+// is a remote reopen (t7): the same signal t4 uses for to-dos, extended to
+// tasks. The twin's section is the done section (the projection moved it there
+// when it completed), so the section cannot name the lane to return to; the
+// reopen pulls the note out of done into the default lane and propagates the
+// status, which reopens the issue and moves the board card. To-do completion and
+// reopen stay owned by ApplyTodoistCompletionAction (t4) and are not revisited
+// here. A twin absent from both the active set and the completed window is a
+// Todoist-side deletion when its note survives (t6): the record is evicted so
+// the projection re-creates the twin in the same tick (vault wins); a missing
+// note is left to PropagateTodoistDeletionsAction.
 export class ApplyTodoistRemoteChangesAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
@@ -153,9 +159,20 @@ export class ApplyTodoistRemoteChangesAction {
     // section (dt-02), so its lane is not a controlled field.
     const topLevel = twin.parentId === null;
     const laneControlled = isTask && topLevel && context.hasLanes;
+    // A task twin that is active while the snapshot says completed is a remote
+    // reopen (t7). The twin's section is the done section (the projection moved
+    // it there when it completed), so the section cannot name the lane to return
+    // to; the reopen returns the note to the default lane. A project without
+    // lanes has no lane to return to, so there is nothing to pull out of done.
+    const reopened =
+      isTask &&
+      state.lastSyncedCompleted === true &&
+      !twin.isCompleted &&
+      context.defaultLane !== null;
     // A completed top-level item is in the done lane regardless of its section
     // (dt-07: is_completed ⇔ done lane); a section-less open item lands in the
-    // default lane.
+    // default lane. This is the lane the twin actually sits in, which is what
+    // the snapshot records; a reopen is a separate signal below.
     const remoteLane = laneControlled
       ? twin.isCompleted
         ? context.doneLane
@@ -192,20 +209,22 @@ export class ApplyTodoistRemoteChangesAction {
       vaultParent !== undefined &&
       vaultParent !== (baseParent ?? null);
 
-    const remoteChanged = contentChanged || laneChanged || parentChanged;
+    const remoteChanged =
+      contentChanged || laneChanged || parentChanged || reopened;
     const localChanged =
       localContentChanged || localLaneChanged || localParentChanged;
+
+    // For a task the completion base is the twin's own state: the completion
+    // action owns only to-dos, so a task's base must follow the twin or a
+    // reopen would never settle. For a to-do it is preserved, so a remote
+    // completion racing a rename is not mistaken for our own echo (t4).
+    const completedBase = isTask ? twin.isCompleted : state.lastSyncedCompleted;
 
     if (remoteChanged && localChanged) {
       // The vault wins: leave the note alone and re-stamp from the remote, so
       // the next poll reads it as settled. The projection re-pushes the vault
       // state later in this same tick.
-      await this.stamp(
-        state.notePath,
-        twin,
-        remoteLane,
-        state.lastSyncedCompleted,
-      );
+      await this.stamp(state.notePath, twin, remoteLane, completedBase);
       return;
     }
 
@@ -214,13 +233,17 @@ export class ApplyTodoistRemoteChangesAction {
       if (contentChanged) {
         notePath = await this.renameNote(notePath, twin, isTask, context);
       }
-      if (laneChanged && remoteLane !== null) {
+      if (reopened) {
+        // The reopen is a lane move out of done; it takes precedence over the
+        // section-derived lane, which still reads as done.
+        await this.applyLane(notePath, context.defaultLane!, context);
+      } else if (laneChanged && remoteLane !== null) {
         await this.applyLane(notePath, remoteLane, context);
       }
       if (parentChanged) {
         await this.applyParent(notePath, twin.parentId, context, isTask);
       }
-      await this.stamp(notePath, twin, remoteLane, state.lastSyncedCompleted);
+      await this.stamp(notePath, twin, remoteLane, completedBase);
       return;
     }
 
@@ -231,12 +254,7 @@ export class ApplyTodoistRemoteChangesAction {
       baseLane === undefined ||
       baseParent === undefined
     ) {
-      await this.stamp(
-        state.notePath,
-        twin,
-        remoteLane,
-        state.lastSyncedCompleted,
-      );
+      await this.stamp(state.notePath, twin, remoteLane, completedBase);
     }
   }
 
