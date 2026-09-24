@@ -204,6 +204,28 @@ async function main() {
       }),
     );
 
+    // --- To-do projection: a subtask under a subtask (indent 4) -----------
+    // The to-do projection nests a to-do under its parent to-do's twin. Relative
+    // to the slice, that nested to-do is Todoist's fourth (and deepest) indent
+    // level. Prove the API accepts a four-deep chain and reports the parent
+    // back at the bottom.
+    const subSubtask = await run('createTask (sub-subtask, indent 3)', () =>
+      adapter.createTask({
+        projectId,
+        parentId: subtask?.id,
+        content: 'Probe sub-subtask',
+      }),
+    );
+    const subSubSubtask = await run(
+      'createTask (sub-sub-subtask, indent 4)',
+      () =>
+        adapter.createTask({
+          projectId,
+          parentId: subSubtask?.id,
+          content: 'Probe sub-sub-subtask',
+        }),
+    );
+
     await run('updateTask (content + labels)', () =>
       adapter.updateTask(task?.id, {
         content: 'Probe task (updated)',
@@ -224,12 +246,29 @@ async function main() {
 
     await run('fetchActiveTasks', async () => {
       const active = await adapter.fetchActiveTasks(projectId);
-      if (active.length < 3) {
+      if (active.length < 5) {
         throw new Error(
-          `expected at least 3 active tasks, got ${active.length}`,
+          `expected at least 5 active tasks, got ${active.length}`,
         );
       }
       return `${active.length} active tasks`;
+    });
+
+    await run('four-deep chain sits at the fourth indent level', async () => {
+      const active = await adapter.fetchActiveTasks(projectId);
+      const nested = active.find(
+        (candidate) => candidate.id === subSubSubtask?.id,
+      );
+      if (!nested) {
+        throw new Error('sub-sub-subtask not in active set');
+      }
+      if (nested.parentId !== subSubtask?.id) {
+        throw new Error(`sub-sub-subtask parentId ${nested.parentId} is wrong`);
+      }
+      findings.push(
+        `subtask under a subtask: SUCCEEDED; a to-do under a to-do sits at Todoist indent level 4 (parentId=${nested.parentId})`,
+      );
+      return `parent ${nested.parentId}`;
     });
 
     // --- Completion + completed-since query (dt-12 finding 3) -------------
