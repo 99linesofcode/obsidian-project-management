@@ -6,5 +6,7 @@ export interface ToDoData {
   taskLink: string;
   parentTodoLink?: string;
   status: 'open' | 'completed';
+  // A full ISO datetime stamp — the sync timestamp of the completion, e.g.
+  // 2026-09-18T12:00:00Z. Passed through verbatim; never date-only.
   completedAt?: string;
 }

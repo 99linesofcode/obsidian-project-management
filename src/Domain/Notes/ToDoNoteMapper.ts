@@ -12,6 +12,8 @@ export interface ToDoNoteInput {
 export interface ToDoNoteContext {
   syncedAt: string;
   statusName: 'open' | 'completed';
+  // A full ISO datetime stamp — the sync timestamp of the completion, e.g.
+  // 2026-09-18T12:00:00Z. Passed through verbatim; never date-only.
   completedAt?: string;
 }
 
@@ -27,6 +29,7 @@ export const ToDoNoteMapper = {
   map(input: ToDoNoteInput, context: ToDoNoteContext): ToDoNote {
     const content = [
       '---',
+      'categories: ["[[Todos.base|Todos]]"]',
       `affiliation: ${affiliationValue(input)}`,
       `status: ${context.statusName}`,
       completedLine(context.completedAt),
