@@ -412,7 +412,12 @@ async function main() {
     );
     ensureProjectId = undefined;
 
-    // --- Delete cascade (dt-12 finding 2) ---------------------------------
+    // --- Delete cascade (dt-12 finding 2, t6 subtree semantics) -----------
+    // A vault deletion propagates by deleting the root twin and relying on the
+    // API to cascade the whole subtree. Prove the cascade reaches a two-level
+    // subtree (child + grandchild), and that deleting an already-gone twin is a
+    // no-op — the t6 eviction must proceed even when the twin was removed on
+    // the Todoist side first.
     const cascadeParent = await run('createTask (cascade parent)', () =>
       adapter.createTask({ projectId, content: 'Cascade parent' }),
     );
@@ -423,19 +428,33 @@ async function main() {
         content: 'Cascade child',
       }),
     );
+    const cascadeGrandchild = await run('createTask (cascade grandchild)', () =>
+      adapter.createTask({
+        projectId,
+        parentId: cascadeChild?.id,
+        content: 'Cascade grandchild',
+      }),
+    );
     await run('deleteTask (cascade parent)', () =>
       adapter.deleteTask(cascadeParent?.id),
     );
-    await run('delete cascade check', async () => {
+    await run('delete cascade check (two-level subtree)', async () => {
       const active = await adapter.fetchActiveTasks(projectId);
       const childSurvived = active.some(
         (candidate) => candidate.id === cascadeChild?.id,
       );
-      findings.push(
-        `delete cascade: deleting a parent task ${childSurvived ? 'LEFT the subtask alive (no cascade)' : 'REMOVED the subtask (cascade)'}`,
+      const grandchildSurvived = active.some(
+        (candidate) => candidate.id === cascadeGrandchild?.id,
       );
-      return childSurvived ? 'subtask survived' : 'subtask removed';
+      const subtreeGone = !childSurvived && !grandchildSurvived;
+      findings.push(
+        `delete cascade: deleting a parent ${subtreeGone ? 'REMOVED its two-level subtree (child + grandchild)' : 'LEFT part of its subtree alive'}`,
+      );
+      return subtreeGone ? 'subtree removed' : 'subtree survived';
     });
+    await run('deleteTask (already gone, 404 no-op)', () =>
+      adapter.deleteTask(cascadeParent?.id),
+    );
 
     await run('deleteTask (second top-level)', () =>
       adapter.deleteTask(task2?.id),
