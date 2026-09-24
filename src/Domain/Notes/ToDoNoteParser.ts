@@ -33,3 +33,35 @@ function parseAffiliation(raw: string | undefined): string[] {
   }
   return [...raw.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
 }
+
+// Rewrites the frontmatter status and completed lines of a to-do note,
+// preserving the body and every other frontmatter field. Mirrors withStatus
+// for task notes. A null stamp empties the completed field.
+export function withToDoStatus(
+  content: string,
+  status: string,
+  completedAt: string | null,
+): string {
+  const lines = content.split('\n');
+  let inFrontmatter = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (i === 0 && line === '---') {
+      inFrontmatter = true;
+      continue;
+    }
+    if (inFrontmatter && line === '---') {
+      break;
+    }
+    if (!inFrontmatter) {
+      continue;
+    }
+    if (line.startsWith('status:')) {
+      lines[i] = `status: ${status}`;
+    } else if (line.startsWith('completed:')) {
+      lines[i] =
+        completedAt === null ? 'completed:' : `completed: ${completedAt}`;
+    }
+  }
+  return lines.join('\n');
+}

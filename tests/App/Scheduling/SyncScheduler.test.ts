@@ -23,6 +23,8 @@ import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNote
 import { ApplyBoardChangeAction } from '../../../src/Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
+import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncChecklistAction.js';
+import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
@@ -44,6 +46,12 @@ class FakeVault implements VaultPort {
   async writeNote(): Promise<void> {}
   async renameNote(): Promise<void> {}
   async findProjectNotes(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listNotesInFolder(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
   onNoteChanged(cb: (path: string) => void): void {
@@ -134,9 +142,14 @@ class FakeProjectManagement implements ProjectManagementPort {
 class FakeReconcile {
   calls: Array<{ notePath: string; projectName: string; syncedAt: string }> =
     [];
+  events: string[] = [];
   active = 0;
   maxActive = 0;
   private resolvers: Array<() => void> = [];
+
+  constructor(events: string[] = []) {
+    this.events = events;
+  }
 
   async execute(input: {
     notePath: string;
@@ -146,6 +159,7 @@ class FakeReconcile {
     this.active++;
     this.maxActive = Math.max(this.maxActive, this.active);
     this.calls.push(input);
+    this.events.push('reconcile');
     await new Promise<void>((resolve) => this.resolvers.push(resolve));
     this.active--;
   }
@@ -156,6 +170,43 @@ class FakeReconcile {
     }
     this.resolvers = [];
   }
+}
+
+// Fakes for the checklist sync and the parent-line mirror, recording their
+// invocations (and order, via a shared events array) without the real vault.
+class FakeSyncChecklist {
+  calls: Array<{ notePath: string; projectName: string; syncedAt: string }> =
+    [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: {
+    notePath: string;
+    projectName: string;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('checklist');
+  }
+}
+
+class FakeMirrorTodo {
+  calls: Array<{ todoPath: string; syncedAt: string }> = [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: { todoPath: string; syncedAt: string }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('mirror');
+  }
+}
+
+function idleChecklist(): SyncChecklistAction {
+  return new FakeSyncChecklist() as unknown as SyncChecklistAction;
+}
+
+function idleMirror(): MirrorTodoStatusAction {
+  return new FakeMirrorTodo() as unknown as MirrorTodoStatusAction;
 }
 
 const fakeSyncProject = {
@@ -239,6 +290,8 @@ describe('SyncScheduler', () => {
       ['Acme Widgets', 'Other'],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       2000,
@@ -265,6 +318,8 @@ describe('SyncScheduler', () => {
       [],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       0,
@@ -283,6 +338,71 @@ describe('SyncScheduler', () => {
     );
   });
 
+  it('runs the checklist sync before the reconcile for a task note change', async () => {
+    // Given — a scheduler wired to observe the chained order
+    const vault = new FakeVault();
+    const events: string[] = [];
+    const checklist = new FakeSyncChecklist(events);
+    const reconcile = new FakeReconcile(events);
+    const handleDeleted = new FakeHandleDeleted();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      checklist as unknown as SyncChecklistAction,
+      idleMirror(),
+      reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a task note under Projecten/<project>/taken changes
+    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — the checklist sync runs first, then the reconcile, in one chain
+    expect(events).toEqual(['checklist', 'reconcile']);
+    expect(checklist.calls[0]!.projectName).toBe('Acme Widgets');
+    expect(checklist.calls[0]!.notePath).toBe(
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    );
+    reconcile.releaseAll();
+  });
+
+  it('routes a to-do note change to the parent-line mirror', async () => {
+    // Given — a scheduler wired to observe routing
+    const vault = new FakeVault();
+    const events: string[] = [];
+    const mirror = new FakeMirrorTodo(events);
+    const reconcile = new FakeReconcile(events);
+    const handleDeleted = new FakeHandleDeleted();
+    const scheduler = new SyncScheduler(
+      fakeSyncProject,
+      [],
+      60_000,
+      vault,
+      idleChecklist(),
+      mirror as unknown as MirrorTodoStatusAction,
+      reconcile as unknown as ReconcileTaskAction,
+      handleDeleted as unknown as HandleDeletedNoteAction,
+      0,
+    );
+    scheduler.load();
+
+    // When — a to-do note under Projecten/<project>/todos changes
+    vault.fireNoteChanged('Projecten/Acme Widgets/todos/fix-the-bug.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — the mirror runs instead of the reconcile
+    expect(events).toEqual(['mirror']);
+    expect(mirror.calls[0]!.todoPath).toBe(
+      'Projecten/Acme Widgets/todos/fix-the-bug.md',
+    );
+    expect(reconcile.calls).toHaveLength(0);
+  });
+
   it('ignores note changes outside Projecten', async () => {
     // Given — a scheduler subscribed to vault note changes
     const vault = new FakeVault();
@@ -293,6 +413,8 @@ describe('SyncScheduler', () => {
       [],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       0,
@@ -317,6 +439,8 @@ describe('SyncScheduler', () => {
       [],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       2000,
@@ -344,6 +468,8 @@ describe('SyncScheduler', () => {
       [],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       0,
@@ -380,6 +506,8 @@ describe('SyncScheduler', () => {
       [],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       2000,
@@ -408,6 +536,8 @@ describe('SyncScheduler', () => {
       [],
       60_000,
       vault,
+      idleChecklist(),
+      idleMirror(),
       reconcile as unknown as ReconcileTaskAction,
       handleDeleted as unknown as HandleDeletedNoteAction,
       0,

@@ -9,6 +9,10 @@ export interface VaultPort {
   createNote(path: string, content: string): Promise<void>;
   writeNote(path: string, content: string): Promise<void>;
   renameNote(oldPath: string, newPath: string): Promise<void>;
+  // Markdown paths under a folder prefix — used to find a task's to-dos.
+  listNotesInFolder(folder: string): Promise<string[]>;
+  // Moves a note to the vault-internal trash; never a permanent delete.
+  trashNote(path: string): Promise<void>;
   findProjectNotes(): Promise<ProjectNoteData[]>;
   onNoteChanged(cb: (path: string) => void): void;
   onNoteDeleted(cb: (path: string) => void): void;
