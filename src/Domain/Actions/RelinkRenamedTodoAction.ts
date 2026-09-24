@@ -2,6 +2,7 @@ import { parseChecklist, renderChecklist } from '../Notes/Checklist.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { withBody } from '../Notes/withBody.js';
+import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 
 export interface RelinkRenamedTodoInput {
@@ -14,11 +15,18 @@ export interface RelinkRenamedTodoInput {
 // line follows. The parent and task come from the to-do's new path and
 // affiliation; the line is located by the old link path. A rename the checklist
 // sync itself performed already updated the line, so no line matches the old
-// path and the action no-ops — that is what lets the rename echo settle.
+// path and the action no-ops — that is what lets the rename echo settle. The
+// to-do's TodoistState record follows too (t5), so a rename keeps its twin
+// anchor rather than stranding it at the old path.
 export class RelinkRenamedTodoAction {
-  constructor(private readonly vault: VaultPort) {}
+  constructor(
+    private readonly vault: VaultPort,
+    private readonly syncState: SyncStatePort,
+  ) {}
 
   async execute(input: RelinkRenamedTodoInput): Promise<void> {
+    await this.moveTodoistState(input.oldPath, input.newPath);
+
     const todo = await this.vault.getNoteByPath(input.newPath);
     if (!todo) {
       return;
@@ -58,6 +66,21 @@ export class RelinkRenamedTodoAction {
       taskPath,
       withBody(task.content, renderChecklist(body, items)),
     );
+  }
+
+  // Re-keys the to-do's TodoistState to the new path. The adapter evicts the
+  // record's old key (one record per todoistId), so this is a move, not a copy.
+  private async moveTodoistState(
+    oldPath: string,
+    newPath: string,
+  ): Promise<void> {
+    const state = await this.syncState.getTodoistState(oldPath);
+    if (state) {
+      await this.syncState.setTodoistState(newPath, {
+        ...state,
+        notePath: newPath,
+      });
+    }
   }
 }
 

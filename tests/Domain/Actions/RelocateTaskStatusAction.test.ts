@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RelocateTaskStatusAction } from '../../../src/Domain/Actions/RelocateTaskStatusAction.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 
@@ -29,10 +30,17 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
+  todoistState: TodoistStateData | null = null;
+  todoistSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  async getTodoistState(): Promise<TodoistStateData | null> {
+    return this.todoistState;
   }
-  async setTodoistState(): Promise<void> {}
+  async setTodoistState(
+    notePath: string,
+    state: TodoistStateData,
+  ): Promise<void> {
+    this.todoistSets.push({ notePath, state });
+  }
   async listTodoistStates(): Promise<[]> {
     return [];
   }
@@ -101,5 +109,33 @@ describe('RelocateTaskStatusAction', () => {
 
     // Then — nothing is saved
     expect(syncState.saved).toEqual([]);
+  });
+
+  it('moves the Todoist bookkeeping record to the new path', async () => {
+    // Given — a TodoistState record at the note's old path
+    const syncState = new FakeSyncState();
+    syncState.todoistState = {
+      todoistId: 'T1',
+      notePath: oldPath,
+      lastSyncedHash: 'abc',
+      lastSyncedCompleted: false,
+    };
+    const action = new RelocateTaskStatusAction(syncState);
+
+    // When — the task note rename is followed
+    await action.execute({ oldPath, newPath });
+
+    // Then — the record is re-keyed to the new path
+    expect(syncState.todoistSets).toEqual([
+      {
+        notePath: newPath,
+        state: {
+          todoistId: 'T1',
+          notePath: newPath,
+          lastSyncedHash: 'abc',
+          lastSyncedCompleted: false,
+        },
+      },
+    ]);
   });
 });

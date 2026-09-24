@@ -23,6 +23,8 @@ import type { ReconcileTodoistProjectAction } from '../../../src/Domain/Actions/
 import type { ProjectTasksToTodoistAction } from '../../../src/Domain/Actions/ProjectTasksToTodoistAction.js';
 import type { ProjectToDosToTodoistAction } from '../../../src/Domain/Actions/ProjectToDosToTodoistAction.js';
 import type { ApplyTodoistCompletionAction } from '../../../src/Domain/Actions/ApplyTodoistCompletionAction.js';
+import type { ApplyTodoistRemoteChangesAction } from '../../../src/Domain/Actions/ApplyTodoistRemoteChangesAction.js';
+import type { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/CaptureTodoistCreationsAction.js';
 import type { WatchArchivedProjectAction } from '../../../src/Domain/Actions/WatchArchivedProjectAction.js';
 import { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
@@ -335,6 +337,16 @@ const idleProjectTasks = {
   execute: async () => {},
 } as unknown as ProjectTasksToTodoistAction;
 
+// t5 remote-verdict and creation fakes for tests that never tick; tick tests
+// that exercise the absorption half supply their own recording fakes.
+const idleApplyRemoteChanges = {
+  execute: async () => {},
+} as unknown as ApplyTodoistRemoteChangesAction;
+
+const idleCaptureCreations = {
+  execute: async () => {},
+} as unknown as CaptureTodoistCreationsAction;
+
 // A to-do completion-pull fake and a to-do projection fake for tests that never
 // tick; tick tests that exercise the to-do half supply their own recording
 // fakes.
@@ -441,6 +453,8 @@ function schedulerWith(overrides: {
   vault?: FakeVault | undefined;
   reconcileArchive?: ReconcileArchiveStateAction | undefined;
   reconcileTodoist?: ReconcileTodoistProjectAction | undefined;
+  applyRemoteChanges?: ApplyTodoistRemoteChangesAction | undefined;
+  captureCreations?: CaptureTodoistCreationsAction | undefined;
   projectTasks?: ProjectTasksToTodoistAction | undefined;
   applyCompletion?: ApplyTodoistCompletionAction | undefined;
   projectToDos?: ProjectToDosToTodoistAction | undefined;
@@ -451,6 +465,8 @@ function schedulerWith(overrides: {
     overrides.probe,
     overrides.reconcileArchive ?? idleReconcileArchive,
     overrides.reconcileTodoist ?? idleReconcileTodoist,
+    overrides.applyRemoteChanges ?? idleApplyRemoteChanges,
+    overrides.captureCreations ?? idleCaptureCreations,
     overrides.projectTasks ?? idleProjectTasks,
     overrides.applyCompletion ?? idleApplyCompletion,
     overrides.projectToDos ?? idleProjectToDos,
@@ -488,6 +504,8 @@ function tickHarness(options: {
   archived?: boolean;
   reconcileArchive?: ReconcileArchiveStateAction;
   reconcileTodoist?: ReconcileTodoistProjectAction;
+  applyRemoteChanges?: ApplyTodoistRemoteChangesAction;
+  captureCreations?: CaptureTodoistCreationsAction;
   projectTasks?: ProjectTasksToTodoistAction;
   applyCompletion?: ApplyTodoistCompletionAction;
   projectToDos?: ProjectToDosToTodoistAction;
@@ -539,6 +557,8 @@ function tickHarness(options: {
     vault,
     reconcileArchive: options.reconcileArchive,
     reconcileTodoist: options.reconcileTodoist,
+    applyRemoteChanges: options.applyRemoteChanges,
+    captureCreations: options.captureCreations,
     projectTasks: options.projectTasks,
     applyCompletion: options.applyCompletion,
     projectToDos: options.projectToDos,
@@ -674,6 +694,41 @@ class FakeProjectToDos {
   }
 }
 
+// t5 remote-verdict and creation fakes, recording their invocations (and order,
+// via a shared events array), so the scheduler's absorb-before-project
+// invariant is observable.
+class FakeApplyRemoteChanges {
+  calls: Array<{ projectName: string; projectId: string; syncedAt: string }> =
+    [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: {
+    projectName: string;
+    projectId: string;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('applyRemoteChanges');
+  }
+}
+
+class FakeCaptureCreations {
+  calls: Array<{ projectName: string; projectId: string; syncedAt: string }> =
+    [];
+
+  constructor(private readonly events: string[] = []) {}
+
+  async execute(input: {
+    projectName: string;
+    projectId: string;
+    syncedAt: string;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('captureCreations');
+  }
+}
+
 describe('SyncScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -755,6 +810,8 @@ describe('SyncScheduler', () => {
       probe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -789,6 +846,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -830,6 +889,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -872,6 +933,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -912,6 +975,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -956,6 +1021,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1000,6 +1067,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1041,6 +1110,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1079,6 +1150,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1114,6 +1187,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1152,6 +1227,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1199,6 +1276,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1238,6 +1317,8 @@ describe('SyncScheduler', () => {
       idleProbe,
       idleReconcileArchive,
       idleReconcileTodoist,
+      idleApplyRemoteChanges,
+      idleCaptureCreations,
       idleProjectTasks,
       idleApplyCompletion,
       idleProjectToDos,
@@ -1606,6 +1687,59 @@ describe('SyncScheduler', () => {
       syncedAt: expect.any(String),
     });
     expect(projectToDos.calls[0]).toEqual({
+      projectName: 'Acme Widgets',
+      projectId: 'P1',
+      syncedAt: expect.any(String),
+    });
+  });
+
+  it('absorbs Todoist remote changes and creations before projecting', async () => {
+    // Given — an active project with a GitHub attach
+    const { transport } = routingTransport({
+      states: {
+        p0: { id: 'PVT_123', updatedAt: '2026-09-18T10:00:00Z', closed: false },
+      },
+    });
+    const events: string[] = [];
+    const reconcileTodoist = new FakeReconcileTodoist();
+    const applyRemoteChanges = new FakeApplyRemoteChanges(events);
+    const captureCreations = new FakeCaptureCreations(events);
+    const projectTasks = new FakeProjectTasks(events);
+    const applyCompletion = new FakeApplyCompletion(events);
+    const projectToDos = new FakeProjectToDos(events);
+    const { scheduler } = tickHarness({
+      transport,
+      reconcileTodoist:
+        reconcileTodoist as unknown as ReconcileTodoistProjectAction,
+      applyRemoteChanges:
+        applyRemoteChanges as unknown as ApplyTodoistRemoteChangesAction,
+      captureCreations:
+        captureCreations as unknown as CaptureTodoistCreationsAction,
+      projectTasks: projectTasks as unknown as ProjectTasksToTodoistAction,
+      applyCompletion:
+        applyCompletion as unknown as ApplyTodoistCompletionAction,
+      projectToDos: projectToDos as unknown as ProjectToDosToTodoistAction,
+    });
+    scheduler.load();
+
+    // When — one tick elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the remote verdicts and creations land in the vault before any
+    // projection pushes, so a remote change is never clobbered
+    expect(events).toEqual([
+      'applyRemoteChanges',
+      'captureCreations',
+      'projectTasks',
+      'applyCompletion',
+      'projectToDos',
+    ]);
+    expect(applyRemoteChanges.calls[0]).toEqual({
+      projectName: 'Acme Widgets',
+      projectId: 'P1',
+      syncedAt: expect.any(String),
+    });
+    expect(captureCreations.calls[0]).toEqual({
       projectName: 'Acme Widgets',
       projectId: 'P1',
       syncedAt: expect.any(String),
