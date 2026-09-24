@@ -256,6 +256,9 @@ describe('ApplyTodoistCompletionAction', () => {
           notePath: todoPath,
           lastSyncedHash: expect.any(String),
           lastSyncedCompleted: true,
+          lastSyncedContent: 'Fix the widget',
+          lastSyncedLane: null,
+          lastSyncedParent: 'T1',
         },
       },
     ]);
