@@ -5,6 +5,7 @@ import {
   type ProjectManagementSettings,
 } from './App/Settings/PluginSettingTab.js';
 import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
+import { SyncQueue } from './App/Scheduling/SyncQueue.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
@@ -13,6 +14,7 @@ import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRe
 import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCreationsAction.js';
+import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
@@ -31,7 +33,9 @@ import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoist
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
+import { SyncGithubTasksAction } from './Domain/Actions/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
+import { SyncTodoistTasksAction } from './Domain/Actions/SyncTodoistTasksAction.js';
 import { WatchArchivedProjectAction } from './Domain/Actions/WatchArchivedProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import {
@@ -179,7 +183,7 @@ export default class ProjectManagementPlugin extends Plugin {
       vault,
       this.settings.doneOptionName,
     );
-    const syncProject = new SyncProjectAction(
+    const syncGithubTasks = new SyncGithubTasksAction(
       github,
       syncState,
       applyRemoteChange,
@@ -297,12 +301,9 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     promoteCardToIssue.register(this);
 
-    // v1 wiring: the scheduler starts inert and discovers the vault's project
-    // notes on every tick, so a folder move is picked up without a stored list.
-    const scheduler = new SyncScheduler(
-      syncProject,
-      probeProjects,
-      reconcileArchiveState,
+    // t2: the chain composes the interim halves; the queue serialises every
+    // project; the scheduler is discovery + timing policies only.
+    const syncTodoistTasks = new SyncTodoistTasksAction(
       reconcileTodoistProject,
       applyTodoistRemoteChanges,
       captureTodoistCreations,
@@ -310,16 +311,32 @@ export default class ProjectManagementPlugin extends Plugin {
       applyTodoistCompletion,
       projectToDosToTodoist,
       propagateTodoistDeletions,
-      watchArchivedProject,
-      syncState,
-      this.settings.pollIntervalMinutes * 60 * 1000,
+    );
+    const detectNoteRenames = new DetectNoteRenamesAction(
       vault,
-      syncChecklist,
-      mirrorTodoStatus,
-      reconcileTask,
-      handleDeletedNote,
+      syncState,
       relinkRenamedTodo,
       relocateTaskStatus,
+    );
+    const syncProject = new SyncProjectAction(
+      vault,
+      syncState,
+      probeProjects,
+      reconcileArchiveState,
+      watchArchivedProject,
+      detectNoteRenames,
+      syncGithubTasks,
+      syncChecklist,
+      reconcileTask,
+      mirrorTodoStatus,
+      syncTodoistTasks,
+      handleDeletedNote,
+    );
+    const queue = new SyncQueue(syncProject);
+    const scheduler = new SyncScheduler(
+      vault,
+      queue,
+      this.settings.pollIntervalMinutes * 60 * 1000,
       this.settings.debounceSeconds * 1000,
     );
     this.addChild(scheduler);

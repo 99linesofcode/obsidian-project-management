@@ -1,87 +1,86 @@
 import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
-import { ApplyRemoteChangeAction } from '../../../src/Domain/Actions/ApplyRemoteChangeAction.js';
-import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
-import { ApplyBoardChangeAction } from '../../../src/Domain/Actions/ApplyBoardChangeAction.js';
-import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
-import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
-import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
-import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
+import type { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
+import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
+import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
+import type { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
+import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
+import type { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
+import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncChecklistAction.js';
+import type { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTasksAction.js';
+import type { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
+import type { WatchArchivedProjectAction } from '../../../src/Domain/Actions/WatchArchivedProjectAction.js';
+import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
+import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
+import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
-import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
-// Fakes at the ports: hold notes and status records in memory and record the
-// operations the composed actions perform, so the orchestration (fetch →
-// apply/create → board reconcile → advance cursor) is what's under test.
+// Fakes at the ports and at every composed step, recording into one shared
+// events array so the chain's step order and its error isolation are what's
+// under test.
 class FakeVault implements VaultPort {
+  projectNotes: ProjectNoteData[] = [];
   notes = new Map<string, string>();
-  created: Array<{ path: string; content: string }> = [];
-  written: Array<{ path: string; content: string }> = [];
+  folders = new Map<string, string[]>();
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
-
-  async createNote(path: string, content: string): Promise<void> {
-    this.notes.set(path, content);
-    this.created.push({ path, content });
-  }
-
-  async writeNote(path: string, content: string): Promise<void> {
-    this.notes.set(path, content);
-    this.written.push({ path, content });
-  }
-
+  async createNote(): Promise<void> {}
+  async writeNote(): Promise<void> {}
+  async renameNote(): Promise<void> {}
   async moveFolder(): Promise<void> {}
-  async renameNote(): Promise<void> {
-    throw new Error('not used in this test');
+  async listNotesInFolder(folder: string): Promise<string[]> {
+    return this.folders.get(folder) ?? [];
   }
-
-  async findProjectNotes(): Promise<never> {
-    throw new Error('not used in this test');
+  async trashNote(): Promise<void> {}
+  async findProjectNotes(): Promise<ProjectNoteData[]> {
+    return this.projectNotes;
   }
-
-  async listNotesInFolder(): Promise<string[]> {
-    return [];
-  }
-
-  async trashNote(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-
-  onNoteChanged(): void {
-    throw new Error('not used in this test');
-  }
-
-  onNoteDeleted(): void {
-    throw new Error('not used in this test');
-  }
+  onNoteChanged(): void {}
+  onNoteDeleted(): void {}
   onNoteRenamed(): void {}
 }
 
 class FakeSyncState implements SyncStatePort {
-  async getLastProjectUpdate(): Promise<string | null> {
+  statuses: Status[] = [];
+  todoistStates: TodoistStateData[] = [];
+  lastUpdates = new Map<string, string>();
+  lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
+
+  async get(): Promise<Status | null> {
     return null;
   }
-
-  async setLastProjectUpdate(): Promise<void> {}
+  async set(): Promise<void> {}
+  async findByNotePath(): Promise<Status | null> {
+    return null;
+  }
+  async remove(): Promise<void> {}
+  async list(): Promise<Status[]> {
+    return this.statuses;
+  }
+  async setIdentity(): Promise<void> {}
+  async getIdentity(): Promise<null> {
+    return null;
+  }
+  async getLastProjectUpdate(projectName: string): Promise<string | null> {
+    return this.lastUpdates.get(projectName) ?? null;
+  }
+  async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
+    this.lastUpdateSets.push({ projectName, iso });
+    this.lastUpdates.set(projectName, iso);
+  }
   async getArchiveBaseline(): Promise<null> {
     return null;
   }
-  async getWatchState(): Promise<{
-    etag: string | null;
-    cursor: string | null;
-  }> {
+  async setArchiveBaseline(): Promise<void> {}
+  async getWatchState(): Promise<{ etag: null; cursor: null }> {
     return { etag: null, cursor: null };
   }
-
   async setWatchState(): Promise<void> {}
-
   async getTodoistProjectState(): Promise<null> {
     return null;
   }
@@ -90,589 +89,353 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
   async removeTodoistState(): Promise<void> {}
-
-  async setArchiveBaseline(): Promise<void> {}
-  statuses = new Map<string, Status>();
-  identity: ProjectIdentityData | null = null;
-
-  async get(url: string): Promise<Status | null> {
-    return this.statuses.get(url) ?? null;
-  }
-
-  async set(status: Status): Promise<void> {
-    this.statuses.set(status.url, status);
-  }
-
-  async findByNotePath(): Promise<Status | null> {
-    return null;
-  }
-
-  async remove(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
-  async list(): Promise<Status[]> {
-    return [...this.statuses.values()];
-  }
-
-  async setIdentity(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
-  async getIdentity(): Promise<ProjectIdentityData | null> {
-    return this.identity;
+  async listTodoistStates(): Promise<TodoistStateData[]> {
+    return this.todoistStates;
   }
 }
 
-class FakeProjectManagement implements ProjectManagementPort {
-  async setProjectClosed(): Promise<void> {}
-  async lockIssue(): Promise<void> {}
-  async fetchProjectStates(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  tasks: GithubTaskData[] = [];
-  repoUrlCalls: string[] = [];
-  boardItems: BoardItemData[] = [];
-  boardItemsCalls: string[] = [];
-  addBoardItemCalls: Array<{ projectNodeId: string; issueUrl: string }> = [];
-  stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
+class FakeProbe {
+  fail = false;
+  states = new Map<string, ProjectStateData>();
 
-  async fetchProjectIdentity(): Promise<null> {
-    return null;
+  async execute(): Promise<Map<string, ProjectStateData>> {
+    if (this.fail) {
+      throw new Error('probe failed');
+    }
+    return this.states;
   }
+}
 
-  async fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]> {
-    this.repoUrlCalls.push(repoUrl);
-    return this.tasks;
-  }
-
-  async fetchTask(): Promise<GithubTaskData> {
-    throw new Error('not used in this test');
-  }
-
-  async updateTask(): Promise<GithubTaskData> {
-    throw new Error('not used in this test');
-  }
-
-  async setTaskState(
-    url: string,
-    state: 'open' | 'closed',
-  ): Promise<GithubTaskData> {
-    this.stateCalls.push({ url, state });
-    return {
-      url,
-      remoteId: 42,
-      nodeId: 'I_kwDOAAAA42',
-      title: 'Fix the Bug!',
-      body: 'The bug happens when the widget is resized.',
-      state,
-      updatedAt: '2026-09-18T12:30:00Z',
-      labels: ['type: task'],
-    };
-  }
-
-  async fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]> {
-    this.boardItemsCalls.push(projectNodeId);
-    return this.boardItems;
-  }
-
-  boardStatusCalls: Array<{
-    projectNodeId: string;
-    statusFieldId: string;
-    issueUrl: string;
-    optionId: string;
+class FakeSweep {
+  fail = false;
+  calls: Array<{
+    projectName: string;
+    syncedAt: string;
+    includeBoard: boolean;
   }> = [];
 
-  async setBoardStatus(
-    projectNodeId: string,
-    statusFieldId: string,
-    issueUrl: string,
-    optionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({
-      projectNodeId,
-      statusFieldId,
-      issueUrl,
-      optionId,
-    });
-  }
+  constructor(private readonly events: string[]) {}
 
-  async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
-    this.addBoardItemCalls.push({ projectNodeId, issueUrl });
-  }
-
-  async fetchUnpromotedIssues(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-
-  async addLabel(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
-  async fetchLatestIssueActivity(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-
-  async promoteCard(): Promise<never> {
-    throw new Error('not used in this test');
+  async execute(input: {
+    projectName: string;
+    syncedAt: string;
+    includeBoard: boolean;
+  }): Promise<void> {
+    this.calls.push(input);
+    this.events.push('sweep');
+    if (this.fail) {
+      throw new Error('sweep failed');
+    }
   }
 }
 
-const context = {
-  projectName: 'Acme Widgets',
-  syncedAt: '2026-09-18T12:00:00Z',
-  statusName: 'Building',
-  includeBoard: true,
-};
+function projectNote(projectName: string, archived: boolean): ProjectNoteData {
+  return {
+    path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    projectName,
+    archived,
+    pm: 'github',
+    url: 'https://github.com/acme/widgets',
+    board: 'https://github.com/orgs/acme/projects/1',
+  };
+}
 
-const taskA: GithubTaskData = {
-  url: 'https://github.com/acme/widgets/issues/42',
-  remoteId: 42,
-  nodeId: 'I_kwDOAAAA42',
-  title: 'Fix the Bug!',
-  body: 'The bug happens when the widget is resized.',
-  state: 'open',
+function status(notePath: string): Status {
+  return {
+    url: 'https://github.com/acme/widgets/issues/42',
+    remoteId: 42,
+    notePath,
+    lastSyncedBodyHash: 'abc',
+    lastSyncedRemoteUpdatedAt: '2026-09-18T11:00:00Z',
+    lastSyncedStatus: 'Building',
+    lastSyncedTitle: 'Fix the bug',
+  };
+}
+
+interface HarnessOptions {
+  projectNotes?: ProjectNoteData[];
+  state?: ProjectStateData | undefined;
+  statuses?: Status[];
+  taken?: string[];
+  todos?: string[];
+}
+
+function harness(options: HarnessOptions = {}) {
+  const events: string[] = [];
+  const vault = new FakeVault();
+  vault.projectNotes = options.projectNotes ?? [
+    projectNote('Acme Widgets', false),
+  ];
+  vault.folders.set('Projecten/Acme Widgets/taken', options.taken ?? []);
+  vault.folders.set('Projecten/Acme Widgets/todos', options.todos ?? []);
+  const syncState = new FakeSyncState();
+  syncState.statuses = options.statuses ?? [];
+
+  const probe = new FakeProbe();
+  if (options.state !== undefined) {
+    probe.states.set('Acme Widgets', options.state);
+  }
+
+  const reconcileArchive = {
+    execute: async () => {
+      events.push('reconcileArchive');
+    },
+  } as unknown as ReconcileArchiveStateAction;
+  const watch = {
+    execute: async () => {
+      events.push('watch');
+    },
+  } as unknown as WatchArchivedProjectAction;
+  const renames = {
+    execute: async () => {
+      events.push('renames');
+    },
+  } as unknown as DetectNoteRenamesAction;
+  const sweep = new FakeSweep(events);
+  const checklist = {
+    execute: async (input: { notePath: string }) => {
+      events.push(`checklist:${input.notePath}`);
+    },
+  } as unknown as SyncChecklistAction;
+  const reconcileTask = {
+    execute: async (input: { notePath: string }) => {
+      events.push(`reconcile:${input.notePath}`);
+    },
+  } as unknown as ReconcileTaskAction;
+  const mirror = {
+    execute: async (input: { todoPath: string }) => {
+      events.push(`mirror:${input.todoPath}`);
+    },
+  } as unknown as MirrorTodoStatusAction;
+  const todoist = {
+    execute: async () => {
+      events.push('todoist');
+    },
+  } as unknown as SyncTodoistTasksAction;
+  const handleDeleted = {
+    execute: async (input: { notePath: string }) => {
+      events.push(`delete:${input.notePath}`);
+    },
+  } as unknown as HandleDeletedNoteAction;
+
+  const action = new SyncProjectAction(
+    vault,
+    syncState,
+    probe as unknown as ProbeProjectsAction,
+    reconcileArchive,
+    watch,
+    renames,
+    sweep as unknown as SyncGithubTasksAction,
+    checklist,
+    reconcileTask,
+    mirror,
+    todoist,
+    handleDeleted,
+  );
+
+  return { action, events, vault, syncState, probe, sweep };
+}
+
+const openState: ProjectStateData = {
+  projectId: 'PVT_123',
   updatedAt: '2026-09-18T10:00:00Z',
-  labels: ['type: task'],
+  closed: false,
 };
-
-const taskB: GithubTaskData = {
-  url: 'https://github.com/acme/widgets/issues/43',
-  remoteId: 43,
-  nodeId: 'I_kwDOAAAA43',
-  title: 'Add a feature',
-  body: 'A new feature.',
-  state: 'open',
-  updatedAt: '2026-09-18T11:00:00Z',
-  labels: ['type: task'],
-};
-
-const identity: ProjectIdentityData = {
-  repoUrl: 'https://github.com/acme/widgets',
-  repoNodeId: 'R_kgDOAAAA',
-  projectNodeId: 'PVT_123',
-  statusFieldId: 'PVTF_456',
-  statusOptions: [
-    { id: 'PVTSSF_1', name: 'Unshaped' },
-    { id: 'PVTSSF_2', name: 'Shaping' },
-    { id: 'PVTSSF_3', name: 'Shaped' },
-    { id: 'PVTSSF_4', name: 'Building' },
-    { id: 'PVTSSF_5', name: 'Shipped' },
-  ],
-};
-
-function makeAction(
-  vault: FakeVault,
-  syncState: FakeSyncState,
-  projectManagement: FakeProjectManagement,
-) {
-  const createTaskNote = new CreateTaskNoteAction(
-    vault,
-    syncState,
-    'Templates/Task.md',
-  );
-  const applyRemoteChange = new ApplyRemoteChangeAction(
-    vault,
-    syncState,
-    createTaskNote,
-    new BoardStatusAction(syncState, projectManagement),
-    'Templates/Task.md',
-  );
-  const applyBoardChange = new ApplyBoardChangeAction(
-    syncState,
-    projectManagement,
-    vault,
-    'Done',
-  );
-  return new SyncProjectAction(
-    projectManagement,
-    syncState,
-    applyRemoteChange,
-    createTaskNote,
-    applyBoardChange,
-    'Shipped',
-  );
-}
 
 describe('SyncProjectAction', () => {
-  it('reconciles the full tracked set, applying existing and creating new', async () => {
-    // Given — one task with a changed status and one new
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const { path: pathA } = TaskNoteMapper.map(taskA, context);
-    syncState.statuses.set(taskA.url, {
-      url: taskA.url,
-      remoteId: taskA.remoteId,
-      notePath: pathA,
-      lastSyncedBodyHash: hash('old body'),
-      lastSyncedRemoteUpdatedAt: '2026-09-18T09:00:00Z',
-      lastSyncedStatus: 'open',
-      lastSyncedTitle: taskA.title,
+  it('runs the steps in order: lifecycle, renames, sweep, per-note, Todoist', async () => {
+    // Given — an active project with one task note and one to-do note
+    const h = harness({
+      state: openState,
+      taken: ['Projecten/Acme Widgets/taken/42-fix-the-bug.md'],
+      todos: ['Projecten/Acme Widgets/todos/fix-the-bug.md'],
     });
-    // The existing note holds the old body, so the remote change rewrites it
-    const oldTaskA: GithubTaskData = { ...taskA, body: 'old body' };
-    vault.notes.set(pathA, TaskNoteMapper.map(oldTaskA, context).content);
-
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [taskA, taskB];
-
-    const action = makeAction(vault, syncState, projectManagement);
 
     // When — the project is synced
-    await action.execute(context);
+    await h.action.execute('Acme Widgets');
 
-    // Then — the full tracked set is fetched for the identity's repo
-    expect(projectManagement.repoUrlCalls).toEqual([
-      'https://github.com/acme/widgets',
+    // Then — the steps run in the chain's order, the per-note loop after the
+    // sweep, the Todoist half last
+    expect(h.events).toEqual([
+      'reconcileArchive',
+      'renames',
+      'sweep',
+      'checklist:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+      'reconcile:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+      'mirror:Projecten/Acme Widgets/todos/fix-the-bug.md',
+      'todoist',
     ]);
-    // And the existing task is applied (rewritten) while the new one is created
-    expect(vault.written).toHaveLength(1);
-    expect(vault.written[0]!.path).toBe(pathA);
-    expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(
-      TaskNoteMapper.map(taskB, context).path,
+  });
+
+  it('no-ops a stale work item whose pm-note is gone', async () => {
+    // Given — a work item for a project with no pm-note
+    const h = harness({ projectNotes: [] });
+
+    // When — the stale item is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — no step runs: project-level deletion is never propagated
+    expect(h.events).toEqual([]);
+  });
+
+  it('runs the Todoist half even when the GitHub sweep fails', async () => {
+    // Given — an active project whose sweep throws
+    const h = harness({ state: openState });
+    h.sweep.fail = true;
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the Todoist half still ran, and the cursor did not advance
+    expect(h.events).toContain('todoist');
+    expect(h.syncState.lastUpdateSets).toEqual([]);
+  });
+
+  it('runs the Todoist half even when the probe fails', async () => {
+    // Given — a project whose probe throws
+    const h = harness({ state: openState });
+    h.probe.fail = true;
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the GitHub side is skipped but the Todoist half still runs
+    expect(h.events).toEqual(['renames', 'todoist']);
+  });
+
+  it('advances the stored update only after a successful sweep', async () => {
+    // Given — an active project whose probe reports a newer updatedAt
+    const h = harness({ state: openState });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the probe's updatedAt is persisted
+    expect(h.syncState.lastUpdateSets).toEqual([
+      { projectName: 'Acme Widgets', iso: '2026-09-18T10:00:00Z' },
+    ]);
+  });
+
+  it('watches an archived project and skips the sweep', async () => {
+    // Given — an archived project whose board is closed
+    const h = harness({
+      projectNotes: [projectNote('Acme Widgets', true)],
+      state: { ...openState, closed: true },
+    });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the lifecycle reconciles and watches, the sweep is skipped, the
+    // Todoist half still mirrors
+    expect(h.events).toEqual([
+      'reconcileArchive',
+      'watch',
+      'renames',
+      'todoist',
+    ]);
+  });
+
+  it('skips the sweep for a closed board but still mirrors Todoist', async () => {
+    // Given — an active project whose board is closed
+    const h = harness({ state: { ...openState, closed: true } });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the lifecycle reconciles, the sweep is skipped
+    expect(h.events).toEqual(['reconcileArchive', 'renames', 'todoist']);
+  });
+
+  it('skips the GitHub side when the project has no probed state', async () => {
+    // Given — a project with no GitHub attach (the probe returns no state)
+    const h = harness({ state: undefined });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — no lifecycle, no sweep; the Todoist half still runs
+    expect(h.events).toEqual(['renames', 'todoist']);
+  });
+
+  it('runs the deletion sweep last, after the Todoist half', async () => {
+    // Given — a status record whose note no longer exists
+    const h = harness({
+      state: openState,
+      statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
+    });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the deletion runs after the Todoist half
+    expect(h.events).toEqual([
+      'reconcileArchive',
+      'renames',
+      'sweep',
+      'todoist',
+      'delete:Projecten/Acme Widgets/taken/42-gone.md',
+    ]);
+  });
+
+  it('leaves a status record whose note still exists alone', async () => {
+    // Given — a status record whose note is present
+    const h = harness({
+      state: openState,
+      statuses: [status('Projecten/Acme Widgets/taken/42-fix-the-bug.md')],
+    });
+    h.vault.notes.set(
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+      'content',
+    );
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — no deletion runs
+    expect(h.events).not.toContain(
+      'delete:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     );
   });
 
-  it('skips tasks without a type label — only typed tasks are tracked', async () => {
-    // Given — one task carrying a type label and one carrying none
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const typed: GithubTaskData = { ...taskA, labels: ['type: slice'] };
-    const untyped: GithubTaskData = { ...taskB, labels: ['bug'] };
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [typed, untyped];
-
-    const action = makeAction(vault, syncState, projectManagement);
+  it('does not sweep a deletion record under Archief', async () => {
+    // Given — an archived project's status record whose note is gone
+    const h = harness({
+      state: openState,
+      statuses: [status('Archief/Acme Widgets/taken/42-gone.md')],
+    });
 
     // When — the project is synced
-    await action.execute(context);
+    await h.action.execute('Acme Widgets');
 
-    // Then — only the typed task materializes; the untyped one is ignored
-    expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(
-      TaskNoteMapper.map(typed, context).path,
-    );
-    expect(vault.written).toHaveLength(0);
-  });
-
-  it('materializes a quiet typed issue whose update predates the poll', async () => {
-    // Given — a typed issue last updated long before this poll, with no
-    // stored status record (it went quiet before the type filter widened)
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const quiet: GithubTaskData = {
-      ...taskA,
-      updatedAt: '2026-09-01T00:00:00Z',
-      labels: ['type: bug'],
-    };
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [quiet];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — a normal poll runs
-    await action.execute(context);
-
-    // Then — the quiet issue materializes, because every poll reconciles the
-    // complete tracked set rather than only what changed since a cursor
-    expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(
-      TaskNoteMapper.map(quiet, context).path,
+    // Then — the frozen project is never swept
+    expect(h.events).not.toContain(
+      'delete:Archief/Acme Widgets/taken/42-gone.md',
     );
   });
 
-  it('performs no writes on a second poll over a settled project', async () => {
-    // Given — a tracked issue already on the board in its implied lane
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [taskA];
-    projectManagement.boardItems = [
-      {
-        itemId: 'PVTI_1',
-        type: 'ISSUE',
-        issueUrl: taskA.url,
-        statusOptionName: 'Unshaped',
-      },
-    ];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is polled twice
-    await action.execute(context);
-    expect(vault.created).toHaveLength(1);
-    vault.created = [];
-    vault.written = [];
-    await action.execute(context);
-
-    // Then — the settled second poll writes nothing: the sync state is the diff
-    expect(vault.created).toHaveLength(0);
-    expect(vault.written).toHaveLength(0);
-  });
-
-  it('applies board-driven changes when the board disagrees with the issue', async () => {
-    // Given — a project with an identity, a tracked open issue whose card is Done
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const { path: pathA } = TaskNoteMapper.map(taskA, context);
-    syncState.statuses.set(taskA.url, {
-      url: taskA.url,
-      remoteId: taskA.remoteId,
-      notePath: pathA,
-      lastSyncedBodyHash: hash(taskA.body),
-      lastSyncedRemoteUpdatedAt: taskA.updatedAt,
-      lastSyncedStatus: 'open',
-      lastSyncedTitle: taskA.title,
-    });
-    vault.notes.set(pathA, TaskNoteMapper.map(taskA, context).content);
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [];
-    projectManagement.boardItems = [
-      {
-        itemId: 'PVTI_1',
-        type: 'ISSUE',
-        issueUrl: taskA.url,
-        statusOptionName: 'Done',
-      },
-    ];
-    const action = makeAction(vault, syncState, projectManagement);
+  it('closes the board gate when the stored update matches the probe', async () => {
+    // Given — a stored update equal to the probe's updatedAt
+    const h = harness({ state: openState });
+    h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
 
     // When — the project is synced
-    await action.execute(context);
+    await h.action.execute('Acme Widgets');
 
-    // Then — the board items are fetched once and the issue is closed
-    expect(projectManagement.boardItemsCalls).toEqual(['PVT_123']);
-    expect(projectManagement.stateCalls).toEqual([
-      { url: taskA.url, state: 'closed' },
-    ]);
+    // Then — the sweep is told to skip the board fetch
+    expect(h.sweep.calls[0]!.includeBoard).toBe(false);
   });
 
-  it("materializes a board card's issue before the board loop applies its lane", async () => {
-    // Given — a tracked issue with no status record yet, whose card is Done
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [taskA];
-    projectManagement.boardItems = [
-      {
-        itemId: 'PVTI_1',
-        type: 'ISSUE',
-        issueUrl: taskA.url,
-        statusOptionName: 'Done',
-      },
-    ];
-    const action = makeAction(vault, syncState, projectManagement);
+  it('opens the board gate when the probe updatedAt moved', async () => {
+    // Given — a stored update older than the probe's updatedAt
+    const h = harness({ state: openState });
+    h.syncState.lastUpdates.set('Acme Widgets', '2026-09-18T09:00:00Z');
 
     // When — the project is synced
-    await action.execute(context);
+    await h.action.execute('Acme Widgets');
 
-    // Then — the task loop materialized the issue first, so the board loop
-    // could close it; a board-first order would have skipped the untracked card
-    expect(vault.created).toHaveLength(1);
-    expect(projectManagement.stateCalls).toEqual([
-      { url: taskA.url, state: 'closed' },
-    ]);
-  });
-
-  it('adds a tracked task missing from the board', async () => {
-    // Given — a project with an identity and a tracked task not on the board
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const { path: pathA } = TaskNoteMapper.map(taskA, context);
-    syncState.statuses.set(taskA.url, {
-      url: taskA.url,
-      remoteId: taskA.remoteId,
-      notePath: pathA,
-      lastSyncedBodyHash: hash(taskA.body),
-      lastSyncedRemoteUpdatedAt: taskA.updatedAt,
-      lastSyncedStatus: 'open',
-      lastSyncedTitle: taskA.title,
-    });
-    vault.notes.set(pathA, TaskNoteMapper.map(taskA, context).content);
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [];
-    projectManagement.boardItems = [
-      {
-        itemId: 'PVTI_1',
-        type: 'ISSUE',
-        issueUrl: 'https://github.com/acme/widgets/issues/99',
-        statusOptionName: 'Unshaped',
-      },
-    ];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    await action.execute(context);
-
-    // Then — the tracked task is added to the board
-    expect(projectManagement.addBoardItemCalls).toEqual([
-      { projectNodeId: 'PVT_123', issueUrl: taskA.url },
-    ]);
-  });
-
-  it('does not add a tracked task that is already on the board', async () => {
-    // Given — a project with an identity and a tracked task already on the board
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const { path: pathA } = TaskNoteMapper.map(taskA, context);
-    syncState.statuses.set(taskA.url, {
-      url: taskA.url,
-      remoteId: taskA.remoteId,
-      notePath: pathA,
-      lastSyncedBodyHash: hash(taskA.body),
-      lastSyncedRemoteUpdatedAt: taskA.updatedAt,
-      lastSyncedStatus: 'open',
-      lastSyncedTitle: taskA.title,
-    });
-    vault.notes.set(pathA, TaskNoteMapper.map(taskA, context).content);
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [];
-    projectManagement.boardItems = [
-      {
-        itemId: 'PVTI_1',
-        type: 'ISSUE',
-        issueUrl: taskA.url,
-        statusOptionName: 'Unshaped',
-      },
-    ];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    await action.execute(context);
-
-    // Then — nothing is added to the board
-    expect(projectManagement.addBoardItemCalls).toEqual([]);
-  });
-
-  it('skips the poll with a clear error when the project has no stored identity', async () => {
-    // Given — a project with no stored identity (board-less)
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = null;
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    // Then — the poll is skipped with a clear error rather than crashing
-    await expect(action.execute(context)).rejects.toThrow(/no repo url/);
-    expect(projectManagement.repoUrlCalls).toEqual([]);
-    expect(projectManagement.boardItemsCalls).toEqual([]);
-    expect(projectManagement.stateCalls).toEqual([]);
-    expect(projectManagement.addBoardItemCalls).toEqual([]);
-  });
-
-  it('skips the poll with a clear error when the identity lacks a repo url', async () => {
-    // Given — a project whose stored identity has no repo url
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = { ...identity, repoUrl: '' };
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    // Then — the poll is skipped with a clear error rather than crashing
-    await expect(action.execute(context)).rejects.toThrow(/no repo url/);
-    expect(projectManagement.repoUrlCalls).toEqual([]);
-    expect(projectManagement.boardItemsCalls).toEqual([]);
-  });
-
-  it('adds a new typed issue and sets its default lane when the board gate is closed', async () => {
-    // Given — a newly tracked open issue with no status record yet, and a board
-    // that has not moved (its updatedAt would not open the probe gate)
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [taskA];
-    projectManagement.boardItems = [];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced without the board gate
-    await action.execute({ ...context, includeBoard: false });
-
-    // Then — the membership gap opens the board half anyway: the card is added
-    // and placed in the default lane (the open issue's implied lane)
-    expect(vault.created).toHaveLength(1);
-    expect(projectManagement.boardItemsCalls).toEqual(['PVT_123']);
-    expect(projectManagement.addBoardItemCalls).toEqual([
-      { projectNodeId: 'PVT_123', issueUrl: taskA.url },
-    ]);
-    expect(projectManagement.boardStatusCalls).toEqual([
-      {
-        projectNodeId: 'PVT_123',
-        statusFieldId: 'PVTF_456',
-        issueUrl: taskA.url,
-        optionId: 'PVTSSF_1',
-      },
-    ]);
-  });
-
-  it('adds a new closed issue and sets its done lane when the board gate is closed', async () => {
-    // Given — a newly tracked closed issue with no status record yet
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const closed: GithubTaskData = { ...taskA, state: 'closed' };
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [closed];
-    projectManagement.boardItems = [];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced without the board gate
-    await action.execute({ ...context, includeBoard: false });
-
-    // Then — the added card sits in the done lane
-    expect(projectManagement.boardStatusCalls).toEqual([
-      {
-        projectNodeId: 'PVT_123',
-        statusFieldId: 'PVTF_456',
-        issueUrl: closed.url,
-        optionId: 'PVTSSF_5',
-      },
-    ]);
-  });
-
-  it('fetches nothing when the board is excluded and every tracked issue is known', async () => {
-    // Given — a fully tracked issue whose note and record are already in step
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const { path: pathA } = TaskNoteMapper.map(taskA, context);
-    syncState.statuses.set(taskA.url, {
-      url: taskA.url,
-      remoteId: taskA.remoteId,
-      notePath: pathA,
-      lastSyncedBodyHash: hash(taskA.body),
-      lastSyncedRemoteUpdatedAt: taskA.updatedAt,
-      lastSyncedStatus: 'Unshaped',
-      lastSyncedTitle: taskA.title,
-    });
-    vault.notes.set(pathA, TaskNoteMapper.map(taskA, context).content);
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.tasks = [taskA];
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced without the board gate
-    await action.execute({ ...context, includeBoard: false });
-
-    // Then — the settled set leaves the board untouched: no membership gap
-    expect(projectManagement.repoUrlCalls).toEqual([
-      'https://github.com/acme/widgets',
-    ]);
-    expect(projectManagement.boardItemsCalls).toEqual([]);
-    expect(projectManagement.addBoardItemCalls).toEqual([]);
+    // Then — the sweep is told to fetch the board
+    expect(h.sweep.calls[0]!.includeBoard).toBe(true);
   });
 });
