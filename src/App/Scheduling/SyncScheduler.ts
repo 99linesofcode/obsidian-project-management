@@ -126,9 +126,11 @@ export class SyncScheduler extends Component {
   // The stored update advances only after a successful sync, so a failed sync
   // retries the board fetch on the next tick.
   //
-  // Every discovered project gets a tick, not only the probed ones: a project
-  // without a GitHub attach still mirrors to Todoist (dt-03), so it is enqueued
-  // with hasGithub false and the GitHub half skips it.
+   // Every discovered pm-note gets a tick, not only the probed ones: a
+   // pm-marked project whose GitHub identity has not resolved still mirrors
+   // to Todoist (dt-03), so it is enqueued with hasGithub false and the
+   // GitHub half skips it. Notes without a pm property are never discovered
+   // and never sync anywhere.
   private async tick(): Promise<void> {
     const notes = await this.vault.findProjectNotes();
     const active = new Set<string>();
