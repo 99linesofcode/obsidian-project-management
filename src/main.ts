@@ -26,15 +26,13 @@ import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
 import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodoistAction.js';
 import { ProjectToDosToTodoistAction } from './Domain/Actions/ProjectToDosToTodoistAction.js';
 import { PropagateTodoistDeletionsAction } from './Domain/Actions/PropagateTodoistDeletionsAction.js';
-import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
-import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
+import { ReconcileProjectLifecycleAction } from './Domain/Actions/ReconcileProjectLifecycleAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
 import { SyncGithubTasksAction } from './Domain/Actions/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
 import { SyncTodoistTasksAction } from './Domain/Actions/SyncTodoistTasksAction.js';
-import { WatchArchivedProjectAction } from './Domain/Actions/WatchArchivedProjectAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import {
   GitHubAdapter,
@@ -180,27 +178,22 @@ export default class ProjectManagementPlugin extends Plugin {
       new AttachProjectAction(github),
     );
     const probeProjects = new ProbeProjectsAction(github, syncState);
-    const reconcileArchiveState = new ReconcileArchiveStateAction(
-      github,
-      vault,
-      syncState,
-      this.settings.doneOptionName,
-    );
-    const watchArchivedProject = new WatchArchivedProjectAction(
-      github,
-      syncState,
-      reconcileArchiveState,
-    );
 
     // The Todoist half of the tick: the adapter is token-bound through its
     // transport, so a missing token surfaces as a failed request, not a crash.
     const todoist = new TodoistAdapter(
       createTodoistTransport(this.settings.todoistToken),
     );
-    const reconcileTodoistProject = new ReconcileTodoistProjectAction(
+    // t4: ONE lifecycle action with ONE freeze verdict. It merges the former
+    // archive-state, Todoist-project and archived-watch actions: folder ⇄
+    // archive ⇄ Todoist two-way, name drift, frozen projects still polled by
+    // id, and the ETag + newest-issue watch.
+    const reconcileProjectLifecycle = new ReconcileProjectLifecycleAction(
+      github,
       todoist,
       vault,
       syncState,
+      this.settings.doneOptionName,
     );
     const projectTasksToTodoist = new ProjectTasksToTodoistAction(
       todoist,
@@ -285,10 +278,9 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     promoteCardToIssue.register(this);
 
-    // t2: the chain composes the interim halves; the queue serialises every
+    // t4: the chain composes the rebuilt halves; the queue serialises every
     // project; the scheduler is discovery + timing policies only.
     const syncTodoistTasks = new SyncTodoistTasksAction(
-      reconcileTodoistProject,
       applyTodoistRemoteChanges,
       captureTodoistCreations,
       projectTasksToTodoist,
@@ -306,8 +298,7 @@ export default class ProjectManagementPlugin extends Plugin {
       vault,
       syncState,
       probeProjects,
-      reconcileArchiveState,
-      watchArchivedProject,
+      reconcileProjectLifecycle,
       detectNoteRenames,
       syncGithubTasks,
       syncChecklist,

@@ -4,11 +4,13 @@ import type { DetectNoteRenamesAction } from '../../../src/Domain/Actions/Detect
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
-import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
+import type {
+  ProjectLifecycleVerdict,
+  ReconcileProjectLifecycleAction,
+} from '../../../src/Domain/Actions/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncChecklistAction.js';
 import type { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
-import type { WatchArchivedProjectAction } from '../../../src/Domain/Actions/WatchArchivedProjectAction.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
 import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
@@ -106,6 +108,38 @@ class FakeProbe {
   }
 }
 
+class FakeLifecycle {
+  frozen = false;
+  projectId: string | null = 'P1';
+  fail = false;
+  calls: Array<{ projectName: string; closed?: boolean }> = [];
+
+  constructor(private readonly events: string[]) {}
+
+  async execute(input: {
+    projectName: string;
+    notePath: string;
+    locationArchived: boolean;
+    syncedAt: string;
+    closed?: boolean;
+  }): Promise<ProjectLifecycleVerdict> {
+    this.calls.push({
+      projectName: input.projectName,
+      ...(input.closed === undefined ? {} : { closed: input.closed }),
+    });
+    this.events.push('lifecycle');
+    if (this.fail) {
+      throw new Error('lifecycle failed');
+    }
+    return {
+      todoistProjectId: this.frozen ? null : this.projectId,
+      frozen: this.frozen,
+      notePath: input.notePath,
+      locationArchived: input.locationArchived,
+    };
+  }
+}
+
 class FakeSweep {
   fail = false;
   calls: Array<{
@@ -176,16 +210,10 @@ function harness(options: HarnessOptions = {}) {
     probe.states.set('Acme Widgets', options.state);
   }
 
-  const reconcileArchive = {
-    execute: async () => {
-      events.push('reconcileArchive');
-    },
-  } as unknown as ReconcileArchiveStateAction;
-  const watch = {
-    execute: async () => {
-      events.push('watch');
-    },
-  } as unknown as WatchArchivedProjectAction;
+  const lifecycle = new FakeLifecycle(events);
+  lifecycle.frozen =
+    (vault.projectNotes[0]?.archived ?? false) ||
+    (options.state?.closed ?? false);
   const renames = {
     execute: async () => {
       events.push('renames');
@@ -217,8 +245,7 @@ function harness(options: HarnessOptions = {}) {
     vault,
     syncState,
     probe as unknown as ProbeProjectsAction,
-    reconcileArchive,
-    watch,
+    lifecycle as unknown as ReconcileProjectLifecycleAction,
     renames,
     sweep as unknown as SyncGithubTasksAction,
     checklist,
@@ -227,7 +254,7 @@ function harness(options: HarnessOptions = {}) {
     handleDeleted,
   );
 
-  return { action, events, vault, syncState, probe, sweep };
+  return { action, events, vault, syncState, probe, sweep, lifecycle };
 }
 
 const openState: ProjectStateData = {
@@ -251,7 +278,7 @@ describe('SyncProjectAction', () => {
     // Then — the steps run in the chain's order, the vault consistency pass
     // after the sweep, the Todoist half last
     expect(h.events).toEqual([
-      'reconcileArchive',
+      'lifecycle',
       'renames',
       'sweep',
       'checklist:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
@@ -293,7 +320,19 @@ describe('SyncProjectAction', () => {
     await h.action.execute('Acme Widgets');
 
     // Then — the GitHub side is skipped but the Todoist half still runs
-    expect(h.events).toEqual(['renames', 'todoist']);
+    expect(h.events).toEqual(['lifecycle', 'renames', 'todoist']);
+  });
+
+  it('does not block the GitHub half when the lifecycle fails', async () => {
+    // Given — an active project whose lifecycle throws
+    const h = harness({ state: openState });
+    h.lifecycle.fail = true;
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the GitHub half still runs; the Todoist half is skipped
+    expect(h.events).toEqual(['lifecycle', 'renames', 'sweep']);
   });
 
   it('advances the stored update only after a successful sweep', async () => {
@@ -309,7 +348,7 @@ describe('SyncProjectAction', () => {
     ]);
   });
 
-  it('watches an archived project and skips the sweep', async () => {
+  it('freezes an archived project: no sweep and no Todoist task writes', async () => {
     // Given — an archived project whose board is closed
     const h = harness({
       projectNotes: [projectNote('Acme Widgets', true)],
@@ -319,36 +358,30 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the lifecycle reconciles and watches, the sweep is skipped, the
-    // Todoist half still mirrors
-    expect(h.events).toEqual([
-      'reconcileArchive',
-      'watch',
-      'renames',
-      'todoist',
-    ]);
+    // Then — the lifecycle reconciles, both task halves are skipped
+    expect(h.events).toEqual(['lifecycle', 'renames']);
   });
 
-  it('skips the sweep for a closed board but still mirrors Todoist', async () => {
-    // Given — an active project whose board is closed
+  it('freezes a closed-board project: no sweep and no Todoist task writes', async () => {
+    // Given — an active folder whose board is closed
     const h = harness({ state: { ...openState, closed: true } });
 
     // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the lifecycle reconciles, the sweep is skipped
-    expect(h.events).toEqual(['reconcileArchive', 'renames', 'todoist']);
+    // Then — the lifecycle reconciles to frozen, both task halves are skipped
+    expect(h.events).toEqual(['lifecycle', 'renames']);
   });
 
-  it('skips the GitHub side when the project has no probed state', async () => {
+  it('skips the GitHub side but still mirrors Todoist when there is no probed state', async () => {
     // Given — a project with no GitHub attach (the probe returns no state)
     const h = harness({ state: undefined });
 
     // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — no lifecycle, no sweep; the Todoist half still runs
-    expect(h.events).toEqual(['renames', 'todoist']);
+    // Then — no sweep; the Todoist half still runs
+    expect(h.events).toEqual(['lifecycle', 'renames', 'todoist']);
   });
 
   it('runs the deletion sweep last, after the Todoist half', async () => {
@@ -363,7 +396,7 @@ describe('SyncProjectAction', () => {
 
     // Then — the deletion runs after the Todoist half
     expect(h.events).toEqual([
-      'reconcileArchive',
+      'lifecycle',
       'renames',
       'sweep',
       'todoist',

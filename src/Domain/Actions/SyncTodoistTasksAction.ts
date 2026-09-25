@@ -4,36 +4,27 @@ import type { CaptureTodoistCreationsAction } from './CaptureTodoistCreationsAct
 import type { ProjectTasksToTodoistAction } from './ProjectTasksToTodoistAction.js';
 import type { ProjectToDosToTodoistAction } from './ProjectToDosToTodoistAction.js';
 import type { PropagateTodoistDeletionsAction } from './PropagateTodoistDeletionsAction.js';
-import type { ReconcileTodoistProjectAction } from './ReconcileTodoistProjectAction.js';
 
 export interface SyncTodoistTasksInput {
   projectName: string;
-  notePath: string;
-  locationArchived: boolean;
+  // The resolved Todoist project id from the chain's lifecycle verdict. The
+  // lifecycle (freeze verdict, project resolution) runs as chain step 2, so
+  // this half only mirrors an already-active project.
+  projectId: string;
   syncedAt: string;
 }
 
-// The Todoist half of the chain: mirror the project's lifecycle, then absorb
-// the remote side into the vault, then project the vault's tasks and their
-// to-dos. The lifecycle action returns the project id when the project is
-// active and null when it is frozen-archived, so the freeze gates the whole
-// reconcile too (dt-10). Remote absorption comes first (t5): the snapshot
-// verdicts and captured creations land in the vault before any projection
-// pushes, so a remote change is never clobbered by a vault-side push — the
-// same apply-before-project invariant t4 established for completions. The
-// to-do completion pull then runs before the to-do projection for the same
-// reason. Deletion propagation closes the half (spec step 7): twins whose
-// notes are gone are removed after the projections, and the action deletes
-// each twin before evicting its record, so a deleted note's twin never
-// lingers into the next tick's capture pass. A failure is swallowed so the
-// GitHub half's outcome is never affected; the next tick retries.
-//
-// t2 interim: this is the old SyncScheduler.runTodoistHalf body, extracted
-// verbatim so the rewritten SyncProjectAction can compose it as the chain's
-// Todoist half. t4 rebuilds it on the canonical pipeline.
+// The Todoist half of the chain. The lifecycle step (step 2) has already
+// resolved the project and decided the freeze verdict, so this half runs only
+// for an active project. It absorbs the remote side into the vault, captures
+// Todoist-created items, projects the vault's tasks and to-dos, and propagates
+// deletions last (spec reconcile step 7). Remote absorption comes first: the
+// snapshot verdicts and captured creations land in the vault before any
+// projection pushes, so a remote change is never clobbered by a vault-side
+// push. A failure is swallowed so the GitHub half's outcome is never affected;
+// the next tick retries.
 export class SyncTodoistTasksAction {
   constructor(
-    private readonly reconcileTodoistProject: ReconcileTodoistProjectAction,
     private readonly applyTodoistRemoteChanges: ApplyTodoistRemoteChangesAction,
     private readonly captureTodoistCreations: CaptureTodoistCreationsAction,
     private readonly projectTasksToTodoist: ProjectTasksToTodoistAction,
@@ -44,38 +35,29 @@ export class SyncTodoistTasksAction {
 
   async execute(input: SyncTodoistTasksInput): Promise<void> {
     try {
-      const projectId = await this.reconcileTodoistProject.execute({
-        projectName: input.projectName,
-        notePath: input.notePath,
-        locationArchived: input.locationArchived,
-        syncedAt: input.syncedAt,
-      });
-      if (projectId === null) {
-        return;
-      }
       await this.applyTodoistRemoteChanges.execute({
         projectName: input.projectName,
-        projectId,
+        projectId: input.projectId,
         syncedAt: input.syncedAt,
       });
       await this.captureTodoistCreations.execute({
         projectName: input.projectName,
-        projectId,
+        projectId: input.projectId,
         syncedAt: input.syncedAt,
       });
       await this.projectTasksToTodoist.execute({
         projectName: input.projectName,
-        projectId,
+        projectId: input.projectId,
         syncedAt: input.syncedAt,
       });
       await this.applyTodoistCompletion.execute({
         projectName: input.projectName,
-        projectId,
+        projectId: input.projectId,
         syncedAt: input.syncedAt,
       });
       await this.projectToDosToTodoist.execute({
         projectName: input.projectName,
-        projectId,
+        projectId: input.projectId,
         syncedAt: input.syncedAt,
       });
       // Deletion propagation runs last (spec reconcile step 7): the vault-side

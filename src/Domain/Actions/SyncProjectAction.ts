@@ -6,11 +6,13 @@ import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from './ProbeProjectsAction.js';
-import type { ReconcileArchiveStateAction } from './ReconcileArchiveStateAction.js';
+import type {
+  ProjectLifecycleVerdict,
+  ReconcileProjectLifecycleAction,
+} from './ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from './SyncChecklistAction.js';
 import type { SyncGithubTasksAction } from './SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
-import type { WatchArchivedProjectAction } from './WatchArchivedProjectAction.js';
 
 // THE CHAIN: one work item kind — a project folder name — and one entry point.
 // The chain re-resolves the project from the vault, so a stale work item (a
@@ -21,22 +23,21 @@ import type { WatchArchivedProjectAction } from './WatchArchivedProjectAction.js
 // preserved by the underlying actions.
 //
 //   1. resolve project (inline) — pm-note exists? else no-op
-//   2. GitHub-side lifecycle — ReconcileArchiveState → WatchArchivedProject
+//   2. reconcile lifecycle — ONE freeze verdict (folder ⇄ archive ⇄ Todoist)
 //   3. renames — DetectNoteRenamesAction (snapshot drift)
 //   4. GitHub half — probe → SyncGithubTasks (single-query canonical pipeline)
 //   5. vault consistency — checklist ↔ to-do (retained; verdict-independent)
-//   6. Todoist half — SyncTodoistTasks (the old runTodoistHalf body)
+//   6. Todoist half — SyncTodoistTasks (canonical pipeline; gated by the verdict)
 //   7. deletions last — status records whose note is gone
 //
 // The probe is hoisted to the top of the GitHub-side work because the lifecycle
-// gate needs the probed `closed`/`hasGithub` state; one probe serves both.
+// gate needs the probed `closed` state; one probe serves both.
 export class SyncProjectAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
     private readonly probeProjects: ProbeProjectsAction,
-    private readonly reconcileArchiveState: ReconcileArchiveStateAction,
-    private readonly watchArchivedProject: WatchArchivedProjectAction,
+    private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
     private readonly syncGithubTasks: SyncGithubTasksAction,
     private readonly syncChecklist: SyncChecklistAction,
@@ -59,10 +60,10 @@ export class SyncProjectAction {
     // skipped but never blocks the Todoist half.
     const state = await this.probe(project);
 
-    // 2. GitHub-side lifecycle (interim).
-    await this.step('github lifecycle', () =>
-      this.runGithubLifecycle(project, note, state, syncedAt),
-    );
+    // 2. Lifecycle — one freeze verdict for both halves. A failure leaves the
+    // project frozen for this tick so no task write runs against an unknown
+    // state; the next tick retries.
+    const verdict = await this.runLifecycle(project, note, state, syncedAt);
 
     // 3. Renames.
     await this.step('renames', () =>
@@ -71,7 +72,7 @@ export class SyncProjectAction {
 
     // 4. GitHub half (canonical pipeline).
     await this.step('github half', () =>
-      this.runGithubHalf(project, note, state, syncedAt),
+      this.runGithubHalf(project, state, verdict, syncedAt),
     );
 
     // 5. Vault consistency — checklist ↔ to-do. Retained as its own step
@@ -81,15 +82,17 @@ export class SyncProjectAction {
       this.runVaultConsistency(project, syncedAt),
     );
 
-    // 6. Todoist half (interim wrap).
-    await this.step('todoist half', () =>
-      this.syncTodoistTasks.execute({
-        projectName: project,
-        notePath: note.path,
-        locationArchived: note.archived,
-        syncedAt,
-      }),
-    );
+    // 6. Todoist half — gated by the freeze verdict. The lifecycle resolved the
+    // project id; a frozen project accepts no task writes but stays observed.
+    if (!verdict.frozen && verdict.todoistProjectId !== null) {
+      await this.step('todoist half', () =>
+        this.syncTodoistTasks.execute({
+          projectName: project,
+          projectId: verdict.todoistProjectId!,
+          syncedAt,
+        }),
+      );
+    }
 
     // 7. Deletions last.
     await this.step('deletions', () => this.runDeletions(project));
@@ -111,38 +114,46 @@ export class SyncProjectAction {
     }
   }
 
-  private async runGithubLifecycle(
+  private async runLifecycle(
     project: string,
     note: ProjectNoteData,
     state: ProjectStateData | undefined,
     syncedAt: string,
-  ): Promise<void> {
-    // A project without a probed GitHub state has no board to reconcile; the
-    // Todoist half still mirrors it.
-    if (!state) {
-      return;
-    }
-    await this.reconcileArchiveState.execute({
-      projectName: project,
-      locationArchived: note.archived,
-      closed: state.closed,
-      syncedAt,
-    });
-    if (note.archived) {
-      await this.watchArchivedProject.execute({
+  ): Promise<ProjectLifecycleVerdict> {
+    try {
+      return await this.reconcileProjectLifecycle.execute({
         projectName: project,
+        notePath: note.path,
+        locationArchived: note.archived,
         syncedAt,
+        ...(state === undefined ? {} : { closed: state.closed }),
       });
+    } catch (error) {
+      console.error(
+        `SyncProjectAction: lifecycle failed for ${project}`,
+        error,
+      );
+      // The failure leaves the Todoist half skipped (no resolved project) but
+      // does not block the GitHub half: it falls back to the pre-reconcile
+      // archive signal, preserving the halves' error isolation.
+      return {
+        todoistProjectId: null,
+        frozen: note.archived || (state?.closed ?? false),
+        notePath: note.path,
+        locationArchived: note.archived,
+      };
     }
   }
 
   private async runGithubHalf(
     project: string,
-    note: ProjectNoteData,
     state: ProjectStateData | undefined,
+    verdict: ProjectLifecycleVerdict,
     syncedAt: string,
   ): Promise<void> {
-    if (!state || note.archived || state.closed) {
+    // A project without a probed GitHub state has no board to sweep; a frozen
+    // project (archived) accepts no task writes.
+    if (!state || verdict.frozen) {
       return;
     }
 

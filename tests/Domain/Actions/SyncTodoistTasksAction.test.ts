@@ -6,32 +6,6 @@ import type { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/
 import type { ProjectTasksToTodoistAction } from '../../../src/Domain/Actions/ProjectTasksToTodoistAction.js';
 import type { ProjectToDosToTodoistAction } from '../../../src/Domain/Actions/ProjectToDosToTodoistAction.js';
 import type { PropagateTodoistDeletionsAction } from '../../../src/Domain/Actions/PropagateTodoistDeletionsAction.js';
-import type { ReconcileTodoistProjectAction } from '../../../src/Domain/Actions/ReconcileTodoistProjectAction.js';
-
-// A fake lifecycle that records its call and can freeze (return null) or fail.
-class FakeReconcileTodoist {
-  calls: Array<{
-    projectName: string;
-    notePath: string;
-    locationArchived: boolean;
-    syncedAt: string;
-  }> = [];
-  frozen = false;
-  fail = false;
-
-  async execute(input: {
-    projectName: string;
-    notePath: string;
-    locationArchived: boolean;
-    syncedAt: string;
-  }): Promise<string | null> {
-    this.calls.push(input);
-    if (this.fail) {
-      throw new Error('todoist failed');
-    }
-    return this.frozen ? null : 'P1';
-  }
-}
 
 // A recording step that pushes its name into the shared events array.
 function recorder(events: string[], name: string) {
@@ -44,9 +18,7 @@ function recorder(events: string[], name: string) {
 
 function harness() {
   const events: string[] = [];
-  const reconcileTodoist = new FakeReconcileTodoist();
   const action = new SyncTodoistTasksAction(
-    reconcileTodoist as unknown as ReconcileTodoistProjectAction,
     recorder(
       events,
       'applyRemoteChanges',
@@ -66,19 +38,18 @@ function harness() {
       'propagateDeletions',
     ) as unknown as PropagateTodoistDeletionsAction,
   );
-  return { action, events, reconcileTodoist };
+  return { action, events };
 }
 
 const input = {
   projectName: 'Acme Widgets',
-  notePath: 'Projecten/Acme Widgets/_home.md',
-  locationArchived: false,
+  projectId: 'P1',
   syncedAt: '2026-09-18T12:00:00Z',
 };
 
 describe('SyncTodoistTasksAction', () => {
   it('absorbs remote changes before projecting, deletions last', async () => {
-    // Given — an active project whose lifecycle resolves a project id
+    // Given — an active project whose lifecycle already resolved a project id
     const h = harness();
 
     // When — the Todoist half runs
@@ -95,28 +66,41 @@ describe('SyncTodoistTasksAction', () => {
     ]);
   });
 
-  it('skips every step when the project is frozen-archived', async () => {
-    // Given — a lifecycle that returns null (frozen)
-    const h = harness();
-    h.reconcileTodoist.frozen = true;
+  it('swallows a step failure so the GitHub half is never affected', async () => {
+    // Given — a first step that throws
+    const events: string[] = [];
+    const action = new SyncTodoistTasksAction(
+      {
+        execute: async () => {
+          throw new Error('todoist failed');
+        },
+      } as unknown as ApplyTodoistRemoteChangesAction,
+      recorder(
+        events,
+        'captureCreations',
+      ) as unknown as CaptureTodoistCreationsAction,
+      recorder(
+        events,
+        'projectTasks',
+      ) as unknown as ProjectTasksToTodoistAction,
+      recorder(
+        events,
+        'applyCompletion',
+      ) as unknown as ApplyTodoistCompletionAction,
+      recorder(
+        events,
+        'projectToDos',
+      ) as unknown as ProjectToDosToTodoistAction,
+      recorder(
+        events,
+        'propagateDeletions',
+      ) as unknown as PropagateTodoistDeletionsAction,
+    );
 
     // When — the Todoist half runs
-    await h.action.execute(input);
+    await expect(action.execute(input)).resolves.toBeUndefined();
 
-    // Then — the freeze gates the whole half off
-    expect(h.reconcileTodoist.calls).toHaveLength(1);
-    expect(h.events).toEqual([]);
-  });
-
-  it('swallows a lifecycle failure so the GitHub half is never affected', async () => {
-    // Given — a lifecycle that throws
-    const h = harness();
-    h.reconcileTodoist.fail = true;
-
-    // When — the Todoist half runs
-    await expect(h.action.execute(input)).resolves.toBeUndefined();
-
-    // Then — no step ran and the failure did not propagate
-    expect(h.events).toEqual([]);
+    // Then — no later step ran and the failure did not propagate
+    expect(events).toEqual([]);
   });
 });
