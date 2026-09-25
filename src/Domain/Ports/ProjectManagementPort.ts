@@ -1,21 +1,31 @@
 import type { AttachProjectData } from '../DataTransferObjects/AttachProjectData.js';
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
+import type { ProjectDetailData } from '../DataTransferObjects/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../DataTransferObjects/ProjectStateData.js';
 import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 
 // The core's need: given a project note's sync frontmatter, resolve the
-// GitHub identities for that project, fetch the complete tracked issue set,
-// probe every project's lightweight state in one cheap query, read/update a
-// single task by its issue url, set a task's open/closed state, lock an
-// issue's conversation, drive the project board (read its cards, set a
-// card's Status, add an issue to the board), and watch a repository's newest
-// issue through a conditional read. Designed for the core, not to mimic
-// GitHub's API. Returns null when the provider is not ours to handle.
+// GitHub identities for that project, fetch the project's whole detail in one
+// round trip (tracked issues with bodies + board cards with lanes), probe
+// every project's lightweight state in one cheap query, read/update a single
+// task by its issue url, set a task's open/closed state, lock an issue's
+// conversation, drive the project board (read its cards, set a card's Status,
+// add an issue to the board), and watch a repository's newest issue through a
+// conditional read. Designed for the core, not to mimic GitHub's API. Returns
+// null when the provider is not ours to handle.
 export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
+  // The whole-project fetch the sync chain works from: tracked issues (with
+  // bodies) and the board's cards in one call. Replaces the GitHub half's
+  // fetchTrackedIssues + fetchBoardItems pair; the older methods survive for
+  // the promote UI and the Todoist projection until t4 migrates them.
+  fetchProjectDetail(
+    repoUrl: string,
+    projectNodeId: string,
+  ): Promise<ProjectDetailData>;
   fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]>;
   fetchLatestIssueActivity(
     repoUrl: string,

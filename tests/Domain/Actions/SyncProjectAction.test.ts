@@ -5,7 +5,6 @@ import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/Handle
 import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
 import type { ReconcileArchiveStateAction } from '../../../src/Domain/Actions/ReconcileArchiveStateAction.js';
-import type { ReconcileTaskAction } from '../../../src/Domain/Actions/ReconcileTaskAction.js';
 import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncChecklistAction.js';
 import type { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
@@ -198,11 +197,6 @@ function harness(options: HarnessOptions = {}) {
       events.push(`checklist:${input.notePath}`);
     },
   } as unknown as SyncChecklistAction;
-  const reconcileTask = {
-    execute: async (input: { notePath: string }) => {
-      events.push(`reconcile:${input.notePath}`);
-    },
-  } as unknown as ReconcileTaskAction;
   const mirror = {
     execute: async (input: { todoPath: string }) => {
       events.push(`mirror:${input.todoPath}`);
@@ -228,7 +222,6 @@ function harness(options: HarnessOptions = {}) {
     renames,
     sweep as unknown as SyncGithubTasksAction,
     checklist,
-    reconcileTask,
     mirror,
     todoist,
     handleDeleted,
@@ -244,7 +237,7 @@ const openState: ProjectStateData = {
 };
 
 describe('SyncProjectAction', () => {
-  it('runs the steps in order: lifecycle, renames, sweep, per-note, Todoist', async () => {
+  it('runs the steps in order: lifecycle, renames, sweep, vault consistency, Todoist', async () => {
     // Given — an active project with one task note and one to-do note
     const h = harness({
       state: openState,
@@ -255,14 +248,13 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the steps run in the chain's order, the per-note loop after the
-    // sweep, the Todoist half last
+    // Then — the steps run in the chain's order, the vault consistency pass
+    // after the sweep, the Todoist half last
     expect(h.events).toEqual([
       'reconcileArchive',
       'renames',
       'sweep',
       'checklist:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      'reconcile:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
       'mirror:Projecten/Acme Widgets/todos/fix-the-bug.md',
       'todoist',
     ]);

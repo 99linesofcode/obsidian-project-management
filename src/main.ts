@@ -8,10 +8,10 @@ import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
 import { SyncQueue } from './App/Scheduling/SyncQueue.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
-import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { ApplyTaskToGithubAction } from './Domain/Actions/ApplyTaskToGithubAction.js';
+import { ApplyTaskToVaultAction } from './Domain/Actions/ApplyTaskToVaultAction.js';
 import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompletionAction.js';
 import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRemoteChangesAction.js';
-import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCreationsAction.js';
 import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
@@ -20,7 +20,6 @@ import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSecti
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
-import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
@@ -28,7 +27,6 @@ import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodo
 import { ProjectToDosToTodoistAction } from './Domain/Actions/ProjectToDosToTodoistAction.js';
 import { PropagateTodoistDeletionsAction } from './Domain/Actions/PropagateTodoistDeletionsAction.js';
 import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
-import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
 import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
@@ -146,14 +144,6 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.taskTemplatePath,
     );
     const boardStatus = new BoardStatusAction(syncState, github);
-    const applyRemoteChange = new ApplyRemoteChangeAction(
-      vault,
-      syncState,
-      createTaskNote,
-      boardStatus,
-      this.settings.taskTemplatePath,
-    );
-    const pushNote = new PushNoteAction(github);
     const propagateStatus = new PropagateStatusAction(
       github,
       syncState,
@@ -166,29 +156,23 @@ export default class ProjectManagementPlugin extends Plugin {
       boardStatus,
       this.settings.doneOptionName,
     );
-    const reconcileTask = new ReconcileTaskAction(
+    // t3: the canonical GitHub half. The two writers render a winning TaskData
+    // onto GitHub and the vault; the action fetches the whole project in one
+    // query and diffs each entity against the vault and the snapshot.
+    const applyTaskToGithub = new ApplyTaskToGithubAction(github, syncState);
+    const applyTaskToVault = new ApplyTaskToVaultAction(
       vault,
       syncState,
-      github,
       createTaskNote,
-      applyRemoteChange,
-      pushNote,
-      propagateStatus,
-      new VerdictResolver(),
-      this.settings.doneOptionName,
-    );
-    const applyBoardChange = new ApplyBoardChangeAction(
-      syncState,
-      github,
-      vault,
-      this.settings.doneOptionName,
+      this.settings.taskTemplatePath,
     );
     const syncGithubTasks = new SyncGithubTasksAction(
       github,
       syncState,
-      applyRemoteChange,
-      createTaskNote,
-      applyBoardChange,
+      vault,
+      applyTaskToGithub,
+      applyTaskToVault,
+      new VerdictResolver(),
       this.settings.doneOptionName,
     );
     const discoverProjects = new DiscoverProjectsAction(
@@ -327,7 +311,6 @@ export default class ProjectManagementPlugin extends Plugin {
       detectNoteRenames,
       syncGithubTasks,
       syncChecklist,
-      reconcileTask,
       mirrorTodoStatus,
       syncTodoistTasks,
       handleDeletedNote,

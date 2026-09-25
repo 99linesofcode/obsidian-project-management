@@ -169,6 +169,10 @@ class FakeTaskManager implements TaskManagerPort {
 class FakeProjectManagement implements ProjectManagementPort {
   issues: GithubTaskData[] = [];
 
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return this.issues;
   }

@@ -1,43 +1,49 @@
-import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../Ports/SyncStatePort.js';
-import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
-import { boardOptionIDByName } from '../Board/boardOptionIDByName.js';
+import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
+import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { Status } from '../Models/Status.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
 import { statusNameFromState } from '../Board/statusNameFromState.js';
-import type { ApplyBoardChangeAction } from './ApplyBoardChangeAction.js';
-import type { ApplyRemoteChangeAction } from './ApplyRemoteChangeAction.js';
-import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
+import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
+import { GithubTaskMapper } from '../Mappers/GithubTaskMapper.js';
+import { VaultTaskMapper } from '../Mappers/VaultTaskMapper.js';
+import { toIssueBody } from '../Notes/Checklist.js';
+import { hash } from '../Notes/hash.js';
+import { slugify } from '../Notes/TaskNoteMapper.js';
+import { VerdictResolver } from '../Reconciliation/VerdictResolver.js';
+import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
+import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { VaultPort } from '../Ports/VaultPort.js';
+import type { ApplyTaskToGithubAction } from './ApplyTaskToGithubAction.js';
+import type { ApplyTaskToVaultAction } from './ApplyTaskToVaultAction.js';
 
 export interface SyncGithubTasksInput {
   projectName: string;
   syncedAt: string;
+  // The probe's verdict: the project's remote updatedAt moved since the last
+  // poll. When false, the fetch is skipped unless the vault drifted.
   includeBoard: boolean;
 }
 
-// UC3/UC8/UC9: sync one project's GitHub tasks. Fetches the complete tracked
-// issue set and mirrors each onto its note — applying changes to existing
-// notes, creating notes for newly promoted issues — then reconciles the board:
-// the board's Status drives the issue and note (UC8), and every tracked task
-// missing from the board is added to it (UC9). The sync state is the diff: an
-// issue whose last update predates the previous poll still materializes. The
-// poll needs the project's repo url, so a project without a stored identity (or
-// one lacking a repo url) is skipped with a clear error rather than crashing.
-// includeBoard gates the board half on the remote updatedAt, but a membership
-// gap opens it too: a newly tracked issue has no card and does not move the
-// board, so the probe gate alone would starve its bookkeeping. A manually
-// removed card does move the board, caught by the gate. When the board is
-// fetched, an added card starts in the lane its issue state implies.
+// The GitHub half on the canonical pipeline: probe gate → single-query project
+// detail fetch → GithubTaskMapper maps every issue+card to canonical TaskData →
+// VerdictResolver.diff(vault, remote, snapshot) per entity → the two writers
+// apply the winning side. Replaces the t2 interim (probe → old sweep → per-note
+// consistency loop).
 //
-// t2 interim: this is the old SyncProjectAction sweep, extracted verbatim so
-// the rewritten SyncProjectAction can compose it as the chain's GitHub half.
-// t3 replaces its internals with the single-query canonical pipeline.
+// The snapshot DTO is assembled INTERIM from the provider-shaped Status record
+// (t5 migrates the store): its body field carries the stored body hash and the
+// pipeline hashes the vault/remote bodies before diffing, so the canonical
+// diff's string comparison is a hash comparison until the store holds the
+// canonical body. Titles are slug-compared, because the vault's title is
+// filename-derived and the remote's is the issue title.
 export class SyncGithubTasksAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
     private readonly syncState: SyncStatePort,
-    private readonly applyRemoteChange: ApplyRemoteChangeAction,
-    private readonly createTaskNote: CreateTaskNoteAction,
-    private readonly applyBoardChange: ApplyBoardChangeAction,
+    private readonly vault: VaultPort,
+    private readonly applyToGithub: ApplyTaskToGithubAction,
+    private readonly applyToVault: ApplyTaskToVaultAction,
+    private readonly verdictResolver: VerdictResolver,
     private readonly doneOptionName: string,
   ) {}
 
@@ -49,110 +55,222 @@ export class SyncGithubTasksAction {
       );
     }
 
-    // Every poll reconciles the complete tracked set; the sync state is the
-    // diff, so an issue that went quiet before its type label was added still
-    // materializes. Only tasks carrying a type label are tracked.
-    const tasks = (
-      await this.projectManagement.fetchTrackedIssues(identity.repoUrl)
-    ).filter((task) => hasTypeLabel(task.labels));
+    const statuses = await this.syncState.list();
+    const statusByUrl = new Map(statuses.map((s) => [s.url, s] as const));
 
-    // A fetched task the vault has never recorded is a membership gap. Capture
-    // it before materializing: creating a note writes the record, which would
-    // erase the gap we need to detect.
-    const knownUrls = new Set(
-      (await this.syncState.list()).map((status) => status.url),
-    );
-    const hasUntracked = tasks.some((task) => !knownUrls.has(task.url));
-
-    // The lane a task's issue state implies when the board is not the
-    // source: closed issues sit in the done lane, open ones in the default.
-    const fallbackStatusName = statusNameFromState(
-      'open',
-      this.doneOptionName,
-      defaultStatusName(identity.statusOptions),
-    );
-    const doneStatusName = statusNameFromState(
-      'closed',
-      this.doneOptionName,
-      defaultStatusName(identity.statusOptions),
-    );
-
-    for (const task of tasks) {
-      const statusName =
-        task.state === 'closed' ? doneStatusName : fallbackStatusName;
-      const status = await this.syncState.get(task.url);
-      if (status) {
-        await this.applyRemoteChange.execute({
-          task,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-          statusName,
-        });
-      } else {
-        await this.createTaskNote.execute({
-          task,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-          statusName,
-        });
-      }
-    }
-
-    // The board fetch is the expensive half of the poll, so the scheduler gates
-    // it on the project's remote updatedAt. A board change always moves that
-    // updatedAt, so a skipped board fetch resumes on the next tick after any
-    // board activity — including card removals, which the bookkeeping re-adds.
-    // A membership gap opens the gate too, so a new issue's bookkeeping does
-    // not wait for unrelated board activity.
-    if (!input.includeBoard && !hasUntracked) {
+    // The probe gate: skip the whole fetch when the remote is unmoved and the
+    // vault is settled. A vault-side drift re-opens it so the drift can be
+    // pushed; a project with no records is unknown, so it fetches.
+    if (
+      !input.includeBoard &&
+      !(await this.hasVaultDrift(input.projectName, statuses))
+    ) {
       return;
     }
 
-    const items = await this.projectManagement.fetchBoardItems(
+    const detail = await this.projectManagement.fetchProjectDetail(
+      identity.repoUrl,
       identity.projectNodeId,
     );
-
-    for (const item of items) {
-      await this.applyBoardChange.execute({
-        projectName: input.projectName,
-        item,
-        syncedAt: input.syncedAt,
-      });
-    }
-
-    const boardUrls = new Set(
-      items
-        .filter((item) => item.issueUrl !== undefined)
-        .map((item) => item.issueUrl as string),
+    const issues = detail.issues.filter((issue) => hasTypeLabel(issue.labels));
+    const cardByUrl = new Map(
+      detail.cards
+        .filter((card) => card.issueUrl !== undefined)
+        .map((card) => [card.issueUrl as string, card] as const),
     );
-    const taskByUrl = new Map(tasks.map((task) => [task.url, task] as const));
-    const tracked = await this.syncState.list();
-    for (const status of tracked) {
-      if (boardUrls.has(status.url)) {
-        continue;
-      }
-      await this.projectManagement.addBoardItem(
-        identity.projectNodeId,
-        status.url,
+
+    const doneLane = this.doneOptionName;
+    const defaultLane = defaultStatusName(identity.statusOptions);
+
+    for (const issue of issues) {
+      const card = cardByUrl.get(issue.url) ?? null;
+      const status = statusByUrl.get(issue.url);
+      const rawRemote = GithubTaskMapper.parse(issue, card);
+      // The board lane is authoritative for done-ness when a card carries one;
+      // a card with no lane falls back to the record's lane (backfill); a
+      // card-less issue falls back to the lane its state implies.
+      const remote = this.withLaneDone(
+        rawRemote,
+        card,
+        issue.state,
+        doneLane,
+        defaultLane,
+        status,
       );
 
-      const task = taskByUrl.get(status.url);
-      if (!task) {
-        // A record whose issue is no longer fetched has no state to derive a
-        // lane from; leave the card where GitHub placed it.
+      // An untracked issue: materialise the note and add the card.
+      if (!status) {
+        await this.applyToVault.execute({
+          task: remote,
+          current: null,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+        await this.applyToGithub.execute({
+          task: remote,
+          current: rawRemote,
+          hasCard: card !== null,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
         continue;
       }
-      const statusName = statusNameFromState(
-        task.state,
-        this.doneOptionName,
-        defaultStatusName(identity.statusOptions),
+
+      const note = await this.vault.getNoteByPath(status.notePath);
+      const vaultDto = note
+        ? VaultTaskMapper.parseTask(note.content, status.notePath, {
+            projectName: input.projectName,
+            doneLane,
+          })
+        : null;
+      // The note is gone; the deletion sweep owns it.
+      if (!vaultDto) {
+        continue;
+      }
+
+      const snapshot = this.snapshotFrom(status, doneLane);
+      const verdict = this.verdictResolver.diff(
+        this.forDiff(vaultDto, hash(toIssueBody(vaultDto.body))),
+        this.forDiff(remote, hash(remote.body)),
+        this.forDiff(snapshot, status.lastSyncedBodyHash),
       );
-      await this.projectManagement.setBoardStatus(
-        identity.projectNodeId,
-        identity.statusFieldId,
-        status.url,
-        boardOptionIDByName(identity.statusOptions, statusName),
-      );
+
+      if (verdict === 'push' || verdict === 'conflict') {
+        await this.applyToGithub.execute({
+          task: vaultDto,
+          current: rawRemote,
+          hasCard: card !== null,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+      } else if (verdict === 'pull') {
+        await this.applyToVault.execute({
+          task: remote,
+          current: vaultDto,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+        // The board lane's done-ness drives the issue state: reconcile the
+        // issue when the remote's own fields disagree.
+        if (remote.completed !== rawRemote.completed) {
+          await this.applyToGithub.execute({
+            task: remote,
+            current: rawRemote,
+            hasCard: card !== null,
+            projectName: input.projectName,
+            syncedAt: input.syncedAt,
+          });
+        }
+      } else if (card === null || card.statusOptionName === undefined) {
+        // A membership gap (no card) or a lane gap (a card with no lane): the
+        // writer adds or backfills it in the winning lane.
+        await this.applyToGithub.execute({
+          task: remote,
+          current: rawRemote,
+          hasCard: card !== null,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+      }
     }
+  }
+
+  // The board lane is authoritative for done-ness when a card carries one; a
+  // card with no lane falls back to the record's lane (backfill); a card-less
+  // issue falls back to the lane its state implies.
+  private withLaneDone(
+    raw: TaskData,
+    card: BoardItemData | null,
+    state: 'open' | 'closed',
+    doneLane: string,
+    defaultLane: string,
+    status: Status | undefined,
+  ): TaskData {
+    if (card && card.statusOptionName !== undefined) {
+      return {
+        ...raw,
+        status: card.statusOptionName,
+        completed: card.statusOptionName === doneLane,
+      };
+    }
+    if (card) {
+      const lane =
+        status?.lastSyncedStatus ??
+        statusNameFromState(state, doneLane, defaultLane);
+      return { ...raw, status: lane, completed: lane === doneLane };
+    }
+    return {
+      ...raw,
+      status: statusNameFromState(state, doneLane, defaultLane),
+      completed: state === 'closed',
+    };
+  }
+
+  // The interim snapshot DTO: the Status record's provider-shaped fragments
+  // mapped onto canonical fields. The body carries the stored hash (see the
+  // class comment); t5 replaces this with the canonical record.
+  private snapshotFrom(status: Status, doneLane: string): TaskData {
+    return {
+      url: status.url,
+      remoteId: status.remoteId,
+      nodeId: '',
+      todoistId: '',
+      notePath: status.notePath,
+      title: status.lastSyncedTitle,
+      body: status.lastSyncedBodyHash,
+      status: status.lastSyncedStatus,
+      completed: doneLane !== '' && status.lastSyncedStatus === doneLane,
+      parent: null,
+      labels: [],
+      updatedAt: status.lastSyncedRemoteUpdatedAt,
+    };
+  }
+
+  // The comparable shape the diff reads: the title is slug-compared (the vault
+  // derives it from the filename, the remote from the issue title) and the
+  // body is the caller's comparable form (a hash, interim). Parent is not a
+  // GitHub-synced field.
+  private forDiff(task: TaskData, body: string): TaskData {
+    return { ...task, title: slugify(task.title), body, parent: null };
+  }
+
+  // A vault-side drift: a project record whose note no longer matches its
+  // snapshot. A project with no records is unknown and counts as drift, so a
+  // newly tracked issue is never starved by the probe gate.
+  private async hasVaultDrift(
+    projectName: string,
+    statuses: Status[],
+  ): Promise<boolean> {
+    const prefix = `Projecten/${projectName}/`;
+    const projectStatuses = statuses.filter((s) =>
+      s.notePath.startsWith(prefix),
+    );
+    if (projectStatuses.length === 0) {
+      return true;
+    }
+
+    for (const status of projectStatuses) {
+      const note = await this.vault.getNoteByPath(status.notePath);
+      if (!note) {
+        continue;
+      }
+      const parsed = VaultTaskMapper.parseTask(note.content, status.notePath, {
+        projectName,
+        doneLane: this.doneOptionName,
+      });
+      if (!parsed) {
+        return true;
+      }
+      if (hash(toIssueBody(parsed.body)) !== status.lastSyncedBodyHash) {
+        return true;
+      }
+      if (parsed.status !== status.lastSyncedStatus) {
+        return true;
+      }
+      if (slugify(parsed.title) !== slugify(status.lastSyncedTitle)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

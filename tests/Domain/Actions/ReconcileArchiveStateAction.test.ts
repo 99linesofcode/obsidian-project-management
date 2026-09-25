@@ -159,6 +159,10 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }

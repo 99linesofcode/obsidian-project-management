@@ -43,6 +43,10 @@ class FakePort implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     throw new Error('not used in this test');
   }
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async fetchTrackedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }

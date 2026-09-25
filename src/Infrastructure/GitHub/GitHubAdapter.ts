@@ -5,6 +5,7 @@ import type {
   ProjectStatusOption,
 } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../Domain/DataTransferObjects/ProjectStateData.js';
+import type { ProjectDetailData } from '../../Domain/DataTransferObjects/ProjectDetailData.js';
 import type { GithubTaskData } from '../../Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
@@ -91,6 +92,63 @@ const ORG_PROJECT_QUERY = `
 
 const BOARD_ITEMS_QUERY = `
   query BoardItems($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        items(first: 100) {
+          nodes {
+            id
+            type
+            content {
+              ... on Issue {
+                url
+              }
+              ... on DraftIssue {
+                title
+                body
+              }
+            }
+            fieldValues(first: 20) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field {
+                    ... on ProjectV2SingleSelectField {
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// The whole-project fetch: the repository's issues (with bodies, so checklist
+// → to-do extraction works from the same response) and the project's board
+// items (cards + Status lanes), in ONE GraphQL round trip. Both connections
+// are capped at 100 nodes — the same cap the board query always had; a project
+// with more than 100 issues or cards is a follow-up pagination concern.
+const PROJECT_DETAIL_QUERY = `
+  query ProjectDetail($owner: String!, $name: String!, $projectId: ID!) {
+    repository(owner: $owner, name: $name) {
+      issues(first: 100, states: [OPEN, CLOSED]) {
+        nodes {
+          url
+          number
+          id
+          title
+          body
+          state
+          updatedAt
+          labels(first: 20) {
+            nodes { name }
+          }
+        }
+      }
+    }
     node(id: $projectId) {
       ... on ProjectV2 {
         items(first: 100) {
@@ -253,6 +311,76 @@ export class GitHubAdapter implements ProjectManagementPort {
         typeof label.name === 'string' &&
         label.name.startsWith('type:'),
     );
+  }
+
+  // The whole-project fetch the sync chain works from: one GraphQL POST
+  // returns the repository's issues (bodies included) and the project's board
+  // items. The adapter filters to typed issues here, so the core receives the
+  // tracked set; the board cards come along for the lane join.
+  async fetchProjectDetail(
+    repoUrl: string,
+    projectNodeId: string,
+  ): Promise<ProjectDetailData> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const data = await this.postQuery(PROJECT_DETAIL_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+      projectId: projectNodeId,
+    });
+
+    const repository = data.repository;
+    const issueNodes =
+      isRecord(repository) &&
+      isRecord(repository.issues) &&
+      Array.isArray(repository.issues.nodes)
+        ? repository.issues.nodes
+        : [];
+    const issues = issueNodes
+      .filter(isRecord)
+      .map((node) => this.mapGraphqlIssue(node))
+      .filter((issue) =>
+        issue.labels.some((label) => label.startsWith('type:')),
+      );
+
+    const project = data.node;
+    const cardNodes =
+      isRecord(project) &&
+      isRecord(project.items) &&
+      Array.isArray(project.items.nodes)
+        ? project.items.nodes
+        : [];
+    const cards = cardNodes
+      .filter(isRecord)
+      .map((node) => this.mapBoardItem(node))
+      .filter((item): item is BoardItemData => item !== null);
+
+    return { issues, cards };
+  }
+
+  // Maps a GraphQL issue node onto the transport DTO. GraphQL names differ
+  // from REST (url/id/updatedAt, labels as a connection, uppercase state).
+  private mapGraphqlIssue(node: Record<string, unknown>): GithubTaskData {
+    const labels =
+      isRecord(node.labels) && Array.isArray(node.labels.nodes)
+        ? node.labels.nodes
+            .filter(isRecord)
+            .filter(
+              (label): label is { name: string } =>
+                typeof label.name === 'string',
+            )
+            .map((label) => label.name)
+        : [];
+
+    return {
+      url: typeof node.url === 'string' ? node.url : '',
+      remoteId: typeof node.number === 'number' ? node.number : 0,
+      nodeId: typeof node.id === 'string' ? node.id : '',
+      title: typeof node.title === 'string' ? node.title : '',
+      body: typeof node.body === 'string' ? node.body : '',
+      state: node.state === 'CLOSED' ? 'closed' : 'open',
+      updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : '',
+      labels,
+    };
   }
 
   // The watched-repo read: the newest issues by creation date, through a

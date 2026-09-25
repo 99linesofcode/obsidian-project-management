@@ -7,32 +7,29 @@ import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from './ProbeProjectsAction.js';
 import type { ReconcileArchiveStateAction } from './ReconcileArchiveStateAction.js';
-import type { ReconcileTaskAction } from './ReconcileTaskAction.js';
 import type { SyncChecklistAction } from './SyncChecklistAction.js';
 import type { SyncGithubTasksAction } from './SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
 import type { WatchArchivedProjectAction } from './WatchArchivedProjectAction.js';
 
-// THE CHAIN (t2 interim): one work item kind — a project folder name — and one
-// entry point. The chain re-resolves the project from the vault, so a stale
-// work item (a renamed-away project) no-ops and project-level deletion is never
-// propagated from a stale item. Steps compose the interim halves; each step is
-// isolated, so a failure logs and skips that step and the GitHub half failing
-// never blocks the Todoist half (or vice versa). Snapshots and cursors advance
-// only on success, preserved by the underlying actions.
-//
-// The interim composition (t3/t4 rebuild the halves on the canonical pipeline):
+// THE CHAIN: one work item kind — a project folder name — and one entry point.
+// The chain re-resolves the project from the vault, so a stale work item (a
+// renamed-away project) no-ops and project-level deletion is never propagated
+// from a stale item. Steps compose the halves; each step is isolated, so a
+// failure logs and skips that step and the GitHub half failing never blocks the
+// Todoist half (or vice versa). Snapshots and cursors advance only on success,
+// preserved by the underlying actions.
 //
 //   1. resolve project (inline) — pm-note exists? else no-op
 //   2. GitHub-side lifecycle — ReconcileArchiveState → WatchArchivedProject
 //   3. renames — DetectNoteRenamesAction (snapshot drift)
-//   4. GitHub half — probe → SyncGithubTasks sweep → per-note consistency loop
-//   5. Todoist half — SyncTodoistTasks (the old runTodoistHalf body)
-//   6. deletions last — status records whose note is gone
+//   4. GitHub half — probe → SyncGithubTasks (single-query canonical pipeline)
+//   5. vault consistency — checklist ↔ to-do (retained; verdict-independent)
+//   6. Todoist half — SyncTodoistTasks (the old runTodoistHalf body)
+//   7. deletions last — status records whose note is gone
 //
-// The probe is hoisted to the top of the GitHub-side work because the interim
-// lifecycle gate needs the probed `closed`/`hasGithub` state; the task's step-4
-// wording places it with the sweep, but one probe serves both.
+// The probe is hoisted to the top of the GitHub-side work because the lifecycle
+// gate needs the probed `closed`/`hasGithub` state; one probe serves both.
 export class SyncProjectAction {
   constructor(
     private readonly vault: VaultPort,
@@ -43,7 +40,6 @@ export class SyncProjectAction {
     private readonly detectNoteRenames: DetectNoteRenamesAction,
     private readonly syncGithubTasks: SyncGithubTasksAction,
     private readonly syncChecklist: SyncChecklistAction,
-    private readonly reconcileTask: ReconcileTaskAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     private readonly syncTodoistTasks: SyncTodoistTasksAction,
     private readonly handleDeletedNote: HandleDeletedNoteAction,
@@ -73,12 +69,19 @@ export class SyncProjectAction {
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
     );
 
-    // 4. GitHub half (interim wrap).
+    // 4. GitHub half (canonical pipeline).
     await this.step('github half', () =>
       this.runGithubHalf(project, note, state, syncedAt),
     );
 
-    // 5. Todoist half (interim wrap).
+    // 5. Vault consistency — checklist ↔ to-do. Retained as its own step
+    // because it must run for every task note regardless of the GitHub
+    // verdict; the vault writer's surface covers the note body it writes.
+    await this.step('vault consistency', () =>
+      this.runVaultConsistency(project, syncedAt),
+    );
+
+    // 6. Todoist half (interim wrap).
     await this.step('todoist half', () =>
       this.syncTodoistTasks.execute({
         projectName: project,
@@ -88,7 +91,7 @@ export class SyncProjectAction {
       }),
     );
 
-    // 6. Deletions last.
+    // 7. Deletions last.
     await this.step('deletions', () => this.runDeletions(project));
   }
 
@@ -153,37 +156,29 @@ export class SyncProjectAction {
       });
       await this.syncState.setLastProjectUpdate(project, state.updatedAt);
     } catch (error) {
-      // A failed sweep must not advance the stored update, so the next tick
-      // sees the same updatedAt and retries the board fetch. The per-note loop
-      // still runs: it replaces the independent note-event paths.
+      // A failed half must not advance the stored update, so the next tick
+      // sees the same updatedAt and retries the fetch.
       console.error(
-        `SyncProjectAction: github sweep failed for ${project}`,
+        `SyncProjectAction: github half failed for ${project}`,
         error,
       );
     }
-
-    await this.runNoteSweep(project, syncedAt);
   }
 
-  // The per-note consistency loop: the old per-note event paths (reconcile,
-  // mirror) at project granularity. Deliberately coarser than the old event
-  // path — every task note is checklist-synced and reconciled, every to-do
-  // mirrored — but verdict-gated, so a settled note writes nothing. t3 replaces
-  // it with the single-query fetch + canonical diff.
-  private async runNoteSweep(project: string, syncedAt: string): Promise<void> {
+  // The vault-side consistency pass: the checklist line and its to-do notes
+  // converge in both directions. It is deliberately independent of the GitHub
+  // verdict — a checklist edit is a vault change that must promote/complete
+  // its to-dos even when the GitHub half writes nothing.
+  private async runVaultConsistency(
+    project: string,
+    syncedAt: string,
+  ): Promise<void> {
     const taken = await this.vault.listNotesInFolder(
       `Projecten/${project}/taken`,
     );
     for (const notePath of taken) {
       await this.step(`checklist ${notePath}`, () =>
         this.syncChecklist.execute({
-          notePath,
-          projectName: project,
-          syncedAt,
-        }),
-      );
-      await this.step(`reconcile ${notePath}`, () =>
-        this.reconcileTask.execute({
           notePath,
           projectName: project,
           syncedAt,
