@@ -36,7 +36,10 @@ class FakePort implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
 
-  async promoteCard(itemId: string, repoNodeId: string): Promise<GithubTaskData> {
+  async promoteCard(
+    itemId: string,
+    repoNodeId: string,
+  ): Promise<GithubTaskData> {
     this.promoted.push({ itemId, repoNodeId });
     return this.task;
   }

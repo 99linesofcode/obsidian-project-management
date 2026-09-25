@@ -388,7 +388,10 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<GithubTaskData> {
+  async setTaskState(
+    url: string,
+    state: 'open' | 'closed',
+  ): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -503,7 +506,10 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
-  async promoteCard(itemId: string, repoNodeId: string): Promise<GithubTaskData> {
+  async promoteCard(
+    itemId: string,
+    repoNodeId: string,
+  ): Promise<GithubTaskData> {
     const data = await this.postQuery(CONVERT_DRAFT_ISSUE_MUTATION, {
       itemId,
       repositoryId: repoNodeId,

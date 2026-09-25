@@ -26,7 +26,11 @@ export class VerdictResolver {
   // snapshot's content fields. A field changed on both sides is a conflict and
   // the vault wins (dt-01). Identical for every provider, because the DTOs are
   // canonical. Pure: no I/O, no time, no randomness.
-  diff(vault: TaskData, remote: TaskData, snapshot: TaskData): DimensionVerdict {
+  diff(
+    vault: TaskData,
+    remote: TaskData,
+    snapshot: TaskData,
+  ): DimensionVerdict {
     const localChanged = contentOf(vault) !== contentOf(snapshot);
     const remoteChanged = contentOf(remote) !== contentOf(snapshot);
     if (localChanged && remoteChanged) return 'conflict';

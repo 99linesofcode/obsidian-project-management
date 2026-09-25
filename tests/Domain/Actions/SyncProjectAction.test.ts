@@ -158,7 +158,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
 
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<GithubTaskData> {
+  async setTaskState(
+    url: string,
+    state: 'open' | 'closed',
+  ): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
     return {
       url,
