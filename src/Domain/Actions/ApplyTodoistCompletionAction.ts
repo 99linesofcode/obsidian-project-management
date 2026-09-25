@@ -15,7 +15,7 @@ export interface ApplyTodoistCompletionInput {
 // caught by the completed-since query from the project's stored cursor; a
 // reopen is caught by a to-do twin reappearing in the active set while its
 // snapshot says completed (lastSyncedCompleted) — that is what tells a remote
-// reopen from a vault-side completion, which ProjectToDosToTodoistAction owns.
+// reopen from a vault-side completion, which ApplyTaskToTodoistAction owns.
 //
 // The applied completion stamp is the tick's syncedAt — the moment the sync
 // observed the change — a full ISO datetime, never date-only. Every applied

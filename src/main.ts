@@ -9,6 +9,7 @@ import { SyncQueue } from './App/Scheduling/SyncQueue.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
 import { ApplyTaskToGithubAction } from './Domain/Actions/ApplyTaskToGithubAction.js';
+import { ApplyTaskToTodoistAction } from './Domain/Actions/ApplyTaskToTodoistAction.js';
 import { ApplyTaskToVaultAction } from './Domain/Actions/ApplyTaskToVaultAction.js';
 import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompletionAction.js';
 import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRemoteChangesAction.js';
@@ -23,8 +24,6 @@ import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
-import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodoistAction.js';
-import { ProjectToDosToTodoistAction } from './Domain/Actions/ProjectToDosToTodoistAction.js';
 import { PropagateTodoistDeletionsAction } from './Domain/Actions/PropagateTodoistDeletionsAction.js';
 import { ReconcileProjectLifecycleAction } from './Domain/Actions/ReconcileProjectLifecycleAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
@@ -195,20 +194,15 @@ export default class ProjectManagementPlugin extends Plugin {
       syncState,
       this.settings.doneOptionName,
     );
-    const projectTasksToTodoist = new ProjectTasksToTodoistAction(
+    // t4: the gated Todoist writer. It absorbs the two projection actions'
+    // write paths: content/section/parent/completed, writing only the fields
+    // that differ. The pipeline resolves the desired shape and placement.
+    const applyTaskToTodoist = new ApplyTaskToTodoistAction(
       todoist,
-      github,
       vault,
       syncState,
-      new EnsureTodoistSectionsAction(todoist),
-      this.settings.doneOptionName,
     );
     const applyTodoistCompletion = new ApplyTodoistCompletionAction(
-      todoist,
-      vault,
-      syncState,
-    );
-    const projectToDosToTodoist = new ProjectToDosToTodoistAction(
       todoist,
       vault,
       syncState,
@@ -281,12 +275,17 @@ export default class ProjectManagementPlugin extends Plugin {
     // t4: the chain composes the rebuilt halves; the queue serialises every
     // project; the scheduler is discovery + timing policies only.
     const syncTodoistTasks = new SyncTodoistTasksAction(
+      todoist,
+      github,
+      vault,
+      syncState,
+      new EnsureTodoistSectionsAction(todoist),
+      applyTaskToTodoist,
       applyTodoistRemoteChanges,
       captureTodoistCreations,
-      projectTasksToTodoist,
       applyTodoistCompletion,
-      projectToDosToTodoist,
       propagateTodoistDeletions,
+      this.settings.doneOptionName,
     );
     const detectNoteRenames = new DetectNoteRenamesAction(
       vault,
