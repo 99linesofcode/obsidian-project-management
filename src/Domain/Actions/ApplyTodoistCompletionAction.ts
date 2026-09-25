@@ -1,5 +1,5 @@
-import { hash } from '../Notes/hash.js';
 import { ToDoNoteParser, withToDoStatus } from '../Notes/ToDoNoteParser.js';
+import { snapshotHash } from '../Reconciliation/snapshotHash.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
@@ -137,7 +137,13 @@ export class ApplyTodoistCompletionAction {
     await this.syncState.setTodoistState(notePath, {
       todoistId: task.id,
       notePath,
-      lastSyncedHash: snapshotHash(task),
+      lastSyncedHash: snapshotHash({
+        content: task.content,
+        labels: task.labels,
+        sectionId: null,
+        parentId: task.parentId,
+        isCompleted: task.isCompleted,
+      }),
       lastSyncedCompleted: task.isCompleted,
       lastSyncedContent: task.content,
       // The item is a to-do: a subtask, so its lane is inherited (dt-02).
@@ -145,21 +151,6 @@ export class ApplyTodoistCompletionAction {
       lastSyncedParent: task.parentId,
     });
   }
-}
-
-// The snapshot hash (dt-08) over a fetched twin: content, labels, parent and
-// completion. The section stays empty — a subtask inherits its parent's
-// (dt-02), so it is not a controlled field.
-function snapshotHash(task: TodoistTaskData): string {
-  return hash(
-    [
-      task.content,
-      [...task.labels].sort().join(','),
-      '',
-      task.parentId ?? '',
-      task.isCompleted ? '1' : '0',
-    ].join('\n'),
-  );
 }
 
 // A to-do note lives at Projecten/<project>/todos/<file>.md.

@@ -37,7 +37,7 @@ import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncCheckl
 import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
 import type { RelinkRenamedTodoAction } from '../../../src/Domain/Actions/RelinkRenamedTodoAction.js';
 import type { RelocateTaskStatusAction } from '../../../src/Domain/Actions/RelocateTaskStatusAction.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
@@ -164,17 +164,17 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
+  async fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     this.repoUrlCalls.push(repoUrl);
     return [];
   }
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async updateTask(): Promise<TaskData> {
+  async updateTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async setTaskState(): Promise<TaskData> {
+  async setTaskState(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
   async fetchBoardItems(): Promise<BoardItemData[]> {

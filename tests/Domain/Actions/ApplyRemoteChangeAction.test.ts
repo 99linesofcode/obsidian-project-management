@@ -5,7 +5,7 @@ import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
@@ -145,16 +145,16 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async updateTask(): Promise<TaskData> {
+  async updateTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async setTaskState(): Promise<TaskData> {
+  async setTaskState(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
   async fetchBoardItems(): Promise<never> {
@@ -189,7 +189,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 }
 
-const task: TaskData = {
+const task: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
   nodeId: 'I_kwDOAAAA42',
@@ -250,7 +250,7 @@ describe('ApplyRemoteChangeAction', () => {
     const { path, content } = TaskNoteMapper.map(task, context);
     vault.notes.set(path, content);
     const action = makeAction(vault, syncState, new FakeProjectManagement());
-    const changed: TaskData = {
+    const changed: GithubTaskData = {
       ...task,
       body: 'The bug now also happens on resize.',
       updatedAt: '2026-09-18T11:00:00Z',
@@ -285,7 +285,7 @@ describe('ApplyRemoteChangeAction', () => {
     const { path, content } = TaskNoteMapper.map(task, context);
     vault.notes.set(path, content);
     const action = makeAction(vault, syncState, new FakeProjectManagement());
-    const retitled: TaskData = { ...task, title: 'Fix the Widget!' };
+    const retitled: GithubTaskData = { ...task, title: 'Fix the Widget!' };
 
     // When — the remote change is applied
     await action.execute({ task: retitled, ...context });
@@ -355,7 +355,7 @@ describe('ApplyRemoteChangeAction', () => {
     const { path, content } = TaskNoteMapper.map(task, context);
     vault.notes.set(path, content);
     const action = makeAction(vault, syncState, new FakeProjectManagement());
-    const changed: TaskData = {
+    const changed: GithubTaskData = {
       ...task,
       body: 'The bug now also happens on resize.',
       updatedAt: '2026-09-18T11:00:00Z',
@@ -383,7 +383,7 @@ describe('ApplyRemoteChangeAction', () => {
     vault.notes.set(path, content);
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
-    const closed: TaskData = {
+    const closed: GithubTaskData = {
       ...task,
       state: 'closed',
       updatedAt: '2026-09-18T11:00:00Z',
@@ -428,7 +428,7 @@ describe('ApplyRemoteChangeAction', () => {
       ).content,
     );
     const action = makeAction(vault, syncState, new FakeProjectManagement());
-    const changed: TaskData = {
+    const changed: GithubTaskData = {
       ...task,
       body: '- [ ] Fix the bug',
       updatedAt: '2026-09-18T11:00:00Z',
@@ -469,7 +469,7 @@ describe('ApplyRemoteChangeAction', () => {
       ).content,
     );
     const action = makeAction(vault, syncState, new FakeProjectManagement());
-    const changed: TaskData = {
+    const changed: GithubTaskData = {
       ...task,
       body: ['- [ ] New item', '- [x] Fix the bug'].join('\n'),
       updatedAt: '2026-09-18T11:00:00Z',

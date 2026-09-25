@@ -1,8 +1,11 @@
+import { sameLabels } from '../Labels/sameLabels.js';
 import { parseChecklist } from '../Notes/Checklist.js';
-import { hash } from '../Notes/hash.js';
+import { stemOf } from '../Notes/stemOf.js';
+import { stripLink } from '../Notes/stripLink.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
+import { snapshotHash } from '../Reconciliation/snapshotHash.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
@@ -252,7 +255,13 @@ export class ProjectToDosToTodoistAction {
     await this.syncState.setTodoistState(notePath, {
       todoistId,
       notePath,
-      lastSyncedHash: snapshotHash(desired),
+      lastSyncedHash: snapshotHash({
+        content: desired.content,
+        labels: desired.labels,
+        sectionId: null,
+        parentId: desired.parentId,
+        isCompleted: desired.isCompleted,
+      }),
       lastSyncedCompleted: desired.isCompleted,
       lastSyncedContent: desired.content,
       // A to-do is always a subtask: it inherits its parent's section, so the
@@ -269,22 +278,6 @@ function anchorOf(content: string): string | null {
   return anchor === '' ? null : anchor;
 }
 
-// The snapshot hash (dt-08): content, labels, parent and completion. Labels are
-// sorted so their order never reads as a change; the section stays empty
-// because a subtask inherits its parent's (dt-02), so it is not a controlled
-// field here.
-function snapshotHash(desired: DesiredToDo): string {
-  return hash(
-    [
-      desired.content,
-      [...desired.labels].sort().join(','),
-      '',
-      desired.parentId,
-      desired.isCompleted ? '1' : '0',
-    ].join('\n'),
-  );
-}
-
 // The affiliation lists the project first, then the parent task, then — when
 // nested — the parent to-do. The second non-project link is the parent to-do's
 // stem; a to-do with no parent link returns null.
@@ -296,23 +289,4 @@ function parentStemFromAffiliation(
     .map(stripLink)
     .filter((target) => target !== projectName);
   return targets[1] ?? null;
-}
-
-function stripLink(link: string): string {
-  return link.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]!.trim();
-}
-
-// A note's filename stem: its basename without the .md extension.
-function stemOf(path: string): string {
-  const basename = path.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
-}
-
-function sameLabels(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  const sortedA = [...a].sort();
-  const sortedB = [...b].sort();
-  return sortedA.every((label, index) => label === sortedB[index]);
 }

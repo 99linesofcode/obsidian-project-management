@@ -8,7 +8,7 @@ import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
@@ -134,7 +134,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }
-  tasks: TaskData[] = [];
+  tasks: GithubTaskData[] = [];
   repoUrlCalls: string[] = [];
   boardItems: BoardItemData[] = [];
   boardItemsCalls: string[] = [];
@@ -145,20 +145,20 @@ class FakeProjectManagement implements ProjectManagementPort {
     return null;
   }
 
-  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
+  async fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     this.repoUrlCalls.push(repoUrl);
     return this.tasks;
   }
 
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
 
-  async updateTask(): Promise<TaskData> {
+  async updateTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
 
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+  async setTaskState(url: string, state: 'open' | 'closed'): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
     return {
       url,
@@ -226,7 +226,7 @@ const context = {
   includeBoard: true,
 };
 
-const taskA: TaskData = {
+const taskA: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
   nodeId: 'I_kwDOAAAA42',
@@ -237,7 +237,7 @@ const taskA: TaskData = {
   labels: ['type: task'],
 };
 
-const taskB: TaskData = {
+const taskB: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/43',
   remoteId: 43,
   nodeId: 'I_kwDOAAAA43',
@@ -312,7 +312,7 @@ describe('SyncProjectAction', () => {
       lastSyncedTitle: taskA.title,
     });
     // The existing note holds the old body, so the remote change rewrites it
-    const oldTaskA: TaskData = { ...taskA, body: 'old body' };
+    const oldTaskA: GithubTaskData = { ...taskA, body: 'old body' };
     vault.notes.set(pathA, TaskNoteMapper.map(oldTaskA, context).content);
 
     const projectManagement = new FakeProjectManagement();
@@ -341,8 +341,8 @@ describe('SyncProjectAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    const typed: TaskData = { ...taskA, labels: ['type: slice'] };
-    const untyped: TaskData = { ...taskB, labels: ['bug'] };
+    const typed: GithubTaskData = { ...taskA, labels: ['type: slice'] };
+    const untyped: GithubTaskData = { ...taskB, labels: ['bug'] };
     const projectManagement = new FakeProjectManagement();
     projectManagement.tasks = [typed, untyped];
 
@@ -365,7 +365,7 @@ describe('SyncProjectAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    const quiet: TaskData = {
+    const quiet: GithubTaskData = {
       ...taskA,
       updatedAt: '2026-09-01T00:00:00Z',
       labels: ['type: bug'],
@@ -622,7 +622,7 @@ describe('SyncProjectAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    const closed: TaskData = { ...taskA, state: 'closed' };
+    const closed: GithubTaskData = { ...taskA, state: 'closed' };
     const projectManagement = new FakeProjectManagement();
     projectManagement.tasks = [closed];
     projectManagement.boardItems = [];

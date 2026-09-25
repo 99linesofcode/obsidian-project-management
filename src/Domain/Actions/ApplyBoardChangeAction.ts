@@ -3,7 +3,7 @@ import { stateFromStatus } from '../Board/stateFromStatus.js';
 import { withStatus } from '../Notes/TaskNoteParser.js';
 import { hash } from '../Notes/hash.js';
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../Models/Status.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -83,7 +83,7 @@ export class ApplyBoardChangeAction {
   private async applyLane(
     status: Status,
     statusName: string,
-    updated?: TaskData,
+    updated?: GithubTaskData,
   ): Promise<void> {
     const note = await this.vault.getNoteByPath(status.notePath);
     if (note) {

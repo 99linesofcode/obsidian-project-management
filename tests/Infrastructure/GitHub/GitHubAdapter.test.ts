@@ -315,7 +315,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets',
     );
 
-    // Then — every typed issue is surfaced, mapped onto TaskData
+    // Then — every typed issue is surfaced, mapped onto GithubTaskData
     expect(result.map((task) => task.remoteId)).toEqual([42, 43, 44, 45]);
     expect(result[0]).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
@@ -547,7 +547,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets/issues/42',
     );
 
-    // Then — the issue is mapped onto TaskData
+    // Then — the issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
@@ -589,7 +589,7 @@ describe('GitHubAdapter', () => {
       },
     );
 
-    // Then — the updated issue is mapped onto TaskData
+    // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
@@ -634,7 +634,7 @@ describe('GitHubAdapter', () => {
       'closed',
     );
 
-    // Then — the updated issue is mapped onto TaskData
+    // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
@@ -788,7 +788,7 @@ describe('GitHubAdapter', () => {
     const result = await adapter.promoteCard('PVTI_2', 'R_kgDOAAAA');
 
     // Then — the mutation targeted the item and repository, and the new issue
-    // is fetched in full and mapped onto TaskData
+    // is fetched in full and mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/50',
       remoteId: 50,
@@ -956,7 +956,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets',
     );
 
-    // Then — only the unlabeled issue is surfaced, mapped onto TaskData
+    // Then — only the unlabeled issue is surfaced, mapped onto GithubTaskData
     expect(result).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/46',

@@ -1,6 +1,16 @@
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
+
+// The task fields a note is rendered from. Structural, so both the GitHub
+// transport DTO and the canonical TaskData satisfy it. `state` is accepted for
+// structural compatibility with the provider DTO but is not rendered.
+export interface TaskNoteSource {
+  url: string;
+  remoteId: number;
+  title: string;
+  body: string;
+  state?: 'open' | 'closed';
+}
 
 export interface TaskNoteContext {
   projectName: string;
@@ -38,7 +48,7 @@ export function titleFromNotePath(notePath: string, remoteId: number): string {
 // Maps a remote task onto a task note. The remote id lives only in the
 // filename; the body is the note's body verbatim.
 export const TaskNoteMapper = {
-  map(task: TaskData, context: TaskNoteContext): TaskNote {
+  map(task: TaskNoteSource, context: TaskNoteContext): TaskNote {
     const content = [
       '---',
       'categories: [taken]',
@@ -60,7 +70,7 @@ export const TaskNoteMapper = {
   // malformed template falls back to the built-in mapping.
   render(
     template: string | null,
-    task: TaskData,
+    task: TaskNoteSource,
     context: TaskNoteContext,
   ): TaskNote {
     const rendered =
@@ -73,13 +83,13 @@ export const TaskNoteMapper = {
 };
 
 // The note path: the project's taken folder, keyed by remote id + title slug.
-function taskNotePath(task: TaskData, context: TaskNoteContext): string {
+function taskNotePath(task: TaskNoteSource, context: TaskNoteContext): string {
   return `Projecten/${context.projectName}/taken/${task.remoteId}-${slugify(task.title)}.md`;
 }
 
 // Sync-owned frontmatter fields, in append order when a template omits one.
 function managedValues(
-  task: TaskData,
+  task: TaskNoteSource,
   context: TaskNoteContext,
 ): Map<string, string> {
   return new Map([
@@ -94,7 +104,7 @@ function managedValues(
 // frontmatter block (the caller falls back to the built-in mapping).
 function renderTemplate(
   template: string,
-  task: TaskData,
+  task: TaskNoteSource,
   context: TaskNoteContext,
 ): string | null {
   const lines = template.split('\n');

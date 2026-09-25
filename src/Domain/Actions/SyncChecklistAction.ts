@@ -3,6 +3,8 @@ import {
   renderChecklist,
   type ChecklistItem,
 } from '../Notes/Checklist.js';
+import { freePath } from '../Notes/freePath.js';
+import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
 import {
@@ -38,7 +40,7 @@ export class SyncChecklistAction {
 
     const body = splitFrontmatter(note.content)?.body ?? note.content;
     const items = parseChecklist(body);
-    const taskLink = taskLinkFromPath(input.notePath);
+    const taskLink = stemOf(input.notePath);
     const template = await this.readTemplate();
 
     const promoted = await this.promoteUnlinked(
@@ -78,7 +80,10 @@ export class SyncChecklistAction {
       if (item.linkPath !== undefined) {
         continue;
       }
-      const path = await this.freePath(todoPath(input.projectName, item.text));
+      const path = await freePath(
+        this.vault,
+        todoPath(input.projectName, item.text),
+      );
       const note = ToDoNoteMapper.render(
         template,
         { title: item.text, projectName: input.projectName, taskLink },
@@ -128,7 +133,8 @@ export class SyncChecklistAction {
       }
 
       if (isDrifted(slugify(item.text), stemOf(item.linkPath))) {
-        const newPath = await this.freePath(
+        const newPath = await freePath(
+          this.vault,
           todoPath(input.projectName, item.text),
         );
         await this.vault.renameNote(item.linkPath, newPath);
@@ -181,31 +187,6 @@ export class SyncChecklistAction {
       }
     }
   }
-
-  // Suffixes -2, -3, … until the to-do path is free.
-  private async freePath(base: string): Promise<string> {
-    if (!(await this.vault.getNoteByPath(base))) {
-      return base;
-    }
-    const stem = base.replace(/\.md$/, '');
-    let suffix = 2;
-    while (await this.vault.getNoteByPath(`${stem}-${suffix}.md`)) {
-      suffix++;
-    }
-    return `${stem}-${suffix}.md`;
-  }
-}
-
-// The task's link target: the note's filename without its .md extension.
-function taskLinkFromPath(notePath: string): string {
-  const basename = notePath.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
-}
-
-// A to-do's filename stem: its basename without the .md extension.
-function stemOf(path: string): string {
-  const basename = path.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
 }
 
 // Drift exists only when the item's slug matches neither the to-do's stem nor

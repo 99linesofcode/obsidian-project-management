@@ -2,7 +2,7 @@ import type { AttachProjectData } from '../DataTransferObjects/AttachProjectData
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../DataTransferObjects/ProjectStateData.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 
 // The core's need: given a project note's sync frontmatter, resolve the
 // GitHub identities for that project, fetch the complete tracked issue set,
@@ -16,7 +16,7 @@ export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
-  fetchTrackedIssues(repoUrl: string): Promise<TaskData[]>;
+  fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]>;
   fetchLatestIssueActivity(
     repoUrl: string,
     etag?: string,
@@ -30,13 +30,13 @@ export interface ProjectManagementPort {
   ): Promise<Map<string, ProjectStateData>>;
   setProjectClosed(projectNodeId: string, closed: boolean): Promise<void>;
   lockIssue(nodeId: string): Promise<void>;
-  fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]>;
-  fetchTask(url: string): Promise<TaskData>;
+  fetchUnpromotedIssues(repoUrl: string): Promise<GithubTaskData[]>;
+  fetchTask(url: string): Promise<GithubTaskData>;
   updateTask(
     url: string,
     input: { title: string; body: string },
-  ): Promise<TaskData>;
-  setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData>;
+  ): Promise<GithubTaskData>;
+  setTaskState(url: string, state: 'open' | 'closed'): Promise<GithubTaskData>;
   fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]>;
   setBoardStatus(
     projectNodeId: string,
@@ -46,5 +46,5 @@ export interface ProjectManagementPort {
   ): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
   addLabel(url: string, label: string): Promise<void>;
-  promoteCard(itemId: string, repoNodeId: string): Promise<TaskData>;
+  promoteCard(itemId: string, repoNodeId: string): Promise<GithubTaskData>;
 }

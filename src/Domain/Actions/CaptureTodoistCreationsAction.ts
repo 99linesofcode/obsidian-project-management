@@ -1,11 +1,16 @@
+import { laneForSection } from '../Board/laneForSection.js';
 import { CapturedTaskNoteMapper } from '../Notes/CapturedTaskNoteMapper.js';
 import { parseChecklist, renderChecklist } from '../Notes/Checklist.js';
-import { hash } from '../Notes/hash.js';
+import { freePath } from '../Notes/freePath.js';
+import { isMirroredPath } from '../Notes/isMirroredPath.js';
+import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
+import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { ToDoNoteMapper } from '../Notes/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { withBody } from '../Notes/withBody.js';
+import { snapshotHash } from '../Reconciliation/snapshotHash.js';
 import type { TodoistStateData } from '../DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -154,7 +159,7 @@ export class CaptureTodoistCreationsAction {
       },
       { syncedAt: input.syncedAt, statusName },
     );
-    const path = await this.freePath(rendered.path);
+    const path = await freePath(this.vault, rendered.path);
     await this.vault.createNote(path, rendered.content);
     // The lane is controlled only for a top-level task (a subtask inherits its
     // parent's section, dt-02).
@@ -208,7 +213,7 @@ export class CaptureTodoistCreationsAction {
           }
         : { syncedAt: input.syncedAt, statusName: 'open' },
     );
-    const path = await this.freePath(rendered.path);
+    const path = await freePath(this.vault, rendered.path);
     await this.vault.createNote(path, rendered.content);
     await stampFrontmatterField(
       this.vault,
@@ -261,7 +266,13 @@ export class CaptureTodoistCreationsAction {
     const state: TodoistStateData = {
       todoistId: item.id,
       notePath,
-      lastSyncedHash: creationHash(item, lane !== null),
+      lastSyncedHash: snapshotHash({
+        content: item.content,
+        labels: item.labels,
+        sectionId: lane !== null ? item.sectionId : null,
+        parentId: item.parentId,
+        isCompleted: item.isCompleted,
+      }),
       lastSyncedCompleted: item.isCompleted,
       lastSyncedContent: item.content,
       lastSyncedLane: lane,
@@ -291,49 +302,6 @@ export class CaptureTodoistCreationsAction {
     const note = await this.vault.getNoteByPath(this.todoTemplatePath);
     return note?.content ?? null;
   }
-
-  // Suffixes -2, -3, … until the note path is free, mirroring the checklist
-  // sync's collision handling.
-  private async freePath(base: string): Promise<string> {
-    if (!(await this.vault.getNoteByPath(base))) {
-      return base;
-    }
-    const stem = base.replace(/\.md$/, '');
-    let suffix = 2;
-    while (await this.vault.getNoteByPath(`${stem}-${suffix}.md`)) {
-      suffix++;
-    }
-    return `${stem}-${suffix}.md`;
-  }
-}
-
-// The snapshot hash (dt-08): content, labels, section, parent and completion.
-// The section enters only for a top-level item, matching the projection.
-function creationHash(item: TodoistTaskData, topLevel: boolean): string {
-  return hash(
-    [
-      item.content,
-      [...item.labels].sort().join(','),
-      topLevel ? (item.sectionId ?? '') : '',
-      item.parentId ?? '',
-      item.isCompleted ? '1' : '0',
-    ].join('\n'),
-  );
-}
-
-function laneForSection(
-  sections: Record<string, string>,
-  sectionId: string | null,
-): string | null {
-  if (sectionId === null) {
-    return null;
-  }
-  for (const [lane, id] of Object.entries(sections)) {
-    if (id === sectionId) {
-      return lane;
-    }
-  }
-  return null;
 }
 
 // A twin id's item, de-duplicated; later entries win.
@@ -363,32 +331,6 @@ function depthOf(
   return depth;
 }
 
-// A to-do's parent task link: the first non-project affiliation link.
-function taskLinkFromAffiliation(
-  affiliation: string[],
-  projectName: string,
-): string | null {
-  for (const link of affiliation) {
-    const target = link.replace(/^\[\[/, '').replace(/\]\]$/, '');
-    if (target !== projectName) {
-      return target;
-    }
-  }
-  return null;
-}
-
-function stemOf(path: string): string {
-  const basename = path.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
-}
-
 function isToDoPath(path: string, projectName: string): boolean {
   return path.startsWith(`Projecten/${projectName}/todos/`);
-}
-
-function isMirroredPath(path: string, projectName: string): boolean {
-  return (
-    path.startsWith(`Projecten/${projectName}/taken/`) ||
-    isToDoPath(path, projectName)
-  );
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
@@ -117,7 +117,7 @@ class FakeSyncState implements SyncStatePort {
   }
 }
 
-const task: TaskData = {
+const task: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
   nodeId: 'I_kwDOAAAA42',

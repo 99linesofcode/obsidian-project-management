@@ -1,9 +1,13 @@
+import { laneForSection } from '../Board/laneForSection.js';
 import { fillFrontmatterFields } from '../Notes/fillFrontmatterFields.js';
-import { hash } from '../Notes/hash.js';
+import { isMirroredPath } from '../Notes/isMirroredPath.js';
 import { parseAffiliation } from '../Notes/parseAffiliation.js';
+import { stemOf } from '../Notes/stemOf.js';
+import { stripLink } from '../Notes/stripLink.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { withStatus } from '../Notes/TaskNoteParser.js';
+import { snapshotHash } from '../Reconciliation/snapshotHash.js';
 import type { TodoistStateData } from '../DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -355,7 +359,13 @@ export class ApplyTodoistRemoteChangesAction {
     await this.syncState.setTodoistState(notePath, {
       todoistId: twin.id,
       notePath,
-      lastSyncedHash: remoteSnapshotHash(twin, remoteLane !== null),
+      lastSyncedHash: snapshotHash({
+        content: twin.content,
+        labels: twin.labels,
+        sectionId: remoteLane !== null ? twin.sectionId : null,
+        parentId: twin.parentId,
+        isCompleted: twin.isCompleted,
+      }),
       // The completion base belongs to the completion action (t4): preserve it
       // rather than restamping from the twin, or a remote completion racing a
       // content change would read as our own echo and never be applied.
@@ -365,38 +375,6 @@ export class ApplyTodoistRemoteChangesAction {
       lastSyncedParent: twin.parentId,
     });
   }
-}
-
-// The snapshot hash (dt-08): content, labels, section, parent and completion.
-// The section enters only for a top-level item (a subtask inherits its parent's
-// section, dt-02), matching the projection's desired-shape hash.
-function remoteSnapshotHash(twin: TodoistTaskData, topLevel: boolean): string {
-  return hash(
-    [
-      twin.content,
-      [...twin.labels].sort().join(','),
-      topLevel ? (twin.sectionId ?? '') : '',
-      twin.parentId ?? '',
-      twin.isCompleted ? '1' : '0',
-    ].join('\n'),
-  );
-}
-
-// The lane whose section id is the given id, or null when the id is not a lane
-// section (a section-less item, or a section outside the lane map).
-function laneForSection(
-  sections: Record<string, string>,
-  sectionId: string | null,
-): string | null {
-  if (sectionId === null) {
-    return null;
-  }
-  for (const [lane, id] of Object.entries(sections)) {
-    if (id === sectionId) {
-      return lane;
-    }
-  }
-  return null;
 }
 
 // The parent twin id a note's affiliation implies. A task's first non-project
@@ -464,16 +442,6 @@ function readVaultFields(content: string): VaultFields | null {
   };
 }
 
-function stripLink(link: string): string {
-  return link.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]!.trim();
-}
-
-// A note's filename stem: its basename without the .md extension.
-function stemOf(path: string): string {
-  const basename = path.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
-}
-
 // The stem with an issue note's leading `<remoteId>-` prefix stripped, so it
 // compares to the slug of a title.
 function stemWithoutId(path: string): string {
@@ -482,11 +450,4 @@ function stemWithoutId(path: string): string {
 
 function isTaskPath(path: string, projectName: string): boolean {
   return path.startsWith(`Projecten/${projectName}/taken/`);
-}
-
-function isMirroredPath(path: string, projectName: string): boolean {
-  return (
-    isTaskPath(path, projectName) ||
-    path.startsWith(`Projecten/${projectName}/todos/`)
-  );
 }

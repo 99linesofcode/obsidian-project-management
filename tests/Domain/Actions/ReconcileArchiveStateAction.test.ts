@@ -5,7 +5,7 @@ import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/Boar
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
@@ -159,13 +159,13 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchUnpromotedIssues(): Promise<TaskData[]> {
+  async fetchUnpromotedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchTask(url: string): Promise<TaskData> {
+  async fetchTask(url: string): Promise<GithubTaskData> {
     const number = Number(url.split('/').pop());
     return {
       url,

@@ -1,4 +1,4 @@
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../Models/Status.js';
 import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
@@ -6,7 +6,7 @@ import type { VaultPort } from '../Ports/VaultPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 
 export interface CreateTaskNoteInput {
-  task: TaskData;
+  task: GithubTaskData;
   projectName: string;
   syncedAt: string;
   // The project's Status option name the task starts in.

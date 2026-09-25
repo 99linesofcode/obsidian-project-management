@@ -1,4 +1,4 @@
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import { toIssueBody } from '../Notes/Checklist.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 
@@ -17,7 +17,7 @@ export interface PushNoteInput {
 export class PushNoteAction {
   constructor(private readonly projectManagement: ProjectManagementPort) {}
 
-  async execute(input: PushNoteInput): Promise<TaskData> {
+  async execute(input: PushNoteInput): Promise<GithubTaskData> {
     return this.projectManagement.updateTask(input.url, {
       title: input.title,
       body: toIssueBody(input.body),

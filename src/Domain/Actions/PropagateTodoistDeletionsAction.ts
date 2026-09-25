@@ -1,4 +1,5 @@
 import type { TodoistStateData } from '../DataTransferObjects/TodoistStateData.js';
+import { isMirroredPath } from '../Notes/isMirroredPath.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
@@ -98,13 +99,4 @@ function collectSubtrees(
     visit(root);
   }
   return doomed;
-}
-
-// A mirrored item lives at Projecten/<project>/taken/<file>.md (a task twin) or
-// Projecten/<project>/todos/<file>.md (a to-do twin).
-function isMirroredPath(path: string, projectName: string): boolean {
-  return (
-    path.startsWith(`Projecten/${projectName}/taken/`) ||
-    path.startsWith(`Projecten/${projectName}/todos/`)
-  );
 }

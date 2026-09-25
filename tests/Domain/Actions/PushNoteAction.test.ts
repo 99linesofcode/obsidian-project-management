@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PushNoteAction } from '../../../src/Domain/Actions/PushNoteAction.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 
 // A fake at the port: records the update the action asks for and returns a
@@ -14,7 +14,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   updateCalls: Array<{ url: string; input: { title: string; body: string } }> =
     [];
-  updated: TaskData = {
+  updated: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
     nodeId: 'I_kwDOAAAA42',
@@ -29,23 +29,23 @@ class FakeProjectManagement implements ProjectManagementPort {
     return null;
   }
 
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
 
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
 
   async updateTask(
     url: string,
     input: { title: string; body: string },
-  ): Promise<TaskData> {
+  ): Promise<GithubTaskData> {
     this.updateCalls.push({ url, input });
     return this.updated;
   }
 
-  async setTaskState(): Promise<TaskData> {
+  async setTaskState(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
 

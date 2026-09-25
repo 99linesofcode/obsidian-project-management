@@ -1,4 +1,4 @@
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../Models/Status.js';
 import { toIssueBody } from '../Notes/Checklist.js';
 import { TaskNoteParser, withStatus } from '../Notes/TaskNoteParser.js';
@@ -154,7 +154,7 @@ export class ReconcileTaskAction {
 
   private async refreshBaseline(
     status: Status,
-    updated: TaskData,
+    updated: GithubTaskData,
     notePath: string,
     projectName: string,
   ): Promise<void> {

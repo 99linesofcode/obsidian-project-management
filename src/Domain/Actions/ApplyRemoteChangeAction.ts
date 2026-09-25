@@ -1,4 +1,4 @@
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../Models/Status.js';
 import { withChecklistLinks } from '../Notes/Checklist.js';
 import { TaskNoteMapper, slugify } from '../Notes/TaskNoteMapper.js';
@@ -10,7 +10,7 @@ import type { BoardStatusAction } from './BoardStatusAction.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 
 export interface ApplyRemoteChangeInput {
-  task: TaskData;
+  task: GithubTaskData;
   projectName: string;
   syncedAt: string;
   // The project's Status option name the task's issue state implies —
@@ -47,7 +47,7 @@ export class ApplyRemoteChangeAction {
     const template = await this.readTemplate();
     // The note body is the remote body with vault links re-attached, so a
     // remote-driven rewrite keeps the checklist items linked to their to-dos.
-    const linkedTask: TaskData = {
+    const linkedTask: GithubTaskData = {
       ...input.task,
       body: await this.linkedBody(input.task.body, input.projectName),
     };

@@ -1,9 +1,12 @@
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
-import { hash } from '../Notes/hash.js';
+import { sameLabels } from '../Labels/sameLabels.js';
+import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
+import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { TaskNoteParser } from '../Notes/TaskNoteParser.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import { snapshotHash } from '../Reconciliation/snapshotHash.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -22,7 +25,7 @@ export interface ProjectTasksToTodoistInput {
 // affiliation. The vault is the source of truth for the shape; the issue is the
 // source of the type, which the note does not carry.
 interface ProjectionItem {
-  issue: TaskData;
+  issue: GithubTaskData;
   notePath: string;
   noteContent: string;
   type: string;
@@ -127,7 +130,7 @@ export class ProjectTasksToTodoistAction {
         noteContent: note.content,
         type,
         lane: parsed.status,
-        sliceLink: sliceLinkFromAffiliation(
+        sliceLink: taskLinkFromAffiliation(
           parsed.affiliation,
           input.projectName,
         ),
@@ -291,7 +294,13 @@ export class ProjectTasksToTodoistAction {
     await this.syncState.setTodoistState(notePath, {
       todoistId,
       notePath,
-      lastSyncedHash: snapshotHash(desired),
+      lastSyncedHash: snapshotHash({
+        content: desired.content,
+        labels: desired.labels,
+        sectionId: desired.sectionId,
+        parentId: desired.parentId,
+        isCompleted: desired.isCompleted,
+      }),
       lastSyncedCompleted: desired.isCompleted,
       lastSyncedContent: desired.content,
       lastSyncedLane: desired.lane,
@@ -310,47 +319,10 @@ function typeFromLabels(labels: string[]): string | null {
   return label.slice('type:'.length).trim();
 }
 
-// The affiliation lists the project first, then the slice; the first link that
-// is not the project is the slice. A link's display alias (after `|`) is
-// stripped, so `[[40-slice-1|Slice 1]]` resolves to the note stem.
-function sliceLinkFromAffiliation(
-  affiliation: string[],
-  projectName: string,
-): string | null {
-  for (const link of affiliation) {
-    const target = link
-      .replace(/^\[\[/, '')
-      .replace(/\]\]$/, '')
-      .split('|')[0]!
-      .trim();
-    if (target !== projectName) {
-      return target;
-    }
-  }
-  return null;
-}
-
 // A slice link is a note stem; the slice note lives in the project's taken
 // folder beside its children.
 function sliceNotePath(projectName: string, link: string): string {
-  const stem = (link.split('/').pop() ?? link).replace(/\.md$/, '');
-  return `Projecten/${projectName}/taken/${stem}.md`;
-}
-
-// The snapshot hash (dt-08): content, labels, section, parent and completion.
-// Labels are sorted so their order never reads as a change. A subtask's section
-// is inherited from its parent (dt-02), so it is not a controlled field and
-// enters the hash as empty — the parent's own snapshot carries the section.
-function snapshotHash(desired: DesiredTask): string {
-  return hash(
-    [
-      desired.content,
-      [...desired.labels].sort().join(','),
-      desired.sectionId ?? '',
-      desired.parentId ?? '',
-      desired.isCompleted ? '1' : '0',
-    ].join('\n'),
-  );
+  return `Projecten/${projectName}/taken/${stemOf(link)}.md`;
 }
 
 // Whether the live twin already carries the desired shape. A null desired
@@ -370,15 +342,6 @@ function matches(desired: DesiredTask, current: TodoistTaskData): boolean {
     return false;
   }
   return current.isCompleted === desired.isCompleted;
-}
-
-function sameLabels(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  const sortedA = [...a].sort();
-  const sortedB = [...b].sort();
-  return sortedA.every((label, index) => label === sortedB[index]);
 }
 
 // Whether two lane maps agree, so a settled project's bookkeeping is not

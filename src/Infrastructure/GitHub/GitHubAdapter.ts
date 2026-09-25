@@ -5,7 +5,7 @@ import type {
   ProjectStatusOption,
 } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../Domain/DataTransferObjects/ProjectStateData.js';
-import type { TaskData } from '../../Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
@@ -213,7 +213,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
+  async fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
     const issues: Record<string, unknown>[] = [];
 
@@ -299,7 +299,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]> {
+  async fetchUnpromotedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
     // Open issues only; the client-side filter keeps untyped issues, so the
     // promote modal only offers what can be promoted.
@@ -351,7 +351,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     }
   }
 
-  async fetchTask(url: string): Promise<TaskData> {
+  async fetchTask(url: string): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -371,7 +371,7 @@ export class GitHubAdapter implements ProjectManagementPort {
   async updateTask(
     url: string,
     input: { title: string; body: string },
-  ): Promise<TaskData> {
+  ): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -388,7 +388,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+  async setTaskState(url: string, state: 'open' | 'closed'): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -503,7 +503,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
-  async promoteCard(itemId: string, repoNodeId: string): Promise<TaskData> {
+  async promoteCard(itemId: string, repoNodeId: string): Promise<GithubTaskData> {
     const data = await this.postQuery(CONVERT_DRAFT_ISSUE_MUTATION, {
       itemId,
       repositoryId: repoNodeId,
@@ -597,7 +597,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     return number;
   }
 
-  private mapIssue(issue: Record<string, unknown>): TaskData {
+  private mapIssue(issue: Record<string, unknown>): GithubTaskData {
     const labels = Array.isArray(issue.labels)
       ? issue.labels
           .filter(isRecord)

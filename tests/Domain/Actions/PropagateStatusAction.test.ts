@@ -3,7 +3,7 @@ import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStat
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
@@ -19,7 +19,7 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
-  updated: TaskData = {
+  updated: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
     nodeId: 'I_kwDOAAAA42',
@@ -33,16 +33,16 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async updateTask(): Promise<TaskData> {
+  async updateTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+  async setTaskState(url: string, state: 'open' | 'closed'): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
     return this.updated;
   }
@@ -134,7 +134,7 @@ class FakeSyncState implements SyncStatePort {
   }
 }
 
-const task: TaskData = {
+const task: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
   nodeId: 'I_kwDOAAAA42',

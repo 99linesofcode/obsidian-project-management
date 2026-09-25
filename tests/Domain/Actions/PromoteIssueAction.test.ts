@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PromoteIssueAction } from '../../../src/Domain/Actions/PromoteIssueAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { slugify } from '../../../src/Domain/Notes/TaskNoteMapper.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
@@ -21,7 +21,7 @@ class FakePort implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   addedLabels: Array<{ url: string; label: string }> = [];
-  task: TaskData = {
+  task: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
     nodeId: 'I_kwDOAAAA42',
@@ -36,7 +36,7 @@ class FakePort implements ProjectManagementPort {
     this.addedLabels.push({ url, label });
   }
 
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     return this.task;
   }
 

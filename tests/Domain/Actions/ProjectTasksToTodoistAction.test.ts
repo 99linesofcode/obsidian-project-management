@@ -4,7 +4,7 @@ import { ProjectTasksToTodoistAction } from '../../../src/Domain/Actions/Project
 import type { CreateTodoistTaskData } from '../../../src/Domain/DataTransferObjects/CreateTodoistTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
@@ -167,9 +167,9 @@ class FakeTaskManager implements TaskManagerPort {
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
-  issues: TaskData[] = [];
+  issues: GithubTaskData[] = [];
 
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return this.issues;
   }
 
@@ -317,7 +317,7 @@ function issue(
   title: string,
   type: string,
   state: 'open' | 'closed' = 'open',
-): TaskData {
+): GithubTaskData {
   return {
     url,
     remoteId: 0,
