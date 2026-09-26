@@ -117,6 +117,15 @@ export class ApplyTaskToTodoistAction {
       }
       if (!desired.isCompleted) {
         await this.taskManager.setTaskCompleted(id, false);
+        // A reopened task must leave the done section too: a task's section IS
+        // its lane, so a twin reopened in place would still read as done to the
+        // absorber, which would drag the note back into done on the next tick.
+        // The section is controlled only for a top-level task (a subtask
+        // inherits its parent's section, dt-02). Reopening first puts the twin
+        // back in the active set the move targets.
+        if (desired.sectionId !== null) {
+          await this.taskManager.moveTask(id, { sectionId: desired.sectionId });
+        }
       }
       await this.stampTask(input.notePath, id, desired);
       return id;

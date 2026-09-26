@@ -439,6 +439,34 @@ describe('ApplyTaskToTodoistAction', () => {
       ]);
     });
 
+    it('moves a reopened absent twin out of the done section', async () => {
+      // Given — a stored twin absent from the active set (completed in the done
+      // section) that the vault reopened into a non-done lane
+      const h = setup();
+      h.syncState.todoistStates.set(
+        notePath,
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          status: 'Shipped',
+          completed: true,
+        }),
+      );
+
+      // When — the winning task is open in the default lane
+      await h.action.executeTask({ task: task(), current: null, ...base });
+
+      // Then — the twin is reopened AND moved back to the lane's section; the
+      // absorber would otherwise read the stale done section as a remote drag
+      // and pull the note back into done
+      expect(h.taskManager.completeCalls).toEqual([
+        { id: 'T9', completed: false },
+      ]);
+      expect(h.taskManager.moveTaskCalls).toEqual([
+        { id: 'T9', to: { sectionId: 'S1' } },
+      ]);
+    });
+
     it('leaves an already-completed absent twin settled (no re-complete, no re-stamp)', async () => {
       // Given — a stored twin absent from the active set (completed) whose
       // snapshot already carries the completion stamp
