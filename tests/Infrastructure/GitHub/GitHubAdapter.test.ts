@@ -315,7 +315,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets',
     );
 
-    // Then — every typed issue is surfaced, mapped onto TaskData
+    // Then — every typed issue is surfaced, mapped onto GithubTaskData
     expect(result.map((task) => task.remoteId)).toEqual([42, 43, 44, 45]);
     expect(result[0]).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
@@ -547,7 +547,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets/issues/42',
     );
 
-    // Then — the issue is mapped onto TaskData
+    // Then — the issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
@@ -589,7 +589,7 @@ describe('GitHubAdapter', () => {
       },
     );
 
-    // Then — the updated issue is mapped onto TaskData
+    // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
@@ -634,7 +634,7 @@ describe('GitHubAdapter', () => {
       'closed',
     );
 
-    // Then — the updated issue is mapped onto TaskData
+    // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       remoteId: 42,
@@ -749,6 +749,133 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('DraftIssue');
   });
 
+  it('fetches the whole project detail in one query', async () => {
+    // Given — a GraphQL response carrying the repo's issues and the board
+    const detailResponse = {
+      status: 200,
+      json: {
+        data: {
+          repository: {
+            issues: {
+              nodes: [
+                {
+                  url: 'https://github.com/acme/widgets/issues/42',
+                  number: 42,
+                  id: 'I_kwDOAAAA42',
+                  title: 'Fix the Bug!',
+                  body: 'The bug happens when the widget is resized.',
+                  state: 'OPEN',
+                  updatedAt: '2026-09-18T10:00:00Z',
+                  labels: { nodes: [{ name: 'type: task' }] },
+                },
+                {
+                  url: 'https://github.com/acme/widgets/issues/43',
+                  number: 43,
+                  id: 'I_kwDOAAAA43',
+                  title: 'Untyped',
+                  body: 'No type label.',
+                  state: 'CLOSED',
+                  updatedAt: '2026-09-18T11:00:00Z',
+                  labels: { nodes: [{ name: 'bug' }] },
+                },
+              ],
+            },
+          },
+          node: {
+            items: {
+              nodes: [
+                {
+                  id: 'PVTI_1',
+                  type: 'ISSUE',
+                  content: {
+                    url: 'https://github.com/acme/widgets/issues/42',
+                  },
+                  fieldValues: {
+                    nodes: [{ name: 'Building', field: { name: 'Status' } }],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([detailResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter fetches the project detail
+    const result = await adapter.fetchProjectDetail(
+      'https://github.com/acme/widgets',
+      'PVT_123',
+    );
+
+    // Then — one POST carries both connections
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain('ProjectDetail');
+    expect(bodies[0]).toContain('"projectId":"PVT_123"');
+    // And the typed issue is mapped, the untyped one filtered out
+    expect(result.issues).toEqual([
+      {
+        url: 'https://github.com/acme/widgets/issues/42',
+        remoteId: 42,
+        nodeId: 'I_kwDOAAAA42',
+        title: 'Fix the Bug!',
+        body: 'The bug happens when the widget is resized.',
+        state: 'open',
+        updatedAt: '2026-09-18T10:00:00Z',
+        labels: ['type: task'],
+      },
+    ]);
+    // And the board card comes along with its lane
+    expect(result.cards).toEqual([
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: 'https://github.com/acme/widgets/issues/42',
+        statusOptionName: 'Building',
+      },
+    ]);
+  });
+
+  it('maps a closed GraphQL issue to a closed task state', async () => {
+    // Given — a GraphQL response with a closed typed issue
+    const detailResponse = {
+      status: 200,
+      json: {
+        data: {
+          repository: {
+            issues: {
+              nodes: [
+                {
+                  url: 'https://github.com/acme/widgets/issues/7',
+                  number: 7,
+                  id: 'I_kwDOAAAA7',
+                  title: 'Close me',
+                  body: 'Done.',
+                  state: 'CLOSED',
+                  updatedAt: '2026-09-18T09:00:00Z',
+                  labels: { nodes: [{ name: 'type: task' }] },
+                },
+              ],
+            },
+          },
+          node: { items: { nodes: [] } },
+        },
+      },
+    };
+    const { transport } = fakeTransport([detailResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter fetches the project detail
+    const result = await adapter.fetchProjectDetail(
+      'https://github.com/acme/widgets',
+      'PVT_123',
+    );
+
+    // Then — the state is closed
+    expect(result.issues[0]!.state).toBe('closed');
+  });
+
   it('promotes a draft card to an issue and fetches the full task', async () => {
     // Given — a transport that converts the draft card and then returns the
     // new issue via REST
@@ -788,7 +915,7 @@ describe('GitHubAdapter', () => {
     const result = await adapter.promoteCard('PVTI_2', 'R_kgDOAAAA');
 
     // Then — the mutation targeted the item and repository, and the new issue
-    // is fetched in full and mapped onto TaskData
+    // is fetched in full and mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/50',
       remoteId: 50,
@@ -890,6 +1017,71 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
+  it('deletes the issue card via deleteProjectV2Item', async () => {
+    // Given — a board containing the issue and a transport for the two calls
+    const boardResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            items: {
+              nodes: [
+                {
+                  id: 'PVTI_1',
+                  type: 'ISSUE',
+                  content: { url: 'https://github.com/acme/widgets/issues/42' },
+                  fieldValues: {
+                    nodes: [{ name: 'Unshaped', field: { name: 'Status' } }],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const mutationResponse = {
+      status: 200,
+      json: { data: { deleteProjectV2Item: { deletedItemId: 'PVTI_1' } } },
+    };
+    const { transport, bodies } = fakeTransport([
+      boardResponse,
+      mutationResponse,
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter deletes the issue's card
+    await adapter.deleteCard(
+      'PVT_123',
+      'https://github.com/acme/widgets/issues/42',
+    );
+
+    // Then — the item id is resolved from the board and deleted
+    expect(bodies[1]).toContain('DeleteBoardItem');
+    expect(bodies[1]).toContain('"itemId":"PVTI_1"');
+    expect(bodies[1]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('treats a card-less issue as a no-op on delete', async () => {
+    // Given — a board with no card for the issue
+    const boardResponse = {
+      status: 200,
+      json: { data: { node: { items: { nodes: [] } } } },
+    };
+    const { transport, bodies } = fakeTransport([boardResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter deletes the issue's card
+    await adapter.deleteCard(
+      'PVT_123',
+      'https://github.com/acme/widgets/issues/42',
+    );
+
+    // Then — only the board read ran; no mutation was posted
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain('BoardItems');
+  });
+
   it('lists open issues that carry no type label', async () => {
     // Given — a REST response mixing typed issues (task, slice, bug, chore)
     // with an unlabeled one
@@ -956,7 +1148,7 @@ describe('GitHubAdapter', () => {
       'https://github.com/acme/widgets',
     );
 
-    // Then — only the unlabeled issue is surfaced, mapped onto TaskData
+    // Then — only the unlabeled issue is surfaced, mapped onto GithubTaskData
     expect(result).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/46',

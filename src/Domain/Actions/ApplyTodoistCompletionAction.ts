@@ -1,4 +1,3 @@
-import { hash } from '../Notes/hash.js';
 import { ToDoNoteParser, withToDoStatus } from '../Notes/ToDoNoteParser.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -15,7 +14,7 @@ export interface ApplyTodoistCompletionInput {
 // caught by the completed-since query from the project's stored cursor; a
 // reopen is caught by a to-do twin reappearing in the active set while its
 // snapshot says completed (lastSyncedCompleted) — that is what tells a remote
-// reopen from a vault-side completion, which ProjectToDosToTodoistAction owns.
+// reopen from a vault-side completion, which ApplyTaskToTodoistAction owns.
 //
 // The applied completion stamp is the tick's syncedAt — the moment the sync
 // observed the change — a full ISO datetime, never date-only. Every applied
@@ -45,7 +44,7 @@ export class ApplyTodoistCompletionAction {
     const activeById = new Map(active.map((task) => [task.id, task]));
 
     // Only this project's to-do notes carry a completion to pull; task twins
-    // (t3) are t5's concern.
+    // are owned by the task-side reconciliation.
     const states = (await this.syncState.listTodoistStates()).filter((state) =>
       isToDoPathForProject(state.notePath, input.projectName),
     );
@@ -58,7 +57,7 @@ export class ApplyTodoistCompletionAction {
       }
       // Our own close: the snapshot already says completed, so this entry is
       // the echo of a vault-driven completion, not a remote change.
-      if (state.lastSyncedCompleted) {
+      if (state.completed) {
         continue;
       }
       await this.applyCompletion(state.notePath, task, input.syncedAt);
@@ -71,7 +70,7 @@ export class ApplyTodoistCompletionAction {
         continue;
       }
       // The snapshot said open, so an active twin is no change at all.
-      if (!state.lastSyncedCompleted) {
+      if (!state.completed) {
         continue;
       }
       await this.applyReopen(state.notePath, twin);
@@ -135,31 +134,21 @@ export class ApplyTodoistCompletionAction {
     task: TodoistTaskData,
   ): Promise<void> {
     await this.syncState.setTodoistState(notePath, {
+      url: '',
+      remoteId: 0,
+      nodeId: '',
       todoistId: task.id,
       notePath,
-      lastSyncedHash: snapshotHash(task),
-      lastSyncedCompleted: task.isCompleted,
-      lastSyncedContent: task.content,
+      title: task.content,
+      body: '',
       // The item is a to-do: a subtask, so its lane is inherited (dt-02).
-      lastSyncedLane: null,
-      lastSyncedParent: task.parentId,
+      status: '',
+      completed: task.isCompleted,
+      parent: task.parentId,
+      labels: [...task.labels],
+      updatedAt: '',
     });
   }
-}
-
-// The snapshot hash (dt-08) over a fetched twin: content, labels, parent and
-// completion. The section stays empty — a subtask inherits its parent's
-// (dt-02), so it is not a controlled field.
-function snapshotHash(task: TodoistTaskData): string {
-  return hash(
-    [
-      task.content,
-      [...task.labels].sort().join(','),
-      '',
-      task.parentId ?? '',
-      task.isCompleted ? '1' : '0',
-    ].join('\n'),
-  );
 }
 
 // A to-do note lives at Projecten/<project>/todos/<file>.md.

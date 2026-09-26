@@ -1,6 +1,6 @@
 import { App, FuzzySuggestModal } from 'obsidian';
 import type { PromoteIssueAction } from '../Domain/Actions/PromoteIssueAction.js';
-import type { TaskData } from '../Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Domain/Ports/SyncStatePort.js';
 
@@ -14,7 +14,7 @@ type KeyboardEvent = unknown;
 // belongs to, so the display can be prefixed and the note lands in the right
 // project folder.
 export interface PromoteSuggestion {
-  task: TaskData;
+  task: GithubTaskData;
   projectName: string;
 }
 

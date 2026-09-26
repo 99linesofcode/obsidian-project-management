@@ -1,4 +1,5 @@
-import type { TodoistStateData } from '../DataTransferObjects/TodoistStateData.js';
+import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import { isMirroredPath } from '../Notes/isMirroredPath.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
@@ -44,7 +45,7 @@ export class PropagateTodoistDeletionsAction {
 
     // A missing note is a vault deletion; a present one belongs to the
     // projection (and its self-heal), not here.
-    const deleted: TodoistStateData[] = [];
+    const deleted: TaskData[] = [];
     for (const state of states) {
       if ((await this.vault.getNoteByPath(state.notePath)) === null) {
         deleted.push(state);
@@ -70,12 +71,12 @@ export class PropagateTodoistDeletionsAction {
 // The deleted roots plus every record whose last-synced parent chain leads to
 // one of them — the subtree the API cascades away with the root twin.
 function collectSubtrees(
-  roots: TodoistStateData[],
-  states: TodoistStateData[],
-): Map<string, TodoistStateData> {
-  const childrenByParent = new Map<string, TodoistStateData[]>();
+  roots: TaskData[],
+  states: TaskData[],
+): Map<string, TaskData> {
+  const childrenByParent = new Map<string, TaskData[]>();
   for (const state of states) {
-    const parent = state.lastSyncedParent;
+    const parent = state.parent;
     if (parent === undefined || parent === null) {
       continue;
     }
@@ -84,8 +85,8 @@ function collectSubtrees(
     childrenByParent.set(parent, children);
   }
 
-  const doomed = new Map<string, TodoistStateData>();
-  const visit = (state: TodoistStateData): void => {
+  const doomed = new Map<string, TaskData>();
+  const visit = (state: TaskData): void => {
     if (doomed.has(state.notePath)) {
       return;
     }
@@ -98,13 +99,4 @@ function collectSubtrees(
     visit(root);
   }
   return doomed;
-}
-
-// A mirrored item lives at Projecten/<project>/taken/<file>.md (a task twin) or
-// Projecten/<project>/todos/<file>.md (a to-do twin).
-function isMirroredPath(path: string, projectName: string): boolean {
-  return (
-    path.startsWith(`Projecten/${projectName}/taken/`) ||
-    path.startsWith(`Projecten/${projectName}/todos/`)
-  );
 }

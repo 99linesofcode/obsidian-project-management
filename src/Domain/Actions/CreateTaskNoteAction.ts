@@ -1,12 +1,12 @@
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import type { Status } from '../Models/Status.js';
 import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
 import { hash } from '../Notes/hash.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 
 export interface CreateTaskNoteInput {
-  task: TaskData;
+  task: GithubTaskData;
   projectName: string;
   syncedAt: string;
   // The project's Status option name the task starts in.
@@ -37,16 +37,25 @@ export class CreateTaskNoteAction {
 
     await this.vault.createNote(path, content);
 
-    const status: Status = {
+    // The canonical snapshot record: the body carries the issue-body hash (the
+    // comparable fingerprint), the lane is preserved verbatim. `completed` is
+    // re-derived from the lane at diff time, so a default here is not
+    // load-bearing.
+    const snapshot: TaskData = {
       url: input.task.url,
       remoteId: input.task.remoteId,
+      nodeId: input.task.nodeId,
+      todoistId: '',
       notePath: path,
-      lastSyncedBodyHash: hash(input.task.body),
-      lastSyncedRemoteUpdatedAt: input.task.updatedAt,
-      lastSyncedStatus: input.statusName,
-      lastSyncedTitle: input.task.title,
+      title: input.task.title,
+      body: hash(input.task.body),
+      status: input.statusName,
+      completed: false,
+      parent: null,
+      labels: [...input.task.labels],
+      updatedAt: input.task.updatedAt,
     };
-    await this.syncState.set(status);
+    await this.syncState.set(snapshot);
   }
 
   // The template note's content, or null when it does not exist — render

@@ -1,3 +1,4 @@
+import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import { hash } from '../Notes/hash.js';
 import type { ObservedState } from './ObservedState.js';
 import { SyncVerdict } from './SyncVerdict.js';
@@ -21,6 +22,23 @@ export class VerdictResolver {
     return new SyncVerdict({ body, status });
   }
 
+  // The canonical three-way diff: compare the vault's, the remote's and the
+  // snapshot's content fields. A field changed on both sides is a conflict and
+  // the vault wins (dt-01). Identical for every provider, because the DTOs are
+  // canonical. Pure: no I/O, no time, no randomness.
+  diff(
+    vault: TaskData,
+    remote: TaskData,
+    snapshot: TaskData,
+  ): DimensionVerdict {
+    const localChanged = contentOf(vault) !== contentOf(snapshot);
+    const remoteChanged = contentOf(remote) !== contentOf(snapshot);
+    if (localChanged && remoteChanged) return 'conflict';
+    if (localChanged) return 'push';
+    if (remoteChanged) return 'pull';
+    return 'none';
+  }
+
   private resolveDimension(
     localChanged: boolean,
     remoteChanged: boolean,
@@ -30,4 +48,17 @@ export class VerdictResolver {
     if (remoteChanged) return 'pull';
     return 'none';
   }
+}
+
+// The comparable content of a canonical task: the fields the diff reads. The
+// identity fields (url, ids, note path) link representations and never enter
+// the comparison.
+function contentOf(task: TaskData): string {
+  return [
+    task.title,
+    task.body,
+    task.status,
+    task.completed ? '1' : '0',
+    task.parent ?? '',
+  ].join('\n');
 }

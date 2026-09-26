@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { PromoteCardAction } from '../../../src/Domain/Actions/PromoteCardAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { slugify } from '../../../src/Domain/Notes/TaskNoteMapper.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 
 // Fakes at the ports: the project management port records the draft card it
 // was asked to promote and returns the resulting task; the vault and sync
@@ -21,7 +21,7 @@ class FakePort implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   promoted: Array<{ itemId: string; repoNodeId: string }> = [];
-  task: TaskData = {
+  task: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/50',
     remoteId: 50,
     nodeId: 'I_kwDOAAAA50',
@@ -36,14 +36,25 @@ class FakePort implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
 
-  async promoteCard(itemId: string, repoNodeId: string): Promise<TaskData> {
+  async promoteCard(
+    itemId: string,
+    repoNodeId: string,
+  ): Promise<GithubTaskData> {
     this.promoted.push({ itemId, repoNodeId });
     return this.task;
+  }
+
+  async deleteCard(): Promise<never> {
+    throw new Error('not used in this test');
   }
 
   async fetchProjectIdentity(): Promise<null> {
     throw new Error('not used in this test');
   }
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async fetchTrackedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -161,15 +172,15 @@ class FakeSyncState implements SyncStatePort {
     ],
   };
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}

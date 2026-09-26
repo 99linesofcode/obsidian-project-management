@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: hold the stored identity and record the board status
 // writes the action asks for, so the action's own behaviour (identity lookup
@@ -24,16 +26,20 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async updateTask(): Promise<TaskData> {
+  async updateTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async setTaskState(): Promise<TaskData> {
+  async setTaskState(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
   async fetchBoardItems(): Promise<never> {
@@ -71,6 +77,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async deleteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeSyncState implements SyncStatePort {
@@ -106,9 +115,10 @@ class FakeSyncState implements SyncStatePort {
 
   async setArchiveBaseline(): Promise<void> {}
   identity: ProjectIdentityData | null = null;
+  record: TaskData | null = null;
 
-  async get(): Promise<null> {
-    return null;
+  async get(): Promise<TaskData | null> {
+    return this.record;
   }
   async set(): Promise<void> {}
   async findByNotePath(): Promise<null> {
@@ -189,6 +199,25 @@ describe('BoardStatusAction', () => {
         statusOptionId: 'PVTSSF_1',
       },
     ]);
+  });
+
+  it('skips the board write when the record already sits in the lane', async () => {
+    // Given — a record whose stored lane is the one being mirrored
+    const projectManagement = new FakeProjectManagement();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    syncState.record = taskRecord({ url, status: 'Building' });
+    const action = new BoardStatusAction(syncState, projectManagement);
+
+    // When — the same lane is mirrored
+    await action.execute({
+      projectName: 'Acme Widgets',
+      url,
+      statusName: 'Building',
+    });
+
+    // Then — the card is already in step, so nothing is written
+    expect(projectManagement.boardStatusCalls).toEqual([]);
   });
 
   it('skips silently when the project has no stored identity', async () => {

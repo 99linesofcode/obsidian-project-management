@@ -3,10 +3,10 @@ import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAc
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 
 // Fakes at the ports: the sync state holds per-project identities and the
 // project management fake records each fleet probe and answers it from a
@@ -15,15 +15,15 @@ import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 class FakeSyncState implements SyncStatePort {
   identities = new Map<string, ProjectIdentityData>();
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -85,10 +85,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchUnpromotedIssues(): Promise<TaskData[]> {
+  async fetchUnpromotedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
   async fetchTask(): Promise<never> {
@@ -111,6 +115,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 
   async promoteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async deleteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }

@@ -5,41 +5,44 @@ import {
   type ProjectManagementSettings,
 } from './App/Settings/PluginSettingTab.js';
 import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
+import { SyncQueue } from './App/Scheduling/SyncQueue.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './Domain/Actions/CreateTaskNoteAction.js';
-import { ApplyRemoteChangeAction } from './Domain/Actions/ApplyRemoteChangeAction.js';
+import { ApplyTaskToGithubAction } from './Domain/Actions/ApplyTaskToGithubAction.js';
+import { ApplyTaskToTodoistAction } from './Domain/Actions/ApplyTaskToTodoistAction.js';
+import { ApplyTaskToVaultAction } from './Domain/Actions/ApplyTaskToVaultAction.js';
 import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompletionAction.js';
 import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRemoteChangesAction.js';
-import { ApplyBoardChangeAction } from './Domain/Actions/ApplyBoardChangeAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCreationsAction.js';
+import { CompleteTaskCascadeAction } from './Domain/Actions/CompleteTaskCascadeAction.js';
+import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
 import { PropagateStatusAction } from './Domain/Actions/PropagateStatusAction.js';
-import { PushNoteAction } from './Domain/Actions/PushNoteAction.js';
 import { PromoteIssueAction } from './Domain/Actions/PromoteIssueAction.js';
 import { PromoteCardAction } from './Domain/Actions/PromoteCardAction.js';
 import { ProbeProjectsAction } from './Domain/Actions/ProbeProjectsAction.js';
-import { ProjectTasksToTodoistAction } from './Domain/Actions/ProjectTasksToTodoistAction.js';
-import { ProjectToDosToTodoistAction } from './Domain/Actions/ProjectToDosToTodoistAction.js';
 import { PropagateTodoistDeletionsAction } from './Domain/Actions/PropagateTodoistDeletionsAction.js';
-import { ReconcileArchiveStateAction } from './Domain/Actions/ReconcileArchiveStateAction.js';
-import { ReconcileTaskAction } from './Domain/Actions/ReconcileTaskAction.js';
-import { ReconcileTodoistProjectAction } from './Domain/Actions/ReconcileTodoistProjectAction.js';
+import { ReconcileProjectLifecycleAction } from './Domain/Actions/ReconcileProjectLifecycleAction.js';
 import { RelinkRenamedTodoAction } from './Domain/Actions/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './Domain/Actions/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './Domain/Actions/SyncChecklistAction.js';
+import { SyncGithubTasksAction } from './Domain/Actions/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './Domain/Actions/SyncProjectAction.js';
-import { WatchArchivedProjectAction } from './Domain/Actions/WatchArchivedProjectAction.js';
+import { SyncTodoistTasksAction } from './Domain/Actions/SyncTodoistTasksAction.js';
 import { VerdictResolver } from './Domain/Reconciliation/VerdictResolver.js';
 import {
   GitHubAdapter,
   type Transport,
 } from './Infrastructure/GitHub/GitHubAdapter.js';
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
-import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
+import {
+  SyncStateAdapter,
+  migrateLegacyState,
+} from './Infrastructure/Obsidian/SyncStateAdapter.js';
 import {
   TodoistAdapter,
   createTodoistTransport,
@@ -124,7 +127,14 @@ export default class ProjectManagementPlugin extends Plugin {
   private projectNames: string[] = [];
 
   override async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // Migrate the legacy flat sync-state keys under their own top-level key
+    // before the settings merge, so the plugin's settings never absorb a
+    // `status.*`/`todoistItem.*` record (the pre-t5 shared-root wrinkle).
+    const raw = (await this.loadData()) ?? {};
+    if (migrateLegacyState(raw)) {
+      await this.saveData(raw);
+    }
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 
     const transport = createTransport(this.settings.githubToken);
     const syncState = new SyncStateAdapter({
@@ -142,14 +152,6 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.taskTemplatePath,
     );
     const boardStatus = new BoardStatusAction(syncState, github);
-    const applyRemoteChange = new ApplyRemoteChangeAction(
-      vault,
-      syncState,
-      createTaskNote,
-      boardStatus,
-      this.settings.taskTemplatePath,
-    );
-    const pushNote = new PushNoteAction(github);
     const propagateStatus = new PropagateStatusAction(
       github,
       syncState,
@@ -159,32 +161,33 @@ export default class ProjectManagementPlugin extends Plugin {
     const handleDeletedNote = new HandleDeletedNoteAction(
       syncState,
       github,
-      boardStatus,
       this.settings.doneOptionName,
     );
-    const reconcileTask = new ReconcileTaskAction(
+    // t3: the canonical GitHub half. The two writers render a winning TaskData
+    // onto GitHub and the vault; the action fetches the whole project in one
+    // query and diffs each entity against the vault and the snapshot.
+    const applyTaskToGithub = new ApplyTaskToGithubAction(github, syncState);
+    // t6: the dt-13 cascade — a done task completes its checklist line and its
+    // still-open to-dos. Composed into the vault writer (the pull path) and the
+    // chain's vault-consistency step (every other origin).
+    const completeTaskCascade = new CompleteTaskCascadeAction(
+      vault,
+      this.settings.doneOptionName,
+    );
+    const applyTaskToVault = new ApplyTaskToVaultAction(
       vault,
       syncState,
-      github,
       createTaskNote,
-      applyRemoteChange,
-      pushNote,
-      propagateStatus,
+      this.settings.taskTemplatePath,
+      completeTaskCascade,
+    );
+    const syncGithubTasks = new SyncGithubTasksAction(
+      github,
+      syncState,
+      vault,
+      applyTaskToGithub,
+      applyTaskToVault,
       new VerdictResolver(),
-      this.settings.doneOptionName,
-    );
-    const applyBoardChange = new ApplyBoardChangeAction(
-      syncState,
-      github,
-      vault,
-      this.settings.doneOptionName,
-    );
-    const syncProject = new SyncProjectAction(
-      github,
-      syncState,
-      applyRemoteChange,
-      createTaskNote,
-      applyBoardChange,
       this.settings.doneOptionName,
     );
     const discoverProjects = new DiscoverProjectsAction(
@@ -192,42 +195,32 @@ export default class ProjectManagementPlugin extends Plugin {
       new AttachProjectAction(github),
     );
     const probeProjects = new ProbeProjectsAction(github, syncState);
-    const reconcileArchiveState = new ReconcileArchiveStateAction(
-      github,
-      vault,
-      syncState,
-      this.settings.doneOptionName,
-    );
-    const watchArchivedProject = new WatchArchivedProjectAction(
-      github,
-      syncState,
-      reconcileArchiveState,
-    );
 
     // The Todoist half of the tick: the adapter is token-bound through its
     // transport, so a missing token surfaces as a failed request, not a crash.
     const todoist = new TodoistAdapter(
       createTodoistTransport(this.settings.todoistToken),
     );
-    const reconcileTodoistProject = new ReconcileTodoistProjectAction(
-      todoist,
-      vault,
-      syncState,
-    );
-    const projectTasksToTodoist = new ProjectTasksToTodoistAction(
-      todoist,
+    // t4: ONE lifecycle action with ONE freeze verdict. It merges the former
+    // archive-state, Todoist-project and archived-watch actions: folder ⇄
+    // archive ⇄ Todoist two-way, name drift, frozen projects still polled by
+    // id, and the ETag + newest-issue watch.
+    const reconcileProjectLifecycle = new ReconcileProjectLifecycleAction(
       github,
+      todoist,
       vault,
       syncState,
-      new EnsureTodoistSectionsAction(todoist),
       this.settings.doneOptionName,
     );
-    const applyTodoistCompletion = new ApplyTodoistCompletionAction(
+    // t4: the gated Todoist writer. It absorbs the two projection actions'
+    // write paths: content/section/parent/completed, writing only the fields
+    // that differ. The pipeline resolves the desired shape and placement.
+    const applyTaskToTodoist = new ApplyTaskToTodoistAction(
       todoist,
       vault,
       syncState,
     );
-    const projectToDosToTodoist = new ProjectToDosToTodoistAction(
+    const applyTodoistCompletion = new ApplyTodoistCompletionAction(
       todoist,
       vault,
       syncState,
@@ -297,29 +290,45 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     promoteCardToIssue.register(this);
 
-    // v1 wiring: the scheduler starts inert and discovers the vault's project
-    // notes on every tick, so a folder move is picked up without a stored list.
-    const scheduler = new SyncScheduler(
-      syncProject,
-      probeProjects,
-      reconcileArchiveState,
-      reconcileTodoistProject,
+    // t4: the chain composes the rebuilt halves; the queue serialises every
+    // project; the scheduler is discovery + timing policies only.
+    const syncTodoistTasks = new SyncTodoistTasksAction(
+      todoist,
+      github,
+      vault,
+      syncState,
+      new EnsureTodoistSectionsAction(todoist),
+      applyTaskToTodoist,
       applyTodoistRemoteChanges,
       captureTodoistCreations,
-      projectTasksToTodoist,
       applyTodoistCompletion,
-      projectToDosToTodoist,
       propagateTodoistDeletions,
-      watchArchivedProject,
-      syncState,
-      this.settings.pollIntervalMinutes * 60 * 1000,
+      this.settings.doneOptionName,
+    );
+    const detectNoteRenames = new DetectNoteRenamesAction(
       vault,
-      syncChecklist,
-      mirrorTodoStatus,
-      reconcileTask,
-      handleDeletedNote,
+      syncState,
       relinkRenamedTodo,
       relocateTaskStatus,
+    );
+    const syncProject = new SyncProjectAction(
+      vault,
+      syncState,
+      probeProjects,
+      reconcileProjectLifecycle,
+      detectNoteRenames,
+      syncGithubTasks,
+      completeTaskCascade,
+      syncChecklist,
+      mirrorTodoStatus,
+      syncTodoistTasks,
+      handleDeletedNote,
+    );
+    const queue = new SyncQueue(syncProject);
+    const scheduler = new SyncScheduler(
+      vault,
+      queue,
+      this.settings.pollIntervalMinutes * 60 * 1000,
       this.settings.debounceSeconds * 1000,
     );
     this.addChild(scheduler);

@@ -95,4 +95,61 @@ describe('projectNoteFromCache', () => {
     // Then — the project name is the folder segment
     expect(note?.projectName).toBe('Other Project');
   });
+
+  describe('the _home.md convention', () => {
+    it('accepts the new _home.md as a project home', () => {
+      // Given — a project note using the new convention
+      const path = 'Projecten/Acme Widgets/_home.md';
+
+      // When — the cache entry is mapped
+      const note = projectNoteFromCache(path, { pm: 'github' });
+
+      // Then — it is the project home
+      expect(note?.projectName).toBe('Acme Widgets');
+    });
+
+    it('accepts the legacy <name>.md project note unchanged', () => {
+      // Given — the pre-convention note named after its folder
+      const path = 'Projecten/Acme Widgets/Acme Widgets.md';
+
+      // When — the cache entry is mapped
+      const note = projectNoteFromCache(path, { pm: 'github' });
+
+      // Then — it is still the project home (no user file needs renaming)
+      expect(note?.projectName).toBe('Acme Widgets');
+    });
+
+    it('derives the name from the folder when a legacy note keeps an old name', () => {
+      // Given — a folder renamed without renaming the legacy note inside
+      const path = 'Projecten/New Name/Old Name.md';
+
+      // When — the cache entry is mapped
+      const note = projectNoteFromCache(path, { pm: 'github' });
+
+      // Then — the folder decides the name; the note filename is meaningless
+      expect(note?.projectName).toBe('New Name');
+    });
+
+    it('ignores a pm note nested below the project folder', () => {
+      // Given — a pm note in a subfolder, not directly inside the project folder
+      const path = 'Projecten/Acme Widgets/sub/note.md';
+
+      // When — the cache entry is mapped
+      const note = projectNoteFromCache(path, { pm: 'github' });
+
+      // Then — it is not the project home
+      expect(note).toBeNull();
+    });
+
+    it('ignores a pm note directly under Projecten with no project folder', () => {
+      // Given — a pm note at the Projecten root, not inside a project folder
+      const path = 'Projecten/loose.md';
+
+      // When — the cache entry is mapped
+      const note = projectNoteFromCache(path, { pm: 'github' });
+
+      // Then — it is not the project home
+      expect(note).toBeNull();
+    });
+  });
 });

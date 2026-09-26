@@ -4,10 +4,10 @@ import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js'
 import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
 // relink's single decision (rewrite the line or not) is observable.
@@ -54,32 +54,29 @@ class FakeVault implements VaultPort {
 // A sync-state fake that only exercises the Todoist item bookkeeping the
 // relink now moves; every other method is inert.
 class FakeSyncState implements SyncStatePort {
-  todoistItemStates = new Map<string, TodoistStateData>();
-  todoistItemSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  todoistItemStates = new Map<string, TaskData>();
+  todoistItemSets: Array<{ notePath: string; state: TaskData }> = [];
 
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistItemStates.get(notePath) ?? null;
   }
-  async setTodoistState(
-    notePath: string,
-    state: TodoistStateData,
-  ): Promise<void> {
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
     this.todoistItemSets.push({ notePath, state });
     this.todoistItemStates.set(notePath, state);
   }
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistItemStates.values()];
   }
   async removeTodoistState(notePath: string): Promise<void> {
@@ -201,12 +198,14 @@ describe('RelinkRenamedTodoAction', () => {
     vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
     const syncState = new FakeSyncState();
-    syncState.todoistItemStates.set(oldPath, {
-      todoistId: 'T9',
-      notePath: oldPath,
-      lastSyncedHash: 'abc',
-      lastSyncedCompleted: false,
-    });
+    syncState.todoistItemStates.set(
+      oldPath,
+      taskRecord({
+        todoistId: 'T9',
+        notePath: oldPath,
+        completed: false,
+      }),
+    );
     const action = new RelinkRenamedTodoAction(vault, syncState);
 
     // When — the rename is followed
@@ -216,12 +215,7 @@ describe('RelinkRenamedTodoAction', () => {
     expect(syncState.todoistItemSets).toEqual([
       {
         notePath: newPath,
-        state: {
-          todoistId: 'T9',
-          notePath: newPath,
-          lastSyncedHash: 'abc',
-          lastSyncedCompleted: false,
-        },
+        state: taskRecord({ todoistId: 'T9', notePath: newPath }),
       },
     ]);
   });
