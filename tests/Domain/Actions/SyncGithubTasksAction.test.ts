@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTasksAction.js';
 import { ApplyTaskToGithubAction } from '../../../src/Domain/Actions/ApplyTaskToGithubAction.js';
 import { ApplyTaskToVaultAction } from '../../../src/Domain/Actions/ApplyTaskToVaultAction.js';
+import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
@@ -257,6 +258,7 @@ function makeAction(
     syncState,
     createTaskNote,
     'Templates/Task.md',
+    new CompleteTaskCascadeAction(vault, 'Shipped'),
   );
   return new SyncGithubTasksAction(
     projectManagement,

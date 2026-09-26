@@ -15,6 +15,7 @@ import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompl
 import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRemoteChangesAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCreationsAction.js';
+import { CompleteTaskCascadeAction } from './Domain/Actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
@@ -167,11 +168,19 @@ export default class ProjectManagementPlugin extends Plugin {
     // onto GitHub and the vault; the action fetches the whole project in one
     // query and diffs each entity against the vault and the snapshot.
     const applyTaskToGithub = new ApplyTaskToGithubAction(github, syncState);
+    // t6: the dt-13 cascade — a done task completes its checklist line and its
+    // still-open to-dos. Composed into the vault writer (the pull path) and the
+    // chain's vault-consistency step (every other origin).
+    const completeTaskCascade = new CompleteTaskCascadeAction(
+      vault,
+      this.settings.doneOptionName,
+    );
     const applyTaskToVault = new ApplyTaskToVaultAction(
       vault,
       syncState,
       createTaskNote,
       this.settings.taskTemplatePath,
+      completeTaskCascade,
     );
     const syncGithubTasks = new SyncGithubTasksAction(
       github,
@@ -310,6 +319,7 @@ export default class ProjectManagementPlugin extends Plugin {
       reconcileProjectLifecycle,
       detectNoteRenames,
       syncGithubTasks,
+      completeTaskCascade,
       syncChecklist,
       mirrorTodoStatus,
       syncTodoistTasks,

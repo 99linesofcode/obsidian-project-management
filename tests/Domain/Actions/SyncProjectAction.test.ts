@@ -9,6 +9,7 @@ import type {
   ReconcileProjectLifecycleAction,
 } from '../../../src/Domain/Actions/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../../../src/Domain/Actions/SyncChecklistAction.js';
+import type { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import type { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
@@ -220,6 +221,11 @@ function harness(options: HarnessOptions = {}) {
     },
   } as unknown as DetectNoteRenamesAction;
   const sweep = new FakeSweep(events);
+  const cascade = {
+    execute: async (input: { notePath: string }) => {
+      events.push(`cascade:${input.notePath}`);
+    },
+  } as unknown as CompleteTaskCascadeAction;
   const checklist = {
     execute: async (input: { notePath: string }) => {
       events.push(`checklist:${input.notePath}`);
@@ -248,6 +254,7 @@ function harness(options: HarnessOptions = {}) {
     lifecycle as unknown as ReconcileProjectLifecycleAction,
     renames,
     sweep as unknown as SyncGithubTasksAction,
+    cascade,
     checklist,
     mirror,
     todoist,
@@ -281,6 +288,7 @@ describe('SyncProjectAction', () => {
       'lifecycle',
       'renames',
       'sweep',
+      'cascade:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
       'checklist:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
       'mirror:Projecten/Acme Widgets/todos/fix-the-bug.md',
       'todoist',

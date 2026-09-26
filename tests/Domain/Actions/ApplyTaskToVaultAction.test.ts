@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApplyTaskToVaultAction } from '../../../src/Domain/Actions/ApplyTaskToVaultAction.js';
+import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
@@ -130,11 +131,13 @@ function makeAction(vault: FakeVault, syncState: FakeSyncState) {
     syncState,
     'Templates/Task.md',
   );
+  const completeTaskCascade = new CompleteTaskCascadeAction(vault, 'Shipped');
   return new ApplyTaskToVaultAction(
     vault,
     syncState,
     createTaskNote,
     'Templates/Task.md',
+    completeTaskCascade,
   );
 }
 
@@ -306,5 +309,81 @@ describe('ApplyTaskToVaultAction', () => {
       context,
     );
     expect(vault.written).toEqual([{ path, content: newContent }]);
+  });
+
+  it('cascades a done status onto the checklist line and its to-dos', async () => {
+    // Given — a synced task whose to-do is linked and still open
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const { path, content } = TaskNoteMapper.map(task(), context);
+    vault.notes.set(path, content);
+    const todoPath = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
+    vault.notes.set(
+      todoPath,
+      ToDoNoteMapper.map(
+        {
+          title: 'Fix the bug',
+          projectName: 'Acme Widgets',
+          taskLink: '42-fix-the-bug',
+        },
+        { syncedAt: context.syncedAt, statusName: 'open' },
+      ).content,
+    );
+    const action = makeAction(vault, syncState);
+    const done = task({
+      status: 'Shipped',
+      completed: true,
+      body: '- [ ] Fix the bug',
+    });
+
+    // When — the winning task applies the done status
+    await action.execute({
+      task: done,
+      current: task(),
+      projectName: 'Acme Widgets',
+      syncedAt: context.syncedAt,
+    });
+
+    // Then — the line follows and the to-do completes (the dt-13 fan-out)
+    expect(vault.notes.get(path)).toContain(
+      `- [x] [[${todoPath}|Fix the bug]]`,
+    );
+    expect(vault.notes.get(todoPath)).toContain('status: completed');
+  });
+
+  it('leaves an open status alone (reopen does not reopen to-dos)', async () => {
+    // Given — a task whose to-do is already completed
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const { path, content } = TaskNoteMapper.map(task(), context);
+    vault.notes.set(path, content);
+    const todoPath = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
+    vault.notes.set(
+      todoPath,
+      ToDoNoteMapper.map(
+        {
+          title: 'Fix the bug',
+          projectName: 'Acme Widgets',
+          taskLink: '42-fix-the-bug',
+        },
+        {
+          syncedAt: context.syncedAt,
+          statusName: 'completed',
+          completedAt: context.syncedAt,
+        },
+      ).content,
+    );
+    const action = makeAction(vault, syncState);
+
+    // When — an open (non-done) status applies
+    await action.execute({
+      task: task({ body: '- [x] Fix the bug' }),
+      current: task(),
+      projectName: 'Acme Widgets',
+      syncedAt: context.syncedAt,
+    });
+
+    // Then — the completed to-do stays completed
+    expect(vault.notes.get(todoPath)).toContain('status: completed');
   });
 });

@@ -6,6 +6,7 @@ import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { hash } from '../Notes/hash.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
+import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 
 export interface ApplyTaskToVaultInput {
@@ -23,13 +24,16 @@ export interface ApplyTaskToVaultInput {
 // CreateTaskNote (note creation for an untracked issue, look-up-before-create).
 // The note body carries the checklist line; the checklist ↔ to-do consistency
 // itself runs as a retained chain step (it must run for every task note, not
-// only on a pull). The dt-13 cascade rule lands here in t6.
+// only on a pull). The dt-13 cascade rule (t6) lives in the composed
+// CompleteTaskCascadeAction and fires here whenever a done status is applied,
+// whatever origin the winning task came from.
 export class ApplyTaskToVaultAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
     private readonly createTaskNote: CreateTaskNoteAction,
     private readonly taskTemplatePath: string,
+    private readonly completeTaskCascade: CompleteTaskCascadeAction,
   ) {}
 
   async execute(input: ApplyTaskToVaultInput): Promise<void> {
@@ -42,6 +46,11 @@ export class ApplyTaskToVaultAction {
         projectName: input.projectName,
         syncedAt: input.syncedAt,
         statusName: input.task.status,
+      });
+      await this.completeTaskCascade.execute({
+        notePath: this.taskNotePath(input.task, input.projectName),
+        projectName: input.projectName,
+        syncedAt: input.syncedAt,
       });
       return;
     }
@@ -71,7 +80,26 @@ export class ApplyTaskToVaultAction {
       await this.vault.writeNote(rendered.path, rendered.content);
     }
 
+    // The dt-13 fan-out: a done status applied here also completes the task's
+    // checklist line and its still-open to-dos; a reopen mirrors the checklist
+    // line but never reopens the to-dos (asymmetric, by decision).
+    await this.completeTaskCascade.execute({
+      notePath: rendered.path,
+      projectName: input.projectName,
+      syncedAt: input.syncedAt,
+    });
+
     await this.refreshRecord(input, rendered.path);
+  }
+
+  // The mapped note path for a task — used to reach a freshly created note for
+  // the cascade without re-rendering it.
+  private taskNotePath(task: TaskData, projectName: string): string {
+    return TaskNoteMapper.map(toGithubTaskData(task), {
+      projectName,
+      syncedAt: '',
+      statusName: task.status,
+    }).path;
   }
 
   // The template note's content, or null when it does not exist — render

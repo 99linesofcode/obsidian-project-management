@@ -7,6 +7,7 @@ import { ApplyTodoistCompletionAction } from '../../../src/Domain/Actions/ApplyT
 import { ApplyTodoistRemoteChangesAction } from '../../../src/Domain/Actions/ApplyTodoistRemoteChangesAction.js';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/CaptureTodoistCreationsAction.js';
+import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
 import { EnsureTodoistSectionsAction } from '../../../src/Domain/Actions/EnsureTodoistSectionsAction.js';
@@ -393,6 +394,10 @@ function taskNote(): string {
   ].join('\n');
 }
 
+function doneTaskNote(): string {
+  return taskNote().replace('status: Building', `status: ${DONE_LANE}`);
+}
+
 function toDoNote(): string {
   return [
     '---',
@@ -525,11 +530,13 @@ function harness(): Harness {
   );
   const createTaskNote = new CreateTaskNoteAction(vault, syncState, '');
   const applyToGithub = new ApplyTaskToGithubAction(github, syncState);
+  const completeTaskCascade = new CompleteTaskCascadeAction(vault, DONE_LANE);
   const applyToVault = new ApplyTaskToVaultAction(
     vault,
     syncState,
     createTaskNote,
     '',
+    completeTaskCascade,
   );
   const syncGithubTasks = new SyncGithubTasksAction(
     github,
@@ -614,6 +621,7 @@ function harness(): Harness {
     lifecycle,
     renames,
     syncGithubTasks,
+    completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
     syncTodoistTasks,
@@ -708,5 +716,58 @@ describe('SyncProjectAction double-sync invariance', () => {
     // And — the second pass retries the write and advances the cursor
     await h.chain.execute('Acme Widgets');
     expect(h.syncState.lastUpdates.has('Acme Widgets')).toBe(true);
+  });
+});
+
+// The dt-13 cascade is origin-agnostic by construction: the chain's vault
+// consistency step reads the task note's status and completes its to-dos,
+// whichever origin wrote that status. These two scenarios pin the vault-edit
+// origin (the vault's done status is pushed, then cascades) and the
+// already-arrived origin (the Todoist absorber wrote the done status; the
+// GitHub side is settled, so only the consistency step fires).
+describe('SyncProjectAction status cascade', () => {
+  it('completes a done task to-dos when the vault edit drove the status', async () => {
+    // Given — the user set the note's status to the done lane; the remote is
+    // still open and the snapshot still reads Building
+    const h = harness();
+    h.vault.notes.set(NOTE_PATH, doneTaskNote());
+
+    // When — the chain runs
+    await h.chain.execute('Acme Widgets');
+
+    // Then — the done status is pushed to GitHub and the to-do completes
+    expect(h.github.mutations).toContain(`setTaskState:${ISSUE_URL}:closed`);
+    expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
+  });
+
+  it('completes a done task to-dos when the status already arrived from a remote', async () => {
+    // Given — the absorber already wrote the done status; the snapshot and the
+    // remote agree, so the GitHub half writes nothing
+    const h = harness();
+    h.vault.notes.set(NOTE_PATH, doneTaskNote());
+    h.syncState.statuses.set(
+      ISSUE_URL,
+      taskRecord({
+        url: ISSUE_URL,
+        remoteId: 42,
+        nodeId: 'I',
+        notePath: NOTE_PATH,
+        title: 'Fix the bug',
+        body: hash('- [ ] Fix the bug'),
+        status: DONE_LANE,
+        completed: true,
+        updatedAt: UPDATED_AT,
+        labels: ['type: task'],
+      }),
+    );
+    h.github.detail.issues[0]!.state = 'closed';
+    h.github.detail.cards[0]!.statusOptionName = DONE_LANE;
+
+    // When — the chain runs
+    await h.chain.execute('Acme Widgets');
+
+    // Then — no GitHub write is needed, yet the to-do still completes
+    expect(h.github.mutations).toEqual([]);
+    expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
   });
 });

@@ -11,6 +11,7 @@ import type {
   ReconcileProjectLifecycleAction,
 } from './ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from './SyncChecklistAction.js';
+import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { SyncGithubTasksAction } from './SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
 
@@ -40,6 +41,7 @@ export class SyncProjectAction {
     private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
     private readonly syncGithubTasks: SyncGithubTasksAction,
+    private readonly completeTaskCascade: CompleteTaskCascadeAction,
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     private readonly syncTodoistTasks: SyncTodoistTasksAction,
@@ -179,7 +181,10 @@ export class SyncProjectAction {
   // The vault-side consistency pass: the checklist line and its to-do notes
   // converge in both directions. It is deliberately independent of the GitHub
   // verdict — a checklist edit is a vault change that must promote/complete
-  // its to-dos even when the GitHub half writes nothing.
+  // its to-dos even when the GitHub half writes nothing. The dt-13 cascade runs
+  // here first, so a task whose done status arrived from ANY origin (a GitHub
+  // close, a Todoist check, a vault edit) completes its to-dos; the writer
+  // itself cascades on the GitHub pull path.
   private async runVaultConsistency(
     project: string,
     syncedAt: string,
@@ -188,6 +193,13 @@ export class SyncProjectAction {
       `Projecten/${project}/taken`,
     );
     for (const notePath of taken) {
+      await this.step(`cascade ${notePath}`, () =>
+        this.completeTaskCascade.execute({
+          notePath,
+          projectName: project,
+          syncedAt,
+        }),
+      );
       await this.step(`checklist ${notePath}`, () =>
         this.syncChecklist.execute({
           notePath,
