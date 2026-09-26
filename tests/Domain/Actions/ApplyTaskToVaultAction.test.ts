@@ -209,6 +209,30 @@ describe('ApplyTaskToVaultAction', () => {
     expect(syncState.setCalls[0]!.body).toBe(hash(changed.body));
   });
 
+  it('carries the todoist anchor through a remote rewrite', async () => {
+    // Given — a synced note whose vault-owned `todoist` anchor points at its
+    // twin, and a remote body change
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const { path, content } = TaskNoteMapper.map(task(), context);
+    vault.notes.set(path, content.replace('url: ', 'todoist: T9\nurl: '));
+    const action = makeAction(vault, syncState);
+    const changed = task({ body: 'The bug now also happens on resize.' });
+
+    // When — the winning task is rendered
+    await action.execute({
+      task: changed,
+      current: task(),
+      projectName: 'Acme Widgets',
+      syncedAt: context.syncedAt,
+    });
+
+    // Then — the rewrite keeps the anchor, so the to-do projection can still
+    // find the task's twin
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.content).toContain('todoist: T9');
+  });
+
   it('skips the write when the note already matches', async () => {
     // Given — a synced note already in step with the remote
     const vault = new FakeVault();

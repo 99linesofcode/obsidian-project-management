@@ -1,6 +1,8 @@
 import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import { withChecklistLinks } from '../Notes/Checklist.js';
+import { fillFrontmatterFields } from '../Notes/fillFrontmatterFields.js';
+import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { TaskNoteMapper, slugify } from '../Notes/TaskNoteMapper.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { hash } from '../Notes/hash.js';
@@ -73,11 +75,15 @@ export class ApplyTaskToVaultAction {
     );
 
     const existing = await this.vault.getNoteByPath(input.current.notePath);
+    // A task note's `todoist` anchor is vault-owned identity, not a synced
+    // field: a remote-driven rewrite must carry it over, or the to-do
+    // projection can no longer find the task's twin and the to-dos detach.
+    const content = withTodoistAnchor(rendered.content, existing?.content);
     if (input.current.notePath !== rendered.path) {
       await this.vault.renameNote(input.current.notePath, rendered.path);
     }
-    if ((existing?.content ?? '') !== rendered.content) {
-      await this.vault.writeNote(rendered.path, rendered.content);
+    if ((existing?.content ?? '') !== content) {
+      await this.vault.writeNote(rendered.path, content);
     }
 
     // The dt-13 fan-out: a done status applied here also completes the task's
@@ -181,4 +187,33 @@ function toGithubTaskData(task: TaskData): GithubTaskData {
     updatedAt: task.updatedAt,
     labels: [...task.labels],
   };
+}
+
+// Carries the existing note's `todoist` anchor into a freshly rendered note.
+// The anchor is vault-owned identity; the renderer's managed frontmatter does
+// not include it, so a remote rewrite would otherwise drop it.
+function withTodoistAnchor(
+  content: string,
+  existing: string | undefined,
+): string {
+  const anchor =
+    existing === undefined
+      ? ''
+      : (splitFrontmatter(existing)?.fields.get('todoist') ?? '');
+  if (anchor === '') {
+    return content;
+  }
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return content;
+  }
+  const closing = lines.indexOf('---', 1);
+  if (closing === -1) {
+    return content;
+  }
+  const frontmatter = fillFrontmatterFields(
+    lines.slice(0, closing + 1),
+    new Map([['todoist', anchor]]),
+  );
+  return [...frontmatter, ...lines.slice(closing + 1)].join('\n');
 }
