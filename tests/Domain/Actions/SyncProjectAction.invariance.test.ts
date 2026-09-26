@@ -238,6 +238,10 @@ class FakeProjectManagement implements ProjectManagementPort {
     state: 'open' | 'closed',
   ): Promise<GithubTaskData> {
     this.mutations.push(`setTaskState:${url}:${state}`);
+    const found = this.detail.issues.find((issue) => issue.url === url);
+    if (found) {
+      found.state = state;
+    }
     return this.issueByUrl(url);
   }
   async fetchBoardItems(): Promise<BoardItemData[]> {
@@ -253,6 +257,12 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async addBoardItem(_projectNodeId: string, issueUrl: string): Promise<void> {
     this.mutations.push(`addBoardItem:${issueUrl}`);
+  }
+  async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
+    this.mutations.push(`deleteCard:${projectNodeId}:${issueUrl}`);
+    this.detail.cards = this.detail.cards.filter(
+      (card) => card.issueUrl !== issueUrl,
+    );
   }
   async addLabel(url: string, label: string): Promise<void> {
     this.mutations.push(`addLabel:${url}:${label}`);
@@ -628,7 +638,6 @@ function harness(): Harness {
   const handleDeletedNote = new HandleDeletedNoteAction(
     syncState,
     github,
-    boardStatus,
     DONE_LANE,
   );
   const chain = new SyncProjectAction(
@@ -786,6 +795,54 @@ describe('SyncProjectAction status cascade', () => {
     // Then — no GitHub write is needed, yet the to-do still completes
     expect(h.github.mutations).toEqual([]);
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
+  });
+});
+
+// The resurrection loop: a trashed note must not return. The sweep deletes the
+// card, closes the issue and removes the record; the untracked-closed gate then
+// keeps the closed issue from re-materialising on every later poll, and the
+// Todoist deletion propagation keeps the twin gone.
+describe('SyncProjectAction deletion sweep', () => {
+  it('does not resurrect a deleted task after the sweep', async () => {
+    // Given — a settled project with a task note, its open issue, its card and
+    // its Todoist twin
+    const h = harness();
+    await h.chain.execute('Acme Widgets');
+    expect(h.syncState.statuses.has(ISSUE_URL)).toBe(true);
+    expect(h.syncState.todoistStates.has(NOTE_PATH)).toBe(true);
+
+    // And — the user deletes the task note
+    h.vault.notes.delete(NOTE_PATH);
+    h.vault.mutations = [];
+    h.github.mutations = [];
+    h.todoist.mutations = [];
+
+    // When — the sweep pass runs
+    await h.chain.execute('Acme Widgets');
+
+    // Then — the card is deleted, the issue closed and the record removed
+    expect(h.github.mutations).toContain(`deleteCard:PVT:${ISSUE_URL}`);
+    expect(h.github.mutations).toContain(`setTaskState:${ISSUE_URL}:closed`);
+    expect(h.syncState.statuses.has(ISSUE_URL)).toBe(false);
+    expect(h.github.detail.cards).toEqual([]);
+
+    // And — the mutator logs are cleared, then two more passes run
+    h.vault.mutations = [];
+    h.github.mutations = [];
+    h.todoist.mutations = [];
+    await h.chain.execute('Acme Widgets');
+    await h.chain.execute('Acme Widgets');
+
+    // Then — the note stays gone, no card or twin is recreated, and no port is
+    // written after the sweep
+    expect(h.vault.notes.has(NOTE_PATH)).toBe(false);
+    expect(h.github.detail.cards).toEqual([]);
+    expect(
+      h.todoist.mutations.filter((m) => m.startsWith('createTask:')),
+    ).toEqual([]);
+    expect(h.github.mutations).toEqual([]);
+    expect(h.todoist.mutations).toEqual([]);
+    expect(h.vault.mutations).toEqual([]);
   });
 });
 

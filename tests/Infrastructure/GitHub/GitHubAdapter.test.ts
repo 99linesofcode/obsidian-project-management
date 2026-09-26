@@ -1017,6 +1017,71 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
+  it('deletes the issue card via deleteProjectV2Item', async () => {
+    // Given — a board containing the issue and a transport for the two calls
+    const boardResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            items: {
+              nodes: [
+                {
+                  id: 'PVTI_1',
+                  type: 'ISSUE',
+                  content: { url: 'https://github.com/acme/widgets/issues/42' },
+                  fieldValues: {
+                    nodes: [{ name: 'Unshaped', field: { name: 'Status' } }],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const mutationResponse = {
+      status: 200,
+      json: { data: { deleteProjectV2Item: { deletedItemId: 'PVTI_1' } } },
+    };
+    const { transport, bodies } = fakeTransport([
+      boardResponse,
+      mutationResponse,
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter deletes the issue's card
+    await adapter.deleteCard(
+      'PVT_123',
+      'https://github.com/acme/widgets/issues/42',
+    );
+
+    // Then — the item id is resolved from the board and deleted
+    expect(bodies[1]).toContain('DeleteBoardItem');
+    expect(bodies[1]).toContain('"itemId":"PVTI_1"');
+    expect(bodies[1]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('treats a card-less issue as a no-op on delete', async () => {
+    // Given — a board with no card for the issue
+    const boardResponse = {
+      status: 200,
+      json: { data: { node: { items: { nodes: [] } } } },
+    };
+    const { transport, bodies } = fakeTransport([boardResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter deletes the issue's card
+    await adapter.deleteCard(
+      'PVT_123',
+      'https://github.com/acme/widgets/issues/42',
+    );
+
+    // Then — only the board read ran; no mutation was posted
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain('BoardItems');
+  });
+
   it('lists open issues that carry no type label', async () => {
     // Given — a REST response mixing typed issues (task, slice, bug, chore)
     // with an unlabeled one

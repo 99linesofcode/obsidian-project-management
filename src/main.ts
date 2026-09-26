@@ -161,7 +161,6 @@ export default class ProjectManagementPlugin extends Plugin {
     const handleDeletedNote = new HandleDeletedNoteAction(
       syncState,
       github,
-      boardStatus,
       this.settings.doneOptionName,
     );
     // t3: the canonical GitHub half. The two writers render a winning TaskData

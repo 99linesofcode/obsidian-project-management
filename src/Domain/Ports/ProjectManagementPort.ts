@@ -55,6 +55,9 @@ export interface ProjectManagementPort {
     statusOptionId: string,
   ): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
+  // Removes the issue's card from the project's board. An issue with no card is
+  // a no-op, so a sweep can call it unconditionally.
+  deleteCard(projectNodeId: string, issueUrl: string): Promise<void>;
   addLabel(url: string, label: string): Promise<void>;
   promoteCard(itemId: string, repoNodeId: string): Promise<GithubTaskData>;
 }

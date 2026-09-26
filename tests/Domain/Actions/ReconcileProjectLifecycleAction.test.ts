@@ -298,6 +298,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async deleteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const syncedAt = '2026-09-24T12:00:00Z';

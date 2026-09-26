@@ -44,6 +44,10 @@ class FakePort implements ProjectManagementPort {
     return this.task;
   }
 
+  async deleteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async fetchProjectIdentity(): Promise<null> {
     throw new Error('not used in this test');
   }

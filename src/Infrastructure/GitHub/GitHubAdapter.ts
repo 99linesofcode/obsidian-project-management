@@ -206,6 +206,14 @@ const ADD_BOARD_ITEM_MUTATION = `
   }
 `;
 
+const DELETE_BOARD_ITEM_MUTATION = `
+  mutation DeleteBoardItem($projectId: ID!, $itemId: ID!) {
+    deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+      deletedItemId
+    }
+  }
+`;
+
 const CONVERT_DRAFT_ISSUE_MUTATION = `
   mutation ConvertDraftIssue($itemId: ID!, $repositoryId: ID!) {
     convertProjectV2DraftIssueItemToIssue(
@@ -631,6 +639,21 @@ export class GitHubAdapter implements ProjectManagementPort {
     await this.postQuery(ADD_BOARD_ITEM_MUTATION, {
       projectId: projectNodeId,
       contentId: task.nodeId,
+    });
+  }
+
+  // Resolves the issue's card from the board (the same join setBoardStatus
+  // uses) and deletes it. A card-less issue is a no-op, so a sweep can call
+  // this without first checking membership.
+  async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
+    const items = await this.fetchBoardItems(projectNodeId);
+    const item = items.find((candidate) => candidate.issueUrl === issueUrl);
+    if (!item) {
+      return;
+    }
+    await this.postQuery(DELETE_BOARD_ITEM_MUTATION, {
+      projectId: projectNodeId,
+      itemId: item.itemId,
     });
   }
 
