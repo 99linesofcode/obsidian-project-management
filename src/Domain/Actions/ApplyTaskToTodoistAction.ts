@@ -107,9 +107,14 @@ export class ApplyTaskToTodoistAction {
 
     const id = stored.todoistId;
     // A twin missing from the active set is completed (or gone). A completed
-    // twin is already in step; an active vault reopens it. Content and labels
-    // follow on the next tick once the twin is active.
+    // twin whose snapshot already carries the completion stamp is settled: no
+    // re-complete and no snapshot rewrite (dt-17). Without this gate the twin
+    // is re-completed and re-stamped on every pass once the completed-since
+    // window has aged past its completion. An active vault reopens it.
     if (!current) {
+      if (desired.isCompleted && stored.completed) {
+        return id;
+      }
       if (!desired.isCompleted) {
         await this.taskManager.setTaskCompleted(id, false);
       }

@@ -438,6 +438,33 @@ describe('ApplyTaskToTodoistAction', () => {
         { id: 'T9', completed: false },
       ]);
     });
+
+    it('leaves an already-completed absent twin settled (no re-complete, no re-stamp)', async () => {
+      // Given — a stored twin absent from the active set (completed) whose
+      // snapshot already carries the completion stamp
+      const h = setup();
+      h.syncState.todoistStates.set(
+        notePath,
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          status: 'Shipped',
+          completed: true,
+        }),
+      );
+
+      // When — the winning task is still completed
+      await h.action.executeTask({
+        task: task({ completed: true, status: 'Shipped' }),
+        current: null,
+        ...base,
+        sectionId: 'S3',
+      });
+
+      // Then — no completion write and no snapshot re-stamp (the dt-17 settle)
+      expect(h.taskManager.completeCalls).toEqual([]);
+      expect(h.syncState.todoistSets).toEqual([]);
+    });
   });
 
   describe('to-dos', () => {

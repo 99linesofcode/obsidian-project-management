@@ -128,7 +128,15 @@ export class ApplyTodoistRemoteChangesAction {
       const twin = twinById.get(state.todoistId);
       if (!twin) {
         // Absent from both the active set and the completed-since window. A
-        // missing note is a vault deletion (PropagateTodoistDeletionsAction
+        // completed twin naturally ages out of that window (the cursor advances
+        // past its completion) and is never in the active set, so the snapshot's
+        // completion stamp says it is a persisted completed twin (dt-22 mirror),
+        // not a deletion. Evicting it would re-create the twin every tick — the
+        // dt-17 churn — so a completed record is left untouched.
+        if (state.completed) {
+          continue;
+        }
+        // A missing note is a vault deletion (PropagateTodoistDeletionsAction
         // owns it, later in the same tick). When the note survives, the twin
         // was deleted on the Todoist side: that is not a vault deletion and not
         // a completion (a completion would be in the completed window). The

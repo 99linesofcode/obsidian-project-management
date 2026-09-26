@@ -365,9 +365,26 @@ class FakeTaskManager implements TaskManagerPort {
     this.mutations.push(`moveTask:${id}`);
   }
   async setTaskCompleted(id: string, completed: boolean): Promise<void> {
-    const task = this.active.find((candidate) => candidate.id === id);
-    if (task) task.isCompleted = completed;
+    const task =
+      this.active.find((candidate) => candidate.id === id) ??
+      this.completed.find((candidate) => candidate.id === id);
+    if (task) {
+      task.isCompleted = completed;
+      // Model the real API: a completed task leaves the active set and is only
+      // visible through the completed-since window.
+      this.active = this.active.filter((candidate) => candidate.id !== id);
+      this.completed = this.completed.filter(
+        (candidate) => candidate.id !== id,
+      );
+      (completed ? this.completed : this.active).push(task);
+    }
     this.mutations.push(`setTaskCompleted:${id}:${completed}`);
+  }
+  // Models the completed-since window advancing past a completion: the API
+  // returns only completions newer than the cursor, so an aged completion drops
+  // out of the fetched set while the twin stays completed on Todoist.
+  expireCompleted(): void {
+    this.completed = [];
   }
   async deleteTask(id: string): Promise<void> {
     this.active = this.active.filter((candidate) => candidate.id !== id);
@@ -769,5 +786,72 @@ describe('SyncProjectAction status cascade', () => {
     // Then — no GitHub write is needed, yet the to-do still completes
     expect(h.github.mutations).toEqual([]);
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
+  });
+});
+
+// dt-17 churn fix: once a task/to-do has completed and its snapshot record
+// carries the stamp, no later pass may re-complete, re-archive or re-write it —
+// even after the completed-since window has aged past the completion and the
+// twin is returned by neither fetch. The mirror policy (dt-22) keeps the
+// completed twin; the settle gate stops the recreate-every-tick loop.
+describe('SyncProjectAction completion settle', () => {
+  it('performs zero completion writes on N passes after a completion settles', async () => {
+    // Given — a task note in the done lane with its checklist line already
+    // checked, its issue closed and its card in the done lane, and a snapshot
+    // that already reads done — so the only remaining work is completing the
+    // still-open to-do and materialising the twins
+    const h = harness();
+    h.vault.notes.set(NOTE_PATH, doneTaskNote().replace('- [ ]', '- [x]'));
+    h.syncState.statuses.set(
+      ISSUE_URL,
+      taskRecord({
+        url: ISSUE_URL,
+        remoteId: 42,
+        nodeId: 'I',
+        notePath: NOTE_PATH,
+        title: 'Fix the bug',
+        body: hash('- [x] Fix the bug'),
+        status: DONE_LANE,
+        completed: true,
+        updatedAt: UPDATED_AT,
+        labels: ['type: task'],
+      }),
+    );
+    h.github.detail.issues[0]!.body = '- [x] Fix the bug';
+    h.github.detail.issues[0]!.state = 'closed';
+    h.github.detail.cards[0]!.statusOptionName = DONE_LANE;
+
+    // When — the chain runs once to settlement: the first pass creates and
+    // completes both the task and the to-do twins
+    await h.chain.execute('Acme Widgets');
+    const completionWrites = h.todoist.mutations.filter((m) =>
+      m.startsWith('setTaskCompleted:'),
+    );
+    expect(completionWrites.length).toBeGreaterThan(0);
+    expect(completionWrites.every((m) => m.endsWith(':true'))).toBe(true);
+
+    // And — the completed-since window ages past the completions (the cursor
+    // advanced), so neither twin is returned by either fetch anymore
+    h.todoist.expireCompleted();
+    h.vault.mutations = [];
+    h.github.mutations = [];
+    h.todoist.mutations = [];
+
+    // And — N further passes with no external change
+    for (let pass = 0; pass < 3; pass++) {
+      await h.chain.execute('Acme Widgets');
+    }
+
+    // Then — the twins are never re-completed, re-created or re-archived, and
+    // no port is written at all: the completed twins persist (dt-22) and the
+    // settle gate holds (dt-17)
+    expect(
+      h.todoist.mutations.filter((m) => m.startsWith('setTaskCompleted:')),
+    ).toEqual([]);
+    expect(
+      h.todoist.mutations.filter((m) => m.startsWith('createTask:')),
+    ).toEqual([]);
+    expect(h.vault.mutations).toEqual([]);
+    expect(h.github.mutations).toEqual([]);
   });
 });

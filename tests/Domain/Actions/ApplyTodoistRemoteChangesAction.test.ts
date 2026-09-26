@@ -793,6 +793,31 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(syncState.todoistItemStates.has(todoPath)).toBe(true);
   });
 
+  it('keeps a completed record whose twin aged out of the completed window', async () => {
+    // Given — a completed task whose twin is absent from BOTH the active set
+    // and the completed-since window (the cursor advanced past its completion)
+    // and whose snapshot already carries the completion stamp
+    const { action, vault, taskManager, syncState } = setup();
+    const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
+    vault.notes.set(taskPath, taskNote('Shipped', ['[[Acme Widgets]]']));
+    syncState.todoistItemStates.set(
+      taskPath,
+      state(taskPath, { status: 'Shipped', completed: true }),
+    );
+    taskManager.active = [];
+    taskManager.completed = [];
+
+    // When — the verdict runs
+    await action.execute({ projectName, projectId, syncedAt });
+
+    // Then — completed is not deleted: the stamped record survives untouched,
+    // so the projection never re-creates the twin (the dt-17 churn)
+    expect(syncState.todoistItemRemovals).toEqual([]);
+    expect(syncState.todoistItemStates.has(taskPath)).toBe(true);
+    expect(vault.writes).toEqual([]);
+    expect(syncState.todoistItemSets).toEqual([]);
+  });
+
   it('leaves a missing note to the deletion action', async () => {
     // Given — a deleted note whose twin is gone too
     const { action, syncState } = setup();
