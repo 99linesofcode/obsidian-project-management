@@ -156,6 +156,21 @@ describe('SyncScheduler', () => {
     expect(queue.enqueued).toEqual(['Acme Widgets']);
   });
 
+  it('derives the project name from a home-note change, not its filename', async () => {
+    // Given — a scheduler subscribed to vault note changes
+    const vault = new FakeVault();
+    const queue = new FakeQueue();
+    const scheduler = schedulerWith(vault, queue);
+    scheduler.load();
+
+    // When — a legacy-named home note under a renamed folder changes
+    vault.fireNoteChanged('Projecten/New Name/Old Name.md');
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Then — the folder decides the project name; the filename is meaningless
+    expect(queue.enqueued).toEqual(['New Name']);
+  });
+
   it('ignores note changes outside Projecten', async () => {
     // Given — a scheduler subscribed to vault note changes
     const vault = new FakeVault();

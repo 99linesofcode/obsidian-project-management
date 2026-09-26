@@ -5,9 +5,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Maps a markdown file's path and frontmatter cache to a project note, or
-// null when the file does not carry a pm property or does not live under
-// Projecten/ or Archief/. Pure: no Obsidian types, so the filtering and
-// project-name derivation are unit-testable without faking the metadataCache.
+// null when the file does not carry a pm property or is not directly inside a
+// Projecten/<project>/ or Archief/<project>/ folder. Pure: no Obsidian types,
+// so the filtering and project-name derivation are unit-testable without
+// faking the metadataCache.
 export function projectNoteFromCache(
   path: string,
   frontmatter: unknown,
@@ -30,14 +31,20 @@ export function projectNoteFromCache(
 }
 
 // Projecten/<project>/_home.md or Archief/<project>/_home.md -> <project>.
-// A pm note anywhere else is not a project note.
+// A pm-marked note DIRECTLY inside a project folder is that project's home
+// note. The new convention names it _home.md; the legacy <name>.md (the note
+// named after its folder) is accepted alongside it, so no user file is renamed
+// unbidden. The project name is ALWAYS the folder segment, never the note's
+// basename — a folder rename needs no note rename, and a note deeper in the
+// tree (taken/, todos/, a subfolder) is not a project home.
 function projectNameFromPath(path: string): string | null {
   const segments = path.split('/');
-  if (
-    (segments[0] === 'Projecten' || segments[0] === 'Archief') &&
-    segments.length >= 2
-  ) {
-    return segments[1] ?? null;
+  if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
+    return null;
   }
-  return null;
+  // Exactly root/<project>/<file>: one trailing segment after the folder.
+  if (segments.length !== 3) {
+    return null;
+  }
+  return segments[1] ?? null;
 }
