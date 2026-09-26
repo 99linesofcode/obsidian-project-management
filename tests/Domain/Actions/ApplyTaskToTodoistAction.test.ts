@@ -7,12 +7,11 @@ import type { ToDoData } from '../../../src/Domain/DataTransferObjects/ToDoData.
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the vault records the anchor writes, the task manager
 // holds the project's tasks and records every mutation, and the sync state
@@ -128,18 +127,18 @@ class FakeTaskManager implements TaskManagerPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  todoistStates = new Map<string, TodoistStateData>();
-  todoistSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  todoistStates = new Map<string, TaskData>();
+  todoistSets: Array<{ notePath: string; state: TaskData }> = [];
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -162,18 +161,15 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistStates.get(notePath) ?? null;
   }
-  async setTodoistState(
-    notePath: string,
-    state: TodoistStateData,
-  ): Promise<void> {
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
     this.todoistSets.push({ notePath, state });
     this.todoistStates.set(notePath, state);
   }
   async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistStates.values()];
   }
 }
@@ -264,10 +260,10 @@ describe('ApplyTaskToTodoistAction', () => {
       expect(h.vault.writes[0]!.content).toContain('todoist: T1');
       expect(h.syncState.todoistSets[0]!.state).toMatchObject({
         todoistId: 'T1',
-        lastSyncedContent: 'Fix the bug',
-        lastSyncedLane: 'Building',
-        lastSyncedParent: null,
-        lastSyncedCompleted: false,
+        title: 'Fix the bug',
+        status: 'Building',
+        parent: null,
+        completed: false,
       });
       expect(id).toBe('T1');
     });
@@ -293,15 +289,17 @@ describe('ApplyTaskToTodoistAction', () => {
     it('writes nothing when the twin already matches', async () => {
       // Given — a settled twin
       const h = setup();
-      h.syncState.todoistStates.set(notePath, {
-        todoistId: 'T9',
+      h.syncState.todoistStates.set(
         notePath,
-        lastSyncedHash: 'h',
-        lastSyncedCompleted: false,
-        lastSyncedContent: 'Fix the bug',
-        lastSyncedLane: 'Building',
-        lastSyncedParent: null,
-      });
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          completed: false,
+          title: 'Fix the bug',
+          status: 'Building',
+          parent: null,
+        }),
+      );
 
       // When — the task is rendered
       await h.action.executeTask({ task: task(), current: twin(), ...base });
@@ -317,12 +315,14 @@ describe('ApplyTaskToTodoistAction', () => {
     it('updates content and labels only when they differ', async () => {
       // Given — a twin whose content and labels drifted
       const h = setup();
-      h.syncState.todoistStates.set(notePath, {
-        todoistId: 'T9',
+      h.syncState.todoistStates.set(
         notePath,
-        lastSyncedHash: 'h',
-        lastSyncedCompleted: false,
-      });
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          completed: false,
+        }),
+      );
 
       // When — the winning task is rendered
       await h.action.executeTask({
@@ -341,12 +341,14 @@ describe('ApplyTaskToTodoistAction', () => {
     it('moves the section only when the lane differs', async () => {
       // Given — a twin in a different section
       const h = setup();
-      h.syncState.todoistStates.set(notePath, {
-        todoistId: 'T9',
+      h.syncState.todoistStates.set(
         notePath,
-        lastSyncedHash: 'h',
-        lastSyncedCompleted: false,
-      });
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          completed: false,
+        }),
+      );
 
       // When — the winning task sits in another lane
       await h.action.executeTask({
@@ -365,12 +367,14 @@ describe('ApplyTaskToTodoistAction', () => {
     it('moves the parent only when the parent differs', async () => {
       // Given — a subtask whose parent drifted
       const h = setup();
-      h.syncState.todoistStates.set(notePath, {
-        todoistId: 'T9',
+      h.syncState.todoistStates.set(
         notePath,
-        lastSyncedHash: 'h',
-        lastSyncedCompleted: false,
-      });
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          completed: false,
+        }),
+      );
 
       // When — the winning task nests under another slice
       await h.action.executeTask({
@@ -390,12 +394,14 @@ describe('ApplyTaskToTodoistAction', () => {
     it('completes the twin when the vault completed the task', async () => {
       // Given — an active twin the vault marked done
       const h = setup();
-      h.syncState.todoistStates.set(notePath, {
-        todoistId: 'T9',
+      h.syncState.todoistStates.set(
         notePath,
-        lastSyncedHash: 'h',
-        lastSyncedCompleted: false,
-      });
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          completed: false,
+        }),
+      );
 
       // When — the winning task is completed
       await h.action.executeTask({
@@ -415,12 +421,14 @@ describe('ApplyTaskToTodoistAction', () => {
       // Given — a stored twin absent from the active set (completed) the vault
       // reopened
       const h = setup();
-      h.syncState.todoistStates.set(notePath, {
-        todoistId: 'T9',
+      h.syncState.todoistStates.set(
         notePath,
-        lastSyncedHash: 'h',
-        lastSyncedCompleted: true,
-      });
+        taskRecord({
+          todoistId: 'T9',
+          notePath,
+          completed: true,
+        }),
+      );
 
       // When — the winning task is open
       await h.action.executeTask({ task: task(), current: null, ...base });
@@ -456,7 +464,7 @@ describe('ApplyTaskToTodoistAction', () => {
         labels: ['todo'],
       });
       expect(h.taskManager.ensureLabelCalls).toEqual(['todo']);
-      expect(h.syncState.todoistSets[0]!.state.lastSyncedLane).toBeNull();
+      expect(h.syncState.todoistSets[0]!.state.status).toBe('');
       expect(id).toBe('T1');
     });
 
@@ -465,12 +473,11 @@ describe('ApplyTaskToTodoistAction', () => {
       const h = setup();
       h.syncState.todoistStates.set(
         'Projecten/Acme Widgets/todos/step-one.md',
-        {
+        taskRecord({
           todoistId: 'T9',
           notePath: 'Projecten/Acme Widgets/todos/step-one.md',
-          lastSyncedHash: 'h',
-          lastSyncedCompleted: false,
-        },
+          completed: false,
+        }),
       );
 
       // When — the to-do is rendered with the same shape
@@ -499,12 +506,11 @@ describe('ApplyTaskToTodoistAction', () => {
       const h = setup();
       h.syncState.todoistStates.set(
         'Projecten/Acme Widgets/todos/step-one.md',
-        {
+        taskRecord({
           todoistId: 'T9',
           notePath: 'Projecten/Acme Widgets/todos/step-one.md',
-          lastSyncedHash: 'h',
-          lastSyncedCompleted: false,
-        },
+          completed: false,
+        }),
       );
 
       // When — the to-do is rendered completed

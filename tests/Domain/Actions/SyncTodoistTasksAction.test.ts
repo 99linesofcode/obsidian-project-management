@@ -17,13 +17,13 @@ import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/P
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 class FakeVault implements VaultPort {
   notes = new Map<string, string>();
@@ -61,20 +61,20 @@ class FakeSyncState implements SyncStatePort {
       { id: 'O3', name: 'Shipped' },
     ],
   };
-  statuses = new Map<string, Status>();
-  todoistStates = new Map<string, TodoistStateData>();
+  statuses = new Map<string, TaskData>();
+  todoistStates = new Map<string, TaskData>();
   projectState: TodoistProjectStateData | null = null;
   projectStateSets: TodoistProjectStateData[] = [];
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [...this.statuses.values()];
   }
   async setIdentity(): Promise<void> {}
@@ -103,12 +103,12 @@ class FakeSyncState implements SyncStatePort {
     this.projectStateSets.push(state);
     this.projectState = state;
   }
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistStates.get(notePath) ?? null;
   }
   async setTodoistState(): Promise<void> {}
   async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistStates.values()];
   }
 }
@@ -246,16 +246,16 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   };
 }
 
-function status(notePath: string, url: string): Status {
-  return {
+function status(notePath: string, url: string): TaskData {
+  return taskRecord({
     url,
     remoteId: 42,
     notePath,
-    lastSyncedBodyHash: 'h',
-    lastSyncedRemoteUpdatedAt: '2026-09-18T11:00:00Z',
-    lastSyncedStatus: 'Building',
-    lastSyncedTitle: 'Fix the bug',
-  };
+    body: 'h',
+    updatedAt: '2026-09-18T11:00:00Z',
+    status: 'Building',
+    title: 'Fix the bug',
+  });
 }
 
 function taskNote(statusName: string, body = '', todoistId?: string): string {

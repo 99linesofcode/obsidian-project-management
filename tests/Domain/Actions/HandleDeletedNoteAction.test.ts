@@ -4,9 +4,10 @@ import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: record the state change and the record removal the
 // action asks for, so the action's own behaviour (find → close → board →
@@ -116,17 +117,17 @@ class FakeSyncState implements SyncStatePort {
   async removeTodoistState(): Promise<void> {}
 
   async setArchiveBaseline(): Promise<void> {}
-  statuses = new Map<string, Status>();
+  statuses = new Map<string, TaskData>();
   removed: string[] = [];
   identity: ProjectIdentityData | null = null;
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.statuses.set(status.url, status);
   }
-  async findByNotePath(notePath: string): Promise<Status | null> {
+  async findByNotePath(notePath: string): Promise<TaskData | null> {
     for (const status of this.statuses.values()) {
       if (status.notePath === notePath) {
         return status;
@@ -138,7 +139,7 @@ class FakeSyncState implements SyncStatePort {
     this.statuses.delete(url);
     this.removed.push(url);
   }
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -161,17 +162,17 @@ const task: GithubTaskData = {
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const projectName = 'Acme Widgets';
 
-function makeStatus(overrides: Partial<Status> = {}): Status {
-  return {
+function makeStatus(overrides: Partial<TaskData> = {}): TaskData {
+  return taskRecord({
     url: task.url,
     remoteId: task.remoteId,
     notePath,
-    lastSyncedBodyHash: hash(task.body),
-    lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: 'open',
-    lastSyncedTitle: task.title,
+    body: hash(task.body),
+    updatedAt: task.updatedAt,
+    status: 'open',
+    title: task.title,
     ...overrides,
-  };
+  });
 }
 
 function makeAction(

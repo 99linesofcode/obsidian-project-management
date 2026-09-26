@@ -11,14 +11,15 @@ import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferOb
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { WatchStateData } from '../../../src/Domain/DataTransferObjects/WatchStateData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the vault holds note content and actually moves folders,
-// the sync state holds Status records, baselines, watch state and the Todoist
+// the sync state holds TaskData records, baselines, watch state and the Todoist
 // project bookkeeping and relocates records, the task manager holds the Todoist
 // project list, and the project management fake records board mutations and
 // serves the latest-issue probe. The lifecycle's merge decisions are what's
@@ -73,8 +74,8 @@ class FakeSyncState implements SyncStatePort {
     statusFieldId: 'PVTF_456',
     statusOptions: [],
   };
-  records: Status[] = [];
-  saved: Status[] = [];
+  records: TaskData[] = [];
+  saved: TaskData[] = [];
   baselines = new Map<string, ArchiveBaselineData>();
   baselineSets: Array<{ projectName: string; baseline: ArchiveBaselineData }> =
     [];
@@ -84,10 +85,10 @@ class FakeSyncState implements SyncStatePort {
   todoistSets: Array<{ projectName: string; state: TodoistProjectStateData }> =
     [];
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.saved.push(status);
     const index = this.records.findIndex((record) => record.url === status.url);
     if (index >= 0) {
@@ -96,11 +97,11 @@ class FakeSyncState implements SyncStatePort {
       this.records.push(status);
     }
   }
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return this.records;
   }
   async setIdentity(): Promise<void> {}
@@ -321,17 +322,17 @@ function project(
   return { id: 'P1', name: 'Acme Widgets', isArchived: false, ...overrides };
 }
 
-function record(notePath: string, overrides: Partial<Status> = {}): Status {
-  return {
+function record(notePath: string, overrides: Partial<TaskData> = {}): TaskData {
+  return taskRecord({
     url: issueUrl,
     remoteId: 42,
     notePath,
-    lastSyncedBodyHash: 'abc',
-    lastSyncedRemoteUpdatedAt: '2026-09-18T11:00:00Z',
-    lastSyncedStatus: 'Building',
-    lastSyncedTitle: 'Fix the bug',
+    body: 'abc',
+    updatedAt: '2026-09-18T11:00:00Z',
+    status: 'Building',
+    title: 'Fix the bug',
     ...overrides,
-  };
+  });
 }
 
 function setup(anchor = 'P1') {
@@ -528,7 +529,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       // When — the lifecycle reconciles with closed: true
       await h.action.execute({ ...activeInput, closed: true });
 
-      // Then — the folder moves to Archief/ and the Status records follow
+      // Then — the folder moves to Archief/ and the TaskData records follow
       expect(h.vault.moveCalls).toEqual([
         { from: 'Projecten/Acme Widgets', to: 'Archief/Acme Widgets' },
       ]);
@@ -850,7 +851,7 @@ describe('ReconcileProjectLifecycleAction', () => {
     it('skips shipped issues when archiving: the vault decides done', async () => {
       // Given — a project whose only record is in the done lane
       const h = setup();
-      h.syncState.records = [record(taskPath, { lastSyncedStatus: 'Shipped' })];
+      h.syncState.records = [record(taskPath, { status: 'Shipped' })];
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,

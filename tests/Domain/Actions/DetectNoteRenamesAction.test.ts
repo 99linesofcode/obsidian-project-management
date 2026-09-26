@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
 import type { RelinkRenamedTodoAction } from '../../../src/Domain/Actions/RelinkRenamedTodoAction.js';
 import type { RelocateTaskStatusAction } from '../../../src/Domain/Actions/RelocateTaskStatusAction.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 class FakeVault implements VaultPort {
   folders = new Map<string, string[]>();
@@ -32,18 +32,18 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  statuses: Status[] = [];
-  todoistStates: TodoistStateData[] = [];
+  statuses: TaskData[] = [];
+  todoistStates: TaskData[] = [];
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return this.statuses;
   }
   async setIdentity(): Promise<void> {}
@@ -71,7 +71,7 @@ class FakeSyncState implements SyncStatePort {
   }
   async setTodoistState(): Promise<void> {}
   async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return this.todoistStates;
   }
 }
@@ -94,25 +94,20 @@ class FakeRelocate {
   }
 }
 
-function status(notePath: string): Status {
-  return {
+function status(notePath: string): TaskData {
+  return taskRecord({
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
     notePath,
-    lastSyncedBodyHash: 'abc',
-    lastSyncedRemoteUpdatedAt: '2026-09-18T11:00:00Z',
-    lastSyncedStatus: 'Building',
-    lastSyncedTitle: 'Fix the bug',
-  };
+    body: 'abc',
+    updatedAt: '2026-09-18T11:00:00Z',
+    status: 'Building',
+    title: 'Fix the bug',
+  });
 }
 
-function todoistState(notePath: string): TodoistStateData {
-  return {
-    todoistId: 'T9',
-    notePath,
-    lastSyncedHash: 'abc',
-    lastSyncedCompleted: false,
-  };
+function todoistState(notePath: string): TaskData {
+  return taskRecord({ todoistId: 'T9', notePath });
 }
 
 function harness() {

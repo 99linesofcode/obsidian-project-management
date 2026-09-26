@@ -1,6 +1,5 @@
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import type { Status } from '../Models/Status.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
 import { statusNameFromState } from '../Board/statusNameFromState.js';
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
@@ -30,12 +29,12 @@ export interface SyncGithubTasksInput {
 // apply the winning side. Replaces the t2 interim (probe → old sweep → per-note
 // consistency loop).
 //
-// The snapshot DTO is assembled INTERIM from the provider-shaped Status record
-// (t5 migrates the store): its body field carries the stored body hash and the
+// The snapshot DTO is read straight from the canonical store (one TaskData per
+// issue); its body field carries the comparable issue-body hash, and the
 // pipeline hashes the vault/remote bodies before diffing, so the canonical
-// diff's string comparison is a hash comparison until the store holds the
-// canonical body. Titles are slug-compared, because the vault's title is
-// filename-derived and the remote's is the issue title.
+// diff's string comparison is a hash comparison. Titles are slug-compared,
+// because the vault's title is filename-derived and the remote's is the issue
+// title.
 export class SyncGithubTasksAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -128,11 +127,11 @@ export class SyncGithubTasksAction {
         continue;
       }
 
-      const snapshot = this.snapshotFrom(status, doneLane);
+      const snapshot = this.snapshotForDiff(status, doneLane);
       const verdict = this.verdictResolver.diff(
         this.forDiff(vaultDto, hash(toIssueBody(vaultDto.body))),
         this.forDiff(remote, hash(remote.body)),
-        this.forDiff(snapshot, status.lastSyncedBodyHash),
+        this.forDiff(snapshot, snapshot.body),
       );
 
       if (verdict === 'push' || verdict === 'conflict') {
@@ -184,7 +183,7 @@ export class SyncGithubTasksAction {
     state: 'open' | 'closed',
     doneLane: string,
     defaultLane: string,
-    status: Status | undefined,
+    status: TaskData | undefined,
   ): TaskData {
     if (card && card.statusOptionName !== undefined) {
       return {
@@ -195,8 +194,7 @@ export class SyncGithubTasksAction {
     }
     if (card) {
       const lane =
-        status?.lastSyncedStatus ??
-        statusNameFromState(state, doneLane, defaultLane);
+        status?.status ?? statusNameFromState(state, doneLane, defaultLane);
       return { ...raw, status: lane, completed: lane === doneLane };
     }
     return {
@@ -206,29 +204,20 @@ export class SyncGithubTasksAction {
     };
   }
 
-  // The interim snapshot DTO: the Status record's provider-shaped fragments
-  // mapped onto canonical fields. The body carries the stored hash (see the
-  // class comment); t5 replaces this with the canonical record.
-  private snapshotFrom(status: Status, doneLane: string): TaskData {
+  // The canonical snapshot the diff reads, straight from the store. The stored
+  // record already carries the canonical content (the body as the comparable
+  // hash); the only derived field is `completed`, re-read from the lane so a
+  // migrated pre-t5 record resolves correctly.
+  private snapshotForDiff(status: TaskData, doneLane: string): TaskData {
     return {
-      url: status.url,
-      remoteId: status.remoteId,
-      nodeId: '',
-      todoistId: '',
-      notePath: status.notePath,
-      title: status.lastSyncedTitle,
-      body: status.lastSyncedBodyHash,
-      status: status.lastSyncedStatus,
-      completed: doneLane !== '' && status.lastSyncedStatus === doneLane,
-      parent: null,
-      labels: [],
-      updatedAt: status.lastSyncedRemoteUpdatedAt,
+      ...status,
+      completed: doneLane !== '' && status.status === doneLane,
     };
   }
 
   // The comparable shape the diff reads: the title is slug-compared (the vault
   // derives it from the filename, the remote from the issue title) and the
-  // body is the caller's comparable form (a hash, interim). Parent is not a
+  // body is the caller's comparable form (the issue-body hash). Parent is not a
   // GitHub-synced field.
   private forDiff(task: TaskData, body: string): TaskData {
     return { ...task, title: slugify(task.title), body, parent: null };
@@ -239,7 +228,7 @@ export class SyncGithubTasksAction {
   // newly tracked issue is never starved by the probe gate.
   private async hasVaultDrift(
     projectName: string,
-    statuses: Status[],
+    statuses: TaskData[],
   ): Promise<boolean> {
     const prefix = `Projecten/${projectName}/`;
     const projectStatuses = statuses.filter((s) =>
@@ -261,13 +250,13 @@ export class SyncGithubTasksAction {
       if (!parsed) {
         return true;
       }
-      if (hash(toIssueBody(parsed.body)) !== status.lastSyncedBodyHash) {
+      if (hash(toIssueBody(parsed.body)) !== status.body) {
         return true;
       }
-      if (parsed.status !== status.lastSyncedStatus) {
+      if (parsed.status !== status.status) {
         return true;
       }
-      if (slugify(parsed.title) !== slugify(status.lastSyncedTitle)) {
+      if (slugify(parsed.title) !== slugify(status.title)) {
         return true;
       }
     }

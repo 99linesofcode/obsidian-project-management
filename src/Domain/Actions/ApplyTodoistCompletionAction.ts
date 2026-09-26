@@ -1,5 +1,4 @@
 import { ToDoNoteParser, withToDoStatus } from '../Notes/ToDoNoteParser.js';
-import { snapshotHash } from '../Reconciliation/snapshotHash.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
@@ -45,7 +44,7 @@ export class ApplyTodoistCompletionAction {
     const activeById = new Map(active.map((task) => [task.id, task]));
 
     // Only this project's to-do notes carry a completion to pull; task twins
-    // (t3) are t5's concern.
+    // are owned by the task-side reconciliation.
     const states = (await this.syncState.listTodoistStates()).filter((state) =>
       isToDoPathForProject(state.notePath, input.projectName),
     );
@@ -58,7 +57,7 @@ export class ApplyTodoistCompletionAction {
       }
       // Our own close: the snapshot already says completed, so this entry is
       // the echo of a vault-driven completion, not a remote change.
-      if (state.lastSyncedCompleted) {
+      if (state.completed) {
         continue;
       }
       await this.applyCompletion(state.notePath, task, input.syncedAt);
@@ -71,7 +70,7 @@ export class ApplyTodoistCompletionAction {
         continue;
       }
       // The snapshot said open, so an active twin is no change at all.
-      if (!state.lastSyncedCompleted) {
+      if (!state.completed) {
         continue;
       }
       await this.applyReopen(state.notePath, twin);
@@ -135,20 +134,19 @@ export class ApplyTodoistCompletionAction {
     task: TodoistTaskData,
   ): Promise<void> {
     await this.syncState.setTodoistState(notePath, {
+      url: '',
+      remoteId: 0,
+      nodeId: '',
       todoistId: task.id,
       notePath,
-      lastSyncedHash: snapshotHash({
-        content: task.content,
-        labels: task.labels,
-        sectionId: null,
-        parentId: task.parentId,
-        isCompleted: task.isCompleted,
-      }),
-      lastSyncedCompleted: task.isCompleted,
-      lastSyncedContent: task.content,
+      title: task.content,
+      body: '',
       // The item is a to-do: a subtask, so its lane is inherited (dt-02).
-      lastSyncedLane: null,
-      lastSyncedParent: task.parentId,
+      status: '',
+      completed: task.isCompleted,
+      parent: task.parentId,
+      labels: [...task.labels],
+      updatedAt: '',
     });
   }
 }

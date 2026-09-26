@@ -1,6 +1,6 @@
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
-import type { Status } from '../Models/Status.js';
+import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { TodoistProjectData } from '../DataTransferObjects/TodoistProjectData.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -328,7 +328,7 @@ export class ReconcileProjectLifecycleAction {
 
   private async lockUnshippedIssues(projectName: string): Promise<void> {
     for (const status of await this.trackedIssues(projectName)) {
-      if (status.lastSyncedStatus === this.doneOptionName) {
+      if (status.status === this.doneOptionName) {
         continue;
       }
       const task = await this.projectManagement.fetchTask(status.url);
@@ -336,7 +336,7 @@ export class ReconcileProjectLifecycleAction {
     }
   }
 
-  private async trackedIssues(projectName: string): Promise<Status[]> {
+  private async trackedIssues(projectName: string): Promise<TaskData[]> {
     // Either prefix: the relocation may or may not have run for a record yet.
     const prefixes = [`Projecten/${projectName}/`, `Archief/${projectName}/`];
     return (await this.syncState.list()).filter((status) =>

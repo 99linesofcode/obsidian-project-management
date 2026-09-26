@@ -5,12 +5,12 @@ import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObject
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the vault holds note content and records creations and
 // writes; the task manager serves the fetched active/completed sets (and would
@@ -106,39 +106,36 @@ class FakeTaskManager implements TaskManagerPort {
 class FakeSyncState implements SyncStatePort {
   identity: ProjectIdentityData | null = null;
   projectState: TodoistProjectStateData | null = null;
-  todoistItemStates = new Map<string, TodoistStateData>();
-  todoistItemSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  todoistItemStates = new Map<string, TaskData>();
+  todoistItemSets: Array<{ notePath: string; state: TaskData }> = [];
 
   async getTodoistProjectState(): Promise<TodoistProjectStateData | null> {
     return this.projectState;
   }
   async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistItemStates.get(notePath) ?? null;
   }
-  async setTodoistState(
-    notePath: string,
-    state: TodoistStateData,
-  ): Promise<void> {
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
     this.todoistItemSets.push({ notePath, state });
     this.todoistItemStates.set(notePath, state);
   }
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistItemStates.values()];
   }
   async removeTodoistState(notePath: string): Promise<void> {
     this.todoistItemStates.delete(notePath);
   }
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -225,13 +222,8 @@ function todoNote(affiliation: string[], todoistId: string): string {
   ].join('\n');
 }
 
-function state(notePath: string, todoistId: string): TodoistStateData {
-  return {
-    todoistId,
-    notePath,
-    lastSyncedHash: 'x',
-    lastSyncedCompleted: false,
-  };
+function state(notePath: string, todoistId: string): TaskData {
+  return taskRecord({ todoistId, notePath });
 }
 
 function bodyOf(content: string): string {
@@ -277,15 +269,14 @@ describe('CaptureTodoistCreationsAction', () => {
     expect(syncState.todoistItemSets).toEqual([
       {
         notePath: path,
-        state: {
+        state: taskRecord({
+          url: '',
+          remoteId: 0,
           todoistId: 'T1',
           notePath: path,
-          lastSyncedHash: expect.any(String),
-          lastSyncedCompleted: false,
-          lastSyncedContent: 'Buy milk',
-          lastSyncedLane: 'Building',
-          lastSyncedParent: null,
-        },
+          title: 'Buy milk',
+          status: 'Building',
+        }),
       },
     ]);
   });
@@ -331,8 +322,8 @@ describe('CaptureTodoistCreationsAction', () => {
     expect(content).toContain('status: Unshaped');
     expect(content).toContain('todoist: T2');
     // And its lane is not controlled (a subtask inherits its parent's)
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedLane).toBeNull();
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedParent).toBe('SLICE');
+    expect(syncState.todoistItemSets[0]!.state.status).toBe('');
+    expect(syncState.todoistItemSets[0]!.state.parent).toBe('SLICE');
   });
 
   it("captures a subtask under a task's twin as a linked to-do", async () => {
@@ -361,7 +352,7 @@ describe('CaptureTodoistCreationsAction', () => {
       `- [ ] [[${todoPath}|Fix the widget]]`,
     );
     // And the to-do's snapshot carries the task twin as its parent
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedParent).toBe('TASK');
+    expect(syncState.todoistItemSets[0]!.state.parent).toBe('TASK');
   });
 
   it("captures a subtask under a to-do's twin as a nested to-do", async () => {
@@ -423,7 +414,7 @@ describe('CaptureTodoistCreationsAction', () => {
     )!;
     expect(doneTodo).toContain('status: completed');
     expect(doneTodo).toContain(`completed: ${syncedAt}`);
-    expect(syncState.todoistItemSets[1]!.state.lastSyncedCompleted).toBe(true);
+    expect(syncState.todoistItemSets[1]!.state.completed).toBe(true);
   });
 
   it('does not re-capture an already-anchored item', async () => {

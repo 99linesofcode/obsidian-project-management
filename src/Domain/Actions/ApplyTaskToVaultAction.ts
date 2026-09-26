@@ -126,11 +126,16 @@ export class ApplyTaskToVaultAction {
     await this.syncState.set({
       url: task.url,
       remoteId: task.remoteId,
+      nodeId: task.nodeId,
+      todoistId: '',
       notePath,
-      lastSyncedBodyHash: hash(task.body),
-      lastSyncedRemoteUpdatedAt: task.updatedAt,
-      lastSyncedStatus: task.status,
-      lastSyncedTitle: task.title,
+      title: task.title,
+      body: hash(task.body),
+      status: task.status,
+      completed: task.completed,
+      parent: null,
+      labels: [...task.labels],
+      updatedAt: task.updatedAt,
     });
   }
 }

@@ -10,8 +10,6 @@ import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { ToDoNoteMapper } from '../Notes/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { withBody } from '../Notes/withBody.js';
-import { snapshotHash } from '../Reconciliation/snapshotHash.js';
-import type { TodoistStateData } from '../DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
@@ -263,22 +261,20 @@ export class CaptureTodoistCreationsAction {
     item: TodoistTaskData,
     lane: string | null,
   ): Promise<void> {
-    const state: TodoistStateData = {
+    await this.syncState.setTodoistState(notePath, {
+      url: '',
+      remoteId: 0,
+      nodeId: '',
       todoistId: item.id,
       notePath,
-      lastSyncedHash: snapshotHash({
-        content: item.content,
-        labels: item.labels,
-        sectionId: lane !== null ? item.sectionId : null,
-        parentId: item.parentId,
-        isCompleted: item.isCompleted,
-      }),
-      lastSyncedCompleted: item.isCompleted,
-      lastSyncedContent: item.content,
-      lastSyncedLane: lane,
-      lastSyncedParent: item.parentId,
-    };
-    await this.syncState.setTodoistState(notePath, state);
+      title: item.content,
+      body: '',
+      status: lane ?? '',
+      completed: item.isCompleted,
+      parent: item.parentId,
+      labels: [...item.labels],
+      updatedAt: '',
+    });
   }
 
   // The lane a new item's status starts in: its section's lane; a completed

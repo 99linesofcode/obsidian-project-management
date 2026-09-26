@@ -4,32 +4,32 @@ import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: record the writes the writer asks for, so its field-level
 // gates (write only what differs) are what's under test.
 class FakeSyncState implements SyncStatePort {
   identity: ProjectIdentityData | null = null;
-  statuses = new Map<string, Status>();
-  setCalls: Status[] = [];
+  statuses = new Map<string, TaskData>();
+  setCalls: TaskData[] = [];
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.statuses.set(status.url, status);
     this.setCalls.push(status);
   }
   async getIdentity(): Promise<ProjectIdentityData | null> {
     return this.identity;
   }
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [...this.statuses.values()];
   }
   async setIdentity(): Promise<void> {}
@@ -391,7 +391,7 @@ describe('ApplyTaskToGithubAction', () => {
     expect(port.boardStatusCalls).toEqual([]);
   });
 
-  it('refreshes the Status record from the write response', async () => {
+  it('refreshes the TaskData record from the write response', async () => {
     // Given — a winning task whose body moved
     const syncState = new FakeSyncState();
     syncState.identity = identity;
@@ -414,15 +414,17 @@ describe('ApplyTaskToGithubAction', () => {
 
     // Then — the record reflects the response's body and updatedAt
     expect(syncState.setCalls).toEqual([
-      {
+      taskRecord({
         url,
         remoteId: 42,
+        nodeId: 'I_kwDOAAAA42',
         notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-        lastSyncedBodyHash: hash('New body.'),
-        lastSyncedRemoteUpdatedAt: '2026-09-18T12:30:00Z',
-        lastSyncedStatus: 'Building',
-        lastSyncedTitle: 'Fix the widget',
-      },
+        body: hash('New body.'),
+        updatedAt: '2026-09-18T12:30:00Z',
+        status: 'Building',
+        title: 'Fix the widget',
+        labels: ['type: task'],
+      }),
     ]);
   });
 });

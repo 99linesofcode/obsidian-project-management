@@ -5,7 +5,6 @@ import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
@@ -52,21 +51,21 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  statuses = new Map<string, Status>();
-  setCalls: Status[] = [];
+  statuses = new Map<string, TaskData>();
+  setCalls: TaskData[] = [];
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.statuses.set(status.url, status);
     this.setCalls.push(status);
   }
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [...this.statuses.values()];
   }
   async setIdentity(): Promise<void> {}
@@ -204,7 +203,7 @@ describe('ApplyTaskToVaultAction', () => {
     // Then — the note is rewritten with the new body
     const { content: newContent } = TaskNoteMapper.map(changed, context);
     expect(vault.written).toEqual([{ path, content: newContent }]);
-    expect(syncState.setCalls[0]!.lastSyncedBodyHash).toBe(hash(changed.body));
+    expect(syncState.setCalls[0]!.body).toBe(hash(changed.body));
   });
 
   it('skips the write when the note already matches', async () => {

@@ -10,10 +10,11 @@ import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/Boar
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectDetailData } from '../../../src/Domain/DataTransferObjects/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the pipeline is exercised end-to-end through the real
 // writers, so the fetch → map → diff → apply orchestration is what's under test.
@@ -59,24 +60,24 @@ class FakeVault implements VaultPort {
 
 class FakeSyncState implements SyncStatePort {
   identity: ProjectIdentityData | null = null;
-  statuses = new Map<string, Status>();
-  setCalls: Status[] = [];
+  statuses = new Map<string, TaskData>();
+  setCalls: TaskData[] = [];
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.statuses.set(status.url, status);
     this.setCalls.push(status);
   }
   async getIdentity(): Promise<ProjectIdentityData | null> {
     return this.identity;
   }
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [...this.statuses.values()];
   }
   async setIdentity(): Promise<void> {}
@@ -224,17 +225,17 @@ function card(overrides: Partial<BoardItemData> = {}): BoardItemData {
   };
 }
 
-function record(overrides: Partial<Status> = {}): Status {
-  return {
+function record(overrides: Partial<TaskData> = {}): TaskData {
+  return taskRecord({
     url,
     remoteId: 42,
     notePath,
-    lastSyncedBodyHash: hash(issueA.body),
-    lastSyncedRemoteUpdatedAt: issueA.updatedAt,
-    lastSyncedStatus: 'Unshaped',
-    lastSyncedTitle: issueA.title,
+    body: hash(issueA.body),
+    updatedAt: issueA.updatedAt,
+    status: 'Unshaped',
+    title: issueA.title,
     ...overrides,
-  };
+  });
 }
 
 function makeAction(
@@ -548,7 +549,7 @@ describe('SyncGithubTasksAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    syncState.statuses.set(url, record({ lastSyncedStatus: 'Building' }));
+    syncState.statuses.set(url, record({ status: 'Building' }));
     vault.notes.set(
       notePath,
       TaskNoteMapper.map(issueA, { ...context, statusName: 'Building' })
@@ -575,7 +576,7 @@ describe('SyncGithubTasksAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    syncState.statuses.set(url, record({ lastSyncedStatus: 'Shipped' }));
+    syncState.statuses.set(url, record({ status: 'Shipped' }));
     vault.notes.set(
       notePath,
       TaskNoteMapper.map(issueA, { ...context, statusName: 'Shipped' }).content,
@@ -597,11 +598,11 @@ describe('SyncGithubTasksAction', () => {
   });
 
   it('backfills a card with no lane from the record lane', async () => {
-    // Given — a tracked issue whose card has no Status value
+    // Given — a tracked issue whose card has no TaskData value
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
-    syncState.statuses.set(url, record({ lastSyncedStatus: 'Building' }));
+    syncState.statuses.set(url, record({ status: 'Building' }));
     vault.notes.set(
       notePath,
       TaskNoteMapper.map(issueA, { ...context, statusName: 'Building' })

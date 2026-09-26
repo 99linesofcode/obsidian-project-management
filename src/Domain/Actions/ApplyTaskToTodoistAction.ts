@@ -1,6 +1,5 @@
 import { sameLabels } from '../Labels/sameLabels.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
-import { snapshotHash } from '../Reconciliation/snapshotHash.js';
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { ToDoData } from '../DataTransferObjects/ToDoData.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
@@ -153,7 +152,7 @@ export class ApplyTaskToTodoistAction {
     };
     const stored = await this.syncState.getTodoistState(input.notePath);
     const current = input.current;
-    const storedCompleted = stored?.lastSyncedCompleted ?? false;
+    const storedCompleted = stored?.completed ?? false;
 
     if (!stored) {
       await this.taskManager.ensureLabel(TODO_LABEL);
@@ -242,19 +241,18 @@ export class ApplyTaskToTodoistAction {
     },
   ): Promise<void> {
     await this.syncState.setTodoistState(notePath, {
+      url: '',
+      remoteId: 0,
+      nodeId: '',
       todoistId,
       notePath,
-      lastSyncedHash: snapshotHash({
-        content: desired.content,
-        labels: desired.labels,
-        sectionId: desired.sectionId,
-        parentId: desired.parentId,
-        isCompleted: desired.isCompleted,
-      }),
-      lastSyncedCompleted: desired.isCompleted,
-      lastSyncedContent: desired.content,
-      lastSyncedLane: desired.lane,
-      lastSyncedParent: desired.parentId,
+      title: desired.content,
+      body: '',
+      status: desired.lane ?? '',
+      completed: desired.isCompleted,
+      parent: desired.parentId,
+      labels: [...desired.labels],
+      updatedAt: '',
     });
   }
 
@@ -269,21 +267,20 @@ export class ApplyTaskToTodoistAction {
     },
   ): Promise<void> {
     await this.syncState.setTodoistState(notePath, {
+      url: '',
+      remoteId: 0,
+      nodeId: '',
       todoistId,
       notePath,
-      lastSyncedHash: snapshotHash({
-        content: desired.content,
-        labels: desired.labels,
-        sectionId: null,
-        parentId: desired.parentId,
-        isCompleted: desired.isCompleted,
-      }),
-      lastSyncedCompleted: desired.isCompleted,
-      lastSyncedContent: desired.content,
+      title: desired.content,
+      body: '',
       // A to-do is always a subtask: it inherits its parent's section, so the
       // lane is not a controlled field for it (dt-02).
-      lastSyncedLane: null,
-      lastSyncedParent: desired.parentId,
+      status: '',
+      completed: desired.isCompleted,
+      parent: desired.parentId,
+      labels: [...desired.labels],
+      updatedAt: '',
     });
   }
 }

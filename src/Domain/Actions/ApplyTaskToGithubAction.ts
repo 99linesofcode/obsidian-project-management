@@ -97,6 +97,8 @@ export class ApplyTaskToGithubAction {
   // The record reflects the remote as of the write: the response's body and
   // updatedAt when a write happened, the current remote's otherwise. The lane
   // and title are the winning task's, since the writer just reconciled them.
+  // The body is stored as the issue-body hash — the comparable fingerprint the
+  // GitHub pipeline reads.
   private async refreshRecord(
     input: ApplyTaskToGithubInput,
     updated: GithubTaskData | null,
@@ -106,12 +108,17 @@ export class ApplyTaskToGithubAction {
     await this.syncState.set({
       url: task.url,
       remoteId: task.remoteId,
+      nodeId: task.nodeId !== '' ? task.nodeId : (existing?.nodeId ?? ''),
+      todoistId: '',
       notePath:
         task.notePath !== '' ? task.notePath : (existing?.notePath ?? ''),
-      lastSyncedBodyHash: hash(updated?.body ?? current.body),
-      lastSyncedRemoteUpdatedAt: updated?.updatedAt ?? current.updatedAt,
-      lastSyncedStatus: task.status,
-      lastSyncedTitle: updated?.title ?? current.title,
+      title: updated?.title ?? current.title,
+      body: hash(updated?.body ?? current.body),
+      status: task.status,
+      completed: task.completed,
+      parent: null,
+      labels: [...(updated?.labels ?? current.labels)],
+      updatedAt: updated?.updatedAt ?? current.updatedAt,
     });
   }
 }

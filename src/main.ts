@@ -38,7 +38,10 @@ import {
   type Transport,
 } from './Infrastructure/GitHub/GitHubAdapter.js';
 import { VaultAdapter } from './Infrastructure/Obsidian/VaultAdapter.js';
-import { SyncStateAdapter } from './Infrastructure/Obsidian/SyncStateAdapter.js';
+import {
+  SyncStateAdapter,
+  migrateLegacyState,
+} from './Infrastructure/Obsidian/SyncStateAdapter.js';
 import {
   TodoistAdapter,
   createTodoistTransport,
@@ -123,7 +126,14 @@ export default class ProjectManagementPlugin extends Plugin {
   private projectNames: string[] = [];
 
   override async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // Migrate the legacy flat sync-state keys under their own top-level key
+    // before the settings merge, so the plugin's settings never absorb a
+    // `status.*`/`todoistItem.*` record (the pre-t5 shared-root wrinkle).
+    const raw = (await this.loadData()) ?? {};
+    if (migrateLegacyState(raw)) {
+      await this.saveData(raw);
+    }
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 
     const transport = createTransport(this.settings.githubToken);
     const syncState = new SyncStateAdapter({

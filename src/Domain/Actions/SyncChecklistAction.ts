@@ -7,6 +7,7 @@ import { freePath } from '../Notes/freePath.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
+import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import {
   ToDoNoteMapper,
   type ToDoNoteContext,
@@ -182,9 +183,20 @@ export class SyncChecklistAction {
         continue;
       }
       const parsed = ToDoNoteParser.parse(note.content);
-      if (parsed?.affiliation.includes(`[[${taskLink}]]`)) {
-        await this.vault.trashNote(path);
+      if (parsed === null) {
+        continue;
       }
+      // Gate: trash only when the to-do's CURRENT affiliation still names this
+      // task as its primary parent. A note whose affiliation was just rewritten
+      // (by the projection or a capture) no longer leads with this task, so it
+      // is left alone rather than trashed by a stale membership read.
+      if (
+        taskLinkFromAffiliation(parsed.affiliation, input.projectName) !==
+        taskLink
+      ) {
+        continue;
+      }
+      await this.vault.trashNote(path);
     }
   }
 }

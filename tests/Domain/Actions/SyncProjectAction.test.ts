@@ -13,10 +13,10 @@ import type { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGith
 import type { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports and at every composed step, recording into one shared
 // events array so the chain's step order and its error isolation are what's
@@ -47,20 +47,20 @@ class FakeVault implements VaultPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  statuses: Status[] = [];
-  todoistStates: TodoistStateData[] = [];
+  statuses: TaskData[] = [];
+  todoistStates: TaskData[] = [];
   lastUpdates = new Map<string, string>();
   lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return this.statuses;
   }
   async setIdentity(): Promise<void> {}
@@ -91,7 +91,7 @@ class FakeSyncState implements SyncStatePort {
   }
   async setTodoistState(): Promise<void> {}
   async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return this.todoistStates;
   }
 }
@@ -174,22 +174,22 @@ function projectNote(projectName: string, archived: boolean): ProjectNoteData {
   };
 }
 
-function status(notePath: string): Status {
-  return {
+function status(notePath: string): TaskData {
+  return taskRecord({
     url: 'https://github.com/acme/widgets/issues/42',
     remoteId: 42,
     notePath,
-    lastSyncedBodyHash: 'abc',
-    lastSyncedRemoteUpdatedAt: '2026-09-18T11:00:00Z',
-    lastSyncedStatus: 'Building',
-    lastSyncedTitle: 'Fix the bug',
-  };
+    body: 'abc',
+    updatedAt: '2026-09-18T11:00:00Z',
+    status: 'Building',
+    title: 'Fix the bug',
+  });
 }
 
 interface HarnessOptions {
   projectNotes?: ProjectNoteData[];
   state?: ProjectStateData | undefined;
-  statuses?: Status[];
+  statuses?: TaskData[];
   taken?: string[];
   todos?: string[];
 }

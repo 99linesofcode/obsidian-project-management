@@ -4,9 +4,10 @@ import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: record the state change the action asks for and hold
 // the status record in memory, so the action's own behaviour (PATCH state +
@@ -117,22 +118,22 @@ class FakeSyncState implements SyncStatePort {
   async removeTodoistState(): Promise<void> {}
 
   async setArchiveBaseline(): Promise<void> {}
-  statuses = new Map<string, Status>();
-  setCalls: Status[] = [];
+  statuses = new Map<string, TaskData>();
+  setCalls: TaskData[] = [];
   identity: ProjectIdentityData | null = null;
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.statuses.set(status.url, status);
     this.setCalls.push(status);
   }
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -155,17 +156,17 @@ const task: GithubTaskData = {
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const projectName = 'Acme Widgets';
 
-function makeStatus(overrides: Partial<Status> = {}): Status {
-  return {
+function makeStatus(overrides: Partial<TaskData> = {}): TaskData {
+  return taskRecord({
     url: task.url,
     remoteId: task.remoteId,
     notePath,
-    lastSyncedBodyHash: hash(task.body),
-    lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: 'Unshaped',
-    lastSyncedTitle: task.title,
+    body: hash(task.body),
+    updatedAt: task.updatedAt,
+    status: 'Unshaped',
+    title: task.title,
     ...overrides,
-  };
+  });
 }
 
 function makeAction(
@@ -208,15 +209,16 @@ describe('PropagateStatusAction', () => {
     ]);
     // And the baseline is refreshed from the response, keeping the other fields
     expect(syncState.setCalls).toEqual([
-      {
+      taskRecord({
         url: task.url,
         remoteId: task.remoteId,
         notePath,
-        lastSyncedBodyHash: hash(task.body),
-        lastSyncedRemoteUpdatedAt: '2026-09-18T12:30:00Z',
-        lastSyncedStatus: 'Shipped',
-        lastSyncedTitle: task.title,
-      },
+        body: hash(task.body),
+        updatedAt: '2026-09-18T12:30:00Z',
+        status: 'Shipped',
+        title: task.title,
+        completed: true,
+      }),
     ]);
   });
 
@@ -229,7 +231,7 @@ describe('PropagateStatusAction', () => {
       updatedAt: '2026-09-18T12:30:00Z',
     };
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus({ lastSyncedStatus: 'done' }));
+    syncState.statuses.set(task.url, makeStatus({ status: 'Shipped' }));
     const action = makeAction(projectManagement, syncState);
 
     // When — the open status is propagated
@@ -246,10 +248,27 @@ describe('PropagateStatusAction', () => {
     ]);
     // And the baseline is refreshed from the response
     expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.lastSyncedStatus).toBe('Unshaped');
-    expect(syncState.setCalls[0]!.lastSyncedRemoteUpdatedAt).toBe(
-      '2026-09-18T12:30:00Z',
-    );
+    expect(syncState.setCalls[0]!.status).toBe('Unshaped');
+    expect(syncState.setCalls[0]!.updatedAt).toBe('2026-09-18T12:30:00Z');
+  });
+
+  it('skips the issue state write when the lane done-ness is unchanged', async () => {
+    // Given — a record already in an open lane, mirrored to another open lane
+    const projectManagement = new FakeProjectManagement();
+    const syncState = new FakeSyncState();
+    syncState.statuses.set(task.url, makeStatus({ status: 'Unshaped' }));
+    const action = makeAction(projectManagement, syncState);
+
+    // When — the open lane is propagated
+    await action.execute({
+      url: task.url,
+      statusName: 'Building',
+      notePath,
+      projectName,
+    });
+
+    // Then — the issue state is not written (both lanes are open)
+    expect(projectManagement.stateCalls).toEqual([]);
   });
 
   it('mirrors the status onto the board when the project has an identity', async () => {
@@ -285,7 +304,7 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the board Status is set to the done option
+    // Then — the board TaskData is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: task.url, statusOptionId: 'PVTSSF_5' },
     ]);

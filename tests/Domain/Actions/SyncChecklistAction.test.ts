@@ -241,6 +241,36 @@ describe('SyncChecklistAction', () => {
     expect(vault.notes.has(todoPath)).toBe(false);
   });
 
+  it('keeps a to-do whose primary affiliation was rewritten away', async () => {
+    // Given — a to-do whose affiliation still names this task second, but
+    // whose primary parent is now another task (a rewrite in the same pass)
+    const vault = new FakeVault();
+    vault.notes.set(taskPath, taskNote('No items left.'));
+    const rewritten = 'Projecten/Acme Widgets/todos/rewritten.md';
+    vault.notes.set(
+      rewritten,
+      ToDoNoteMapper.map(
+        {
+          title: 'Rewritten',
+          projectName,
+          taskLink: '99-other',
+        },
+        { syncedAt, statusName: 'open' },
+      ).content.replace(
+        '"[[99-other]]"',
+        '"[[99-other]]", "[[42-fix-the-bug]]"',
+      ),
+    );
+    const action = new SyncChecklistAction(vault, 'Templates/ToDo.md');
+
+    // When — the checklist is synced
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    // Then — the to-do is not trashed: this task is not its primary parent
+    expect(vault.trashed).toEqual([]);
+    expect(vault.notes.has(rewritten)).toBe(true);
+  });
+
   it('keeps a to-do that belongs to another task', async () => {
     // Given — a to-do affiliated with a different task
     const vault = new FakeVault();

@@ -61,15 +61,14 @@ interface ToDoItem {
 // the vault's desired shape and the snapshot record, and apply the winning side
 // through ApplyTaskToTodoistAction. The remote -> vault absorption
 // (ApplyTodoistRemoteChanges + ApplyTodoistCompletion) runs first and stays
-// retained: the interim snapshot record cannot express the affiliation/twin-id
-// duality, so the pull side is canonicalised by t5. Captured creations
-// (dt-06) and deletion propagation close the half.
+// retained: the pull side's affiliation/twin-id duality is a later concern, so
+// the absorbers canonicalise the remote->vault direction while the writer owns
+// the vault->remote projection. Captured creations (dt-06) and deletion
+// propagation close the half.
 //
-// The snapshot DTO is assembled INTERIM from the TodoistStateData fragments
-// (t5 migrates the store): lastSyncedContent -> title, lastSyncedLane ->
-// status, lastSyncedCompleted -> completed, lastSyncedParent -> parent. A
-// missing per-field base is treated as the desired value, so a pre-t5 record
-// reads as settled rather than as a vault change.
+// The snapshot DTO is read straight from the canonical store (one TaskData per
+// twin): `title` is the content, `status` the lane ('' = not controlled),
+// `completed` the completion bit, `parent` the parent twin id.
 export class SyncTodoistTasksAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
@@ -251,14 +250,14 @@ export class SyncTodoistTasksAction {
     const desired = this.desiredTask(item, placement);
     // A missing twin is a membership gap the writer must fill; only a present
     // twin whose remote moved (the absorber's pull) is left to the absorber.
-    if (current !== null) {
+    if (current !== null && stored !== null) {
       const verdict = this.verdictResolver.diff(
         desired,
         this.remoteTask(current, sections),
-        this.snapshotTask(stored, desired),
+        stored,
       );
       if (verdict === 'pull') {
-        return stored?.todoistId ?? '';
+        return stored.todoistId;
       }
     }
 
@@ -337,9 +336,9 @@ export class SyncTodoistTasksAction {
         current?.parentId ?? parentId,
       ),
       this.comparableToDo(
-        stored?.lastSyncedContent ?? item.title,
-        stored?.lastSyncedCompleted === true ? 'completed' : 'open',
-        stored?.lastSyncedParent ?? parentId,
+        stored?.title ?? item.title,
+        stored?.completed === true ? 'completed' : 'open',
+        stored?.parent ?? parentId,
       ),
     );
 
@@ -396,34 +395,6 @@ export class SyncTodoistTasksAction {
       name: laneForSection(sections, twin.sectionId) ?? '',
     };
     return TodoistTaskMapper.parseTask(twin, section, null);
-  }
-
-  // The interim snapshot DTO for a task, from the TodoistStateData fragments.
-  // A missing base reads as the desired value (settled), so a pre-t5 record
-  // never triggers a spurious push.
-  private snapshotTask(
-    stored: {
-      lastSyncedContent?: string;
-      lastSyncedLane?: string | null;
-      lastSyncedCompleted: boolean;
-      lastSyncedParent?: string | null;
-    } | null,
-    desired: TaskData,
-  ): TaskData {
-    return {
-      url: desired.url,
-      remoteId: 0,
-      nodeId: '',
-      todoistId: '',
-      notePath: desired.notePath,
-      title: stored?.lastSyncedContent ?? desired.title,
-      body: '',
-      status: stored?.lastSyncedLane ?? desired.status,
-      completed: stored?.lastSyncedCompleted ?? desired.completed,
-      parent: stored?.lastSyncedParent ?? desired.parent,
-      labels: desired.labels,
-      updatedAt: '',
-    };
   }
 
   // A TaskData-shaped comparable for a to-do, so the same pure diff can read

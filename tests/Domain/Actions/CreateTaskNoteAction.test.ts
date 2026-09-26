@@ -3,9 +3,10 @@ import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNote
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: record what the action asked for, so the action's own
 // behaviour (create + record, or no-op) is what's under test.
@@ -86,17 +87,17 @@ class FakeSyncState implements SyncStatePort {
   async removeTodoistState(): Promise<void> {}
 
   async setArchiveBaseline(): Promise<void> {}
-  stored: Status[] = [];
+  stored: TaskData[] = [];
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
 
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.stored.push(status);
   }
 
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
 
@@ -112,7 +113,7 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
 
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
 }
@@ -167,15 +168,16 @@ describe('CreateTaskNoteAction', () => {
     expect(vault.created).toEqual([{ path, content }]);
     // And the status record is written with the body hash and remote updatedAt
     expect(syncState.stored).toEqual([
-      {
+      taskRecord({
         url: task.url,
         remoteId: task.remoteId,
+        nodeId: task.nodeId,
         notePath: path,
-        lastSyncedBodyHash: hash(task.body),
-        lastSyncedRemoteUpdatedAt: task.updatedAt,
-        lastSyncedStatus: 'Building',
-        lastSyncedTitle: task.title,
-      },
+        body: hash(task.body),
+        updatedAt: task.updatedAt,
+        status: 'Building',
+        title: task.title,
+      }),
     ]);
   });
 

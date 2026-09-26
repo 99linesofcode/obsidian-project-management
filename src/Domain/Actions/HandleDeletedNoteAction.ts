@@ -26,7 +26,11 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    await this.projectManagement.setTaskState(status.url, 'closed');
+    // The record's lane already names the issue state: a note already in the
+    // done lane leaves the issue closed, so the state write is skipped.
+    if (status.status !== this.doneOptionName) {
+      await this.projectManagement.setTaskState(status.url, 'closed');
+    }
     await this.boardStatus.execute({
       projectName: input.projectName,
       url: status.url,
