@@ -97,8 +97,16 @@ export class SyncGithubTasksAction {
         status,
       );
 
-      // An untracked issue: materialise the note and add the card.
+      // An untracked issue: materialise the note and add the card. A closed
+      // untracked issue is skipped — it is either swept or pre-plugin history,
+      // and the vault is the source of truth. Reopening it on GitHub makes it an
+      // open untracked issue, so it materialises then. The raw state is read
+      // from the fetched issue, not the lane-derived `completed` (a closed issue
+      // with a stale card in an active lane derives completed=false).
       if (!status) {
+        if (issue.state === 'closed') {
+          continue;
+        }
         await this.applyToVault.execute({
           task: remote,
           current: null,

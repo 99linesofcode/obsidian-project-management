@@ -154,6 +154,9 @@ class FakeProjectManagement implements ProjectManagementPort {
       statusOptionName: 'Unshaped',
     });
   }
+  async deleteCard(): Promise<void> {
+    throw new Error('not used in this test');
+  }
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
@@ -525,8 +528,9 @@ describe('SyncGithubTasksAction', () => {
     expect(vault.created[0]!.path).toBe(notePath);
   });
 
-  it('adds a new closed issue and sets its done lane', async () => {
-    // Given — a newly tracked closed issue with no record and no card
+  it('skips an untracked closed issue without materialising it', async () => {
+    // Given — a closed typed issue with no record and no card (swept, or
+    // pre-plugin history)
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identity = identity;
@@ -540,10 +544,37 @@ describe('SyncGithubTasksAction', () => {
     // When — the project is synced
     await action.execute(input);
 
-    // Then — the added card sits in the done lane
-    expect(projectManagement.boardStatusCalls).toEqual([
-      { issueUrl: url, optionId: 'PVTSSF_5' },
-    ]);
+    // Then — nothing is created, no card is added, no GitHub write runs, and
+    // no record is written
+    expect(vault.created).toEqual([]);
+    expect(vault.written).toEqual([]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
+    expect(projectManagement.boardStatusCalls).toEqual([]);
+    expect(projectManagement.stateCalls).toEqual([]);
+    expect(projectManagement.updateCalls).toEqual([]);
+    expect(syncState.setCalls).toEqual([]);
+  });
+
+  it('materialises an untracked open issue even with a stale done-lane card', async () => {
+    // Given — an open typed issue with no record whose stale card sits in the
+    // done lane (the derived completion would read done, but the raw state is
+    // open)
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identity = identity;
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issueA],
+      cards: [card({ statusOptionName: 'Shipped' })],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the note materialises; the raw open state gates the decision
+    expect(vault.created).toHaveLength(1);
+    expect(vault.created[0]!.path).toBe(notePath);
   });
 
   it('leaves the issue alone when the board moves between non-done lanes', async () => {
