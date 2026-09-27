@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import { TaskNoteParser } from '../../../src/Domain/Notes/TaskNoteParser.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 
-const task: TaskData = {
+const task: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
   nodeId: 'I_kwDOAAAA42',

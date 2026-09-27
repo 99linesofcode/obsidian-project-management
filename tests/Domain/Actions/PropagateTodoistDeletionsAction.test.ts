@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { PropagateTodoistDeletionsAction } from '../../../src/Domain/Actions/PropagateTodoistDeletionsAction.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the vault holds the mirrored notes (a missing path is a
 // vault deletion), the task manager records every twin deletion (and can be
@@ -96,27 +96,24 @@ class FakeTaskManager implements TaskManagerPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  todoistItemStates = new Map<string, TodoistStateData>();
+  todoistItemStates = new Map<string, TaskData>();
   removals: string[] = [];
 
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistItemStates.get(notePath) ?? null;
   }
-  async setTodoistState(
-    notePath: string,
-    state: TodoistStateData,
-  ): Promise<void> {
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
     this.todoistItemStates.set(notePath, state);
   }
   async removeTodoistState(notePath: string): Promise<void> {
     this.todoistItemStates.delete(notePath);
     this.removals.push(notePath);
   }
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistItemStates.values()];
   }
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
@@ -124,7 +121,7 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -159,15 +156,9 @@ const otherPath = 'Projecten/Other Project/taken/9-other.md';
 function state(
   notePath: string,
   todoistId: string,
-  lastSyncedParent: string | null = null,
-): TodoistStateData {
-  return {
-    todoistId,
-    notePath,
-    lastSyncedHash: 'stale',
-    lastSyncedCompleted: false,
-    lastSyncedParent,
-  };
+  parent: string | null = null,
+): TaskData {
+  return taskRecord({ todoistId, notePath, parent });
 }
 
 function setup() {

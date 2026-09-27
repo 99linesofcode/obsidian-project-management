@@ -1,154 +1,246 @@
-import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
+import type { ProjectNoteData } from '../DataTransferObjects/ProjectNoteData.js';
+import type { ProjectStateData } from '../DataTransferObjects/ProjectStateData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
-import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
-import { boardOptionIDByName } from '../Board/boardOptionIDByName.js';
-import { defaultStatusName } from '../Board/defaultStatusName.js';
-import { statusNameFromState } from '../Board/statusNameFromState.js';
-import type { ApplyBoardChangeAction } from './ApplyBoardChangeAction.js';
-import type { ApplyRemoteChangeAction } from './ApplyRemoteChangeAction.js';
-import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
+import type { VaultPort } from '../Ports/VaultPort.js';
+import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
+import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
+import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
+import type { ProbeProjectsAction } from './ProbeProjectsAction.js';
+import type {
+  ProjectLifecycleVerdict,
+  ReconcileProjectLifecycleAction,
+} from './ReconcileProjectLifecycleAction.js';
+import type { SyncChecklistAction } from './SyncChecklistAction.js';
+import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
+import type { SyncGithubTasksAction } from './SyncGithubTasksAction.js';
+import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
 
-export interface SyncProjectInput {
-  projectName: string;
-  syncedAt: string;
-  includeBoard: boolean;
-}
-
-// UC3/UC8/UC9: sync one project. Fetches the complete tracked issue set and
-// mirrors each onto its note — applying changes to existing notes, creating
-// notes for newly promoted issues — then reconciles the board: the board's
-// Status drives the issue and note (UC8), and every tracked task missing from
-// the board is added to it (UC9). The sync state is the diff: an issue whose
-// last update predates the previous poll still materializes. The poll needs
-// the project's repo url, so a project without a stored identity (or one
-// lacking a repo url) is skipped with a clear error rather than crashing.
-// includeBoard gates the board half on the remote updatedAt, but a membership
-// gap opens it too: a newly tracked issue has no card and does not move the
-// board, so the probe gate alone would starve its bookkeeping. A manually
-// removed card does move the board, caught by the gate. When the board is
-// fetched, an added card starts in the lane its issue state implies.
+// THE CHAIN: one work item kind — a project folder name — and one entry point.
+// The chain re-resolves the project from the vault, so a stale work item (a
+// renamed-away project) no-ops and project-level deletion is never propagated
+// from a stale item. Steps compose the halves; each step is isolated, so a
+// failure logs and skips that step and the GitHub half failing never blocks the
+// Todoist half (or vice versa). Snapshots and cursors advance only on success,
+// preserved by the underlying actions.
+//
+//   1. resolve project (inline) — pm-note exists? else no-op
+//   2. reconcile lifecycle — ONE freeze verdict (folder ⇄ archive ⇄ Todoist)
+//   3. renames — DetectNoteRenamesAction (snapshot drift)
+//   4. GitHub half — probe → SyncGithubTasks (single-query canonical pipeline)
+//   5. vault consistency — checklist ↔ to-do (retained; verdict-independent)
+//   6. Todoist half — SyncTodoistTasks (canonical pipeline; gated by the verdict)
+//   7. deletions last — status records whose note is gone
+//
+// The probe is hoisted to the top of the GitHub-side work because the lifecycle
+// gate needs the probed `closed` state; one probe serves both.
 export class SyncProjectAction {
   constructor(
-    private readonly projectManagement: ProjectManagementPort,
+    private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
-    private readonly applyRemoteChange: ApplyRemoteChangeAction,
-    private readonly createTaskNote: CreateTaskNoteAction,
-    private readonly applyBoardChange: ApplyBoardChangeAction,
-    private readonly doneOptionName: string,
+    private readonly probeProjects: ProbeProjectsAction,
+    private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
+    private readonly detectNoteRenames: DetectNoteRenamesAction,
+    private readonly syncGithubTasks: SyncGithubTasksAction,
+    private readonly completeTaskCascade: CompleteTaskCascadeAction,
+    private readonly syncChecklist: SyncChecklistAction,
+    private readonly mirrorTodoStatus: MirrorTodoStatusAction,
+    private readonly syncTodoistTasks: SyncTodoistTasksAction,
+    private readonly handleDeletedNote: HandleDeletedNoteAction,
   ) {}
 
-  async execute(input: SyncProjectInput): Promise<void> {
-    const identity = await this.syncState.getIdentity(input.projectName);
-    if (!identity?.repoUrl) {
-      throw new Error(
-        `SyncProjectAction: no repo url for project ${input.projectName}`,
-      );
-    }
+  async execute(project: string): Promise<void> {
+    const syncedAt = new Date().toISOString();
 
-    // Every poll reconciles the complete tracked set; the sync state is the
-    // diff, so an issue that went quiet before its type label was added still
-    // materializes. Only tasks carrying a type label are tracked.
-    const tasks = (
-      await this.projectManagement.fetchTrackedIssues(identity.repoUrl)
-    ).filter((task) => hasTypeLabel(task.labels));
-
-    // A fetched task the vault has never recorded is a membership gap. Capture
-    // it before materializing: creating a note writes the record, which would
-    // erase the gap we need to detect.
-    const knownUrls = new Set(
-      (await this.syncState.list()).map((status) => status.url),
-    );
-    const hasUntracked = tasks.some((task) => !knownUrls.has(task.url));
-
-    // The lane a task's issue state implies when the board is not the
-    // source: closed issues sit in the done lane, open ones in the default.
-    const fallbackStatusName = statusNameFromState(
-      'open',
-      this.doneOptionName,
-      defaultStatusName(identity.statusOptions),
-    );
-    const doneStatusName = statusNameFromState(
-      'closed',
-      this.doneOptionName,
-      defaultStatusName(identity.statusOptions),
-    );
-
-    for (const task of tasks) {
-      const statusName =
-        task.state === 'closed' ? doneStatusName : fallbackStatusName;
-      const status = await this.syncState.get(task.url);
-      if (status) {
-        await this.applyRemoteChange.execute({
-          task,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-          statusName,
-        });
-      } else {
-        await this.createTaskNote.execute({
-          task,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-          statusName,
-        });
-      }
-    }
-
-    // The board fetch is the expensive half of the poll, so the scheduler gates
-    // it on the project's remote updatedAt. A board change always moves that
-    // updatedAt, so a skipped board fetch resumes on the next tick after any
-    // board activity — including card removals, which the bookkeeping re-adds.
-    // A membership gap opens the gate too, so a new issue's bookkeeping does
-    // not wait for unrelated board activity.
-    if (!input.includeBoard && !hasUntracked) {
+    // 1. Resolve project — a stale work item no-ops. The note's absence is not
+    // a synced fact, so a missing pm-note never propagates a deletion.
+    const note = await this.resolveProject(project);
+    if (!note) {
       return;
     }
 
-    const items = await this.projectManagement.fetchBoardItems(
-      identity.projectNodeId,
+    // The probe is a GitHub-side read. A failure leaves the GitHub side
+    // skipped but never blocks the Todoist half.
+    const state = await this.probe(project);
+
+    // 2. Lifecycle — one freeze verdict for both halves. A failure leaves the
+    // project frozen for this tick so no task write runs against an unknown
+    // state; the next tick retries.
+    const verdict = await this.runLifecycle(project, note, state, syncedAt);
+
+    // 3. Renames.
+    await this.step('renames', () =>
+      this.detectNoteRenames.execute({ projectName: project, syncedAt }),
     );
 
-    for (const item of items) {
-      await this.applyBoardChange.execute({
-        projectName: input.projectName,
-        item,
-        syncedAt: input.syncedAt,
-      });
+    // 4. GitHub half (canonical pipeline).
+    await this.step('github half', () =>
+      this.runGithubHalf(project, state, verdict, syncedAt),
+    );
+
+    // 5. Vault consistency — checklist ↔ to-do. Retained as its own step
+    // because it must run for every task note regardless of the GitHub
+    // verdict; the vault writer's surface covers the note body it writes.
+    await this.step('vault consistency', () =>
+      this.runVaultConsistency(project, syncedAt),
+    );
+
+    // 6. Todoist half — gated by the freeze verdict. The lifecycle resolved the
+    // project id; a frozen project accepts no task writes but stays observed.
+    if (!verdict.frozen && verdict.todoistProjectId !== null) {
+      await this.step('todoist half', () =>
+        this.syncTodoistTasks.execute({
+          projectName: project,
+          projectId: verdict.todoistProjectId!,
+          syncedAt,
+        }),
+      );
     }
 
-    const boardUrls = new Set(
-      items
-        .filter((item) => item.issueUrl !== undefined)
-        .map((item) => item.issueUrl as string),
-    );
-    const taskByUrl = new Map(tasks.map((task) => [task.url, task] as const));
-    const tracked = await this.syncState.list();
-    for (const status of tracked) {
-      if (boardUrls.has(status.url)) {
-        continue;
-      }
-      await this.projectManagement.addBoardItem(
-        identity.projectNodeId,
-        status.url,
-      );
+    // 7. Deletions last.
+    await this.step('deletions', () => this.runDeletions(project));
+  }
 
-      const task = taskByUrl.get(status.url);
-      if (!task) {
-        // A record whose issue is no longer fetched has no state to derive a
-        // lane from; leave the card where GitHub placed it.
+  private async resolveProject(
+    project: string,
+  ): Promise<ProjectNoteData | null> {
+    const notes = await this.vault.findProjectNotes();
+    return notes.find((note) => note.projectName === project) ?? null;
+  }
+
+  private async probe(project: string): Promise<ProjectStateData | undefined> {
+    try {
+      return (await this.probeProjects.execute([project])).get(project);
+    } catch (error) {
+      console.error(`SyncProjectAction: probe failed for ${project}`, error);
+      return undefined;
+    }
+  }
+
+  private async runLifecycle(
+    project: string,
+    note: ProjectNoteData,
+    state: ProjectStateData | undefined,
+    syncedAt: string,
+  ): Promise<ProjectLifecycleVerdict> {
+    try {
+      return await this.reconcileProjectLifecycle.execute({
+        projectName: project,
+        notePath: note.path,
+        locationArchived: note.archived,
+        syncedAt,
+        ...(state === undefined ? {} : { closed: state.closed }),
+      });
+    } catch (error) {
+      console.error(
+        `SyncProjectAction: lifecycle failed for ${project}`,
+        error,
+      );
+      // The failure leaves the Todoist half skipped (no resolved project) but
+      // does not block the GitHub half: it falls back to the pre-reconcile
+      // archive signal, preserving the halves' error isolation.
+      return {
+        todoistProjectId: null,
+        frozen: note.archived || (state?.closed ?? false),
+        notePath: note.path,
+        locationArchived: note.archived,
+      };
+    }
+  }
+
+  private async runGithubHalf(
+    project: string,
+    state: ProjectStateData | undefined,
+    verdict: ProjectLifecycleVerdict,
+    syncedAt: string,
+  ): Promise<void> {
+    // A project without a probed GitHub state has no board to sweep; a frozen
+    // project (archived) accepts no task writes.
+    if (!state || verdict.frozen) {
+      return;
+    }
+
+    const lastUpdate = await this.syncState.getLastProjectUpdate(project);
+    const includeBoard = state.updatedAt !== lastUpdate;
+    try {
+      await this.syncGithubTasks.execute({
+        projectName: project,
+        syncedAt,
+        includeBoard,
+      });
+      await this.syncState.setLastProjectUpdate(project, state.updatedAt);
+    } catch (error) {
+      // A failed half must not advance the stored update, so the next tick
+      // sees the same updatedAt and retries the fetch.
+      console.error(
+        `SyncProjectAction: github half failed for ${project}`,
+        error,
+      );
+    }
+  }
+
+  // The vault-side consistency pass: the checklist line and its to-do notes
+  // converge in both directions. It is deliberately independent of the GitHub
+  // verdict — a checklist edit is a vault change that must promote/complete
+  // its to-dos even when the GitHub half writes nothing. The dt-13 cascade runs
+  // here first, so a task whose done status arrived from ANY origin (a GitHub
+  // close, a Todoist check, a vault edit) completes its to-dos; the writer
+  // itself cascades on the GitHub pull path.
+  private async runVaultConsistency(
+    project: string,
+    syncedAt: string,
+  ): Promise<void> {
+    const taken = await this.vault.listNotesInFolder(
+      `Projecten/${project}/taken`,
+    );
+    for (const notePath of taken) {
+      await this.step(`cascade ${notePath}`, () =>
+        this.completeTaskCascade.execute({
+          notePath,
+          projectName: project,
+          syncedAt,
+        }),
+      );
+      await this.step(`checklist ${notePath}`, () =>
+        this.syncChecklist.execute({
+          notePath,
+          projectName: project,
+          syncedAt,
+        }),
+      );
+    }
+
+    const todos = await this.vault.listNotesInFolder(
+      `Projecten/${project}/todos`,
+    );
+    for (const todoPath of todos) {
+      await this.step(`mirror ${todoPath}`, () =>
+        this.mirrorTodoStatus.execute({ todoPath, syncedAt }),
+      );
+    }
+  }
+
+  private async runDeletions(project: string): Promise<void> {
+    const prefix = `Projecten/${project}/`;
+    for (const record of await this.syncState.list()) {
+      if (!record.notePath.startsWith(prefix)) {
         continue;
       }
-      const statusName = statusNameFromState(
-        task.state,
-        this.doneOptionName,
-        defaultStatusName(identity.statusOptions),
-      );
-      await this.projectManagement.setBoardStatus(
-        identity.projectNodeId,
-        identity.statusFieldId,
-        status.url,
-        boardOptionIDByName(identity.statusOptions, statusName),
-      );
+      if ((await this.vault.getNoteByPath(record.notePath)) === null) {
+        await this.step(`delete ${record.notePath}`, () =>
+          this.handleDeletedNote.execute({
+            notePath: record.notePath,
+            projectName: project,
+          }),
+        );
+      }
+    }
+  }
+
+  private async step(name: string, run: () => Promise<void>): Promise<void> {
+    try {
+      await run();
+    } catch (error) {
+      console.error(`SyncProjectAction: ${name} failed`, error);
     }
   }
 }

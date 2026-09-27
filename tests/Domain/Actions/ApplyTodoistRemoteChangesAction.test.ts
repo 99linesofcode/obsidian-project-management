@@ -4,12 +4,12 @@ import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObject
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the vault holds the mirrored notes and records every
 // write and rename; the task manager serves the active and completed sets; the
@@ -112,25 +112,22 @@ class FakeTaskManager implements TaskManagerPort {
 class FakeSyncState implements SyncStatePort {
   identity: ProjectIdentityData | null = null;
   projectState: TodoistProjectStateData | null = null;
-  todoistItemStates = new Map<string, TodoistStateData>();
-  todoistItemSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  todoistItemStates = new Map<string, TaskData>();
+  todoistItemSets: Array<{ notePath: string; state: TaskData }> = [];
   todoistItemRemovals: string[] = [];
 
   async getTodoistProjectState(): Promise<TodoistProjectStateData | null> {
     return this.projectState;
   }
   async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistItemStates.get(notePath) ?? null;
   }
-  async setTodoistState(
-    notePath: string,
-    state: TodoistStateData,
-  ): Promise<void> {
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
     this.todoistItemSets.push({ notePath, state });
     this.todoistItemStates.set(notePath, state);
   }
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistItemStates.values()];
   }
   async removeTodoistState(notePath: string): Promise<void> {
@@ -138,15 +135,15 @@ class FakeSyncState implements SyncStatePort {
     this.todoistItemRemovals.push(notePath);
   }
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
-  async findByNotePath(): Promise<Status | null> {
+  async findByNotePath(): Promise<TaskData | null> {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -256,20 +253,13 @@ function twin(
   };
 }
 
-function state(
-  notePath: string,
-  overrides: Partial<TodoistStateData> = {},
-): TodoistStateData {
-  return {
+function state(notePath: string, overrides: Partial<TaskData> = {}): TaskData {
+  return taskRecord({
     todoistId: 'T1',
     notePath,
-    lastSyncedHash: 'stale',
-    lastSyncedCompleted: false,
-    lastSyncedContent: 'Chore 1',
-    lastSyncedLane: null,
-    lastSyncedParent: null,
+    title: 'Chore 1',
     ...overrides,
-  };
+  });
 }
 
 function setup() {
@@ -318,8 +308,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
       todoPath,
       state(todoPath, {
         todoistId: 'T2',
-        lastSyncedContent: 'Fix the bug',
-        lastSyncedParent: 'T1',
+        title: 'Fix the bug',
+        parent: 'T1',
       }),
     );
     taskManager.active = [twin('T2', 'Fix the widget', { parentId: 'T1' })];
@@ -337,9 +327,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     ]);
     // And the snapshot is re-stamped at the new path
     expect(syncState.todoistItemSets[0]!.notePath).toBe(newPath);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedContent).toBe(
-      'Fix the widget',
-    );
+    expect(syncState.todoistItemSets[0]!.state.title).toBe('Fix the widget');
   });
 
   it('renames a task note keeping its issue-id prefix', async () => {
@@ -350,7 +338,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     syncState.todoistItemStates.set(
       taskPath,
-      state(taskPath, { lastSyncedLane: 'Unshaped' }),
+      state(taskPath, { status: 'Unshaped' }),
     );
     taskManager.active = [twin('T1', 'Chore 1 renamed')];
 
@@ -370,7 +358,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     syncState.todoistItemStates.set(
       taskPath,
-      state(taskPath, { lastSyncedLane: 'Unshaped' }),
+      state(taskPath, { status: 'Unshaped' }),
     );
     taskManager.active = [twin('T1', 'Chore 1', { sectionId: 'S2' })];
 
@@ -389,7 +377,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
       },
     ]);
     // And the snapshot now records the new lane
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedLane).toBe('Building');
+    expect(syncState.todoistItemSets[0]!.state.status).toBe('Building');
   });
 
   it('moves only the note when the dragged item has no GitHub issue', async () => {
@@ -400,8 +388,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     syncState.todoistItemStates.set(
       taskPath,
       state(taskPath, {
-        lastSyncedContent: 'Capture me',
-        lastSyncedLane: 'Unshaped',
+        title: 'Capture me',
+        status: 'Unshaped',
       }),
     );
     taskManager.active = [twin('T1', 'Capture me', { sectionId: 'S2' })];
@@ -442,7 +430,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes[0]!.content).toContain(
       'affiliation: ["[[Acme Widgets]]", "[[40-slice-1]]"]',
     );
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedParent).toBe('T1');
+    expect(syncState.todoistItemSets[0]!.state.parent).toBe('T1');
   });
 
   it('drops the slice affiliation when a task is dragged back to top level', async () => {
@@ -464,7 +452,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     );
     syncState.todoistItemStates.set(
       taskPath,
-      state(taskPath, { lastSyncedLane: 'Unshaped', lastSyncedParent: 'T1' }),
+      state(taskPath, { status: 'Unshaped', parent: 'T1' }),
     );
     taskManager.active = [twin('T1', 'Chore 1')];
 
@@ -475,7 +463,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes[0]!.content).toContain(
       'affiliation: ["[[Acme Widgets]]"]',
     );
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedParent).toBeNull();
+    expect(syncState.todoistItemSets[0]!.state.parent).toBeNull();
   });
 
   it('lets the vault win when both sides changed', async () => {
@@ -485,7 +473,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     vault.notes.set(taskPath, taskNote('Building', ['[[Acme Widgets]]']));
     syncState.todoistItemStates.set(
       taskPath,
-      state(taskPath, { lastSyncedLane: 'Unshaped' }),
+      state(taskPath, { status: 'Unshaped' }),
     );
     taskManager.active = [twin('T1', 'Chore 1 renamed', { sectionId: 'S1' })];
 
@@ -497,9 +485,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes).toEqual([]);
     // And the snapshot is re-stamped from the remote either way
     expect(syncState.todoistItemSets).toHaveLength(1);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedContent).toBe(
-      'Chore 1 renamed',
-    );
+    expect(syncState.todoistItemSets[0]!.state.title).toBe('Chore 1 renamed');
   });
 
   it('ignores a section change on a subtask (it inherits its parent)', async () => {
@@ -521,7 +507,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     );
     syncState.todoistItemStates.set(
       childPath,
-      state(childPath, { lastSyncedParent: 'SLICE' }),
+      state(childPath, { parent: 'SLICE' }),
     );
     taskManager.active = [
       twin('T1', 'Chore 1', { parentId: 'SLICE', sectionId: 'S2' }),
@@ -542,7 +528,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     syncState.todoistItemStates.set(
       taskPath,
-      state(taskPath, { lastSyncedLane: 'Unshaped' }),
+      state(taskPath, { status: 'Unshaped' }),
     );
     taskManager.active = [twin('T1', 'Chore 1', { isCompleted: true })];
 
@@ -562,8 +548,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     syncState.todoistItemStates.set(
       taskPath,
       state(taskPath, {
-        lastSyncedLane: 'Shipped',
-        lastSyncedCompleted: true,
+        status: 'Shipped',
+        completed: true,
       }),
     );
     // The twin still sits in the done section (the projection moved it there
@@ -587,8 +573,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
       },
     ]);
     // And the snapshot now says open, so the next poll is settled
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedCompleted).toBe(false);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedLane).toBe('Shipped');
+    expect(syncState.todoistItemSets[0]!.state.completed).toBe(false);
+    expect(syncState.todoistItemSets[0]!.state.status).toBe('Shipped');
   });
 
   it('pulls a subtask out of the done lane when Todoist reopened it', async () => {
@@ -611,9 +597,9 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     syncState.todoistItemStates.set(
       childPath,
       state(childPath, {
-        lastSyncedLane: null,
-        lastSyncedCompleted: true,
-        lastSyncedParent: 'SLICE',
+        status: '',
+        completed: true,
+        parent: 'SLICE',
       }),
     );
     taskManager.active = [
@@ -631,8 +617,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes[0]!.content).toContain('status: Unshaped');
     expect(propagateStatus.calls[0]!.statusName).toBe('Unshaped');
     // And the snapshot says open; the lane stays uncontrolled for a subtask
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedCompleted).toBe(false);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedLane).toBeNull();
+    expect(syncState.todoistItemSets[0]!.state.completed).toBe(false);
+    expect(syncState.todoistItemSets[0]!.state.status).toBe('');
   });
 
   it('lets the vault win when a reopen races a vault change', async () => {
@@ -643,9 +629,9 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     syncState.todoistItemStates.set(
       taskPath,
       state(taskPath, {
-        lastSyncedContent: 'Old title',
-        lastSyncedLane: 'Shipped',
-        lastSyncedCompleted: true,
+        title: 'Old title',
+        status: 'Shipped',
+        completed: true,
       }),
     );
     taskManager.active = [
@@ -659,7 +645,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes).toEqual([]);
     // And the snapshot is re-stamped from the remote either way
     expect(syncState.todoistItemSets).toHaveLength(1);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedCompleted).toBe(false);
+    expect(syncState.todoistItemSets[0]!.state.completed).toBe(false);
   });
 
   it('is idempotent: a settled reopen is not re-applied on a second pass', async () => {
@@ -670,8 +656,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     syncState.todoistItemStates.set(
       taskPath,
       state(taskPath, {
-        lastSyncedLane: 'Shipped',
-        lastSyncedCompleted: true,
+        status: 'Shipped',
+        completed: true,
       }),
     );
     taskManager.active = [
@@ -701,9 +687,9 @@ describe('ApplyTodoistRemoteChangesAction', () => {
       todoPath,
       state(todoPath, {
         todoistId: 'T2',
-        lastSyncedContent: 'Fix the widget',
-        lastSyncedParent: 'T1',
-        lastSyncedCompleted: true,
+        title: 'Fix the widget',
+        parent: 'T1',
+        completed: true,
       }),
     );
     taskManager.active = [twin('T2', 'Fix the widget', { parentId: 'T1' })];
@@ -721,12 +707,14 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     const { action, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
-    syncState.todoistItemStates.set(taskPath, {
-      todoistId: 'T1',
-      notePath: taskPath,
-      lastSyncedHash: 'stale',
-      lastSyncedCompleted: false,
-    });
+    syncState.todoistItemStates.set(
+      taskPath,
+      taskRecord({
+        todoistId: 'T1',
+        notePath: taskPath,
+        completed: false,
+      }),
+    );
     taskManager.active = [twin('T1', 'Chore 1')];
 
     // When — the verdict runs
@@ -734,10 +722,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
     // Then — nothing is applied to the vault, but the bases are stamped
     expect(vault.writes).toEqual([]);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedContent).toBe(
-      'Chore 1',
-    );
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedLane).toBe('Unshaped');
+    expect(syncState.todoistItemSets[0]!.state.title).toBe('Chore 1');
+    expect(syncState.todoistItemSets[0]!.state.status).toBe('Unshaped');
   });
 
   it('is idempotent: a settled item is not touched on a second pass', async () => {
@@ -747,7 +733,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     syncState.todoistItemStates.set(
       taskPath,
-      state(taskPath, { lastSyncedLane: 'Unshaped' }),
+      state(taskPath, { status: 'Unshaped' }),
     );
     taskManager.active = [twin('T1', 'Chore 1', { sectionId: 'S2' })];
     await action.execute({ projectName, projectId, syncedAt });
@@ -791,8 +777,8 @@ describe('ApplyTodoistRemoteChangesAction', () => {
       todoPath,
       state(todoPath, {
         todoistId: 'T2',
-        lastSyncedContent: 'Fix the bug',
-        lastSyncedParent: 'TASK',
+        title: 'Fix the bug',
+        parent: 'TASK',
       }),
     );
     taskManager.completed = [
@@ -805,6 +791,31 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     // Then — completion is not a deletion: the record survives untouched
     expect(syncState.todoistItemRemovals).toEqual([]);
     expect(syncState.todoistItemStates.has(todoPath)).toBe(true);
+  });
+
+  it('keeps a completed record whose twin aged out of the completed window', async () => {
+    // Given — a completed task whose twin is absent from BOTH the active set
+    // and the completed-since window (the cursor advanced past its completion)
+    // and whose snapshot already carries the completion stamp
+    const { action, vault, taskManager, syncState } = setup();
+    const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
+    vault.notes.set(taskPath, taskNote('Shipped', ['[[Acme Widgets]]']));
+    syncState.todoistItemStates.set(
+      taskPath,
+      state(taskPath, { status: 'Shipped', completed: true }),
+    );
+    taskManager.active = [];
+    taskManager.completed = [];
+
+    // When — the verdict runs
+    await action.execute({ projectName, projectId, syncedAt });
+
+    // Then — completed is not deleted: the stamped record survives untouched,
+    // so the projection never re-creates the twin (the dt-17 churn)
+    expect(syncState.todoistItemRemovals).toEqual([]);
+    expect(syncState.todoistItemStates.has(taskPath)).toBe(true);
+    expect(vault.writes).toEqual([]);
+    expect(syncState.todoistItemSets).toEqual([]);
   });
 
   it('leaves a missing note to the deletion action', async () => {

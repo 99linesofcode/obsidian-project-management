@@ -3,8 +3,11 @@ import {
   renderChecklist,
   type ChecklistItem,
 } from '../Notes/Checklist.js';
+import { freePath } from '../Notes/freePath.js';
+import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
+import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import {
   ToDoNoteMapper,
   type ToDoNoteContext,
@@ -38,7 +41,7 @@ export class SyncChecklistAction {
 
     const body = splitFrontmatter(note.content)?.body ?? note.content;
     const items = parseChecklist(body);
-    const taskLink = taskLinkFromPath(input.notePath);
+    const taskLink = stemOf(input.notePath);
     const template = await this.readTemplate();
 
     const promoted = await this.promoteUnlinked(
@@ -78,13 +81,13 @@ export class SyncChecklistAction {
       if (item.linkPath !== undefined) {
         continue;
       }
-      const path = await this.freePath(todoPath(input.projectName, item.text));
-      const note = ToDoNoteMapper.render(
+      const path = await this.createTodo(
+        input,
+        item,
+        todoPath(input.projectName, item.text),
         template,
-        { title: item.text, projectName: input.projectName, taskLink },
-        toDoContext(input.syncedAt, item.checked),
+        taskLink,
       );
-      await this.vault.createNote(path, note.content);
       item.linkPath = path;
       promoted = true;
     }
@@ -92,12 +95,13 @@ export class SyncChecklistAction {
     return promoted;
   }
 
-  // A linked item mirrors onto its to-do: a missing note is re-created at the
-  // linked path (a dangling link is a to-do to restore, not to forget), a
+  // A linked item mirrors onto its to-do: a missing note is resolved before
+  // anything is created (a short or wrong-folder link is relinked to the to-do
+  // that already exists; only a genuinely absent one is re-promoted), a
   // drifted filename is renamed to the item's slug, and an existing one follows
-  // the checkbox. Returns whether a rename changed a link, so the caller
-  // rewrites the parent body once. A to-do with nothing to change is left
-  // alone — that is what lets the scheduler's echo settle.
+  // the checkbox. Returns whether a relink or rename changed a link, so the
+  // caller rewrites the parent body once. A to-do with nothing to change is
+  // left alone — that is what lets the scheduler's echo settle.
   private async mirrorLinked(
     input: SyncChecklistInput,
     taskLink: string,
@@ -113,12 +117,27 @@ export class SyncChecklistAction {
       const note = await this.vault.getNoteByPath(item.linkPath);
 
       if (!note) {
-        const created = ToDoNoteMapper.render(
-          template,
-          { title: item.text, projectName: input.projectName, taskLink },
-          toDoContext(input.syncedAt, item.checked),
+        const existing = await this.findTodoForMissingLink(
+          input,
+          item,
+          item.linkPath,
         );
-        await this.vault.createNote(item.linkPath, created.content);
+        if (existing !== null) {
+          item.linkPath = existing;
+          relinked = true;
+          continue;
+        }
+        const path = await this.createTodo(
+          input,
+          item,
+          item.linkPath,
+          template,
+          taskLink,
+        );
+        if (path !== item.linkPath) {
+          item.linkPath = path;
+          relinked = true;
+        }
         continue;
       }
 
@@ -128,7 +147,8 @@ export class SyncChecklistAction {
       }
 
       if (isDrifted(slugify(item.text), stemOf(item.linkPath))) {
-        const newPath = await this.freePath(
+        const newPath = await freePath(
+          this.vault,
           todoPath(input.projectName, item.text),
         );
         await this.vault.renameNote(item.linkPath, newPath);
@@ -152,6 +172,56 @@ export class SyncChecklistAction {
     return relinked;
   }
 
+  // A missing link is resolved before anything is created: a to-do already in
+  // the project's folder wins (the link was merely short or pointed at the
+  // wrong folder), and only a genuinely absent to-do is re-promoted. A link
+  // already under todos/ is left to the self-heal path, so a deleted to-do is
+  // restored in place rather than duplicated.
+  private async findTodoForMissingLink(
+    input: SyncChecklistInput,
+    item: ChecklistItem,
+    linkPath: string,
+  ): Promise<string | null> {
+    if (isInTodosFolder(input.projectName, linkPath)) {
+      return null;
+    }
+    const linkStem = stemOf(linkPath);
+    const textSlug = slugify(item.text);
+    for (const path of await this.vault.listNotesInFolder(
+      todosFolder(input.projectName),
+    )) {
+      const stem = stemOf(path);
+      if (stem === linkStem || stem === textSlug) {
+        return path;
+      }
+    }
+    return null;
+  }
+
+  // The single place a to-do is created. The hard guard lives here: a
+  // candidate outside the project's todos folder is replaced by the canonical
+  // slug path, so a malformed link can never litter the vault root or another
+  // folder. freePath then keeps a slug collision from overwriting a note.
+  private async createTodo(
+    input: SyncChecklistInput,
+    item: ChecklistItem,
+    candidate: string,
+    template: string | null,
+    taskLink: string,
+  ): Promise<string> {
+    const base = isInTodosFolder(input.projectName, candidate)
+      ? candidate
+      : todoPath(input.projectName, item.text);
+    const path = await freePath(this.vault, base);
+    const note = ToDoNoteMapper.render(
+      template,
+      { title: item.text, projectName: input.projectName, taskLink },
+      toDoContext(input.syncedAt, item.checked),
+    );
+    await this.vault.createNote(path, note.content);
+    return path;
+  }
+
   // A to-do this task owns but no line links to is orphaned: move it to the
   // trash. The affiliation check keeps other tasks' to-dos in the same folder
   // out of it.
@@ -165,7 +235,7 @@ export class SyncChecklistAction {
         .map((item) => item.linkPath)
         .filter((path): path is string => path !== undefined),
     );
-    const folder = `Projecten/${input.projectName}/todos`;
+    const folder = todosFolder(input.projectName);
 
     for (const path of await this.vault.listNotesInFolder(folder)) {
       if (linked.has(path)) {
@@ -176,36 +246,22 @@ export class SyncChecklistAction {
         continue;
       }
       const parsed = ToDoNoteParser.parse(note.content);
-      if (parsed?.affiliation.includes(`[[${taskLink}]]`)) {
-        await this.vault.trashNote(path);
+      if (parsed === null) {
+        continue;
       }
+      // Gate: trash only when the to-do's CURRENT affiliation still names this
+      // task as its primary parent. A note whose affiliation was just rewritten
+      // (by the projection or a capture) no longer leads with this task, so it
+      // is left alone rather than trashed by a stale membership read.
+      if (
+        taskLinkFromAffiliation(parsed.affiliation, input.projectName) !==
+        taskLink
+      ) {
+        continue;
+      }
+      await this.vault.trashNote(path);
     }
   }
-
-  // Suffixes -2, -3, … until the to-do path is free.
-  private async freePath(base: string): Promise<string> {
-    if (!(await this.vault.getNoteByPath(base))) {
-      return base;
-    }
-    const stem = base.replace(/\.md$/, '');
-    let suffix = 2;
-    while (await this.vault.getNoteByPath(`${stem}-${suffix}.md`)) {
-      suffix++;
-    }
-    return `${stem}-${suffix}.md`;
-  }
-}
-
-// The task's link target: the note's filename without its .md extension.
-function taskLinkFromPath(notePath: string): string {
-  const basename = notePath.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
-}
-
-// A to-do's filename stem: its basename without the .md extension.
-function stemOf(path: string): string {
-  const basename = path.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '');
 }
 
 // Drift exists only when the item's slug matches neither the to-do's stem nor
@@ -218,8 +274,18 @@ function isDrifted(slug: string, stem: string): boolean {
   return slug !== stem && slug !== stem.replace(/-\d+$/, '');
 }
 
+function todosFolder(projectName: string): string {
+  return `Projecten/${projectName}/todos`;
+}
+
+// The hard guard's predicate: a path is inside the project's todos folder only
+// when it is a child of it, so a sibling like `todos-archive/` cannot pass.
+function isInTodosFolder(projectName: string, path: string): boolean {
+  return path.startsWith(`${todosFolder(projectName)}/`);
+}
+
 function todoPath(projectName: string, title: string): string {
-  return `Projecten/${projectName}/todos/${slugify(title)}.md`;
+  return `${todosFolder(projectName)}/${slugify(title)}.md`;
 }
 
 function toDoContext(syncedAt: string, checked: boolean): ToDoNoteContext {
