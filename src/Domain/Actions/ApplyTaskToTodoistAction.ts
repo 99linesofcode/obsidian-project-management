@@ -1,4 +1,5 @@
 import { sameLabels } from '../Labels/sameLabels.js';
+import { projectFromTodoPath } from '../Notes/projectFromTodoPath.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { ToDoData } from '../DataTransferObjects/ToDoData.js';
@@ -158,13 +159,25 @@ export class ApplyTaskToTodoistAction {
   // only a vault-side completion change moves the twin (a remote change is
   // absorbed by ApplyTodoistCompletionAction before the projection runs).
   async executeToDo(input: ApplyToDoToTodoistInput): Promise<string> {
+    const stored = await this.syncState.getTodoistState(input.notePath);
+    // A to-do's identity is its note in the project's to-do folder. Anything
+    // else — a legacy bare-stem path above all — must never create, stamp or
+    // write, or the twin is re-created and re-captured every tick. Refuse and
+    // let the projection resolve the real path next tick; the stored id is
+    // returned so a caller can still nest a child under an existing twin.
+    if (projectFromTodoPath(input.notePath) !== input.todo.projectName) {
+      console.error(
+        `ApplyTaskToTodoistAction: refusing to project to-do ${input.notePath} outside Projecten/${input.todo.projectName}/todos/`,
+      );
+      return stored?.todoistId ?? '';
+    }
+
     const desired = {
       content: input.todo.title,
       labels: [TODO_LABEL],
       parentId: input.parentId,
       isCompleted: input.todo.status === 'completed',
     };
-    const stored = await this.syncState.getTodoistState(input.notePath);
     const current = input.current;
     const storedCompleted = stored?.completed ?? false;
 

@@ -862,3 +862,129 @@ describe('SyncTodoistTasksAction creation order', () => {
     expect(h.vault.notes.get(taskPath)).toContain(`todoist: ${parent.id}`);
   });
 });
+
+describe('SyncTodoistTasksAction checklist link resolution', () => {
+  const bareStem = 'note-edit-step-one';
+  const todoPath = `Projecten/Acme Widgets/todos/${bareStem}.md`;
+  const takenFolder = 'Projecten/Acme Widgets/taken';
+
+  it('resolves a legacy bare wikilink to the to-do note in todos/', async () => {
+    // Given — a tracked task whose checklist links its to-do by a bare stem
+    // (no folder, no .md) and the to-do note in the project's todos/ folder
+    const h = composedHarness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(
+      taskPath,
+      taskNote('Building', `- [ ] [[${bareStem}|Step one]]`),
+    );
+    h.vault.notes.set(todoPath, toDoNote('42-fix-the-bug'));
+    h.syncState.statuses.set(issue().url, status(taskPath, issue().url));
+    h.vault.folders.set(takenFolder, [taskPath]);
+
+    // When — one pass runs
+    await h.action.execute(input);
+
+    // Then — exactly one task twin and one to-do twin exist
+    expect(h.taskManager.createTaskCalls).toHaveLength(2);
+
+    // And — the to-do hangs off the task's twin
+    const parent = h.taskManager.active.find(
+      (task) => task.content === 'Fix the bug',
+    )!;
+    const todoTwin = h.taskManager.active.find(
+      (task) => task.content === 'Step one',
+    )!;
+    expect(todoTwin.parentId).toBe(parent.id);
+
+    // And — the record is keyed by the REAL todos/ path, never the bare stem
+    expect(h.syncState.todoistStates.get(todoPath)!.parent).toBe(parent.id);
+    expect(h.syncState.todoistStates.get(todoPath)!.completed).toBe(false);
+    expect(h.syncState.todoistStates.has(bareStem)).toBe(false);
+
+    // And — the frontmatter anchor is stamped on the real note, never the stem
+    expect(h.vault.notes.get(todoPath)).toContain(`todoist: ${todoTwin.id}`);
+    expect(h.vault.notes.has(bareStem)).toBe(false);
+  });
+
+  it('settles a completed to-do across ticks', async () => {
+    // Given — a tracked task whose to-do is already completed in the vault
+    const h = composedHarness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(
+      taskPath,
+      taskNote('Building', `- [ ] [[${bareStem}|Step one]]`),
+    );
+    h.vault.notes.set(
+      todoPath,
+      '---\nstatus: completed\ncompleted: 2026-09-18T12:00:00Z\naffiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]"]\n---\n',
+    );
+    h.syncState.statuses.set(issue().url, status(taskPath, issue().url));
+    h.vault.folders.set(takenFolder, [taskPath]);
+
+    // When — the first tick runs
+    await h.action.execute(input);
+    const created = h.taskManager.createTaskCalls.length;
+    const completed = h.taskManager.completeCalls.length;
+    expect(created).toBe(2);
+    expect(completed).toBe(1);
+    expect(h.syncState.todoistStates.get(todoPath)!.completed).toBe(true);
+
+    // And — the completed twin leaves the active set; the completed-since
+    // window owns it from here on, so it is absent from every later probe
+    const todoTwin = h.taskManager.active.find(
+      (task) => task.content === 'Step one',
+    )!;
+    h.taskManager.active = h.taskManager.active.filter(
+      (task) => task.id !== todoTwin.id,
+    );
+    const todoRecord = h.syncState.todoistStates.get(todoPath);
+    const taskRecord = h.syncState.todoistStates.get(taskPath);
+    const todoContent = h.vault.notes.get(todoPath);
+
+    // When — two more ticks run
+    await h.action.execute(input);
+    await h.action.execute(input);
+
+    // Then — nothing is created, written or completed again
+    expect(h.taskManager.createTaskCalls).toHaveLength(created);
+    expect(h.taskManager.completeCalls).toHaveLength(completed);
+    expect(h.taskManager.updateTaskCalls).toEqual([]);
+    expect(h.taskManager.moveTaskCalls).toEqual([]);
+    expect(h.syncState.todoistStates.get(todoPath)).toBe(todoRecord);
+    expect(h.syncState.todoistStates.get(taskPath)).toBe(taskRecord);
+    expect(h.vault.notes.get(todoPath)).toBe(todoContent);
+  });
+
+  it('ignores a leftover note at the bare stem outside todos/', async () => {
+    // Given — a bare checklist link, a decoy note at the bare stem in the vault
+    // root, and the real to-do note in todos/
+    const h = composedHarness();
+    const decoy = toDoNote('42-fix-the-bug');
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(
+      taskPath,
+      taskNote('Building', `- [ ] [[${bareStem}|Step one]]`),
+    );
+    h.vault.notes.set(bareStem, decoy);
+    h.vault.notes.set(todoPath, toDoNote('42-fix-the-bug'));
+    h.syncState.statuses.set(issue().url, status(taskPath, issue().url));
+    h.vault.folders.set(takenFolder, [taskPath]);
+
+    // When — one pass runs
+    await h.action.execute(input);
+
+    // Then — the to-do is keyed by and projected from the todos/ note only
+    const todoTwin = h.taskManager.active.find(
+      (task) => task.content === 'Step one',
+    )!;
+    expect(h.syncState.todoistStates.get(todoPath)!.todoistId).toBe(
+      todoTwin.id,
+    );
+    expect(h.syncState.todoistStates.has(bareStem)).toBe(false);
+
+    // And — the decoy at the bare stem is never written to; the anchor lands
+    // on the real note
+    expect(h.vault.notes.get(bareStem)).toBe(decoy);
+    expect(h.vault.notes.get(todoPath)).toContain(`todoist: ${todoTwin.id}`);
+  });
+});

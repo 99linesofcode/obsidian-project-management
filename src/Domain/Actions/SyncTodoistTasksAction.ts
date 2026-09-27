@@ -485,7 +485,18 @@ export class SyncTodoistTasksAction {
         if (entry.linkPath === undefined) {
           continue;
         }
-        const todo = await this.vault.getNoteByPath(entry.linkPath);
+        // The checklist link is not the identity: a legacy bare wikilink lost
+        // its folder, and a leftover file at the bare stem is not the to-do.
+        // Resolve it to the project's to-do folder so the note's real path keys
+        // the record and anchors the twin.
+        const notePath = await this.resolveToDoPath(
+          entry.linkPath,
+          projectName,
+        );
+        if (notePath === null) {
+          continue;
+        }
+        const todo = await this.vault.getNoteByPath(notePath);
         if (!todo) {
           continue;
         }
@@ -493,8 +504,8 @@ export class SyncTodoistTasksAction {
         if (!parsed) {
           continue;
         }
-        items.set(entry.linkPath, {
-          notePath: entry.linkPath,
+        items.set(notePath, {
+          notePath,
           noteContent: todo.content,
           title: entry.text,
           taskNotePath: taskPath,
@@ -507,6 +518,24 @@ export class SyncTodoistTasksAction {
     }
 
     return [...items.values()];
+  }
+
+  // The to-do note a checklist link names. A link already inside the project's
+  // to-do folder is its real path; anything else — a legacy bare wikilink above
+  // all — is resolved there by stem. A note at the bare stem outside the folder
+  // is never the to-do, so it can never key the record or anchor the twin.
+  private async resolveToDoPath(
+    linkPath: string,
+    projectName: string,
+  ): Promise<string | null> {
+    const folder = `Projecten/${projectName}/todos/`;
+    const candidate =
+      linkPath.startsWith(folder) && linkPath.endsWith('.md')
+        ? linkPath
+        : `${folder}${stemOf(linkPath)}.md`;
+    return (await this.vault.getNoteByPath(candidate)) === null
+      ? null
+      : candidate;
   }
 
   // The slice's twin id, read from the slice note's `todoist` anchor.

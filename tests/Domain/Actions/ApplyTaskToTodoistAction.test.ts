@@ -589,5 +589,59 @@ describe('ApplyTaskToTodoistAction', () => {
         { id: 'T9', completed: true },
       ]);
     });
+
+    it('refuses a note outside the project to-do folder', async () => {
+      // Given — a to-do whose notePath is a bare stem, not the todos/ note
+      const h = setup();
+
+      // When — the winning to-do is rendered
+      const id = await h.action.executeToDo({
+        todo: todo({ notePath: 'note-edit-step-one' }),
+        current: null,
+        projectId: 'P1',
+        parentId: 'T9',
+        notePath: 'note-edit-step-one',
+        noteContent: '---\nstatus: open\n---\n',
+        syncedAt: '2026-09-18T12:00:00Z',
+      });
+
+      // Then — nothing is created, labelled, stamped or written
+      expect(id).toBe('');
+      expect(h.taskManager.createTaskCalls).toEqual([]);
+      expect(h.taskManager.ensureLabelCalls).toEqual([]);
+      expect(h.syncState.todoistSets).toEqual([]);
+      expect(h.vault.writes).toEqual([]);
+    });
+
+    it('returns the stored twin id without writing when it refuses', async () => {
+      // Given — a stray record keyed by the out-of-folder path
+      const h = setup();
+      h.syncState.todoistStates.set(
+        'note-edit-step-one',
+        taskRecord({
+          todoistId: 'T9',
+          notePath: 'note-edit-step-one',
+          completed: false,
+        }),
+      );
+
+      // When — the writer is asked to project that path
+      const id = await h.action.executeToDo({
+        todo: todo({ notePath: 'note-edit-step-one' }),
+        current: null,
+        projectId: 'P1',
+        parentId: 'T9',
+        notePath: 'note-edit-step-one',
+        noteContent: '---\nstatus: open\n---\n',
+        syncedAt: '2026-09-18T12:00:00Z',
+      });
+
+      // Then — the id is reported so a caller can nest, but nothing is written
+      expect(id).toBe('T9');
+      expect(h.taskManager.createTaskCalls).toEqual([]);
+      expect(h.taskManager.completeCalls).toEqual([]);
+      expect(h.syncState.todoistSets).toEqual([]);
+      expect(h.vault.writes).toEqual([]);
+    });
   });
 });
