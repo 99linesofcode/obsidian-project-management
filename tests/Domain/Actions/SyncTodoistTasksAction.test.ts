@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
+import { ApplyTaskToTodoistAction } from '../../../src/Domain/Actions/ApplyTaskToTodoistAction.js';
 import type {
-  ApplyTaskToTodoistAction,
   ApplyTaskToTodoistInput,
   ApplyToDoToTodoistInput,
 } from '../../../src/Domain/Actions/ApplyTaskToTodoistAction.js';
@@ -11,6 +11,7 @@ import type { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/
 import type { EnsureTodoistSectionsAction } from '../../../src/Domain/Actions/EnsureTodoistSectionsAction.js';
 import type { PropagateTodoistDeletionsAction } from '../../../src/Domain/Actions/PropagateTodoistDeletionsAction.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
+import type { CreateTodoistTaskData } from '../../../src/Domain/DataTransferObjects/CreateTodoistTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
@@ -33,8 +34,12 @@ class FakeVault implements VaultPort {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
-  async createNote(): Promise<void> {}
-  async writeNote(): Promise<void> {}
+  async createNote(path: string, content: string): Promise<void> {
+    this.notes.set(path, content);
+  }
+  async writeNote(path: string, content: string): Promise<void> {
+    this.notes.set(path, content);
+  }
   async renameNote(): Promise<void> {}
   async moveFolder(): Promise<void> {}
   async listNotesInFolder(folder: string): Promise<string[]> {
@@ -106,7 +111,9 @@ class FakeSyncState implements SyncStatePort {
   async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistStates.get(notePath) ?? null;
   }
-  async setTodoistState(): Promise<void> {}
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
+    this.todoistStates.set(notePath, state);
+  }
   async removeTodoistState(): Promise<void> {}
   async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistStates.values()];
@@ -161,6 +168,16 @@ class FakeProjectManagement implements ProjectManagementPort {
 
 class FakeTaskManager implements TaskManagerPort {
   active: TodoistTaskData[] = [];
+  createTaskCalls: CreateTodoistTaskData[] = [];
+  updateTaskCalls: Array<{ id: string; content: string; labels: string[] }> =
+    [];
+  moveTaskCalls: Array<{
+    id: string;
+    to: { sectionId?: string; parentId?: string };
+  }> = [];
+  completeCalls: Array<{ id: string; completed: boolean }> = [];
+  ensureLabelCalls: string[] = [];
+  private nextTaskId = 1;
 
   async fetchActiveTasks(): Promise<TodoistTaskData[]> {
     return this.active;
@@ -192,38 +209,77 @@ class FakeTaskManager implements TaskManagerPort {
   async fetchCompletedTasks(): Promise<TodoistTaskData[]> {
     return [];
   }
-  async createTask(): Promise<never> {
-    throw new Error('not used in this test');
+  async createTask(input: CreateTodoistTaskData): Promise<TodoistTaskData> {
+    this.createTaskCalls.push(input);
+    const id = `T${this.nextTaskId++}`;
+    const task: TodoistTaskData = {
+      id,
+      projectId: input.projectId,
+      sectionId: input.sectionId ?? null,
+      parentId: input.parentId ?? null,
+      content: input.content,
+      labels: input.labels ?? [],
+      isCompleted: false,
+      url: `https://app.todoist.com/app/task/${id}`,
+    };
+    this.active.push(task);
+    return task;
   }
-  async updateTask(): Promise<never> {
-    throw new Error('not used in this test');
+  async updateTask(
+    id: string,
+    input: { content: string; labels: string[] },
+  ): Promise<void> {
+    this.updateTaskCalls.push({ id, ...input });
   }
-  async moveTask(): Promise<never> {
-    throw new Error('not used in this test');
+  async moveTask(
+    id: string,
+    to: { sectionId?: string; parentId?: string },
+  ): Promise<void> {
+    this.moveTaskCalls.push({ id, to });
+    const task = this.active.find((candidate) => candidate.id === id);
+    if (task) {
+      task.sectionId = to.sectionId ?? task.sectionId;
+      task.parentId = to.parentId ?? task.parentId;
+    }
   }
-  async setTaskCompleted(): Promise<never> {
-    throw new Error('not used in this test');
+  async setTaskCompleted(id: string, completed: boolean): Promise<void> {
+    this.completeCalls.push({ id, completed });
+    const task = this.active.find((candidate) => candidate.id === id);
+    if (task) {
+      task.isCompleted = completed;
+    }
   }
   async deleteTask(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async ensureLabel(): Promise<never> {
-    throw new Error('not used in this test');
+  async ensureLabel(name: string): Promise<void> {
+    this.ensureLabelCalls.push(name);
   }
 }
 
 class FakeWriter {
   taskCalls: ApplyTaskToTodoistInput[] = [];
   todoCalls: ApplyToDoToTodoistInput[] = [];
-  nextId = 'T-new';
+  taskReturns: string[] = [];
+  todoReturns: string[] = [];
+  // The interleaved call order across both surfaces, so the two-phase
+  // parents-before-children ordering is directly observable.
+  order: string[] = [];
+  private counter = 0;
 
   async executeTask(input: ApplyTaskToTodoistInput): Promise<string> {
     this.taskCalls.push(input);
-    return this.nextId;
+    this.order.push(`task:${input.task.title}`);
+    const id = `T${++this.counter}`;
+    this.taskReturns.push(id);
+    return id;
   }
   async executeToDo(input: ApplyToDoToTodoistInput): Promise<string> {
     this.todoCalls.push(input);
-    return this.nextId;
+    this.order.push(`todo:${input.todo.title}`);
+    const id = `T${++this.counter}`;
+    this.todoReturns.push(id);
+    return id;
   }
 }
 
@@ -275,13 +331,58 @@ function taskNote(statusName: string, body = '', todoistId?: string): string {
   return lines.join('\n');
 }
 
-function harness() {
+// A slice note: a tracked issue of type slice, affiliated to the project.
+function sliceNote(url: string, statusName: string): string {
+  return [
+    '---',
+    `url: ${url}`,
+    `status: ${statusName}`,
+    'affiliation: ["[[Acme Widgets]]"]',
+    '---',
+    '',
+  ].join('\n');
+}
+
+// A task note affiliated to a slice (its second affiliation link).
+function sliceChildNote(
+  url: string,
+  statusName: string,
+  sliceStem: string,
+  body = '',
+): string {
+  return [
+    '---',
+    `url: ${url}`,
+    `status: ${statusName}`,
+    `affiliation: ["[[Acme Widgets]]", "[[${sliceStem}]]"]`,
+    '---',
+    body,
+  ].join('\n');
+}
+
+// A to-do note affiliated to its parent task (and optionally a parent to-do).
+function toDoNote(taskStem: string, parentToDoStem?: string): string {
+  const links = ['"[[Acme Widgets]]"', `"[[${taskStem}]]"`];
+  if (parentToDoStem !== undefined) {
+    links.push(`"[[${parentToDoStem}]]"`);
+  }
+  return [
+    '---',
+    'status: open',
+    `affiliation: [${links.join(', ')}]`,
+    '---',
+    '',
+  ].join('\n');
+}
+
+function buildAction(
+  vault: FakeVault,
+  syncState: FakeSyncState,
+  projectManagement: FakeProjectManagement,
+  taskManager: FakeTaskManager,
+  writer: ApplyTaskToTodoistAction,
+): { action: SyncTodoistTasksAction; events: string[] } {
   const events: string[] = [];
-  const vault = new FakeVault();
-  const syncState = new FakeSyncState();
-  const projectManagement = new FakeProjectManagement();
-  const taskManager = new FakeTaskManager();
-  const writer = new FakeWriter();
   const action = new SyncTodoistTasksAction(
     taskManager,
     projectManagement,
@@ -290,7 +391,7 @@ function harness() {
     {
       execute: async () => ({ Unshaped: 'S1', Building: 'S2', Shipped: 'S3' }),
     } as unknown as EnsureTodoistSectionsAction,
-    writer as unknown as ApplyTaskToTodoistAction,
+    writer,
     recorder(
       events,
       'applyRemoteChanges',
@@ -308,6 +409,49 @@ function harness() {
       'propagateDeletions',
     ) as unknown as PropagateTodoistDeletionsAction,
     'Shipped',
+  );
+  return { action, events };
+}
+
+function harness() {
+  const vault = new FakeVault();
+  const syncState = new FakeSyncState();
+  const projectManagement = new FakeProjectManagement();
+  const taskManager = new FakeTaskManager();
+  const writer = new FakeWriter();
+  const { action, events } = buildAction(
+    vault,
+    syncState,
+    projectManagement,
+    taskManager,
+    writer as unknown as ApplyTaskToTodoistAction,
+  );
+  return {
+    action,
+    events,
+    vault,
+    syncState,
+    projectManagement,
+    taskManager,
+    writer,
+  };
+}
+
+// A composed harness: the REAL writer over the fakes, so the two-phase ordering
+// and the settle property are observable end to end (the fakes apply the
+// anchor and snapshot writes the writer makes).
+function composedHarness() {
+  const vault = new FakeVault();
+  const syncState = new FakeSyncState();
+  const projectManagement = new FakeProjectManagement();
+  const taskManager = new FakeTaskManager();
+  const writer = new ApplyTaskToTodoistAction(taskManager, vault, syncState);
+  const { action, events } = buildAction(
+    vault,
+    syncState,
+    projectManagement,
+    taskManager,
+    writer,
   );
   return {
     action,
@@ -417,7 +561,7 @@ describe('SyncTodoistTasksAction', () => {
     const childCall = h.writer.taskCalls.find(
       (call) => call.task.title === 'The child',
     );
-    expect(childCall?.parentId).toBe('T-new');
+    expect(childCall?.parentId).toBe(h.writer.taskReturns[0]);
   });
 
   it('projects a to-do linked from a task checklist', async () => {
@@ -442,7 +586,7 @@ describe('SyncTodoistTasksAction', () => {
     // Then — the to-do is projected under the task's twin
     expect(h.writer.todoCalls).toHaveLength(1);
     expect(h.writer.todoCalls[0]!.todo.title).toBe('Step one');
-    expect(h.writer.todoCalls[0]!.parentId).toBe('T-task');
+    expect(h.writer.todoCalls[0]!.parentId).toBe(h.writer.taskReturns[0]);
   });
 
   it('swallows a step failure so the GitHub half is never affected', async () => {
@@ -480,5 +624,241 @@ describe('SyncTodoistTasksAction', () => {
 
     // Then — no later step ran and the failure did not propagate
     expect(events).toEqual([]);
+  });
+});
+
+describe('SyncTodoistTasksAction creation order', () => {
+  const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+  const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
+  const stepPath = 'Projecten/Acme Widgets/todos/step-one.md';
+  const sliceUrl = 'https://github.com/acme/widgets/issues/40';
+  const childUrl = 'https://github.com/acme/widgets/issues/42';
+  const takenFolder = 'Projecten/Acme Widgets/taken';
+
+  it('#61: creates the missing parent twin before wiring its to-do', async () => {
+    // Given — a tracked task whose twin record is missing (a stale anchor is
+    // all that remains) and a to-do linked from its checklist
+    const h = harness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(
+      taskPath,
+      taskNote('Building', `- [ ] [[${stepPath}|Step one]]`, 'T-stale'),
+    );
+    h.vault.notes.set(stepPath, toDoNote('42-fix-the-bug'));
+    h.syncState.statuses.set(issue().url, status(taskPath, issue().url));
+    h.vault.folders.set(takenFolder, [taskPath]);
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — phase A creates the parent twin top-level
+    expect(h.writer.taskCalls).toHaveLength(1);
+    expect(h.writer.taskCalls[0]!.parentId).toBeNull();
+    expect(h.writer.taskCalls[0]!.sectionId).toBe('S2');
+
+    // And — phase B wires the to-do to that freshly created twin, never the
+    // stale anchor
+    expect(h.writer.todoCalls).toHaveLength(1);
+    expect(h.writer.todoCalls[0]!.parentId).toBe(h.writer.taskReturns[0]);
+    expect(h.writer.todoCalls[0]!.parentId).not.toBe('T-stale');
+
+    // And — the parent create strictly precedes the to-do, so the parent twin
+    // the to-do hangs off cannot be missing mid-pass
+    expect(h.writer.order).toEqual(['task:Fix the bug', 'todo:Step one']);
+
+    // And — no to-do create ever reaches Todoist without a real parent twin
+    for (const call of h.writer.todoCalls) {
+      expect(h.writer.taskReturns).toContain(call.parentId);
+    }
+  });
+
+  it('rebuilds a whole slice tree in one pass from an empty twin store', async () => {
+    // Given — an empty todoistItem namespace and a full vault tree: a slice,
+    // its child task, and the child's to-do
+    const h = harness();
+    h.projectManagement.issues = [
+      issue({
+        url: sliceUrl,
+        remoteId: 40,
+        title: 'The slice',
+        labels: ['type: slice'],
+      }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(slicePath, sliceNote(sliceUrl, 'Building'));
+    h.vault.notes.set(
+      childPath,
+      sliceChildNote(
+        childUrl,
+        'Building',
+        '40-the-slice',
+        `- [ ] [[${stepPath}|Step one]]`,
+      ),
+    );
+    h.vault.notes.set(stepPath, toDoNote('42-the-child'));
+    h.syncState.statuses.set(sliceUrl, status(slicePath, sliceUrl));
+    h.syncState.statuses.set(childUrl, status(childPath, childUrl));
+    h.vault.folders.set(takenFolder, [slicePath, childPath]);
+
+    // When — one pass runs
+    await h.action.execute(input);
+
+    // Then — the slice is top-level, the child hangs off the slice, and the
+    // to-do hangs off the child, each parent resolved from the twin just created
+    expect(h.writer.taskCalls.map((call) => call.task.title)).toEqual([
+      'The slice',
+      'The child',
+    ]);
+    expect(h.writer.taskCalls[0]!.parentId).toBeNull();
+    expect(h.writer.taskCalls[1]!.parentId).toBe(h.writer.taskReturns[0]);
+    expect(h.writer.todoCalls).toHaveLength(1);
+    expect(h.writer.todoCalls[0]!.parentId).toBe(h.writer.taskReturns[1]);
+
+    // And — the slice (phase A) precedes its child (phase B), which precedes
+    // the to-do (phase B, after every task twin exists)
+    expect(h.writer.order).toEqual([
+      'task:The slice',
+      'task:The child',
+      'todo:Step one',
+    ]);
+  });
+
+  it('creates a standalone task top-level with no parent', async () => {
+    // Given — a tracked task with no slice affiliation and no twin
+    const h = harness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(taskPath, taskNote('Building'));
+    h.syncState.statuses.set(issue().url, status(taskPath, issue().url));
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the task is top-level with no parent
+    expect(h.writer.taskCalls).toHaveLength(1);
+    expect(h.writer.taskCalls[0]!.parentId).toBeNull();
+  });
+
+  it('creates a slice-member task under the slice twin', async () => {
+    // Given — a slice and a child affiliated to it
+    const h = harness();
+    h.projectManagement.issues = [
+      issue({
+        url: sliceUrl,
+        remoteId: 40,
+        title: 'The slice',
+        labels: ['type: slice'],
+      }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(slicePath, sliceNote(sliceUrl, 'Building'));
+    h.vault.notes.set(
+      childPath,
+      sliceChildNote(childUrl, 'Building', '40-the-slice'),
+    );
+    h.syncState.statuses.set(sliceUrl, status(slicePath, sliceUrl));
+    h.syncState.statuses.set(childUrl, status(childPath, childUrl));
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the child hangs off the slice's twin
+    expect(h.writer.taskCalls[1]!.parentId).toBe(h.writer.taskReturns[0]);
+  });
+
+  it('settles: a second pass writes nothing on any surface', async () => {
+    // Given — a clean tree rebuilt in one pass by the real writer
+    const h = composedHarness();
+    h.projectManagement.issues = [
+      issue({
+        url: sliceUrl,
+        remoteId: 40,
+        title: 'The slice',
+        labels: ['type: slice'],
+      }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(slicePath, sliceNote(sliceUrl, 'Building'));
+    h.vault.notes.set(
+      childPath,
+      sliceChildNote(
+        childUrl,
+        'Building',
+        '40-the-slice',
+        `- [ ] [[${stepPath}|Step one]]`,
+      ),
+    );
+    h.vault.notes.set(stepPath, toDoNote('42-the-child'));
+    h.syncState.statuses.set(sliceUrl, status(slicePath, sliceUrl));
+    h.syncState.statuses.set(childUrl, status(childPath, childUrl));
+    h.vault.folders.set(takenFolder, [slicePath, childPath]);
+
+    await h.action.execute(input);
+    expect(h.taskManager.createTaskCalls).toHaveLength(3);
+
+    // When — a second pass runs with no external change
+    await h.action.execute(input);
+
+    // Then — nothing is created, updated, moved or completed again
+    expect(h.taskManager.createTaskCalls).toHaveLength(3);
+    expect(h.taskManager.updateTaskCalls).toEqual([]);
+    expect(h.taskManager.moveTaskCalls).toEqual([]);
+    expect(h.taskManager.completeCalls).toEqual([]);
+  });
+
+  it('never creates a top-level to-do whose parent twin cannot exist', async () => {
+    // Given — a to-do linked from a task note that is not tracked and carries
+    // only a stale anchor, so no twin can exist after the task projection. The
+    // real writer is composed so a create would reach the Todoist fake.
+    const h = composedHarness();
+    h.projectManagement.issues = [];
+    h.vault.notes.set(
+      taskPath,
+      taskNote('Building', `- [ ] [[${stepPath}|Step one]]`, 'T-stale'),
+    );
+    h.vault.notes.set(stepPath, toDoNote('42-fix-the-bug'));
+    h.vault.folders.set(takenFolder, [taskPath]);
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the to-do is skipped: Todoist receives no create, so it can never
+    // be materialised as a top-level task by capture
+    expect(h.taskManager.createTaskCalls).toEqual([]);
+    expect(h.taskManager.ensureLabelCalls).toEqual([]);
+  });
+
+  it('#61 composed: stamps the to-do record with the real parent twin', async () => {
+    // Given — a tracked task whose twin record is missing and a to-do linked
+    // from its checklist, through the real writer
+    const h = composedHarness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(
+      taskPath,
+      taskNote('Building', `- [ ] [[${stepPath}|Step one]]`, 'T-stale'),
+    );
+    h.vault.notes.set(stepPath, toDoNote('42-fix-the-bug'));
+    h.syncState.statuses.set(issue().url, status(taskPath, issue().url));
+    h.vault.folders.set(takenFolder, [taskPath]);
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the parent twin is top-level and the to-do is its child
+    const parent = h.taskManager.active.find(
+      (task) => task.content === 'Fix the bug',
+    )!;
+    const todo = h.taskManager.active.find(
+      (task) => task.content === 'Step one',
+    )!;
+    expect(parent.parentId).toBeNull();
+    expect(todo.parentId).toBe(parent.id);
+
+    // And — the to-do's snapshot record carries the real parent twin id, so the
+    // next poll cannot read it as a top-level item
+    expect(h.syncState.todoistStates.get(stepPath)!.parent).toBe(parent.id);
+    expect(h.syncState.todoistStates.get(taskPath)!.parent).toBeNull();
+
+    // And — the stale anchor was replaced by the newly created twin id
+    expect(h.vault.notes.get(taskPath)).toContain(`todoist: ${parent.id}`);
   });
 });

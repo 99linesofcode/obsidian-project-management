@@ -44,12 +44,14 @@ interface ProjectionItem {
 }
 
 // One to-do linked from a tracked task's checklist, resolved to its note and
-// the twin of the task that owns it.
+// the task note that owns it.
 interface ToDoItem {
   notePath: string;
   noteContent: string;
   title: string;
-  taskTwinId: string;
+  // The parent task's note path; its twin is resolved from the pass's task
+  // projection (or the stored record), never from a stale note anchor.
+  taskNotePath: string;
   // The parent to-do's note stem when this to-do nests under another to-do
   // (Todoist indent level 4 — the ceiling); null for a direct task child.
   parentStem: string | null;
@@ -108,8 +110,12 @@ export class SyncTodoistTasksAction {
 
       // The probe: one active-task fetch serves both projections.
       const active = await this.taskManager.fetchActiveTasks(input.projectId);
-      await this.projectTasks(input, active);
-      await this.projectToDos(input, active);
+      // The pass-level twin plan: projectTasks creates every top-level twin
+      // first (phase A) and returns note-path -> twin-id for the whole tree, so
+      // projectToDos can hang each to-do off a parent that exists in this pass
+      // (phase B) instead of a possibly-stale note anchor.
+      const taskTwinIdByNotePath = await this.projectTasks(input, active);
+      await this.projectToDos(input, active, taskTwinIdByNotePath);
 
       // Deletions last (spec reconcile step 7).
       await this.propagateTodoistDeletions.execute({
@@ -120,17 +126,21 @@ export class SyncTodoistTasksAction {
     }
   }
 
-  // The vault's tracked tasks projected onto their twins. Slices first so a
-  // child can nest under its slice's twin, then the children, then the
-  // unaffiliated top-level tasks.
+  // The vault's tracked tasks projected onto their twins in TWO PHASES. Phase A
+  // creates every top-level twin first — a slice's twin and a standalone
+  // task's twin are both top-level — so phase B can wire a child to a parent
+  // that exists in this very pass. Phase B then creates the slice-member tasks
+  // under their slice twin. The returned map (note path -> twin id) is the
+  // pass's twin plan; projectToDos hangs each to-do off it.
   private async projectTasks(
     input: SyncTodoistTasksInput,
     active: TodoistTaskData[],
-  ): Promise<void> {
+  ): Promise<Map<string, string>> {
+    const taskTwinIdByNotePath = new Map<string, string>();
     const identity = await this.syncState.getIdentity(input.projectName);
     // A project without a GitHub attach has no typed issues to project (dt-03).
     if (!identity?.repoUrl) {
-      return;
+      return taskTwinIdByNotePath;
     }
 
     const projectState = await this.syncState.getTodoistProjectState(
@@ -195,7 +205,9 @@ export class SyncTodoistTasksAction {
       (item) => item.type !== 'slice' && item.sliceLink === null,
     );
 
-    const sliceTaskIdByNotePath = new Map<string, string>();
+    // Phase A — every top-level twin. Slices and standalone tasks both sit at
+    // the top level; creating them before any child is what lets phase B (and
+    // the to-do pass) resolve a real parent id.
     for (const item of slices) {
       const taskId = await this.projectItem(
         item,
@@ -204,36 +216,41 @@ export class SyncTodoistTasksAction {
         sections,
         input,
       );
-      sliceTaskIdByNotePath.set(item.notePath, taskId);
+      taskTwinIdByNotePath.set(item.notePath, taskId);
     }
-
-    for (const item of children) {
-      const slicePath = sliceNotePath(input.projectName, item.sliceLink!);
-      const parentId =
-        sliceTaskIdByNotePath.get(slicePath) ??
-        (await this.sliceTaskId(slicePath));
-      if (parentId === null) {
-        // The slice has no twin yet; the child waits for the next tick.
-        continue;
-      }
-      await this.projectItem(
-        item,
-        { sectionId: null, parentId },
-        activeById,
-        sections,
-        input,
-      );
-    }
-
     for (const item of unaffiliated) {
-      await this.projectItem(
+      const taskId = await this.projectItem(
         item,
         { sectionId: sections[item.lane] ?? null, parentId: null },
         activeById,
         sections,
         input,
       );
+      taskTwinIdByNotePath.set(item.notePath, taskId);
     }
+
+    // Phase B — slice-member tasks attach to the slice twin phase A created (or
+    // an existing one the map already carries).
+    for (const item of children) {
+      const slicePath = sliceNotePath(input.projectName, item.sliceLink!);
+      const parentId =
+        taskTwinIdByNotePath.get(slicePath) ??
+        (await this.sliceTaskId(slicePath));
+      if (parentId === null) {
+        // The slice has no twin yet; the child waits for the next tick.
+        continue;
+      }
+      const taskId = await this.projectItem(
+        item,
+        { sectionId: null, parentId },
+        activeById,
+        sections,
+        input,
+      );
+      taskTwinIdByNotePath.set(item.notePath, taskId);
+    }
+
+    return taskTwinIdByNotePath;
   }
 
   // Projects one task through the canonical pipeline and returns its twin id.
@@ -275,11 +292,15 @@ export class SyncTodoistTasksAction {
     });
   }
 
-  // The vault's to-dos projected onto their twins. Roots before nested children
-  // so a child can find its parent's twin.
+  // The vault's to-dos projected onto their twins. Phase B of the pass: every
+  // task twin already exists (phase A created the top-level ones, the loop
+  // below creates the slice members first), so a root to-do always hangs off a
+  // real task twin. A to-do whose parent twin cannot exist is an orphan owned
+  // by the vault-consistency pass: it is skipped, never created top-level.
   private async projectToDos(
     input: SyncTodoistTasksInput,
     active: TodoistTaskData[],
+    taskTwinIdByNotePath: Map<string, string>,
   ): Promise<void> {
     const items = await this.collectToDos(input.projectName);
     if (items.length === 0) {
@@ -292,12 +313,21 @@ export class SyncTodoistTasksAction {
 
     const twinIdByStem = new Map<string, string>();
     for (const item of roots) {
-      const id = await this.projectToDoItem(
-        item,
-        item.taskTwinId,
-        activeById,
-        input,
+      const parentId = await this.parentTaskTwinId(
+        item.taskNotePath,
+        taskTwinIdByNotePath,
       );
+      if (parentId === null) {
+        // The parent task has no twin and none can exist this pass (it is not a
+        // tracked issue and carries no stored record). The to-do is an orphan
+        // the vault-consistency pass will trash; creating it top-level is the
+        // #61 churn loop, so it is skipped and converges next tick.
+        console.error(
+          `SyncTodoistTasksAction: to-do ${item.notePath} has no parent twin (${item.taskNotePath}); skipping this tick`,
+        );
+        continue;
+      }
+      const id = await this.projectToDoItem(item, parentId, activeById, input);
       twinIdByStem.set(stemOf(item.notePath), id);
     }
 
@@ -313,6 +343,22 @@ export class SyncTodoistTasksAction {
       }
       await this.projectToDoItem(item, parentId, activeById, input);
     }
+  }
+
+  // The parent task's twin id: the pass's own projection first, so a twin
+  // created this pass wins over a stale note anchor, then the stored record for
+  // a captured draft task that is not a tracked issue. Null when neither
+  // exists — the to-do must not be created.
+  private async parentTaskTwinId(
+    taskNotePath: string,
+    taskTwinIdByNotePath: Map<string, string>,
+  ): Promise<string | null> {
+    const planned = taskTwinIdByNotePath.get(taskNotePath);
+    if (planned !== undefined) {
+      return planned;
+    }
+    const stored = await this.syncState.getTodoistState(taskNotePath);
+    return stored?.todoistId ?? null;
   }
 
   private async projectToDoItem(
@@ -420,8 +466,11 @@ export class SyncTodoistTasksAction {
     };
   }
 
-  // Every to-do linked from the checklist of a task note that carries a
-  // `todoist` twin anchor. De-duplicated by note path.
+  // Every to-do linked from a task note's checklist, keyed by the task note
+  // that owns it. The anchor is deliberately NOT read here: a to-do's parent
+  // twin is resolved from the pass's task projection, so a task whose twin
+  // record was lost still gets its to-dos hung off the twin this pass creates.
+  // De-duplicated by to-do note path.
   private async collectToDos(projectName: string): Promise<ToDoItem[]> {
     const items = new Map<string, ToDoItem>();
     const folder = `Projecten/${projectName}/taken`;
@@ -429,11 +478,6 @@ export class SyncTodoistTasksAction {
     for (const taskPath of await this.vault.listNotesInFolder(folder)) {
       const task = await this.vault.getNoteByPath(taskPath);
       if (!task) {
-        continue;
-      }
-      const taskTwinId = anchorOf(task.content);
-      // A task with no twin has nowhere to hang its to-dos.
-      if (taskTwinId === null) {
         continue;
       }
       const body = splitFrontmatter(task.content)?.body ?? task.content;
@@ -453,7 +497,7 @@ export class SyncTodoistTasksAction {
           notePath: entry.linkPath,
           noteContent: todo.content,
           title: entry.text,
-          taskTwinId,
+          taskNotePath: taskPath,
           parentStem: parentStemFromAffiliation(
             parsed.affiliation,
             projectName,
