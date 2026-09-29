@@ -2,14 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { SyncVerdict } from '../../../src/Domain/Reconciliation/SyncVerdict.js';
 
 describe('SyncVerdict', () => {
-  it('holds a per-dimension verdict for the body and status', () => {
-    // Given — a body and status verdict
+  it('holds one verdict per content field', () => {
+    // Given — a verdict for each diffed field
 
     // When — a sync verdict is constructed
-    const verdict = new SyncVerdict({ body: 'push', status: 'pull' });
 
-    // Then — it exposes both dimensions
-    expect(verdict.body).toBe('push');
-    expect(verdict.status).toBe('pull');
+    // Then — it exposes every field
+    const verdict = new SyncVerdict({
+      title: 'push',
+      body: 'pull',
+      status: 'conflict',
+      completedAt: 'none',
+      type: 'push',
+      parent: 'pull',
+    });
+    expect(verdict.title).toBe('push');
+    expect(verdict.body).toBe('pull');
+    expect(verdict.status).toBe('conflict');
+    expect(verdict.completedAt).toBe('none');
+    expect(verdict.type).toBe('push');
+    expect(verdict.parent).toBe('pull');
   });
 });

@@ -1,94 +1,116 @@
 import { describe, expect, it } from 'vitest';
 import { VerdictResolver } from '../../../src/Domain/Reconciliation/VerdictResolver.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskData } from './taskView.js';
 
-const snapshot: TaskData = {
-  url: 'https://github.com/acme/widgets/issues/42',
-  remoteId: 42,
-  nodeId: 'I_kwDOAAAA42',
-  todoistId: '',
-  notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-  title: 'Fix the bug',
-  body: 'The bug happens on resize.',
-  status: 'Building',
-  completed: false,
-  parent: null,
-  labels: [],
-  updatedAt: '2026-09-18T10:00:00Z',
-};
-
-const resolver = new VerdictResolver();
+const resolver = new VerdictResolver('Done');
 
 describe('VerdictResolver.diff', () => {
-  it('pushes when only the vault changed', () => {
-    // Given — the vault body moved, the remote did not
-    const vault = { ...snapshot, body: 'The bug now also happens on resize.' };
+  it('pushes a field the vault changed and the remote did not', () => {
+    // Given — the vault title moved, the remote still matches base
 
     // When — the canonical diff runs
-    const verdict = resolver.diff(vault, snapshot, snapshot);
 
-    // Then — the vault change is pushed
-    expect(verdict).toBe('push');
+    // Then — the title is pushed and nothing else moves
+    const base = taskData();
+    const vault = taskData({ title: 'Vault title' });
+    const verdicts = resolver.diff(vault, base, base);
+    expect(verdicts.title).toBe('push');
+    expect(verdicts.body).toBe('none');
+    expect(verdicts.status).toBe('none');
   });
 
-  it('pulls when only the remote changed', () => {
-    // Given — the remote status moved, the vault did not
-    const remote = { ...snapshot, status: 'Shipped' };
+  it('pulls a field the remote changed and the vault did not', () => {
+    // Given — the remote status moved, the vault still matches base
 
     // When — the canonical diff runs
-    const verdict = resolver.diff(snapshot, remote, snapshot);
 
-    // Then — the remote change is pulled
-    expect(verdict).toBe('pull');
+    // Then — the status is pulled
+    const base = taskData();
+    const remote = taskData({ status: 'Done' });
+    expect(resolver.diff(base, remote, base).status).toBe('pull');
   });
 
-  it('conflicts (vault wins) when both sides changed', () => {
-    // Given — both the vault and the remote moved
-    const vault = { ...snapshot, body: 'Vault edit.' };
-    const remote = { ...snapshot, status: 'Shipped' };
+  it('conflicts a field both sides changed', () => {
+    // Given — both the vault and the remote body moved
 
     // When — the canonical diff runs
-    const verdict = resolver.diff(vault, remote, snapshot);
 
-    // Then — the conflict resolves to the vault
-    expect(verdict).toBe('conflict');
+    // Then — the body conflicts
+    const base = taskData();
+    const vault = taskData({ body: 'vault-digest' });
+    const remote = taskData({ body: 'remote-digest' });
+    expect(resolver.diff(vault, remote, base).body).toBe('conflict');
   });
 
-  it('does nothing when neither side changed', () => {
-    // Given — vault, remote and snapshot all agree
+  it('leaves a field alone when neither side changed', () => {
+    // Given — vault, remote and base all agree
 
     // When — the canonical diff runs
-    const verdict = resolver.diff(snapshot, snapshot, snapshot);
 
-    // Then — there is nothing to do
-    expect(verdict).toBe('none');
+    // Then — every field is none
+    const base = taskData();
+    const verdicts = resolver.diff(base, base, base);
+    expect(verdicts).toEqual({
+      title: 'none',
+      body: 'none',
+      status: 'none',
+      completedAt: 'none',
+      type: 'none',
+      parent: 'none',
+    });
   });
 
-  it('ignores identity fields', () => {
-    // Given — only the identity fields differ
-    const vault = {
-      ...snapshot,
-      notePath: 'Projecten/Acme Widgets/taken/renamed.md',
-    };
-    const remote = { ...snapshot, updatedAt: '2026-09-18T11:00:00Z' };
+  it('attributes each content field independently', () => {
+    // Given — the vault body moved and the remote status moved
 
     // When — the canonical diff runs
-    const verdict = resolver.diff(vault, remote, snapshot);
 
-    // Then — identity drift is not a content change
-    expect(verdict).toBe('none');
+    // Then — body pushes while status pulls
+    const base = taskData();
+    const vault = taskData({ body: 'vault-digest' });
+    const remote = taskData({ status: 'Done' });
+    const verdicts = resolver.diff(vault, remote, base);
+    expect(verdicts.body).toBe('push');
+    expect(verdicts.status).toBe('pull');
+    expect(verdicts.title).toBe('none');
+  });
+
+  it('attributes type and parent', () => {
+    // Given — the vault type and the remote parent moved
+
+    // When — the canonical diff runs
+
+    // Then — type pushes and parent pulls
+    const base = taskData();
+    const vault = taskData({ type: 'slice' });
+    const remote = taskData({ parent: 'task-9' });
+    const verdicts = resolver.diff(vault, remote, base);
+    expect(verdicts.type).toBe('push');
+    expect(verdicts.parent).toBe('pull');
+  });
+
+  it('attributes completedAt', () => {
+    // Given — the remote carries a completion stamp base lacks
+
+    // When — the canonical diff runs
+
+    // Then — completedAt pulls
+    const base = taskData();
+    const remote = taskData({ completedAt: '2026-09-18T12:00:00Z' });
+    expect(resolver.diff(base, remote, base).completedAt).toBe('pull');
   });
 
   it('is deterministic for the same input', () => {
     // Given — a scenario where both sides changed
-    const vault = { ...snapshot, body: 'Vault edit.' };
-    const remote = { ...snapshot, status: 'Shipped' };
 
     // When — the diff runs twice
-    const first = resolver.diff(vault, remote, snapshot);
-    const second = resolver.diff(vault, remote, snapshot);
 
     // Then — both verdicts are identical
-    expect(second).toBe(first);
+    const base = taskData();
+    const vault = taskData({ body: 'vault-digest' });
+    const remote = taskData({ status: 'Done' });
+    expect(resolver.diff(vault, remote, base)).toEqual(
+      resolver.diff(vault, remote, base),
+    );
   });
 });
