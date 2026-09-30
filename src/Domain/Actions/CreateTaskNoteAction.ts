@@ -1,20 +1,27 @@
-import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import { Mirror } from '../DataTransferObjects/Mirror.js';
+import { freePath } from '../Notes/freePath.js';
 import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
-import { hash } from '../Notes/hash.js';
-import type { VaultPort } from '../Ports/VaultPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { VaultPort } from '../Ports/VaultPort.js';
 
 export interface CreateTaskNoteInput {
-  task: GithubTaskData;
+  // The issue url when the note is GitHub-backed; '' for a vault-only note.
+  // Recorded as the github mirror handle so a later pass resolves the entity.
+  url: string;
+  title: string;
+  body: string;
+  // The vault-owned content type (from the winning task or the promoted label).
+  type: string;
   projectName: string;
   syncedAt: string;
   // The project's Status option name the task starts in.
   statusName: string;
 }
 
-// UC2: materialise a task note. Idempotent — if the note already exists it is
-// left untouched. Otherwise the note is created and its Status record written.
+// UC2: materialise a task note. Idempotent — an issue already registered keeps
+// its note. Otherwise the note is created with a fresh vault-owned uuid, named
+// by title slug (ordinal-suffixed on collision), and its registry record is
+// written with the github handle when the task has one.
 export class CreateTaskNoteAction {
   constructor(
     private readonly vault: VaultPort,
@@ -23,39 +30,43 @@ export class CreateTaskNoteAction {
   ) {}
 
   async execute(input: CreateTaskNoteInput): Promise<void> {
-    const template = await this.readTemplate();
-    const { path, content } = TaskNoteMapper.render(template, input.task, {
-      projectName: input.projectName,
-      syncedAt: input.syncedAt,
-      statusName: input.statusName,
-    });
-
-    const existing = await this.vault.getNoteByPath(path);
-    if (existing) {
+    // The registry is the identity check now: the slug filename is shared by
+    // any task with the same title, so path existence no longer means "ours".
+    if (
+      input.url !== '' &&
+      (await this.syncState.findByMirror('github', input.url)) !== null
+    ) {
       return;
     }
 
-    await this.vault.createNote(path, content);
+    const id = crypto.randomUUID();
+    const template = await this.readTemplate();
+    const { path: base, content } = TaskNoteMapper.render(
+      template,
+      {
+        id,
+        type: input.type,
+        title: input.title,
+        body: input.body,
+        createdAt: null,
+      },
+      {
+        projectName: input.projectName,
+        syncedAt: input.syncedAt,
+        statusName: input.statusName,
+      },
+    );
+    // A title slug can collide with another task; freePath appends the ordinal
+    // so the name stays human-readable and unique.
+    const path = await freePath(this.vault, base);
 
-    // The canonical snapshot record: the body carries the issue-body hash (the
-    // comparable fingerprint), the lane is preserved verbatim. `completed` is
-    // re-derived from the lane at diff time, so a default here is not
-    // load-bearing.
-    const snapshot: TaskData = {
-      url: input.task.url,
-      remoteId: input.task.remoteId,
-      nodeId: input.task.nodeId,
-      todoistId: '',
+    await this.vault.createNote(path, content);
+    await this.syncState.set({
+      id,
       notePath: path,
-      title: input.task.title,
-      body: hash(input.task.body),
-      status: input.statusName,
-      completed: false,
-      parent: null,
-      labels: [...input.task.labels],
-      updatedAt: input.task.updatedAt,
-    };
-    await this.syncState.set(snapshot);
+      mirrors:
+        input.url === '' ? {} : { github: new Mirror(input.url, null) },
+    });
   }
 
   // The template note's content, or null when it does not exist — render

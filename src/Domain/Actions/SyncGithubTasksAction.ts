@@ -1,16 +1,29 @@
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
+import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
 import { statusNameFromState } from '../Board/statusNameFromState.js';
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
-import { GithubTaskMapper } from '../Mappers/GithubTaskMapper.js';
+import {
+  GithubTaskMapper,
+  typeFromLabels,
+} from '../Mappers/GithubTaskMapper.js';
 import { VaultTaskMapper } from '../Mappers/VaultTaskMapper.js';
 import { toIssueBody } from '../Notes/Checklist.js';
 import { hash } from '../Notes/hash.js';
+import { parseAffiliation } from '../Notes/parseAffiliation.js';
+import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
+import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
+import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
+import type { ConflictHints } from '../Reconciliation/VerdictResolver.js';
 import { VerdictResolver } from '../Reconciliation/VerdictResolver.js';
+import type {
+  DimensionVerdict,
+  SyncVerdict,
+} from '../Reconciliation/SyncVerdict.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { ApplyTaskToGithubAction } from './ApplyTaskToGithubAction.js';
 import type { ApplyTaskToVaultAction } from './ApplyTaskToVaultAction.js';
@@ -23,18 +36,20 @@ export interface SyncGithubTasksInput {
   includeBoard: boolean;
 }
 
-// The GitHub half on the canonical pipeline: probe gate → single-query project
-// detail fetch → GithubTaskMapper maps every issue+card to canonical TaskData →
-// VerdictResolver.diff(vault, remote, snapshot) per entity → the two writers
-// apply the winning side. Replaces the t2 interim (probe → old sweep → per-note
-// consistency loop).
+// The GitHub half on the uuid-keyed registry: probe gate → single-query project
+// detail fetch → per issue, resolve its record by mirror handle → map the
+// remote live view, read the note's live view, read the mirror's base → per-
+// field three-way diff → apply the winning side through the two writers.
 //
-// The snapshot DTO is read straight from the canonical store (one TaskData per
-// issue); its body field carries the comparable issue-body hash, and the
-// pipeline hashes the vault/remote bodies before diffing, so the canonical
-// diff's string comparison is a hash comparison. Titles are slug-compared,
-// because the vault's title is filename-derived and the remote's is the issue
-// title.
+// Identity always comes from the registry, never from the fetch: the mapper
+// leaves id/notePath empty and this action composes them from the record. All
+// diffing operates on diff views (body = digest); base storage is a diff view.
+//
+// The reopen veto (dt-17, the revert fix) lives here: a pull that would move a
+// done note off the done lane is vetoed while the mirror's own state disagrees
+// with its lane (a closed issue whose card sits in an active lane). The board
+// lane is eventually consistent, so a stale lane must never revert a
+// completion; the mirror is re-reconciled to the base instead.
 export class SyncGithubTasksAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -54,16 +69,11 @@ export class SyncGithubTasksAction {
       );
     }
 
-    const statuses = await this.syncState.list();
-    const statusByUrl = new Map(statuses.map((s) => [s.url, s] as const));
-
     // The probe gate: skip the whole fetch when the remote is unmoved and the
     // vault is settled. A vault-side drift re-opens it so the drift can be
-    // pushed; a project with no records is unknown, so it fetches.
-    if (
-      !input.includeBoard &&
-      !(await this.hasVaultDrift(input.projectName, statuses))
-    ) {
+    // pushed; a project with no github-mirrored records is unknown, so it
+    // fetches.
+    if (!input.includeBoard && !(await this.hasVaultDrift(input.projectName))) {
       return;
     }
 
@@ -83,191 +93,483 @@ export class SyncGithubTasksAction {
 
     for (const issue of issues) {
       const card = cardByUrl.get(issue.url) ?? null;
-      const status = statusByUrl.get(issue.url);
-      const rawRemote = GithubTaskMapper.parse(issue, card);
-      // The board lane is authoritative for done-ness when a card carries one;
-      // a card with no lane falls back to the record's lane (backfill); a
-      // card-less issue falls back to the lane its state implies.
-      const remote = this.withLaneDone(
-        rawRemote,
+      // Handle-index resolution: the issue url is the github mirror handle.
+      const record = await this.syncState.findByMirror('github', issue.url);
+      if (record === null) {
+        await this.materializeUntracked(
+          issue,
+          card,
+          input,
+          doneLane,
+          defaultLane,
+        );
+        continue;
+      }
+      await this.reconcileTracked(
+        issue,
         card,
-        issue.state,
+        record,
+        input,
         doneLane,
         defaultLane,
-        status,
       );
-
-      // An untracked issue: materialise the note and add the card. A closed
-      // untracked issue is skipped — it is either swept or pre-plugin history,
-      // and the vault is the source of truth. Reopening it on GitHub makes it an
-      // open untracked issue, so it materialises then. The raw state is read
-      // from the fetched issue, not the lane-derived `completed` (a closed issue
-      // with a stale card in an active lane derives completed=false).
-      if (!status) {
-        if (issue.state === 'closed') {
-          continue;
-        }
-        await this.applyToVault.execute({
-          task: remote,
-          current: null,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-        });
-        await this.applyToGithub.execute({
-          task: remote,
-          current: rawRemote,
-          hasCard: card !== null,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-        });
-        continue;
-      }
-
-      const note = await this.vault.getNoteByPath(status.notePath);
-      const vaultDto = note
-        ? VaultTaskMapper.parseTask(note.content, status.notePath, {
-            projectName: input.projectName,
-            doneLane,
-          })
-        : null;
-      // The note is gone; the deletion sweep owns it.
-      if (!vaultDto) {
-        continue;
-      }
-
-      const snapshot = this.snapshotForDiff(status, doneLane);
-      const verdict = this.verdictResolver.diff(
-        this.forDiff(vaultDto, hash(toIssueBody(vaultDto.body))),
-        this.forDiff(remote, hash(remote.body)),
-        this.forDiff(snapshot, snapshot.body),
-      );
-
-      if (verdict === 'push' || verdict === 'conflict') {
-        await this.applyToGithub.execute({
-          task: vaultDto,
-          current: rawRemote,
-          hasCard: card !== null,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-        });
-      } else if (verdict === 'pull') {
-        await this.applyToVault.execute({
-          task: remote,
-          current: vaultDto,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-        });
-        // The board lane's done-ness drives the issue state: reconcile the
-        // issue when the remote's own fields disagree.
-        if (remote.completed !== rawRemote.completed) {
-          await this.applyToGithub.execute({
-            task: remote,
-            current: rawRemote,
-            hasCard: card !== null,
-            projectName: input.projectName,
-            syncedAt: input.syncedAt,
-          });
-        }
-      } else if (card === null || card.statusOptionName === undefined) {
-        // A membership gap (no card) or a lane gap (a card with no lane): the
-        // writer adds or backfills it in the winning lane.
-        await this.applyToGithub.execute({
-          task: remote,
-          current: rawRemote,
-          hasCard: card !== null,
-          projectName: input.projectName,
-          syncedAt: input.syncedAt,
-        });
-      }
     }
   }
 
-  // The board lane is authoritative for done-ness when a card carries one; a
-  // card with no lane falls back to the record's lane (backfill); a card-less
-  // issue falls back to the lane its state implies.
-  private withLaneDone(
-    raw: TaskData,
+  // An untracked issue: materialise the note and add the card. A closed
+  // untracked issue is skipped — it is either swept or pre-plugin history, and
+  // the vault is the source of truth; reopening it on GitHub makes it an open
+  // untracked issue, so it materialises then. The raw state gates the decision,
+  // not the lane-derived completion (a closed issue with a stale card in an
+  // active lane still reads closed here).
+  private async materializeUntracked(
+    issue: GithubTaskData,
     card: BoardItemData | null,
-    state: 'open' | 'closed',
+    input: SyncGithubTasksInput,
     doneLane: string,
     defaultLane: string,
-    status: TaskData | undefined,
-  ): TaskData {
-    if (card && card.statusOptionName !== undefined) {
-      return {
-        ...raw,
-        status: card.statusOptionName,
-        completed: card.statusOptionName === doneLane,
-      };
+  ): Promise<void> {
+    if (issue.state === 'closed') {
+      return;
     }
-    if (card) {
-      const lane =
-        status?.status ?? statusNameFromState(state, doneLane, defaultLane);
-      return { ...raw, status: lane, completed: lane === doneLane };
-    }
-    return {
-      ...raw,
-      status: statusNameFromState(state, doneLane, defaultLane),
-      completed: state === 'closed',
-    };
+    const { remote, raw } = this.remoteViews(
+      issue,
+      null,
+      card,
+      doneLane,
+      defaultLane,
+    );
+    // The vault writer creates the note (fresh uuid) and the registry record,
+    // and advances the base after the durable write (origin pull).
+    await this.applyToVault.execute({
+      task: remote,
+      current: null,
+      projectName: input.projectName,
+      syncedAt: input.syncedAt,
+      origin: 'pull',
+    });
+    // The card add is a GitHub write; the writer owns the base advance.
+    await this.applyToGithub.execute({
+      task: remote,
+      current: raw,
+      hasCard: card !== null,
+      projectName: input.projectName,
+      syncedAt: input.syncedAt,
+    });
   }
 
-  // The canonical snapshot the diff reads, straight from the store. The stored
-  // record already carries the canonical content (the body as the comparable
-  // hash); the only derived field is `completed`, re-read from the lane so a
-  // migrated pre-t5 record resolves correctly.
-  private snapshotForDiff(status: TaskData, doneLane: string): TaskData {
+  private async reconcileTracked(
+    issue: GithubTaskData,
+    card: BoardItemData | null,
+    record: EntityRecord,
+    input: SyncGithubTasksInput,
+    doneLane: string,
+    defaultLane: string,
+  ): Promise<void> {
+    const note = await this.vault.getNoteByPath(record.notePath);
+    // The note is gone; the deletion sweep owns it.
+    if (note === null) {
+      return;
+    }
+    const vault = VaultTaskMapper.parseTask(note.content, record.notePath, {
+      projectName: input.projectName,
+      doneLane,
+    });
+    if (vault === null) {
+      return;
+    }
+
+    const { remote, raw } = this.remoteViews(
+      issue,
+      record,
+      card,
+      doneLane,
+      defaultLane,
+    );
+
+    // The pure mapper leaves parent null: the affiliation link names the parent
+    // note, and only the registry can turn that path into the parent's uuid.
+    vault.parent = await this.resolveParent(note.content, input.projectName);
+
+    // Type backfill: a note or record that predates the type promotion adopts
+    // the issue's type label. Stamping both settles the type field.
+    const base = await this.backfillType(issue, record, vault, note.content);
+
+    const vaultDiff = this.diffView(vault, hash(toIssueBody(vault.body)));
+    const remoteDiff = this.diffView(remote, hash(remote.body));
+    const baseDiff =
+      base === null ? remoteDiff : this.diffView(base, base.body);
+
+    const verdicts = this.verdictResolver.diff(vaultDiff, remoteDiff, baseDiff);
+    const resolved = this.verdictResolver.resolveConflicts(
+      vaultDiff,
+      remoteDiff,
+      verdicts,
+      this.conflictHints(issue),
+    );
+    const overall = overallVerdict(resolved);
+
+    if (overall === 'push') {
+      // Origin authority: the vault wins. The writer renders it onto the issue.
+      await this.applyToGithub.execute({
+        task: vault,
+        current: raw,
+        hasCard: card !== null,
+        projectName: input.projectName,
+        syncedAt: input.syncedAt,
+      });
+      return;
+    }
+
+    if (overall === 'pull') {
+      const vetoed = reopenVetoed(vault, remote, resolved, issue, doneLane);
+      if (!vetoed) {
+        await this.applyToVault.execute({
+          task: remote,
+          current: vault,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+          origin: 'pull',
+          record,
+        });
+      }
+      // The completion invariant: a done lane implies a closed issue. When the
+      // lane and the issue's own state disagree, reconcile the issue. On a
+      // veto the base's shape is re-asserted so the stale card lane catches up
+      // to the closed issue; otherwise the lane-derived remote shape is applied.
+      const laneDone = remote.completedAt !== null;
+      const stateDone = raw.completedAt !== null;
+      if (vetoed && base !== null) {
+        await this.applyToGithub.execute({
+          task: reconcileShape(remote, base),
+          current: raw,
+          hasCard: card !== null,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+      } else if (laneDone !== stateDone) {
+        await this.applyToGithub.execute({
+          task: remote,
+          current: raw,
+          hasCard: card !== null,
+          projectName: input.projectName,
+          syncedAt: input.syncedAt,
+        });
+      }
+      return;
+    }
+
+    // Nothing content-wise moved: a membership gap (no card) or a lane gap (a
+    // card with no lane) is the only reason to write.
+    if (card === null || card.statusOptionName === undefined) {
+      await this.applyToGithub.execute({
+        task: remote,
+        current: raw,
+        hasCard: card !== null,
+        projectName: input.projectName,
+        syncedAt: input.syncedAt,
+      });
+    }
+  }
+
+  // The two remote views for one issue. `remote` is the canonical live view:
+  // the lane is authoritative for done-ness and falls back to the base lane (a
+  // card with no lane) or the lane its state implies (a card-less issue).
+  // `raw` is the issue as fetched: its completion stamp is the issue's own
+  // open/closed state, so the writer can tell a stale lane from a real reopen.
+  private remoteViews(
+    issue: GithubTaskData,
+    record: EntityRecord | null,
+    card: BoardItemData | null,
+    doneLane: string,
+    defaultLane: string,
+  ): { remote: TaskData; raw: TaskData } {
+    const parsed = GithubTaskMapper.parse(issue, card, doneLane);
+    const base = record?.mirrors.github?.base ?? null;
+    const lane = effectiveLane(card, issue, base, doneLane, defaultLane);
+    const laneDone = doneLane !== '' && lane === doneLane;
+    const stateDone = issue.state === 'closed';
+    const cardLane = card?.statusOptionName ?? '';
+    const id = record?.id ?? '';
+    const notePath = record?.notePath ?? '';
+    const mirrors = { github: parsed.mirrors.github ?? '' };
+
+    const remote = new TaskData(
+      id,
+      notePath,
+      mirrors,
+      parsed.title,
+      parsed.body,
+      lane,
+      laneDone ? '' : null,
+      parsed.type,
+      parsed.parent,
+      parsed.createdAt,
+      parsed.updatedAt,
+    );
+    const raw = new TaskData(
+      id,
+      notePath,
+      mirrors,
+      parsed.title,
+      parsed.body,
+      cardLane,
+      stateDone ? '' : null,
+      parsed.type,
+      parsed.parent,
+      parsed.createdAt,
+      parsed.updatedAt,
+    );
+    return { remote, raw };
+  }
+
+  // The timing evidence the conflict ladder may use. GitHub's lastEditedAt is
+  // the honest title/body clock.
+  private conflictHints(issue: GithubTaskData): ConflictHints {
+    // TODO: VaultPort exposes no file mtime, so the vault side of the timestamp
+    // ladder is unknown here and the ladder falls through to the semantic rules
+    // (done-beats-open for status, origin authority otherwise). Adding a
+    // lastModified read to VaultPort is a later ticket.
+    //
+    // BoardItemData carries no updatedAt, so the lane has no honest timestamp;
+    // the status hint stays null until the transport surfaces one.
+    const cardUpdatedAt: string | null = null;
     return {
-      ...status,
-      completed: doneLane !== '' && status.status === doneLane,
+      vaultModifiedAt: null,
+      remoteFieldTimes: {
+        // lastEditedAt moves only on title/body edits — never on comments.
+        title: issue.lastEditedAt,
+        body: issue.lastEditedAt,
+        status: cardUpdatedAt,
+      },
     };
   }
 
   // The comparable shape the diff reads: the title is slug-compared (the vault
-  // derives it from the filename, the remote from the issue title) and the
-  // body is the caller's comparable form (the issue-body hash). Parent is not a
-  // GitHub-synced field.
-  private forDiff(task: TaskData, body: string): TaskData {
-    return { ...task, title: slugify(task.title), body, parent: null };
+  // derives it from the filename, the remote from the issue title), the body is
+  // the caller's digest, and parent/type are constants — neither is a
+  // GitHub-synced field. Parent is a uuid reference resolved through the
+  // registry; type travels on GitHub only as a `type:*` label the writer does
+  // not manage (the label is the mirror's representation of the vault-owned
+  // type), so it must never drive a pull that would overwrite the note's type.
+  private diffView(task: TaskData, bodyDigest: string): TaskData {
+    return new TaskData(
+      task.id,
+      task.notePath,
+      task.mirrors,
+      slugify(task.title),
+      bodyDigest,
+      task.status,
+      task.completedAt,
+      '',
+      null,
+      task.createdAt,
+      task.updatedAt,
+    );
   }
 
-  // A vault-side drift: a project record whose note no longer matches its
-  // snapshot. A project with no records is unknown and counts as drift, so a
-  // newly tracked issue is never starved by the probe gate.
-  private async hasVaultDrift(
+  // Resolves a note's affiliation link to its parent's uuid through the
+  // registry. A link may be a full note path or a bare stem, so the taken and
+  // todos folders are tried; an unresolved parent stays null and the next pass
+  // retries once the parent note is known.
+  private async resolveParent(
+    content: string,
     projectName: string,
-    statuses: TaskData[],
-  ): Promise<boolean> {
-    const prefix = `Projecten/${projectName}/`;
-    const projectStatuses = statuses.filter((s) =>
-      s.notePath.startsWith(prefix),
+  ): Promise<string | null> {
+    const fields = splitFrontmatter(content)?.fields;
+    if (fields === undefined) {
+      return null;
+    }
+    const link = taskLinkFromAffiliation(
+      parseAffiliation(fields.get('affiliation')),
+      projectName,
     );
-    if (projectStatuses.length === 0) {
+    if (link === null || link === '') {
+      return null;
+    }
+    // A uuid reference resolves directly; a link target resolves by path.
+    if ((await this.syncState.get(link)) !== null) {
+      return link;
+    }
+    for (const candidate of [
+      link,
+      `Projecten/${projectName}/taken/${link}.md`,
+      `Projecten/${projectName}/todos/${link}.md`,
+    ]) {
+      const record = await this.syncState.findByNotePath(candidate);
+      if (record !== null) {
+        return record.id;
+      }
+    }
+    return null;
+  }
+
+  // Stamps the vault-owned type from the issue's type label when the note or
+  // the record's base lacks one (the migration path for existing notes). The
+  // note frontmatter and the base both move, so the type field settles. Returns
+  // the (possibly updated) base.
+  private async backfillType(
+    issue: GithubTaskData,
+    record: EntityRecord,
+    vault: TaskData,
+    content: string,
+  ): Promise<TaskData | null> {
+    const base = record.mirrors.github?.base ?? null;
+    const issueType = typeFromLabels(issue.labels);
+    if (issueType === '') {
+      return base;
+    }
+    if (vault.type === '') {
+      await stampFrontmatterField(
+        this.vault,
+        record.notePath,
+        content,
+        'type',
+        issueType,
+      );
+      vault.type = issueType;
+    }
+    if (base !== null && base.type === '') {
+      base.type = vault.type !== '' ? vault.type : issueType;
+      await this.syncState.set(record);
+    }
+    return base;
+  }
+
+  // A vault-side drift: a github-mirrored record whose note no longer matches
+  // its base. A project with no such records is unknown and counts as drift, so
+  // a newly tracked issue is never starved by the probe gate.
+  private async hasVaultDrift(projectName: string): Promise<boolean> {
+    const prefix = `Projecten/${projectName}/`;
+    const records = (await this.syncState.list()).filter(
+      (record) =>
+        record.notePath.startsWith(prefix) &&
+        record.mirrors.github !== undefined,
+    );
+    if (records.length === 0) {
       return true;
     }
 
-    for (const status of projectStatuses) {
-      const note = await this.vault.getNoteByPath(status.notePath);
-      if (!note) {
+    for (const record of records) {
+      const base = record.mirrors.github?.base ?? null;
+      if (base === null) {
+        return true;
+      }
+      const note = await this.vault.getNoteByPath(record.notePath);
+      if (note === null) {
         continue;
       }
-      const parsed = VaultTaskMapper.parseTask(note.content, status.notePath, {
+      const parsed = VaultTaskMapper.parseTask(note.content, record.notePath, {
         projectName,
         doneLane: this.doneOptionName,
       });
-      if (!parsed) {
+      if (parsed === null) {
         return true;
       }
-      if (hash(toIssueBody(parsed.body)) !== status.body) {
-        return true;
-      }
-      if (parsed.status !== status.status) {
-        return true;
-      }
-      if (slugify(parsed.title) !== slugify(status.title)) {
+      if (!matchesBase(parsed, base)) {
         return true;
       }
     }
     return false;
   }
+}
+
+// The lane an issue sits in: the card's lane when it carries one; otherwise the
+// base lane (a card with no lane backfills from the last-synced lane) or the
+// lane its state implies (a card-less issue).
+function effectiveLane(
+  card: BoardItemData | null,
+  issue: GithubTaskData,
+  base: TaskData | null,
+  doneLane: string,
+  defaultLane: string,
+): string {
+  if (card?.statusOptionName !== undefined) {
+    return card.statusOptionName;
+  }
+  if (card !== null) {
+    return (
+      base?.status ?? statusNameFromState(issue.state, doneLane, defaultLane)
+    );
+  }
+  return statusNameFromState(issue.state, doneLane, defaultLane);
+}
+
+// The base's shape with the remote's own content: used to re-reconcile a stale
+// mirror to the last-synced done state without touching the issue's title/body.
+function reconcileShape(remote: TaskData, base: TaskData): TaskData {
+  return new TaskData(
+    remote.id,
+    remote.notePath,
+    remote.mirrors,
+    remote.title,
+    remote.body,
+    base.status,
+    base.completedAt,
+    base.type !== '' ? base.type : remote.type,
+    remote.parent,
+    remote.createdAt,
+    remote.updatedAt,
+  );
+}
+
+// The reopen veto (dt-17): a pull that would move a done note OFF the done lane
+// is vetoed when the mirror's own state disagrees with its lane — the issue is
+// closed while its card sits in an active lane. The board lane is eventually
+// consistent; a stale lane must never revert a completion.
+function reopenVetoed(
+  vault: TaskData,
+  remote: TaskData,
+  resolved: SyncVerdict,
+  issue: GithubTaskData,
+  doneLane: string,
+): boolean {
+  if (resolved.status !== 'pull') {
+    return false;
+  }
+  if (!isDone(vault, doneLane)) {
+    return false;
+  }
+  return issue.state === 'closed' && remote.status !== doneLane;
+}
+
+// Collapses the per-field verdicts into the one direction the writers can
+// apply. A vault push takes precedence over a pull (origin authority); after
+// resolveConflicts no field is left 'conflict'.
+function overallVerdict(verdicts: SyncVerdict): DimensionVerdict {
+  const values: DimensionVerdict[] = [
+    verdicts.title,
+    verdicts.body,
+    verdicts.status,
+    verdicts.completedAt,
+    verdicts.type,
+    verdicts.parent,
+  ];
+  if (values.includes('push')) {
+    return 'push';
+  }
+  if (values.includes('pull')) {
+    return 'pull';
+  }
+  return 'none';
+}
+
+// A side is done when it carries a completion stamp or its lane is the
+// project's done lane; a project with no board ('') has no done lane.
+function isDone(task: TaskData, doneLane: string): boolean {
+  return (
+    task.completedAt !== null || (doneLane !== '' && task.status === doneLane)
+  );
+}
+
+// Whether the note's live view still matches its mirror's base. The title is
+// slug-compared (the vault derives it from the filename); parent and type are
+// excluded (neither is a GitHub-synced field).
+function matchesBase(vault: TaskData, base: TaskData): boolean {
+  return (
+    hash(toIssueBody(vault.body)) === base.body &&
+    vault.status === base.status &&
+    slugify(vault.title) === slugify(base.title) &&
+    vault.completedAt === base.completedAt
+  );
 }

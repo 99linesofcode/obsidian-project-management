@@ -1,8 +1,6 @@
-import { stemOf } from '../Notes/stemOf.js';
+import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
-import type { RelinkRenamedTodoAction } from './RelinkRenamedTodoAction.js';
-import type { RelocateTaskStatusAction } from './RelocateTaskStatusAction.js';
 
 export interface DetectNoteRenamesInput {
   projectName: string;
@@ -10,71 +8,60 @@ export interface DetectNoteRenamesInput {
 }
 
 // UC: detect hand-renamed notes from snapshot drift, replacing the old
-// `renamed` trigger kind. The vault rename event carried both paths; the chain
-// only has the snapshot records, so it compares each record's notePath against
-// the project's current vault paths and, for a record whose note is gone,
-// composes the existing rename actions:
+// `renamed` trigger kind. Identity is the vault-owned uuid in a note's
+// frontmatter, so a rename is a FIELD UPDATE on the registry record — the
+// note's location moved, its id and its mirrors did not. For every record
+// whose note is no longer at its recorded path, the action looks for the
+// current note carrying the same id and moves the record's notePath to it. No
+// re-key, no handle churn, no two-store bookkeeping.
 //
-//   - a task note keeps its remote id in the filename, so the new path is the
-//     current `taken/` note whose stem starts with `<remoteId>-`;
-//   - a to-do note has no stable id in its content, so the new path is the
-//     current `todos/` note no record claims. A single rename pairs cleanly;
-//     simultaneous renames pair in order (an accepted interim ambiguity).
-//
-// A record whose note is gone and has no matching current note is left alone:
-// the deletion sweep owns a genuine deletion, and the checklist sync restores
-// a to-do whose filename drifted from its title.
+// A record whose note is gone and has no id-matching current note is left
+// alone: the deletion sweep owns a genuine deletion, and a note that lost its
+// id is re-registered by the id backfill on the next chain start.
 export class DetectNoteRenamesAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
-    private readonly relinkRenamedTodo: RelinkRenamedTodoAction,
-    private readonly relocateTaskStatus: RelocateTaskStatusAction,
   ) {}
 
   async execute(input: DetectNoteRenamesInput): Promise<void> {
-    const takenFolder = `Projecten/${input.projectName}/taken`;
-    const todoFolder = `Projecten/${input.projectName}/todos`;
-    const takenPaths = await this.vault.listNotesInFolder(takenFolder);
-    const todoPaths = await this.vault.listNotesInFolder(todoFolder);
+    const currentPaths: string[] = [];
+    for (const folder of [
+      `Projecten/${input.projectName}/taken`,
+      `Projecten/${input.projectName}/todos`,
+    ]) {
+      currentPaths.push(...(await this.vault.listNotesInFolder(folder)));
+    }
+    const currentSet = new Set(currentPaths);
 
-    for (const record of await this.syncState.list()) {
-      if (!record.notePath.startsWith(`${takenFolder}/`)) {
+    // The id → current path index: the durable anchor survives a rename, so a
+    // note found at a new path still resolves to its record.
+    const pathById = new Map<string, string>();
+    for (const path of currentPaths) {
+      const note = await this.vault.getNoteByPath(path);
+      if (note === null) {
         continue;
       }
-      if (takenPaths.includes(record.notePath)) {
-        continue;
-      }
-      const newPath = takenPaths.find((path) =>
-        stemOf(path).startsWith(`${record.remoteId}-`),
-      );
-      if (newPath !== undefined) {
-        await this.relocateTaskStatus.execute({
-          oldPath: record.notePath,
-          newPath,
-        });
+      const id = splitFrontmatter(note.content)?.fields.get('id') ?? '';
+      if (id !== '' && !pathById.has(id)) {
+        pathById.set(id, path);
       }
     }
 
-    const recordedTodoPaths = new Set(
-      (await this.syncState.listTodoistStates()).map((state) => state.notePath),
-    );
-    const unclaimed = todoPaths.filter((path) => !recordedTodoPaths.has(path));
-    for (const record of await this.syncState.listTodoistStates()) {
-      if (!record.notePath.startsWith(`${todoFolder}/`)) {
+    const prefix = `Projecten/${input.projectName}/`;
+    for (const record of await this.syncState.list()) {
+      if (!record.notePath.startsWith(prefix)) {
         continue;
       }
-      if (todoPaths.includes(record.notePath)) {
+      if (currentSet.has(record.notePath)) {
         continue;
       }
-      const newPath = unclaimed.shift();
-      if (newPath !== undefined) {
-        await this.relinkRenamedTodo.execute({
-          oldPath: record.notePath,
-          newPath,
-          syncedAt: input.syncedAt,
-        });
+      const newPath = pathById.get(record.id);
+      if (newPath === undefined) {
+        continue;
       }
+      // The id and the mirrors are untouched; only the location moves.
+      await this.syncState.set({ ...record, notePath: newPath });
     }
   }
 }

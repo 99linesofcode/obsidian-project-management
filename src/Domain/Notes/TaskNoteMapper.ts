@@ -1,15 +1,17 @@
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
 
-// The task fields a note is rendered from. Structural, so both the GitHub
-// transport DTO and the canonical TaskData satisfy it. `state` is accepted for
-// structural compatibility with the provider DTO but is not rendered.
+// The task fields a note is rendered from. Structural, so the canonical
+// TaskData satisfies it directly. The url is deliberately absent: identity is
+// the vault-owned uuid, and a new note carries no url.
 export interface TaskNoteSource {
-  url: string;
-  remoteId: number;
+  id: string;
+  type: string;
   title: string;
   body: string;
-  state?: 'open' | 'closed';
+  // The vault `created` stamp, or null for a fresh note (the sync stamp is
+  // used then).
+  createdAt: string | null;
 }
 
 export interface TaskNoteContext {
@@ -35,9 +37,10 @@ export function slugify(title: string): string {
     .replace(/^-|-$/g, '');
 }
 
-// Derives the user-facing title from a note's filename: strips the remote id
-// prefix and .md, then turns the slug's dashes back into spaces. Lossy — the
-// slug cannot recover the original casing or punctuation — but readable.
+// Derives the user-facing title from a note's filename: strips a legacy
+// `<remoteId>-` prefix and .md, then turns the slug's dashes back into spaces.
+// Lossy — the slug cannot recover the original casing or punctuation — but
+// readable. New note names are slug-only, so the prefix is usually absent.
 export function titleFromNotePath(notePath: string, remoteId: number): string {
   const basename = notePath.split('/').pop() ?? '';
   const withoutExt = basename.replace(/\.md$/, '');
@@ -45,16 +48,19 @@ export function titleFromNotePath(notePath: string, remoteId: number): string {
   return withoutId.replace(/-/g, ' ');
 }
 
-// Maps a remote task onto a task note. The remote id lives only in the
-// filename; the body is the note's body verbatim.
+// Maps a task onto a task note. The name is the title slug — filenames carry
+// zero identity weight now, so no remote id prefixes a new note; the caller
+// resolves a collision through freePath. The body is the note's body verbatim.
 export const TaskNoteMapper = {
   map(task: TaskNoteSource, context: TaskNoteContext): TaskNote {
     const content = [
       '---',
       'categories: [taken]',
-      `url: ${task.url}`,
+      `id: ${task.id}`,
+      `type: ${task.type}`,
       `status: ${context.statusName}`,
       `affiliation: ["[[${context.projectName}]]"]`,
+      `created: ${createdValue(task, context)}`,
       `synced: ${context.syncedAt}`,
       '---',
       task.body,
@@ -82,21 +88,37 @@ export const TaskNoteMapper = {
   },
 };
 
-// The note path: the project's taken folder, keyed by remote id + title slug.
+// The note path: the project's taken folder, keyed by the title slug.
 function taskNotePath(task: TaskNoteSource, context: TaskNoteContext): string {
-  return `Projecten/${context.projectName}/taken/${task.remoteId}-${slugify(task.title)}.md`;
+  return `Projecten/${context.projectName}/taken/${slugify(task.title)}.md`;
+}
+
+// The `created` value: the vault's own stamp when the note has one, otherwise
+// the sync date — never a bare empty field on a new note.
+function createdValue(
+  task: TaskNoteSource,
+  context: TaskNoteContext,
+): string {
+  if (task.createdAt !== null && task.createdAt !== '') {
+    return task.createdAt;
+  }
+  return context.syncedAt.slice(0, 10);
 }
 
 // Sync-owned frontmatter fields, in append order when a template omits one.
+// `url` is deliberately not managed: it is no longer written for new notes.
+// `created` is left to the template's {{date}} placeholder and the built-in
+// mapping, so a vault-authored created stamp survives the template path.
 function managedValues(
   task: TaskNoteSource,
   context: TaskNoteContext,
 ): Map<string, string> {
   return new Map([
-    ['url', task.url],
+    ['id', task.id],
+    ['type', task.type],
     ['status', context.statusName],
-    ['synced', context.syncedAt],
     ['affiliation', `["[[${context.projectName}]]"]`],
+    ['synced', context.syncedAt],
   ]);
 }
 

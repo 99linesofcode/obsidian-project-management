@@ -1,61 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStatusAction.js';
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
-import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
-// Fakes at the ports: record the state change the action asks for and hold
-// the status record in memory, so the action's own behaviour (PATCH state +
-// baseline refresh + board mirror) is what's under test.
+// Fakes at the ports: record the state change the action asks for and hold the
+// registry record, so the action's own behaviour (PATCH state + base refresh +
+// board mirror) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
-  async setProjectClosed(): Promise<void> {}
-  async lockIssue(): Promise<void> {}
-  async fetchProjectStates(): Promise<never> {
-    throw new Error('not used in this test');
-  }
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
-  updated: GithubTaskData = {
-    url: 'https://github.com/acme/widgets/issues/42',
-    remoteId: 42,
-    nodeId: 'I_kwDOAAAA42',
-    title: 'Fix the Bug!',
-    body: 'The bug happens when the widget is resized.',
-    state: 'closed',
-    updatedAt: '2026-09-18T12:30:00Z',
-    labels: ['type: task'],
-  };
 
-  async fetchProjectIdentity(): Promise<null> {
-    return null;
-  }
-  async fetchProjectDetail(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-
-  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
-    return [];
-  }
-  async fetchTask(): Promise<GithubTaskData> {
-    throw new Error('not used in this test');
-  }
-  async updateTask(): Promise<GithubTaskData> {
-    throw new Error('not used in this test');
-  }
   async setTaskState(
     url: string,
     state: 'open' | 'closed',
   ): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
-    return this.updated;
-  }
-  async fetchBoardItems(): Promise<never> {
-    throw new Error('not used in this test');
+    return issue({ url, state });
   }
   async setBoardStatus(
     _projectNodeId: string,
@@ -65,111 +28,97 @@ class FakeProjectManagement implements ProjectManagementPort {
   ): Promise<void> {
     this.boardStatusCalls.push({ issueUrl, statusOptionId });
   }
+  async fetchProjectIdentity(): Promise<null> {
+    return null;
+  }
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
+    return [];
+  }
+  async fetchTask(): Promise<GithubTaskData> {
+    throw new Error('not used in this test');
+  }
+  async updateTask(): Promise<GithubTaskData> {
+    throw new Error('not used in this test');
+  }
+  async fetchBoardItems(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
   }
-
   async fetchUnpromotedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async addLabel(): Promise<void> {
     throw new Error('not used in this test');
   }
-
   async fetchLatestIssueActivity(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
   async deleteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
 }
 
-class FakeSyncState implements SyncStatePort {
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async getWatchState(): Promise<{
-    etag: string | null;
-    cursor: string | null;
-  }> {
-    return { etag: null, cursor: null };
-  }
-
-  async setWatchState(): Promise<void> {}
-
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-  async removeTodoistState(): Promise<void> {}
-
-  async setArchiveBaseline(): Promise<void> {}
-  statuses = new Map<string, TaskData>();
-  setCalls: TaskData[] = [];
-  identity: ProjectIdentityData | null = null;
-
-  async get(url: string): Promise<TaskData | null> {
-    return this.statuses.get(url) ?? null;
-  }
-  async set(status: TaskData): Promise<void> {
-    this.statuses.set(status.url, status);
-    this.setCalls.push(status);
-  }
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [];
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<ProjectIdentityData | null> {
-    return this.identity;
-  }
-}
-
-const task: GithubTaskData = {
-  url: 'https://github.com/acme/widgets/issues/42',
-  remoteId: 42,
-  nodeId: 'I_kwDOAAAA42',
-  title: 'Fix the Bug!',
-  body: 'The bug happens when the widget is resized.',
-  state: 'open',
-  updatedAt: '2026-09-18T10:00:00Z',
-  labels: ['type: task'],
-};
-
+const url = 'https://github.com/acme/widgets/issues/42';
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const projectName = 'Acme Widgets';
 
-function makeStatus(overrides: Partial<TaskData> = {}): TaskData {
-  return taskRecord({
-    url: task.url,
-    remoteId: task.remoteId,
-    notePath,
-    body: hash(task.body),
-    updatedAt: task.updatedAt,
-    status: 'Unshaped',
-    title: task.title,
+const identity = {
+  repoUrl: 'https://github.com/acme/widgets',
+  repoNodeId: 'R_kgDOAAAA',
+  projectNodeId: 'PVT_123',
+  statusFieldId: 'PVTF_456',
+  statusOptions: [
+    { id: 'PVTSSF_1', name: 'Unshaped' },
+    { id: 'PVTSSF_2', name: 'Shaping' },
+    { id: 'PVTSSF_3', name: 'Shaped' },
+    { id: 'PVTSSF_4', name: 'Building' },
+    { id: 'PVTSSF_5', name: 'Shipped' },
+  ],
+};
+
+function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
+  return {
+    url,
+    remoteId: 42,
+    nodeId: 'I_kwDOAAAA42',
+    title: 'Fix the Bug!',
+    body: 'The bug happens when the widget is resized.',
+    state: 'open',
+    createdAt: '2026-09-18T09:00:00Z',
+    lastEditedAt: '2026-09-18T10:00:00Z',
+    updatedAt: '2026-09-18T10:00:00Z',
+    labels: ['type: task'],
     ...overrides,
-  });
+  };
+}
+
+function seedBase(syncState: FakeSyncState, lane: string): void {
+  syncState.records.set(
+    'uuid-42',
+    entityRecord({
+      id: 'uuid-42',
+      notePath,
+      mirrors: {
+        github: mirror(
+          url,
+          taskData({ id: 'uuid-42', notePath, status: lane }),
+        ),
+      },
+    }),
+  );
 }
 
 function makeAction(
@@ -186,85 +135,60 @@ function makeAction(
 }
 
 describe('PropagateStatusAction', () => {
-  it('closes the issue for a done note and refreshes the baseline', async () => {
+  it('closes the issue for a done note and refreshes the base lane', async () => {
     // Given — a synced note whose status the user flipped to done
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = {
-      ...task,
-      state: 'closed',
-      updatedAt: '2026-09-18T12:30:00Z',
-    };
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus());
+    seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
     await action.execute({
-      url: task.url,
+      url,
       statusName: 'Shipped',
       notePath,
       projectName,
     });
 
-    // Then — the issue is closed
-    expect(projectManagement.stateCalls).toEqual([
-      { url: task.url, state: 'closed' },
-    ]);
-    // And the baseline is refreshed from the response, keeping the other fields
-    expect(syncState.setCalls).toEqual([
-      taskRecord({
-        url: task.url,
-        remoteId: task.remoteId,
-        notePath,
-        body: hash(task.body),
-        updatedAt: '2026-09-18T12:30:00Z',
-        status: 'Shipped',
-        title: task.title,
-        completed: true,
-      }),
-    ]);
+    // Then — the issue is closed and the base lane follows
+    expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.status).toBe('Shipped');
+    expect(record?.mirrors.github?.base?.completedAt).toBe('');
   });
 
-  it('reopens the issue for an open note and refreshes the baseline', async () => {
+  it('reopens the issue for an open note and refreshes the base lane', async () => {
     // Given — a synced note whose status the user flipped back to open
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = {
-      ...task,
-      state: 'open',
-      updatedAt: '2026-09-18T12:30:00Z',
-    };
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus({ status: 'Shipped' }));
+    seedBase(syncState, 'Shipped');
     const action = makeAction(projectManagement, syncState);
 
     // When — the open status is propagated
     await action.execute({
-      url: task.url,
+      url,
       statusName: 'Unshaped',
       notePath,
       projectName,
     });
 
-    // Then — the issue is reopened
-    expect(projectManagement.stateCalls).toEqual([
-      { url: task.url, state: 'open' },
-    ]);
-    // And the baseline is refreshed from the response
-    expect(syncState.setCalls).toHaveLength(1);
-    expect(syncState.setCalls[0]!.status).toBe('Unshaped');
-    expect(syncState.setCalls[0]!.updatedAt).toBe('2026-09-18T12:30:00Z');
+    // Then — the issue is reopened and the base lane follows
+    expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.status).toBe('Unshaped');
+    expect(record?.mirrors.github?.base?.completedAt).toBeNull();
   });
 
   it('skips the issue state write when the lane done-ness is unchanged', async () => {
     // Given — a record already in an open lane, mirrored to another open lane
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus({ status: 'Unshaped' }));
+    seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
     // When — the open lane is propagated
     await action.execute({
-      url: task.url,
+      url,
       statusName: 'Building',
       notePath,
       projectName,
@@ -277,58 +201,35 @@ describe('PropagateStatusAction', () => {
   it('mirrors the status onto the board when the project has an identity', async () => {
     // Given — a project with a stored identity and a done note
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = {
-      ...task,
-      state: 'closed',
-      updatedAt: '2026-09-18T12:30:00Z',
-    };
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus());
-    syncState.identity = {
-      repoUrl: 'https://github.com/acme/widgets',
-      repoNodeId: 'R_kgDOAAAA',
-      projectNodeId: 'PVT_123',
-      statusFieldId: 'PVTF_456',
-      statusOptions: [
-        { id: 'PVTSSF_1', name: 'Unshaped' },
-        { id: 'PVTSSF_2', name: 'Shaping' },
-        { id: 'PVTSSF_3', name: 'Shaped' },
-        { id: 'PVTSSF_4', name: 'Building' },
-        { id: 'PVTSSF_5', name: 'Shipped' },
-      ],
-    };
+    syncState.identities.set(projectName, identity);
+    seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
     await action.execute({
-      url: task.url,
+      url,
       statusName: 'Shipped',
       notePath,
       projectName,
     });
 
-    // Then — the board TaskData is set to the done option
+    // Then — the board card is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
-      { issueUrl: task.url, statusOptionId: 'PVTSSF_5' },
+      { issueUrl: url, statusOptionId: 'PVTSSF_5' },
     ]);
   });
 
   it('skips the board mirror when the project has no identity', async () => {
     // Given — a project with no stored identity (board-less)
     const projectManagement = new FakeProjectManagement();
-    projectManagement.updated = {
-      ...task,
-      state: 'closed',
-      updatedAt: '2026-09-18T12:30:00Z',
-    };
     const syncState = new FakeSyncState();
-    syncState.statuses.set(task.url, makeStatus());
-    syncState.identity = null;
+    seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
     // When — the done status is propagated
     await action.execute({
-      url: task.url,
+      url,
       statusName: 'Shipped',
       notePath,
       projectName,
@@ -336,5 +237,23 @@ describe('PropagateStatusAction', () => {
 
     // Then — the board is left untouched
     expect(projectManagement.boardStatusCalls).toEqual([]);
+  });
+
+  it('writes the state for an untracked note with no record', async () => {
+    // Given — no registry record for the issue
+    const projectManagement = new FakeProjectManagement();
+    const syncState = new FakeSyncState();
+    const action = makeAction(projectManagement, syncState);
+
+    // When — the done status is propagated
+    await action.execute({
+      url,
+      statusName: 'Shipped',
+      notePath,
+      projectName,
+    });
+
+    // Then — the state is written (no baseline to gate against)
+    expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
   });
 });

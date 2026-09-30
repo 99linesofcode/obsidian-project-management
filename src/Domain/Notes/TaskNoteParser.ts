@@ -2,6 +2,13 @@ import { parseAffiliation } from './parseAffiliation.js';
 import { splitFrontmatter } from './splitFrontmatter.js';
 
 export interface ParsedTaskNote {
+  // The vault-owned uuid (the durable anchor). '' when the note predates the
+  // backfill — EnsureNoteIdsAction stamps it before the halves read notes.
+  id: string;
+  // The vault-owned content type (task/slice/bug). '' when absent.
+  type: string;
+  // The legacy issue url. Still read for notes that carry one, but it is no
+  // longer parsed for identity: a new note has no url at all.
   url: string;
   status: string;
   body: string;
@@ -9,23 +16,21 @@ export interface ParsedTaskNote {
   affiliation: string[];
 }
 
-// Reads a task note back into its sync fields. Returns null when the note has
-// no url frontmatter — i.e. it is not a synced artifact. The status is the
-// project's Status option name, verbatim.
+// Reads a task note back into its sync fields. A task note is recognised by its
+// frontmatter alone: identity moved into the vault-owned `id`, and a new note
+// carries no `url`, so gating on url would reject every note the plugin now
+// creates. The status is the project's Status option name, verbatim.
 export const TaskNoteParser = {
   parse(content: string): ParsedTaskNote | null {
     const split = splitFrontmatter(content);
     if (!split) {
       return null;
     }
-    const url = split.fields.get('url');
-    if (!url) {
-      return null;
-    }
-    const status = split.fields.get('status') ?? '';
     return {
-      url,
-      status,
+      id: split.fields.get('id') ?? '',
+      type: split.fields.get('type') ?? '',
+      url: split.fields.get('url') ?? '',
+      status: split.fields.get('status') ?? '',
       body: split.body,
       affiliation: parseAffiliation(split.fields.get('affiliation')),
     };

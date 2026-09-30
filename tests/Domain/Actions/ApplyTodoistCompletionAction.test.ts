@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { ApplyTodoistCompletionAction } from '../../../src/Domain/Actions/ApplyTodoistCompletionAction.js';
+import { ApplyTaskToVaultAction } from '../../../src/Domain/Actions/ApplyTaskToVaultAction.js';
+import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
+import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
+import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
+import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
+import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
-import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
+import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData, todoistTask } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds the to-do notes and records writes, the
-// task manager serves the completed-since and active sets (and can be made to
-// fail), and the sync state holds the per-item bookkeeping and the per-project
-// cursor. The action's completion pull and its cursor discipline are what's
-// under test.
 class FakeVault implements VaultPort {
   notes = new Map<string, string>();
   writes: Array<{ path: string; content: string }> = [];
@@ -26,11 +27,20 @@ class FakeVault implements VaultPort {
     this.writes.push({ path, content });
     this.notes.set(path, content);
   }
-  async createNote(): Promise<void> {}
-  async renameNote(): Promise<void> {}
+  async createNote(path: string, content: string): Promise<void> {
+    this.notes.set(path, content);
+  }
+  async renameNote(oldPath: string, newPath: string): Promise<void> {
+    const content = this.notes.get(oldPath);
+    if (content !== undefined) {
+      this.notes.delete(oldPath);
+      this.notes.set(newPath, content);
+    }
+  }
   async moveFolder(): Promise<void> {}
-  async listNotesInFolder(): Promise<string[]> {
-    return [];
+  async listNotesInFolder(folder: string): Promise<string[]> {
+    const prefix = folder.endsWith('/') ? folder : `${folder}/`;
+    return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
   }
   async trashNote(): Promise<void> {}
   async findProjectNotes(): Promise<never> {
@@ -44,14 +54,9 @@ class FakeVault implements VaultPort {
 class FakeTaskManager implements TaskManagerPort {
   completed: TodoistTaskData[] = [];
   active: TodoistTaskData[] = [];
-  completedCalls: Array<{ projectId: string; since: string }> = [];
   failCompleted = false;
 
-  async fetchCompletedTasks(
-    projectId: string,
-    since: string,
-  ): Promise<TodoistTaskData[]> {
-    this.completedCalls.push({ projectId, since });
+  async fetchCompletedTasks(): Promise<TodoistTaskData[]> {
     if (this.failCompleted) {
       throw new Error('completed-since fetch failed');
     }
@@ -60,7 +65,6 @@ class FakeTaskManager implements TaskManagerPort {
   async fetchActiveTasks(): Promise<TodoistTaskData[]> {
     return this.active;
   }
-
   async fetchProjects(): Promise<TodoistProjectData[]> {
     return [];
   }
@@ -76,8 +80,8 @@ class FakeTaskManager implements TaskManagerPort {
   async setProjectArchived(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async fetchSections(): Promise<never> {
-    throw new Error('not used in this test');
+  async fetchSections(): Promise<TodoistSectionData[]> {
+    return [];
   }
   async createSection(): Promise<never> {
     throw new Error('not used in this test');
@@ -105,227 +109,235 @@ class FakeTaskManager implements TaskManagerPort {
   }
 }
 
-class FakeSyncState implements SyncStatePort {
-  todoistItemStates = new Map<string, TaskData>();
-  todoistItemSets: Array<{ notePath: string; state: TaskData }> = [];
-  projectState: TodoistProjectStateData | null = null;
-  projectSets: Array<{ projectName: string; state: TodoistProjectStateData }> =
-    [];
-
-  async getTodoistState(notePath: string): Promise<TaskData | null> {
-    return this.todoistItemStates.get(notePath) ?? null;
-  }
-  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
-    this.todoistItemSets.push({ notePath, state });
-    this.todoistItemStates.set(notePath, state);
-  }
-  async listTodoistStates(): Promise<TaskData[]> {
-    return [...this.todoistItemStates.values()];
-  }
-  async removeTodoistState(notePath: string): Promise<void> {
-    this.todoistItemStates.delete(notePath);
-  }
-  async getTodoistProjectState(): Promise<TodoistProjectStateData | null> {
-    return this.projectState;
-  }
-  async setTodoistProjectState(
-    projectName: string,
-    state: TodoistProjectStateData,
-  ): Promise<void> {
-    this.projectSets.push({ projectName, state });
-    this.projectState = state;
-  }
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-  async set(): Promise<void> {}
-  async findByNotePath(): Promise<null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [];
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<null> {
-    return null;
-  }
-  async getLastProjectUpdate(): Promise<null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async setArchiveBaseline(): Promise<void> {}
-  async getWatchState(): Promise<{ etag: null; cursor: null }> {
-    return { etag: null, cursor: null };
-  }
-  async setWatchState(): Promise<void> {}
-}
-
 const projectName = 'Acme Widgets';
 const projectId = 'P1';
 const cursor = '2026-09-24T11:00:00Z';
 const syncedAt = '2026-09-24T12:00:00Z';
-const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
+const doneLane = 'Shipped';
+const defaultLane = 'Unshaped';
 
-function todoNote(status: string, completedAt: string | null): string {
-  return [
-    '---',
-    'categories: ["[[Todos.base|Todos]]"]',
-    'affiliation: ["[[Acme Widgets]]", "[[41-chore-1]]"]',
-    `status: ${status}`,
-    completedAt === null ? 'completed:' : `completed: ${completedAt}`,
-    '---',
-    '',
-  ].join('\n');
+const identity: ProjectIdentityData = {
+  repoUrl: 'https://github.com/acme/widgets',
+  repoNodeId: 'R',
+  projectNodeId: 'PVT',
+  statusFieldId: 'F',
+  statusOptions: [
+    { id: 'O1', name: 'Unshaped' },
+    { id: 'O2', name: 'Building' },
+    { id: 'O3', name: 'Shipped' },
+  ],
+};
+
+const taskPath = 'Projecten/Acme Widgets/taken/fix-the-widget.md';
+const todoPath = 'Projecten/Acme Widgets/todos/step-one.md';
+
+function taskNote(status: string): string {
+  return TaskNoteMapper.map(
+    { id: 'uuid-task', type: 'task', title: 'fix the widget', body: '', createdAt: null },
+    { projectName, syncedAt, statusName: status },
+  ).content;
 }
 
-function task(
+function todoNote(completedAt: string | null): string {
+  return ToDoNoteMapper.map(
+    { title: 'Step one', projectName, taskLink: 'fix-the-widget' },
+    completedAt === null
+      ? { syncedAt, statusName: 'open' }
+      : { syncedAt, statusName: 'completed', completedAt },
+  ).content;
+}
+
+// The registry record for a mirrored note, at the given handle and base.
+function seedRecord(
+  syncState: FakeSyncState,
   id: string,
-  parentId: string | null,
-  content: string,
-  isCompleted: boolean,
-): TodoistTaskData {
-  return {
-    id,
-    projectId,
-    sectionId: null,
-    parentId,
-    content,
-    labels: ['todo'],
-    isCompleted,
-    url: `https://app.todoist.com/app/task/${id}`,
-  };
-}
-
-function state(
-  todoistId: string,
   notePath: string,
-  completed: boolean,
-): TaskData {
-  return taskRecord({ todoistId, notePath, completed });
+  handle: string,
+  base: TaskData,
+): void {
+  syncState.records.set(
+    id,
+    entityRecord({ id, notePath, mirrors: { todoist: mirror(handle, base) } }),
+  );
 }
 
 function setup() {
   const vault = new FakeVault();
   const taskManager = new FakeTaskManager();
   const syncState = new FakeSyncState();
-  syncState.projectState = {
+  syncState.identities.set(projectName, identity);
+  syncState.todoistProjects.set(projectName, {
     sections: { Unshaped: 'S1' },
     lastCompletedPoll: cursor,
-  };
+  });
+  const applyToVault = new ApplyTaskToVaultAction(
+    vault,
+    syncState,
+    new CreateTaskNoteAction(vault, syncState, ''),
+    '',
+    new CompleteTaskCascadeAction(vault, doneLane),
+  );
   const action = new ApplyTodoistCompletionAction(
     taskManager,
     vault,
     syncState,
+    applyToVault,
+    doneLane,
   );
   return { action, vault, taskManager, syncState };
 }
 
+const input = { projectName, projectId, syncedAt };
+
 describe('ApplyTodoistCompletionAction', () => {
-  it('stamps the vault note when Todoist completed the twin', async () => {
+  it('completes a to-do note when Todoist completed the twin and stamps the base', async () => {
     // Given — an open to-do whose twin appears in the completed-since window
     const { action, vault, taskManager, syncState } = setup();
-    vault.notes.set(todoPath, todoNote('open', null));
-    syncState.todoistItemStates.set(todoPath, state('T2', todoPath, false));
-    taskManager.completed = [task('T2', 'T1', 'Fix the widget', true)];
+    vault.notes.set(todoPath, todoNote(null));
+    seedRecord(
+      syncState,
+      'uuid-todo',
+      todoPath,
+      'T2',
+      taskData({ id: 'uuid-todo', notePath: todoPath, status: 'open' }),
+    );
+    taskManager.completed = [
+      todoistTask({ id: 'T2', content: 'Step one', isCompleted: true, completedAt: cursor }),
+    ];
 
     // When — the completion is applied
-    await action.execute({ projectName, projectId, syncedAt });
+    await action.execute(input);
 
-    // Then — the window resumed from the stored cursor
-    expect(taskManager.completedCalls).toEqual([{ projectId, since: cursor }]);
-    // And the note is completed with a full ISO datetime stamp
-    const content = vault.notes.get(todoPath)!;
-    expect(content).toContain('status: completed');
-    expect(content).toContain(`completed: ${syncedAt}`);
-    // And the snapshot now says completed
-    expect(syncState.todoistItemSets).toEqual([
-      {
-        notePath: todoPath,
-        state: taskRecord({
-          url: '',
-          remoteId: 0,
-          todoistId: 'T2',
-          notePath: todoPath,
-          completed: true,
-          title: 'Fix the widget',
-          parent: 'T1',
-          labels: ['todo'],
-        }),
-      },
-    ]);
+    // Then — the note is completed with a full ISO datetime stamp and the base
+    // now says completed
+    expect(vault.notes.get(todoPath)).toContain('status: completed');
+    expect(vault.notes.get(todoPath)).toContain(`completed: ${syncedAt}`);
+    const record = await syncState.get('uuid-todo');
+    expect(record?.mirrors.todoist?.base?.completedAt).not.toBeNull();
+    expect(record?.mirrors.todoist?.base?.status).toBe('completed');
   });
 
-  it('clears the completion stamp when Todoist reopened the twin', async () => {
-    // Given — a completed to-do whose twin is active again and whose snapshot
-    // said completed
+  it('completes a TASK twin: the note takes the done lane and the base is stamped', async () => {
+    // Given — an open task note whose twin was completed in Todoist
     const { action, vault, taskManager, syncState } = setup();
-    vault.notes.set(todoPath, todoNote('completed', '2026-09-24T10:00:00Z'));
-    syncState.todoistItemStates.set(todoPath, state('T2', todoPath, true));
-    taskManager.active = [task('T2', 'T1', 'Fix the widget', false)];
+    vault.notes.set(taskPath, taskNote('Building'));
+    seedRecord(
+      syncState,
+      'uuid-task',
+      taskPath,
+      'T9',
+      taskData({ id: 'uuid-task', notePath: taskPath, status: 'Building' }),
+    );
+    taskManager.completed = [
+      todoistTask({ id: 'T9', content: 'Fix the widget', isCompleted: true, completedAt: cursor }),
+    ];
+
+    // When — the completion pass runs
+    await action.execute(input);
+
+    // Then — the note is done and the todoist base is stamped (the ownership
+    // fix: a task twin is no longer left to the task-side reconciliation)
+    expect(vault.notes.get(taskPath)).toContain(`status: ${doneLane}`);
+    const record = await syncState.get('uuid-task');
+    expect(record?.mirrors.todoist?.base?.status).toBe(doneLane);
+    expect(record?.mirrors.todoist?.base?.completedAt).toBe(cursor);
+  });
+
+  it('regression: a task twin completed remotely makes an open vault/GitHub task done', async () => {
+    // Given — the old bug shape: the task is open in the vault and on GitHub,
+    // but the Todoist twin was completed
+    const { action, vault, taskManager, syncState } = setup();
+    vault.notes.set(taskPath, taskNote(defaultLane));
+    seedRecord(
+      syncState,
+      'uuid-task',
+      taskPath,
+      'T9',
+      taskData({ id: 'uuid-task', notePath: taskPath, status: defaultLane }),
+    );
+    taskManager.completed = [
+      todoistTask({ id: 'T9', isCompleted: true, completedAt: cursor }),
+    ];
+    taskManager.active = [];
+
+    // When — the completion pass runs
+    await action.execute(input);
+
+    // Then — the vault is done, not stuck open
+    expect(vault.notes.get(taskPath)).toContain(`status: ${doneLane}`);
+  });
+
+  it('reopens a task twin active again while the base says completed (asymmetric)', async () => {
+    // Given — a completed task note whose twin is active again, with a
+    // completed to-do that must stay completed
+    const { action, vault, taskManager, syncState } = setup();
+    vault.notes.set(taskPath, taskNote(doneLane));
+    vault.notes.set(todoPath, todoNote('2026-09-24T10:00:00Z'));
+    seedRecord(
+      syncState,
+      'uuid-task',
+      taskPath,
+      'T9',
+      taskData({ id: 'uuid-task', notePath: taskPath, status: doneLane, completedAt: cursor }),
+    );
+    taskManager.active = [todoistTask({ id: 'T9', isCompleted: false })];
+
+    // When — the reopen pass runs
+    await action.execute(input);
+
+    // Then — the task is pulled back to the default lane
+    expect(vault.notes.get(taskPath)).toContain(`status: ${defaultLane}`);
+    // And the to-do is NOT reopened (the cascade's asymmetry)
+    expect(vault.notes.get(todoPath)).toContain('status: completed');
+    // And the base now says open
+    const record = await syncState.get('uuid-task');
+    expect(record?.mirrors.todoist?.base?.completedAt).toBeNull();
+  });
+
+  it('clears the completion stamp when Todoist reopened a to-do twin', async () => {
+    // Given — a completed to-do whose twin is active again
+    const { action, vault, taskManager, syncState } = setup();
+    vault.notes.set(todoPath, todoNote('2026-09-24T10:00:00Z'));
+    seedRecord(
+      syncState,
+      'uuid-todo',
+      todoPath,
+      'T2',
+      taskData({ id: 'uuid-todo', notePath: todoPath, status: 'completed', completedAt: cursor }),
+    );
+    taskManager.active = [todoistTask({ id: 'T2', isCompleted: false })];
 
     // When — the reopen is applied
-    await action.execute({ projectName, projectId, syncedAt });
+    await action.execute(input);
 
     // Then — the note is reopened and the stamp cleared
-    const content = vault.notes.get(todoPath)!;
-    expect(content).toContain('status: open');
-    expect(content).toMatch(/completed:[ \t]*$/m);
-    expect(content).not.toContain('2026-09-24T10:00:00Z');
-    // And the snapshot now says open
-    expect(syncState.todoistItemSets[0]!.state.completed).toBe(false);
+    expect(vault.notes.get(todoPath)).toContain('status: open');
+    expect(vault.notes.get(todoPath)).not.toContain('2026-09-24T10:00:00Z');
   });
 
-  it('does not re-apply our own completion as a remote change', async () => {
-    // Given — a completed to-do whose snapshot already says completed, and
-    // whose completion still shows in the window (the echo of our own close)
+  it('does not re-apply our own completion as a remote change (echo guard)', async () => {
+    // Given — a completed twin whose base already says completed, still showing
+    // in the window (the echo of our own close)
     const { action, vault, taskManager, syncState } = setup();
-    vault.notes.set(todoPath, todoNote('completed', '2026-09-24T10:00:00Z'));
-    syncState.todoistItemStates.set(todoPath, state('T2', todoPath, true));
-    taskManager.completed = [task('T2', 'T1', 'Fix the widget', true)];
+    vault.notes.set(todoPath, todoNote('2026-09-24T10:00:00Z'));
+    seedRecord(
+      syncState,
+      'uuid-todo',
+      todoPath,
+      'T2',
+      taskData({ id: 'uuid-todo', notePath: todoPath, status: 'completed', completedAt: cursor }),
+    );
+    taskManager.completed = [
+      todoistTask({ id: 'T2', isCompleted: true, completedAt: cursor }),
+    ];
+    const before = await syncState.get('uuid-todo');
 
     // When — the window is processed
-    await action.execute({ projectName, projectId, syncedAt });
+    await action.execute(input);
 
-    // Then — no vault write and no snapshot churn
+    // Then — no vault write and no base churn
     expect(vault.writes).toEqual([]);
-    expect(syncState.todoistItemSets).toEqual([]);
-  });
-
-  it('restamps without rewriting a note already completed in the vault', async () => {
-    // Given — a completed to-do whose snapshot said open, and whose twin
-    // completed remotely
-    const { action, vault, taskManager, syncState } = setup();
-    vault.notes.set(todoPath, todoNote('completed', '2026-09-24T10:30:00Z'));
-    syncState.todoistItemStates.set(todoPath, state('T2', todoPath, false));
-    taskManager.completed = [task('T2', 'T1', 'Fix the widget', true)];
-
-    // When — the completion is applied
-    await action.execute({ projectName, projectId, syncedAt });
-
-    // Then — the vault note is untouched (its own stamp is kept) and only the
-    // snapshot moves to completed
-    expect(vault.writes).toEqual([]);
-    expect(syncState.todoistItemSets[0]!.state.completed).toBe(true);
-  });
-
-  it('ignores a completed task twin that is not a to-do', async () => {
-    // Given — a completed task twin with no to-do state record
-    const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(todoPath, state('T2', todoPath, false));
-    vault.notes.set(todoPath, todoNote('open', null));
-    taskManager.completed = [task('T1', null, 'Chore 1', true)];
-
-    // When — the window is processed
-    await action.execute({ projectName, projectId, syncedAt });
-
-    // Then — the task twin is left to t5
-    expect(vault.writes).toEqual([]);
-    expect(syncState.todoistItemSets).toEqual([]);
+    expect(await syncState.get('uuid-todo')).toBe(before);
   });
 
   it('does not advance the cursor when the completed-since fetch fails', async () => {
@@ -334,11 +346,13 @@ describe('ApplyTodoistCompletionAction', () => {
     taskManager.failCompleted = true;
 
     // When — the action runs
-    const result = action.execute({ projectName, projectId, syncedAt });
+    const result = action.execute(input);
 
     // Then — it rejects and the cursor is left untouched, so the window retries
     await expect(result).rejects.toThrow('completed-since fetch failed');
-    expect(syncState.projectSets).toEqual([]);
+    expect(syncState.todoistProjects.get(projectName)?.lastCompletedPoll).toBe(
+      cursor,
+    );
   });
 
   it('advances the cursor and preserves the section map after a pass', async () => {
@@ -346,44 +360,12 @@ describe('ApplyTodoistCompletionAction', () => {
     const { action, syncState } = setup();
 
     // When — the action runs with nothing to apply
-    await action.execute({ projectName, projectId, syncedAt });
+    await action.execute(input);
 
     // Then — the cursor moved to the tick and the sections survived
-    expect(syncState.projectSets).toEqual([
-      {
-        projectName,
-        state: {
-          sections: { Unshaped: 'S1' },
-          lastCompletedPoll: syncedAt,
-        },
-      },
-    ]);
-  });
-
-  it('starts the window at the tick when no cursor is stored', async () => {
-    // Given — a project with no stored state yet
-    const { action, taskManager, syncState } = setup();
-    syncState.projectState = null;
-
-    // When — the action runs
-    await action.execute({ projectName, projectId, syncedAt });
-
-    // Then — the completed-since window starts at the tick
-    expect(taskManager.completedCalls).toEqual([
-      { projectId, since: syncedAt },
-    ]);
-  });
-
-  it('leaves a to-do whose note is gone untouched', async () => {
-    // Given — a to-do state whose note no longer exists
-    const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(todoPath, state('T2', todoPath, true));
-    taskManager.active = [task('T2', 'T1', 'Fix the widget', false)];
-
-    // When — the reopen is applied
-    await action.execute({ projectName, projectId, syncedAt });
-
-    // Then — no write is attempted for the missing note
-    expect(vault.writes).toEqual([]);
+    expect(syncState.todoistProjects.get(projectName)).toEqual({
+      sections: { Unshaped: 'S1' },
+      lastCompletedPoll: syncedAt,
+    });
   });
 });

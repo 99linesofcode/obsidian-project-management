@@ -1,19 +1,21 @@
-import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
+import { Mirror } from '../DataTransferObjects/Mirror.js';
+import { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import { boardOptionIDByName } from '../Board/boardOptionIDByName.js';
 import { toIssueBody } from '../Notes/Checklist.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
-import { hash } from '../Notes/hash.js';
+import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 
 export interface ApplyTaskToGithubInput {
   // The winning canonical task — the vault's when the vault won, the remote's
-  // when the remote won.
+  // when the remote won. Its body is the real (rendered) body.
   task: TaskData;
-  // The remote's current canonical task (issue + card), so the writer can gate
-  // each field: the gate IS the diff.
+  // The issue as fetched: title/body from the issue, the lane from the card,
+  // and the completion stamp from the issue's own open/closed state (NOT the
+  // lane-derived completion). The writer's state gate needs the raw state so a
+  // stale lane cannot mask an open issue.
   current: TaskData;
   // Whether the issue already has a board card. A card with no lane is
   // backfilled; a missing card is added.
@@ -25,8 +27,10 @@ export interface ApplyTaskToGithubInput {
 // The GitHub writer: renders a winning canonical task onto its issue and board
 // card, writing only the fields that differ. Absorbs the write paths of
 // PushNoteAction (issue body/title), PropagateStatusAction (issue state) and
-// BoardStatusAction (board lane), plus the sweep's membership-gap card add.
-// The Status record is refreshed so the next sync sees the remote as settled.
+// BoardStatusAction (board lane), plus the membership-gap card add. The writer
+// OWNS its base advance: after the writes resolve it stores what the issue now
+// carries as the github mirror's base. The caller (SyncGithubTasksAction) owns
+// nothing base-related for pushes.
 export class ApplyTaskToGithubAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -35,28 +39,34 @@ export class ApplyTaskToGithubAction {
 
   async execute(input: ApplyTaskToGithubInput): Promise<void> {
     const { task, current } = input;
+    const url = current.mirrors.github ?? task.mirrors.github ?? '';
+    if (url === '') {
+      return;
+    }
     const identity = await this.syncState.getIdentity(input.projectName);
 
     // Issue content: the note body is projected for GitHub first — checklist
     // wikilinks are vault-only and never reach the issue. The title is
     // slug-compared (the vault derives it from the filename), and when only the
-    // body moved the remote's own title is kept.
-    let updated: GithubTaskData | null = null;
+    // body moved the issue's own title is kept.
     const body = toIssueBody(task.body);
     const titleChanged = slugify(task.title) !== slugify(current.title);
     if (titleChanged || body !== current.body) {
-      updated = await this.projectManagement.updateTask(task.url, {
+      await this.projectManagement.updateTask(url, {
         title: titleChanged ? task.title : current.title,
         body,
       });
     }
 
-    // Issue state: the winning task's completed flag is authoritative (the
-    // board lane's done-ness drives it when the remote won).
-    if (task.completed !== current.completed) {
-      updated = await this.projectManagement.setTaskState(
-        task.url,
-        task.completed ? 'closed' : 'open',
+    // Issue state: the completion invariant (status === doneLane <=> closed).
+    // The winning task's stamp is authoritative; the raw issue state gates, so
+    // the write happens only when done-ness actually differs.
+    const taskDone = task.completedAt !== null;
+    const currentDone = current.completedAt !== null;
+    if (taskDone !== currentDone) {
+      await this.projectManagement.setTaskState(
+        url,
+        taskDone ? 'closed' : 'open',
       );
     }
 
@@ -66,19 +76,16 @@ export class ApplyTaskToGithubAction {
     // no stored identity is board-less and skipped.
     if (identity) {
       if (!input.hasCard) {
-        await this.projectManagement.addBoardItem(
-          identity.projectNodeId,
-          task.url,
-        );
+        await this.projectManagement.addBoardItem(identity.projectNodeId, url);
         if (task.status !== '') {
-          await this.setBoardStatus(identity, task.url, task.status);
+          await this.setBoardStatus(identity, url, task.status);
         }
       } else if (task.status !== '' && task.status !== current.status) {
-        await this.setBoardStatus(identity, task.url, task.status);
+        await this.setBoardStatus(identity, url, task.status);
       }
     }
 
-    await this.refreshRecord(input, updated);
+    await this.advanceBase(url, task, current);
   }
 
   private async setBoardStatus(
@@ -94,31 +101,46 @@ export class ApplyTaskToGithubAction {
     );
   }
 
-  // The record reflects the remote as of the write: the response's body and
-  // updatedAt when a write happened, the current remote's otherwise. The lane
-  // and title are the winning task's, since the writer just reconciled them.
-  // The body is stored as the issue-body hash — the comparable fingerprint the
-  // GitHub pipeline reads.
-  private async refreshRecord(
-    input: ApplyTaskToGithubInput,
-    updated: GithubTaskData | null,
+  // Stores what the issue now carries as the mirror's base. WHY the base
+  // advances only here, after every write above resolved: a base advanced
+  // before the write lands makes the next pass compare the issue against a base
+  // that already claims the new state, so the issue's still-stale value reads
+  // as a fresh change and reverts the vault (the revert bug).
+  //
+  // The base is a DIFF VIEW, so its body is the digest of the comparable
+  // (vault-link-free) issue body — the same form the next diff reads.
+  private async advanceBase(
+    url: string,
+    task: TaskData,
+    current: TaskData,
   ): Promise<void> {
-    const { task, current } = input;
-    const existing = await this.syncState.get(task.url);
-    await this.syncState.set({
-      url: task.url,
-      remoteId: task.remoteId,
-      nodeId: task.nodeId !== '' ? task.nodeId : (existing?.nodeId ?? ''),
-      todoistId: '',
-      notePath:
-        task.notePath !== '' ? task.notePath : (existing?.notePath ?? ''),
-      title: updated?.title ?? current.title,
-      body: hash(updated?.body ?? current.body),
-      status: task.status,
-      completed: task.completed,
-      parent: null,
-      labels: [...(updated?.labels ?? current.labels)],
-      updatedAt: updated?.updatedAt ?? current.updatedAt,
-    });
+    const record = await this.syncState.findByMirror('github', url);
+    if (record === null) {
+      return;
+    }
+    // A title that only differs in slug form keeps the issue's own title,
+    // matching what was actually written.
+    const title =
+      slugify(task.title) === slugify(current.title)
+        ? current.title
+        : task.title;
+    const pushed = new TaskData(
+      record.id,
+      record.notePath,
+      {}, // bases carry no handles
+      title,
+      toIssueBody(task.body),
+      task.status,
+      task.completedAt,
+      task.type,
+      task.parent,
+      task.createdAt,
+      task.updatedAt,
+    );
+    const mirrors = {
+      ...record.mirrors,
+      github: new Mirror(url, toDiffViewWithBody(pushed)),
+    };
+    await this.syncState.set({ ...record, mirrors });
   }
 }

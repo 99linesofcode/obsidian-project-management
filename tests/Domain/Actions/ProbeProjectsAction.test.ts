@@ -1,73 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
-import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the sync state holds per-project identities and the
 // project management fake records each fleet probe and answers it from a
 // canned state map, so the action's identity resolution and re-keying is what's
 // under test.
-class FakeSyncState implements SyncStatePort {
-  identities = new Map<string, ProjectIdentityData>();
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-  async set(): Promise<void> {}
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [];
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(projectName: string): Promise<ProjectIdentityData | null> {
-    return this.identities.get(projectName) ?? null;
-  }
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async getWatchState(): Promise<{
-    etag: string | null;
-    cursor: string | null;
-  }> {
-    return { etag: null, cursor: null };
-  }
-
-  async setWatchState(): Promise<void> {}
-
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-  async removeTodoistState(): Promise<void> {}
-
-  async setArchiveBaseline(): Promise<void> {}
-}
-
 class FakeProjectManagement implements ProjectManagementPort {
   probeCalls: string[][] = [];
   states = new Map<string, ProjectStateData>();
 
-  async setProjectClosed(): Promise<void> {}
-  async lockIssue(): Promise<void> {}
   async fetchProjectStates(
     projectNodeIds: string[],
   ): Promise<Map<string, ProjectStateData>> {
@@ -81,17 +28,20 @@ class FakeProjectManagement implements ProjectManagementPort {
     }
     return result;
   }
-
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
   async fetchProjectDetail(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
+  async fetchLatestIssueActivity(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
   async fetchUnpromotedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
@@ -110,10 +60,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   async setBoardStatus(): Promise<void> {}
   async addBoardItem(): Promise<void> {}
   async addLabel(): Promise<void> {}
-  async fetchLatestIssueActivity(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }

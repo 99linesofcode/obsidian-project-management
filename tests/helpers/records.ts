@@ -1,5 +1,6 @@
 import { Mirror } from '../../src/Domain/DataTransferObjects/Mirror.js';
 import { TaskData } from '../../src/Domain/DataTransferObjects/TaskData.js';
+import type { TodoistTaskData } from '../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { EntityRecord } from '../../src/Domain/Ports/SyncStatePort.js';
 
 // A canonical task with sensible defaults, so a test names only the fields it
@@ -36,5 +37,26 @@ export function entityRecord(
     notePath:
       overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     mirrors: overrides.mirrors ?? {},
+  };
+}
+
+// A Todoist task with sensible defaults. The provider clocks default to empty
+// strings so a test names only the field it cares about.
+export function todoistTask(
+  overrides: Partial<TodoistTaskData> = {},
+): TodoistTaskData {
+  const id = overrides.id ?? 'T1';
+  return {
+    id,
+    projectId: overrides.projectId ?? 'P1',
+    sectionId: overrides.sectionId ?? null,
+    parentId: overrides.parentId ?? null,
+    content: overrides.content ?? 'Fix the bug',
+    labels: overrides.labels ?? [],
+    isCompleted: overrides.isCompleted ?? false,
+    url: overrides.url ?? `https://app.todoist.com/app/task/${id}`,
+    addedAt: overrides.addedAt ?? '',
+    updatedAt: overrides.updatedAt ?? '',
+    completedAt: overrides.completedAt ?? null,
   };
 }

@@ -324,6 +324,8 @@ describe('GitHubAdapter', () => {
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
       state: 'open',
+      createdAt: null,
+      lastEditedAt: null,
       updatedAt: '2026-09-18T10:00:00Z',
       labels: ['type: task', 'bug'],
     });
@@ -555,6 +557,8 @@ describe('GitHubAdapter', () => {
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
       state: 'open',
+      createdAt: null,
+      lastEditedAt: null,
       updatedAt: '2026-09-18T10:00:00Z',
       labels: ['type: task'],
     });
@@ -597,6 +601,8 @@ describe('GitHubAdapter', () => {
       title: 'fix the widget',
       body: 'The bug now also happens on resize.',
       state: 'open',
+      createdAt: null,
+      lastEditedAt: null,
       updatedAt: '2026-09-18T12:30:00Z',
       labels: ['type: task'],
     });
@@ -642,6 +648,8 @@ describe('GitHubAdapter', () => {
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
       state: 'closed',
+      createdAt: null,
+      lastEditedAt: null,
       updatedAt: '2026-09-18T12:30:00Z',
       labels: ['type: task'],
     });
@@ -765,7 +773,9 @@ describe('GitHubAdapter', () => {
                   title: 'Fix the Bug!',
                   body: 'The bug happens when the widget is resized.',
                   state: 'OPEN',
-                  updatedAt: '2026-09-18T10:00:00Z',
+                  createdAt: '2026-09-18T08:00:00Z',
+                  lastEditedAt: '2026-09-18T10:00:00Z',
+                  updatedAt: '2026-09-18T11:30:00Z',
                   labels: { nodes: [{ name: 'type: task' }] },
                 },
                 {
@@ -822,7 +832,9 @@ describe('GitHubAdapter', () => {
         title: 'Fix the Bug!',
         body: 'The bug happens when the widget is resized.',
         state: 'open',
-        updatedAt: '2026-09-18T10:00:00Z',
+        createdAt: '2026-09-18T08:00:00Z',
+        lastEditedAt: '2026-09-18T10:00:00Z',
+        updatedAt: '2026-09-18T11:30:00Z',
         labels: ['type: task'],
       },
     ]);
@@ -923,6 +935,8 @@ describe('GitHubAdapter', () => {
       title: 'An idea',
       body: 'The draft body.',
       state: 'open',
+      createdAt: null,
+      lastEditedAt: null,
       updatedAt: '2026-09-19T10:00:00Z',
       labels: [],
     });
@@ -1157,6 +1171,8 @@ describe('GitHubAdapter', () => {
         title: 'An idea',
         body: 'No labels yet.',
         state: 'open',
+        createdAt: null,
+        lastEditedAt: null,
         updatedAt: '2026-09-18T14:00:00Z',
         labels: [],
       },
