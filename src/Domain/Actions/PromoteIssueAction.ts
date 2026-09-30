@@ -27,7 +27,13 @@ export class PromoteIssueAction {
     const task = await this.port.fetchTask(input.url);
     const identity = await this.syncState.getIdentity(input.projectName);
     await this.createTaskNote.execute({
-      task,
+      url: task.url,
+      title: task.title,
+      body: task.body,
+      // The promoted label IS the vault-owned type (e.g. `type: task`).
+      type: input.label.startsWith('type:')
+        ? input.label.slice('type:'.length).trim()
+        : '',
       projectName: input.projectName,
       syncedAt: new Date().toISOString(),
       statusName: defaultStatusName(identity?.statusOptions ?? []),

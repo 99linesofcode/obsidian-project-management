@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
-import type { RelinkRenamedTodoAction } from '../../../src/Domain/Actions/RelinkRenamedTodoAction.js';
-import type { RelocateTaskStatusAction } from '../../../src/Domain/Actions/RelocateTaskStatusAction.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 class FakeVault implements VaultPort {
   folders = new Map<string, string[]>();
@@ -31,175 +28,108 @@ class FakeVault implements VaultPort {
   onNoteRenamed(): void {}
 }
 
-class FakeSyncState implements SyncStatePort {
-  statuses: TaskData[] = [];
-  todoistStates: TaskData[] = [];
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-  async set(): Promise<void> {}
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return this.statuses;
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<null> {
-    return null;
-  }
-  async getLastProjectUpdate(): Promise<null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async setArchiveBaseline(): Promise<void> {}
-  async getWatchState(): Promise<{ etag: null; cursor: null }> {
-    return { etag: null, cursor: null };
-  }
-  async setWatchState(): Promise<void> {}
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<TaskData[]> {
-    return this.todoistStates;
-  }
-}
-
-class FakeRelink {
-  calls: Array<{ oldPath: string; newPath: string; syncedAt: string }> = [];
-  async execute(input: {
-    oldPath: string;
-    newPath: string;
-    syncedAt: string;
-  }): Promise<void> {
-    this.calls.push(input);
-  }
-}
-
-class FakeRelocate {
-  calls: Array<{ oldPath: string; newPath: string }> = [];
-  async execute(input: { oldPath: string; newPath: string }): Promise<void> {
-    this.calls.push(input);
-  }
-}
-
-function status(notePath: string): TaskData {
-  return taskRecord({
-    url: 'https://github.com/acme/widgets/issues/42',
-    remoteId: 42,
-    notePath,
-    body: 'abc',
-    updatedAt: '2026-09-18T11:00:00Z',
-    status: 'Building',
-    title: 'Fix the bug',
-  });
-}
-
-function todoistState(notePath: string): TaskData {
-  return taskRecord({ todoistId: 'T9', notePath });
+function noteWithId(id: string): string {
+  return ['---', `id: ${id}`, 'status: Building', '---', 'Body.'].join('\n');
 }
 
 function harness() {
   const vault = new FakeVault();
   const syncState = new FakeSyncState();
-  const relink = new FakeRelink();
-  const relocate = new FakeRelocate();
-  const action = new DetectNoteRenamesAction(
-    vault,
-    syncState,
-    relink as unknown as RelinkRenamedTodoAction,
-    relocate as unknown as RelocateTaskStatusAction,
-  );
-  return { action, vault, syncState, relink, relocate };
+  const action = new DetectNoteRenamesAction(vault, syncState);
+  return { action, vault, syncState };
 }
 
 const syncedAt = '2026-09-18T12:00:00Z';
+const oldPath = 'Projecten/Acme Widgets/taken/42-old.md';
+const newPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 
 describe('DetectNoteRenamesAction', () => {
-  it('relocates a task record whose note was renamed', async () => {
-    // Given — a status record at the old path and the note at a new path
+  it('updates the record notePath for a renamed task, without touching mirrors', async () => {
+    // Given — a record at the old path and its note (same id) at a new path
     const h = harness();
-    h.syncState.statuses = [status('Projecten/Acme Widgets/taken/42-old.md')];
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    ]);
+    const base = taskData({ id: 'uuid-1', notePath: oldPath, status: 'Building' });
+    h.syncState.records.set(
+      'uuid-1',
+      entityRecord({
+        id: 'uuid-1',
+        notePath: oldPath,
+        mirrors: { github: mirror('https://github.com/acme/widgets/issues/42', base) },
+      }),
+    );
+    h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
+    h.vault.notes.set(newPath, noteWithId('uuid-1'));
 
     // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — the status record follows the remote id prefix
-    expect(h.relocate.calls).toEqual([
-      {
-        oldPath: 'Projecten/Acme Widgets/taken/42-old.md',
-        newPath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      },
-    ]);
+    // Then — the record follows the id to the new path; its mirrors are intact
+    const record = await h.syncState.get('uuid-1');
+    expect(record?.notePath).toBe(newPath);
+    expect(record?.mirrors.github?.handle).toBe(
+      'https://github.com/acme/widgets/issues/42',
+    );
+    expect(record?.mirrors.github?.base).toBe(base);
   });
 
-  it('relinks a to-do record whose note was renamed', async () => {
-    // Given — a to-do record at the old path and the note at a new path
+  it('updates a to-do record whose note was renamed', async () => {
+    // Given — a to-do record at the old path and its note at a new path
     const h = harness();
-    h.syncState.todoistStates = [
-      todoistState('Projecten/Acme Widgets/todos/fi.md'),
-    ];
-    h.vault.folders.set('Projecten/Acme Widgets/todos', [
-      'Projecten/Acme Widgets/todos/fix-the-bug.md',
-    ]);
+    const todoPath = 'Projecten/Acme Widgets/todos/ship-it.md';
+    const newTodoPath = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
+    h.syncState.records.set(
+      'todo-uuid',
+      entityRecord({
+        id: 'todo-uuid',
+        notePath: todoPath,
+        mirrors: { todoist: mirror('T9', null) },
+      }),
+    );
+    h.vault.folders.set('Projecten/Acme Widgets/todos', [newTodoPath]);
+    h.vault.notes.set(newTodoPath, noteWithId('todo-uuid'));
 
     // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — the to-do relinks to the unclaimed current path
-    expect(h.relink.calls).toEqual([
-      {
-        oldPath: 'Projecten/Acme Widgets/todos/fi.md',
-        newPath: 'Projecten/Acme Widgets/todos/fix-the-bug.md',
-        syncedAt,
-      },
-    ]);
+    // Then — the record follows the id
+    expect((await h.syncState.get('todo-uuid'))?.notePath).toBe(newTodoPath);
   });
 
   it('leaves a record whose note still exists alone', async () => {
-    // Given — a status record whose note is present
+    // Given — a record whose note is present at its recorded path
     const h = harness();
-    h.syncState.statuses = [
-      status('Projecten/Acme Widgets/taken/42-fix-the-bug.md'),
-    ];
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    ]);
+    h.syncState.records.set(
+      'uuid-1',
+      entityRecord({ id: 'uuid-1', notePath: newPath, mirrors: {} }),
+    );
+    h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
+    h.vault.notes.set(newPath, noteWithId('uuid-1'));
 
     // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — nothing moves
-    expect(h.relocate.calls).toEqual([]);
-    expect(h.relink.calls).toEqual([]);
+    // Then — nothing moves and nothing is written
+    expect(h.syncState.setCalls).toEqual([]);
   });
 
-  it('leaves a record whose note is gone and has no match alone', async () => {
-    // Given — a status record whose note is gone and no current note matches
+  it('leaves a record whose note is gone and has no id match alone', async () => {
+    // Given — a record whose note is gone and no current note carries its id
     const h = harness();
-    h.syncState.statuses = [status('Projecten/Acme Widgets/taken/42-gone.md')];
+    h.syncState.records.set(
+      'uuid-1',
+      entityRecord({ id: 'uuid-1', notePath: oldPath, mirrors: {} }),
+    );
     h.vault.folders.set('Projecten/Acme Widgets/taken', [
       'Projecten/Acme Widgets/taken/99-other.md',
     ]);
+    h.vault.notes.set(
+      'Projecten/Acme Widgets/taken/99-other.md',
+      noteWithId('uuid-99'),
+    );
 
     // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
     // Then — the deletion sweep owns it, not the rename detector
-    expect(h.relocate.calls).toEqual([]);
+    expect(h.syncState.setCalls).toEqual([]);
   });
 });

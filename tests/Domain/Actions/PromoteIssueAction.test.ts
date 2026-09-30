@@ -5,21 +5,15 @@ import { slugify } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the project management port records the labels it was
 // asked to add and returns the task the action should materialise; the vault
-// and sync state record what the note action creates. The promote action's
-// own behaviour (label first, then materialise the fetched task) is what's
-// under test, against the real CreateTaskNoteAction.
+// and registry record what the note action creates. The promote action's own
+// behaviour (label first, then materialise the fetched task) is what's under
+// test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
-  async setProjectClosed(): Promise<void> {}
-  async lockIssue(): Promise<void> {}
-  async fetchProjectStates(): Promise<never> {
-    throw new Error('not used in this test');
-  }
   addedLabels: Array<{ url: string; label: string }> = [];
   task: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
@@ -35,21 +29,26 @@ class FakePort implements ProjectManagementPort {
   async addLabel(url: string, label: string): Promise<void> {
     this.addedLabels.push({ url, label });
   }
-
   async fetchTask(): Promise<GithubTaskData> {
     return this.task;
   }
-
   async fetchProjectIdentity(): Promise<null> {
-    throw new Error('not used in this test');
+    return null;
   }
   async fetchProjectDetail(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async fetchTrackedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchLatestIssueActivity(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchProjectStates(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async setProjectClosed(): Promise<void> {}
+  async lockIssue(): Promise<void> {}
   async fetchUnpromotedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -68,10 +67,6 @@ class FakePort implements ProjectManagementPort {
   async addBoardItem(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async fetchLatestIssueActivity(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -86,103 +81,28 @@ class FakeVault implements VaultPort {
   async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
   }
-
   async createNote(path: string, content: string): Promise<void> {
     this.created.push({ path, content });
   }
-
-  async writeNote(): Promise<void> {
+  async writeNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async moveFolder(): Promise<void> {}
-  async renameNote(): Promise<void> {
+  async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-
-  onNoteChanged(): void {
-    throw new Error('not used in this test');
-  }
-
-  onNoteDeleted(): void {
-    throw new Error('not used in this test');
-  }
+  onNoteChanged(): void {}
+  onNoteDeleted(): void {}
   onNoteRenamed(): void {}
-}
-
-class FakeSyncState implements SyncStatePort {
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async getWatchState(): Promise<{
-    etag: string | null;
-    cursor: string | null;
-  }> {
-    return { etag: null, cursor: null };
-  }
-
-  async setWatchState(): Promise<void> {}
-
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-  async removeTodoistState(): Promise<void> {}
-
-  async setArchiveBaseline(): Promise<void> {}
-  identity = {
-    repoUrl: 'https://github.com/acme/widgets',
-    repoNodeId: 'R_kgDOAAAA',
-    projectNodeId: 'PVT_123',
-    statusFieldId: 'PVTF_456',
-    statusOptions: [
-      { id: 'PVTSSF_1', name: 'Unshaped' },
-      { id: 'PVTSSF_2', name: 'Shaping' },
-      { id: 'PVTSSF_3', name: 'Shaped' },
-      { id: 'PVTSSF_4', name: 'Building' },
-      { id: 'PVTSSF_5', name: 'Shipped' },
-    ],
-  };
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-  async set(): Promise<void> {}
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [];
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<ProjectIdentityData | null> {
-    return this.identity;
-  }
 }
 
 function makeAction(
@@ -193,8 +113,18 @@ function makeAction(
   return new PromoteIssueAction(
     port,
     syncState,
-    new CreateTaskNoteAction(vault, syncState, 'Templates/Task.md'),
+    new CreateTaskNoteAction(vault, syncState, ''),
   );
+}
+
+function identity(): ProjectIdentityData {
+  return {
+    repoUrl: 'https://github.com/acme/widgets',
+    repoNodeId: 'R_kgDOAAAA',
+    projectNodeId: 'PVT_123',
+    statusFieldId: 'PVTF_456',
+    statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+  };
 }
 
 describe('PromoteIssueAction', () => {
@@ -203,6 +133,7 @@ describe('PromoteIssueAction', () => {
     const port = new FakePort();
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity());
     const action = makeAction(port, vault, syncState);
 
     // When — the action promotes the issue
@@ -219,6 +150,8 @@ describe('PromoteIssueAction', () => {
     // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toContain(slugify(port.task.title));
+    // And the promoted label became the vault-owned type
+    expect(vault.created[0]!.content).toContain('type: task');
   });
 
   it('applies the label idempotently even when the issue is already labelled', async () => {
@@ -228,6 +161,7 @@ describe('PromoteIssueAction', () => {
     port.task = { ...port.task, labels: ['type: task'] };
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity());
     const action = makeAction(port, vault, syncState);
 
     // When — the action promotes the already-labelled issue

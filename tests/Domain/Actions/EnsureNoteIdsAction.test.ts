@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureNoteIdsAction } from '../../../src/Domain/Actions/EnsureNoteIdsAction.js';
+import { VaultTaskMapper } from '../../../src/Domain/Mappers/VaultTaskMapper.js';
 import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
@@ -161,5 +162,30 @@ describe('EnsureNoteIdsAction', () => {
     expect(
       splitFrontmatter(vault.notes.get(takenPath) ?? '')?.fields.get('id'),
     ).toBe(firstId);
+  });
+
+  it('backfills an id that the vault mapper then parses', async () => {
+    // Given — a task note without an id
+    const vault = new FakeVault();
+    vault.notes.set(takenPath, noteWith(['status: Building']));
+    vault.folderNotes = folderWith([takenPath]);
+    const action = new EnsureNoteIdsAction(vault);
+
+    // When — the backfill runs, then the note is parsed
+    await action.execute({ projectName: 'Acme Widgets' });
+    const task = VaultTaskMapper.parseTask(
+      vault.notes.get(takenPath) ?? '',
+      takenPath,
+      { projectName: 'Acme Widgets', doneLane: 'Shipped' },
+    );
+
+    // Then — the stamped uuid is the parsed identity, so the registry can
+    // resolve the note to its record
+    const stamped = splitFrontmatter(
+      vault.notes.get(takenPath) ?? '',
+    )?.fields.get('id');
+    expect(stamped).toMatch(/^[0-9a-f-]{36}$/);
+    expect(task?.id).toBe(stamped);
+    expect(task?.status).toBe('Building');
   });
 });

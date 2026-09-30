@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
-import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
+import type { TaskNoteSource } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 
-const task: GithubTaskData = {
-  url: 'https://github.com/acme/widgets/issues/42',
-  remoteId: 42,
-  nodeId: 'I_kwDOAAAA42',
+const task: TaskNoteSource = {
+  id: 'uuid-42',
+  type: 'task',
   title: 'Fix the Bug!',
   body: 'The bug happens when the widget is resized.',
-  state: 'open',
-  updatedAt: '2026-09-18T10:00:00Z',
-  labels: [],
+  createdAt: null,
 };
 
 const context = {
@@ -20,35 +17,38 @@ const context = {
 };
 
 describe('TaskNoteMapper', () => {
-  it('maps a task to a note path under the project taken folder', () => {
+  it('maps a task to a slug-named note under the project taken folder', () => {
     // Given — a promoted task and its project context
 
     // When — the note is mapped
     const { path } = TaskNoteMapper.map(task, context);
 
-    // Then — the path carries the project, remote id and title slug
-    expect(path).toBe('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    // Then — the path is the title slug; filenames carry no identity
+    expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
   });
 
-  it('writes the sync frontmatter and the body verbatim', () => {
+  it('writes the vault-owned identity and sync frontmatter, no url', () => {
     // Given — a promoted task and its project context
 
     // When — the note is mapped
     const { content } = TaskNoteMapper.map(task, context);
 
-    // Then — the frontmatter carries the sync fields and the body is verbatim
+    // Then — the frontmatter carries id and type, and no url is written
     expect(content).toBe(
       [
         '---',
         'categories: [taken]',
-        'url: https://github.com/acme/widgets/issues/42',
+        'id: uuid-42',
+        'type: task',
         'status: Building',
         'affiliation: ["[[Acme Widgets]]"]',
+        'created: 2026-09-18',
         'synced: 2026-09-18T12:00:00Z',
         '---',
         'The bug happens when the widget is resized.',
       ].join('\n'),
     );
+    expect(content).not.toContain('url:');
   });
 
   it('writes the status name verbatim — the lane the card sits in', () => {
@@ -65,13 +65,13 @@ describe('TaskNoteMapper', () => {
 
   it('sanitizes the title into a slug for the filename', () => {
     // Given — a title with characters that do not belong in a filename
-    const messy: GithubTaskData = { ...task, title: '  Fix the Bug!!!  ' };
+    const messy: TaskNoteSource = { ...task, title: '  Fix the Bug!!!  ' };
 
     // When — the note is mapped
     const { path } = TaskNoteMapper.map(messy, context);
 
     // Then — the slug is lowercased, trimmed and stripped of specials
-    expect(path).toBe('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+    expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
   });
 
   it('produces the same path for the same task (idempotent)', () => {
@@ -92,7 +92,8 @@ describe('TaskNoteMapper.render', () => {
   const template = [
     '---',
     'affiliation: []',
-    'url:',
+    'id:',
+    'type:',
     'status:',
     'synced:',
     'created: {{date}}',
@@ -113,7 +114,8 @@ describe('TaskNoteMapper.render', () => {
       [
         '---',
         'affiliation: ["[[Acme Widgets]]"]',
-        'url: https://github.com/acme/widgets/issues/42',
+        'id: uuid-42',
+        'type: task',
         'status: Building',
         'synced: 2026-09-18T12:00:00Z',
         'created: 2026-09-18',
@@ -150,9 +152,10 @@ describe('TaskNoteMapper.render', () => {
         '---',
         'status: Building',
         'created: 2026-09-18',
-        'url: https://github.com/acme/widgets/issues/42',
-        'synced: 2026-09-18T12:00:00Z',
+        'id: uuid-42',
+        'type: task',
         'affiliation: ["[[Acme Widgets]]"]',
+        'synced: 2026-09-18T12:00:00Z',
         '---',
         'The bug happens when the widget is resized.',
       ].join('\n'),
