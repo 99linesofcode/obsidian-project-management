@@ -1,5 +1,6 @@
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
+import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 
 export interface EnsureNoteIdsInput {
@@ -17,7 +18,10 @@ export interface EnsureNoteIdsInput {
 // duplicated notes (two notes claiming one id). Without it a registry wipe
 // would silently orphan every mirror.
 export class EnsureNoteIdsAction {
-  constructor(private readonly vault: VaultPort) {}
+  constructor(
+    private readonly vault: VaultPort,
+    private readonly syncState: SyncStatePort,
+  ) {}
 
   async execute(input: EnsureNoteIdsInput): Promise<void> {
     const folders = [
@@ -43,12 +47,17 @@ export class EnsureNoteIdsAction {
     if (parsed === null || parsed.fields.has('id')) {
       return;
     }
+    // WHY adopt the record's id when the registry already knows this path: a
+    // migrated record carries the uuid its mirrors are keyed on; minting a
+    // fresh one would orphan those mirrors from the note. Mint only when no
+    // record exists (a genuinely new note).
+    const record = await this.syncState.findByNotePath(path);
     await stampFrontmatterField(
       this.vault,
       path,
       note.content,
       'id',
-      crypto.randomUUID(),
+      record?.id ?? crypto.randomUUID(),
     );
   }
 }

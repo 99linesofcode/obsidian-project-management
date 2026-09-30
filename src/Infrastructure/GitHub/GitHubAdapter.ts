@@ -142,6 +142,8 @@ const PROJECT_DETAIL_QUERY = `
           title
           body
           state
+          createdAt
+          lastEditedAt
           updatedAt
           labels(first: 20) {
             nodes { name }
@@ -386,6 +388,11 @@ export class GitHubAdapter implements ProjectManagementPort {
       title: typeof node.title === 'string' ? node.title : '',
       body: typeof node.body === 'string' ? node.body : '',
       state: node.state === 'CLOSED' ? 'closed' : 'open',
+      createdAt: typeof node.createdAt === 'string' ? node.createdAt : null,
+      // The GraphQL Issue type carries lastEditedAt, which moves only on
+      // title/body edits — unlike updatedAt, which comments bump.
+      lastEditedAt:
+        typeof node.lastEditedAt === 'string' ? node.lastEditedAt : null,
       updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : '',
       labels,
     };
@@ -772,6 +779,11 @@ export class GitHubAdapter implements ProjectManagementPort {
       title: typeof issue.title === 'string' ? issue.title : '',
       body: typeof issue.body === 'string' ? issue.body : '',
       state: issue.state === 'closed' ? 'closed' : 'open',
+      createdAt: typeof issue.created_at === 'string' ? issue.created_at : null,
+      // The REST shape carries no lastEditedAt; updated_at is comment-noisy, so
+      // it is not a substitute. The canonical content clock stays unknown here
+      // (the GraphQL detail fetch is the sync path and does carry it).
+      lastEditedAt: null,
       updatedAt: typeof issue.updated_at === 'string' ? issue.updated_at : '',
       labels,
     };

@@ -28,6 +28,8 @@ class FakeProjectManagement implements ProjectManagementPort {
       title: 'Fix the Bug!',
       body: '',
       state,
+      createdAt: null,
+      lastEditedAt: null,
       updatedAt: '2026-09-18T12:30:00Z',
       labels: ['type: task'],
     };
@@ -90,10 +92,7 @@ const identity: ProjectIdentityData = {
   ],
 };
 
-function seed(
-  syncState: FakeSyncState,
-  lane = 'Building',
-): void {
+function seed(syncState: FakeSyncState, lane = 'Building'): void {
   syncState.identities.set(projectName, identity);
   syncState.records.set(
     'uuid-42',
@@ -101,7 +100,10 @@ function seed(
       id: 'uuid-42',
       notePath,
       mirrors: {
-        github: mirror(url, taskData({ id: 'uuid-42', notePath, status: lane })),
+        github: mirror(
+          url,
+          taskData({ id: 'uuid-42', notePath, status: lane }),
+        ),
       },
     }),
   );

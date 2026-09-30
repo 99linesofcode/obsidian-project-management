@@ -22,6 +22,8 @@ class FakePort implements ProjectManagementPort {
     title: 'An idea',
     body: 'The draft body.',
     state: 'open',
+    createdAt: null,
+    lastEditedAt: null,
     updatedAt: '2026-09-19T10:00:00Z',
     labels: [],
   };

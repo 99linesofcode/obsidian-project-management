@@ -22,6 +22,8 @@ class FakePort implements ProjectManagementPort {
     title: 'Fix the Bug!',
     body: 'The bug happens when the widget is resized.',
     state: 'open',
+    createdAt: null,
+    lastEditedAt: null,
     updatedAt: '2026-09-18T10:00:00Z',
     labels: [],
   };

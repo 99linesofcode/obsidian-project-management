@@ -1,84 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { ApplyTaskToGithubAction } from '../../../src/Domain/Actions/ApplyTaskToGithubAction.js';
+import { toIssueBody } from '../../../src/Domain/Notes/Checklist.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: record the writes the writer asks for, so its field-level
-// gates (write only what differs) are what's under test.
-class FakeSyncState implements SyncStatePort {
-  identity: ProjectIdentityData | null = null;
-  statuses = new Map<string, TaskData>();
-  setCalls: TaskData[] = [];
-
-  async get(url: string): Promise<TaskData | null> {
-    return this.statuses.get(url) ?? null;
-  }
-  async set(status: TaskData): Promise<void> {
-    this.statuses.set(status.url, status);
-    this.setCalls.push(status);
-  }
-  async getIdentity(): Promise<ProjectIdentityData | null> {
-    return this.identity;
-  }
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [...this.statuses.values()];
-  }
-  async setIdentity(): Promise<void> {}
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async setArchiveBaseline(): Promise<void> {}
-  async getWatchState(): Promise<{ etag: null; cursor: null }> {
-    return { etag: null, cursor: null };
-  }
-  async setWatchState(): Promise<void> {}
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-}
-
+// gates (write only what differs) and its base advance are what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   updateCalls: Array<{ url: string; title: string; body: string }> = [];
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   boardStatusCalls: Array<{ issueUrl: string; optionId: string }> = [];
   addBoardItemCalls: Array<{ projectNodeId: string; issueUrl: string }> = [];
-  updated: GithubTaskData | null = null;
+  failUpdate = false;
 
   async updateTask(
     url: string,
     input: { title: string; body: string },
   ): Promise<GithubTaskData> {
+    if (this.failUpdate) {
+      throw new Error('boom');
+    }
     this.updateCalls.push({ url, ...input });
-    return this.updated ?? issue({ url, title: input.title, body: input.body });
+    return issue({ url, title: input.title, body: input.body });
   }
   async setTaskState(
     url: string,
     state: 'open' | 'closed',
   ): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
-    return this.updated ?? issue({ url, state });
+    return issue({ url, state });
   }
   async setBoardStatus(
     _projectNodeId: string,
@@ -129,6 +84,7 @@ class FakeProjectManagement implements ProjectManagementPort {
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';
+const notePath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 const identity: ProjectIdentityData = {
   repoUrl: 'https://github.com/acme/widgets',
   repoNodeId: 'R_kgDOAAAA',
@@ -141,24 +97,6 @@ const identity: ProjectIdentityData = {
   ],
 };
 
-function task(overrides: Partial<TaskData> = {}): TaskData {
-  return {
-    url,
-    remoteId: 42,
-    nodeId: 'I_kwDOAAAA42',
-    todoistId: '',
-    notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    title: 'Fix the bug',
-    body: 'The bug happens on resize.',
-    status: 'Building',
-    completed: false,
-    parent: null,
-    labels: ['type: task'],
-    updatedAt: '2026-09-18T10:00:00Z',
-    ...overrides,
-  };
-}
-
 function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   return {
     url,
@@ -167,30 +105,56 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
     title: 'Fix the bug',
     body: 'The bug happens on resize.',
     state: 'open',
+    createdAt: '2026-09-18T09:00:00Z',
+    lastEditedAt: '2026-09-18T10:00:00Z',
     updatedAt: '2026-09-18T10:00:00Z',
     labels: ['type: task'],
     ...overrides,
   };
 }
 
+// The winning task (real body) or the raw remote view; both are canonical.
+function task(overrides: Partial<TaskData> = {}): TaskData {
+  return taskData({
+    id: 'uuid-42',
+    notePath,
+    mirrors: { github: url },
+    title: 'Fix the bug',
+    body: 'The bug happens on resize.',
+    status: 'Building',
+    completedAt: null,
+    type: 'task',
+    ...overrides,
+  });
+}
+
 function makeAction(syncState: FakeSyncState, port: FakeProjectManagement) {
   return new ApplyTaskToGithubAction(port, syncState);
+}
+
+function seedRecord(syncState: FakeSyncState, base: TaskData | null = null) {
+  syncState.records.set(
+    'uuid-42',
+    entityRecord({
+      id: 'uuid-42',
+      notePath,
+      mirrors: { github: mirror(url, base) },
+    }),
+  );
 }
 
 describe('ApplyTaskToGithubAction', () => {
   it('writes the issue body and title when they differ', async () => {
     // Given — a winning vault task whose body and title moved
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
-    const current = task({ title: 'Fix the bug', body: 'Old body.' });
-    const winning = task({ title: 'Fix the widget', body: 'New body.' });
 
     // When — the winning task is rendered onto GitHub
     await action.execute({
-      task: winning,
-      current,
+      task: task({ title: 'Fix the widget', body: 'New body.' }),
+      current: task({ title: 'Fix the bug', body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
@@ -205,15 +169,14 @@ describe('ApplyTaskToGithubAction', () => {
   it('does not write the issue when the body and title already match', async () => {
     // Given — a winning task identical to the remote
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
-    const current = task();
 
     // When — the winning task is rendered
     await action.execute({
       task: task(),
-      current,
+      current: task(),
       hasCard: true,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
@@ -224,16 +187,16 @@ describe('ApplyTaskToGithubAction', () => {
   });
 
   it('closes the issue when the winning task is completed', async () => {
-    // Given — a winning task marked completed, the remote still open
+    // Given — a winning task marked completed, the raw issue still open
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
     // When — the winning task is rendered
     await action.execute({
-      task: task({ completed: true, status: 'Shipped' }),
-      current: task({ completed: false }),
+      task: task({ completedAt: '', status: 'Shipped' }),
+      current: task({ completedAt: null }),
       hasCard: true,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
@@ -243,10 +206,30 @@ describe('ApplyTaskToGithubAction', () => {
     expect(port.stateCalls).toEqual([{ url, state: 'closed' }]);
   });
 
+  it('reopens the issue when the winning task is not completed', async () => {
+    // Given — a winning task not completed, the raw issue closed
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    const port = new FakeProjectManagement();
+    const action = makeAction(syncState, port);
+
+    // When — the winning task is rendered
+    await action.execute({
+      task: task({ completedAt: null }),
+      current: task({ completedAt: '' }),
+      hasCard: true,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — the issue is reopened
+    expect(port.stateCalls).toEqual([{ url, state: 'open' }]);
+  });
+
   it('moves the board card only when the lane differs', async () => {
     // Given — a winning task in a different lane than the card
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
@@ -265,10 +248,30 @@ describe('ApplyTaskToGithubAction', () => {
     ]);
   });
 
+  it('does not move the card when the lane already matches', async () => {
+    // Given — a winning task in the same lane as the card
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    const port = new FakeProjectManagement();
+    const action = makeAction(syncState, port);
+
+    // When — the winning task is rendered
+    await action.execute({
+      task: task({ status: 'Building' }),
+      current: task({ status: 'Building' }),
+      hasCard: true,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — the card is left alone
+    expect(port.boardStatusCalls).toEqual([]);
+  });
+
   it('adds a missing card and places it in the winning lane', async () => {
     // Given — a tracked issue with no card (the remote lane is empty)
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
@@ -290,10 +293,30 @@ describe('ApplyTaskToGithubAction', () => {
     ]);
   });
 
+  it('adds a card without a lane when the winning lane is empty', async () => {
+    // Given — a card-less issue whose winning task has no lane
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    const port = new FakeProjectManagement();
+    const action = makeAction(syncState, port);
+
+    // When — the winning task is rendered
+    await action.execute({
+      task: task({ status: '' }),
+      current: task({ status: '' }),
+      hasCard: false,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — the card is added but no lane is written
+    expect(port.addBoardItemCalls).toHaveLength(1);
+    expect(port.boardStatusCalls).toEqual([]);
+  });
+
   it('skips the board for a project with no stored identity', async () => {
     // Given — a board-less project
     const syncState = new FakeSyncState();
-    syncState.identity = null;
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
@@ -314,7 +337,7 @@ describe('ApplyTaskToGithubAction', () => {
   it('keeps the remote title when only the body changed', async () => {
     // Given — a winning task whose body moved but whose title slug is unchanged
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
@@ -333,101 +356,63 @@ describe('ApplyTaskToGithubAction', () => {
     ]);
   });
 
-  it('reopens the issue when the winning task is not completed', async () => {
-    // Given — a winning task not completed, the remote closed
+  it('advances the base to what the issue now carries, after the write', async () => {
+    // Given — a tracked issue whose vault body moved
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set('Acme Widgets', identity);
+    seedRecord(
+      syncState,
+      taskData({ id: 'uuid-42', notePath, body: hash('old body') }),
+    );
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
+    // When — the winning vault task is rendered
     await action.execute({
-      task: task({ completed: false }),
-      current: task({ completed: true }),
-      hasCard: true,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-    });
-
-    // Then — the issue is reopened
-    expect(port.stateCalls).toEqual([{ url, state: 'open' }]);
-  });
-
-  it('does not move the card when the lane already matches', async () => {
-    // Given — a winning task in the same lane as the card
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const port = new FakeProjectManagement();
-    const action = makeAction(syncState, port);
-
-    // When — the winning task is rendered
-    await action.execute({
-      task: task({ status: 'Building' }),
-      current: task({ status: 'Building' }),
-      hasCard: true,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-    });
-
-    // Then — the card is left alone
-    expect(port.boardStatusCalls).toEqual([]);
-  });
-
-  it('adds a card without a lane when the winning lane is empty', async () => {
-    // Given — a card-less issue whose winning task has no lane
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const port = new FakeProjectManagement();
-    const action = makeAction(syncState, port);
-
-    // When — the winning task is rendered
-    await action.execute({
-      task: task({ status: '' }),
-      current: task({ status: '' }),
-      hasCard: false,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-    });
-
-    // Then — the card is added but no lane is written
-    expect(port.addBoardItemCalls).toHaveLength(1);
-    expect(port.boardStatusCalls).toEqual([]);
-  });
-
-  it('refreshes the TaskData record from the write response', async () => {
-    // Given — a winning task whose body moved
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    const port = new FakeProjectManagement();
-    port.updated = issue({
-      title: 'Fix the widget',
-      body: 'New body.',
-      updatedAt: '2026-09-18T12:30:00Z',
-    });
-    const action = makeAction(syncState, port);
-
-    // When — the winning task is rendered
-    await action.execute({
-      task: task({ title: 'Fix the widget', body: 'New body.' }),
+      task: task({ body: 'A vault-side edit.', status: 'Building' }),
       current: task({ body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the record reflects the response's body and updatedAt
-    expect(syncState.setCalls).toEqual([
-      taskRecord({
-        url,
-        remoteId: 42,
-        nodeId: 'I_kwDOAAAA42',
-        notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-        body: hash('New body.'),
-        updatedAt: '2026-09-18T12:30:00Z',
-        status: 'Building',
-        title: 'Fix the widget',
-        labels: ['type: task'],
+    // Then — the base is the diff view of the pushed content
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.body).toBe(
+      hash(toIssueBody('A vault-side edit.')),
+    );
+    expect(record?.mirrors.github?.base?.status).toBe('Building');
+    // And it is a diff view, not the raw body
+    expect(record?.mirrors.github?.base?.body).not.toBe('A vault-side edit.');
+  });
+
+  it('does not advance the base when the write fails', async () => {
+    // Given — a tracked issue whose write will fail
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    const oldBase = taskData({
+      id: 'uuid-42',
+      notePath,
+      body: hash('old body'),
+    });
+    seedRecord(syncState, oldBase);
+    const port = new FakeProjectManagement();
+    port.failUpdate = true;
+    const action = makeAction(syncState, port);
+
+    // When — the winning task is rendered and the write throws
+    await expect(
+      action.execute({
+        task: task({ body: 'A vault-side edit.' }),
+        current: task({ body: 'Old body.' }),
+        hasCard: true,
+        projectName: 'Acme Widgets',
+        syncedAt: '2026-09-18T12:00:00Z',
       }),
-    ]);
+    ).rejects.toThrow('boom');
+
+    // Then — the base is untouched: it advances only after a durable write
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.body).toBe(hash('old body'));
   });
 });

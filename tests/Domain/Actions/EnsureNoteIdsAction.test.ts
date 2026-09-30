@@ -3,6 +3,8 @@ import { EnsureNoteIdsAction } from '../../../src/Domain/Actions/EnsureNoteIdsAc
 import { VaultTaskMapper } from '../../../src/Domain/Mappers/VaultTaskMapper.js';
 import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import { entityRecord } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // A fake vault at the port: a path→content map plus a folder→paths listing, so
 // the action's stamping decisions are what's under test.
@@ -72,13 +74,17 @@ function folderWith(paths: string[]): Map<string, string[]> {
   ]);
 }
 
+function makeAction(vault: FakeVault, syncState: FakeSyncState) {
+  return new EnsureNoteIdsAction(vault, syncState);
+}
+
 describe('EnsureNoteIdsAction', () => {
   it('backfills a uuid into a note that has no id', async () => {
     // Given — a task note without an id field
     const vault = new FakeVault();
     vault.notes.set(takenPath, noteWith(['status: open']));
     vault.folderNotes = folderWith([takenPath]);
-    const action = new EnsureNoteIdsAction(vault);
+    const action = makeAction(vault, new FakeSyncState());
 
     // When — the action runs
     await action.execute({ projectName: 'Acme Widgets' });
@@ -91,13 +97,35 @@ describe('EnsureNoteIdsAction', () => {
     expect(parsed?.body).toBe('Body text.');
   });
 
+  it("adopts the record's id when the registry already knows the note", async () => {
+    // Given — a note without an id and a migrated registry record at its path
+    const vault = new FakeVault();
+    vault.notes.set(takenPath, noteWith(['status: open']));
+    vault.folderNotes = folderWith([takenPath]);
+    const syncState = new FakeSyncState();
+    syncState.records.set(
+      'migrated-uuid',
+      entityRecord({ id: 'migrated-uuid', notePath: takenPath, mirrors: {} }),
+    );
+    const action = makeAction(vault, syncState);
+
+    // When — the action runs
+    await action.execute({ projectName: 'Acme Widgets' });
+
+    // Then — the note adopts the record's uuid, so its mirrors stay attached
+    const id = splitFrontmatter(vault.notes.get(takenPath) ?? '')?.fields.get(
+      'id',
+    );
+    expect(id).toBe('migrated-uuid');
+  });
+
   it('stamps to-do notes as well as task notes', async () => {
     // Given — one note in each folder, both missing an id
     const vault = new FakeVault();
     vault.notes.set(takenPath, noteWith(['status: open']));
     vault.notes.set(todoPath, noteWith(['status: open']));
     vault.folderNotes = folderWith([takenPath, todoPath]);
-    const action = new EnsureNoteIdsAction(vault);
+    const action = makeAction(vault, new FakeSyncState());
 
     // When — the action runs
     await action.execute({ projectName: 'Acme Widgets' });
@@ -116,7 +144,7 @@ describe('EnsureNoteIdsAction', () => {
     const vault = new FakeVault();
     vault.notes.set(takenPath, noteWith(['id: existing-uuid', 'status: open']));
     vault.folderNotes = folderWith([takenPath]);
-    const action = new EnsureNoteIdsAction(vault);
+    const action = makeAction(vault, new FakeSyncState());
 
     // When — the action runs
     await action.execute({ projectName: 'Acme Widgets' });
@@ -133,7 +161,7 @@ describe('EnsureNoteIdsAction', () => {
     const vault = new FakeVault();
     vault.notes.set(takenPath, 'no frontmatter here');
     vault.folderNotes = folderWith([takenPath]);
-    const action = new EnsureNoteIdsAction(vault);
+    const action = makeAction(vault, new FakeSyncState());
 
     // When — the action runs
     await action.execute({ projectName: 'Acme Widgets' });
@@ -148,7 +176,7 @@ describe('EnsureNoteIdsAction', () => {
     const vault = new FakeVault();
     vault.notes.set(takenPath, noteWith(['status: open']));
     vault.folderNotes = folderWith([takenPath]);
-    const action = new EnsureNoteIdsAction(vault);
+    const action = makeAction(vault, new FakeSyncState());
     await action.execute({ projectName: 'Acme Widgets' });
     const firstId = splitFrontmatter(
       vault.notes.get(takenPath) ?? '',
@@ -169,7 +197,7 @@ describe('EnsureNoteIdsAction', () => {
     const vault = new FakeVault();
     vault.notes.set(takenPath, noteWith(['status: Building']));
     vault.folderNotes = folderWith([takenPath]);
-    const action = new EnsureNoteIdsAction(vault);
+    const action = makeAction(vault, new FakeSyncState());
 
     // When — the backfill runs, then the note is parsed
     await action.execute({ projectName: 'Acme Widgets' });

@@ -5,6 +5,7 @@ import { ApplyTaskToVaultAction } from '../../../src/Domain/Actions/ApplyTaskToV
 import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
+import { toIssueBody } from '../../../src/Domain/Notes/Checklist.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import { VerdictResolver } from '../../../src/Domain/Reconciliation/VerdictResolver.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
@@ -12,10 +13,9 @@ import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/Git
 import type { ProjectDetailData } from '../../../src/Domain/DataTransferObjects/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the pipeline is exercised end-to-end through the real
 // writers, so the fetch → map → diff → apply orchestration is what's under test.
@@ -59,55 +59,6 @@ class FakeVault implements VaultPort {
   onNoteRenamed(): void {}
 }
 
-class FakeSyncState implements SyncStatePort {
-  identity: ProjectIdentityData | null = null;
-  statuses = new Map<string, TaskData>();
-  setCalls: TaskData[] = [];
-
-  async get(url: string): Promise<TaskData | null> {
-    return this.statuses.get(url) ?? null;
-  }
-  async set(status: TaskData): Promise<void> {
-    this.statuses.set(status.url, status);
-    this.setCalls.push(status);
-  }
-  async getIdentity(): Promise<ProjectIdentityData | null> {
-    return this.identity;
-  }
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [...this.statuses.values()];
-  }
-  async setIdentity(): Promise<void> {}
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async setArchiveBaseline(): Promise<void> {}
-  async getWatchState(): Promise<{ etag: null; cursor: null }> {
-    return { etag: null, cursor: null };
-  }
-  async setWatchState(): Promise<void> {}
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async removeTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-}
-
 class FakeProjectManagement implements ProjectManagementPort {
   detail: ProjectDetailData = { issues: [], cards: [] };
   detailCalls: Array<{ repoUrl: string; projectNodeId: string }> = [];
@@ -128,14 +79,14 @@ class FakeProjectManagement implements ProjectManagementPort {
     input: { title: string; body: string },
   ): Promise<GithubTaskData> {
     this.updateCalls.push({ url, ...input });
-    return { ...issueA, url, title: input.title, body: input.body };
+    return issue({ url, title: input.title, body: input.body });
   }
   async setTaskState(
     url: string,
     state: 'open' | 'closed',
   ): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
-    return { ...issueA, url, state };
+    return issue({ url, state });
   }
   async setBoardStatus(
     _projectNodeId: string,
@@ -147,15 +98,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     this.addBoardItemCalls.push({ projectNodeId, issueUrl });
-    this.detail.cards.push({
-      itemId: 'PVTI_new',
-      type: 'ISSUE',
-      issueUrl,
-      statusOptionName: 'Unshaped',
-    });
-  }
-  async deleteCard(): Promise<void> {
-    throw new Error('not used in this test');
   }
   async fetchProjectIdentity(): Promise<null> {
     return null;
@@ -181,6 +123,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async deleteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchProjectStates(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -189,23 +134,14 @@ class FakeProjectManagement implements ProjectManagementPort {
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';
+// A legacy issue-backed name (the record's path) and the slug a fresh note
+// would get — the action must follow the record, never re-derive the path.
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
-const context = {
-  projectName: 'Acme Widgets',
-  syncedAt: '2026-09-18T12:00:00Z',
-  statusName: 'Unshaped',
-};
-
-const issueA: GithubTaskData = {
-  url,
-  remoteId: 42,
-  nodeId: 'I_kwDOAAAA42',
-  title: 'Fix the Bug!',
-  body: 'The bug happens when the widget is resized.',
-  state: 'open',
-  updatedAt: '2026-09-18T10:00:00Z',
-  labels: ['type: task'],
-};
+const slugNotePath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+const projectName = 'Acme Widgets';
+const syncedAt = '2026-09-18T12:00:00Z';
+const doneLane = 'Shipped';
+const defaultLane = 'Unshaped';
 
 const identity: ProjectIdentityData = {
   repoUrl: 'https://github.com/acme/widgets',
@@ -219,27 +155,96 @@ const identity: ProjectIdentityData = {
   ],
 };
 
+const baseBody = 'The bug happens when the widget is resized.';
+
+function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
+  return {
+    url,
+    remoteId: 42,
+    nodeId: 'I_kwDOAAAA42',
+    title: 'Fix the Bug!',
+    body: baseBody,
+    state: 'open',
+    createdAt: '2026-09-18T09:00:00Z',
+    lastEditedAt: '2026-09-18T10:00:00Z',
+    updatedAt: '2026-09-18T10:00:00Z',
+    labels: ['type: task'],
+    ...overrides,
+  };
+}
+
+const issueA = issue();
+
 function card(overrides: Partial<BoardItemData> = {}): BoardItemData {
   return {
     itemId: 'PVTI_1',
     type: 'ISSUE',
     issueUrl: url,
-    statusOptionName: 'Unshaped',
+    statusOptionName: defaultLane,
     ...overrides,
   };
 }
 
-function record(overrides: Partial<TaskData> = {}): TaskData {
-  return taskRecord({
-    url,
-    remoteId: 42,
-    notePath,
-    body: hash(issueA.body),
-    updatedAt: issueA.updatedAt,
-    status: 'Unshaped',
+// The note content the vault mapper reads back, so a test seeds a note that is
+// in step with the base it names.
+function noteFor(opts: {
+  id?: string;
+  type?: string;
+  body?: string;
+  status: string;
+}): string {
+  return TaskNoteMapper.map(
+    {
+      id: opts.id ?? 'uuid-42',
+      type: opts.type ?? 'task',
+      title: 'fix the bug',
+      body: opts.body ?? baseBody,
+      createdAt: null,
+    },
+    { projectName, syncedAt, statusName: opts.status },
+  ).content;
+}
+
+interface Seed {
+  baseStatus: string;
+  baseCompletedAt?: string | null;
+  baseBody?: string;
+  baseType?: string;
+  noteStatus: string;
+  noteBody?: string;
+  noteType?: string;
+  notePath?: string;
+}
+
+// Seeds a tracked record (registry + base) and its note.
+function seed(vault: FakeVault, syncState: FakeSyncState, opts: Seed): void {
+  const path = opts.notePath ?? notePath;
+  const base = taskData({
+    id: 'uuid-42',
+    notePath: path,
     title: issueA.title,
-    ...overrides,
+    body: hash(opts.baseBody ?? baseBody),
+    status: opts.baseStatus,
+    completedAt: opts.baseCompletedAt ?? null,
+    type: opts.baseType ?? 'task',
   });
+  syncState.records.set(
+    'uuid-42',
+    entityRecord({
+      id: 'uuid-42',
+      notePath: path,
+      mirrors: { github: mirror(url, base) },
+    }),
+  );
+  vault.notes.set(
+    path,
+    noteFor({
+      id: 'uuid-42',
+      type: opts.noteType ?? 'task',
+      body: opts.noteBody ?? baseBody,
+      status: opts.noteStatus,
+    }),
+  );
 }
 
 function makeAction(
@@ -247,11 +252,7 @@ function makeAction(
   syncState: FakeSyncState,
   projectManagement: FakeProjectManagement,
 ) {
-  const createTaskNote = new CreateTaskNoteAction(
-    vault,
-    syncState,
-    'Templates/Task.md',
-  );
+  const createTaskNote = new CreateTaskNoteAction(vault, syncState, '');
   const applyToGithub = new ApplyTaskToGithubAction(
     projectManagement,
     syncState,
@@ -260,8 +261,8 @@ function makeAction(
     vault,
     syncState,
     createTaskNote,
-    'Templates/Task.md',
-    new CompleteTaskCascadeAction(vault, 'Shipped'),
+    '',
+    new CompleteTaskCascadeAction(vault, doneLane),
   );
   return new SyncGithubTasksAction(
     projectManagement,
@@ -269,23 +270,19 @@ function makeAction(
     vault,
     applyToGithub,
     applyToVault,
-    new VerdictResolver(),
-    'Shipped',
+    new VerdictResolver(doneLane),
+    doneLane,
   );
 }
 
-const input = {
-  projectName: 'Acme Widgets',
-  syncedAt: '2026-09-18T12:00:00Z',
-  includeBoard: true,
-};
+const input = { projectName, syncedAt, includeBoard: true };
 
 describe('SyncGithubTasksAction', () => {
-  it('fetches the project detail in one call and materialises a new typed issue', async () => {
+  it('materialises a new typed issue and anchors a matching uuid', async () => {
     // Given — a typed issue with no record and no card
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set(projectName, identity);
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -293,70 +290,91 @@ describe('SyncGithubTasksAction', () => {
     // When — the project is synced
     await action.execute(input);
 
-    // Then — one detail fetch, the note is created, the card is added
-    expect(projectManagement.detailCalls).toEqual([
-      { repoUrl: identity.repoUrl, projectNodeId: identity.projectNodeId },
-    ]);
+    // Then — the note is created at the slug path, the card is added, and the
+    // registry record's uuid matches the note's frontmatter id
     expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(notePath);
+    expect(vault.created[0]!.path).toBe(slugNotePath);
+    const record = await syncState.findByMirror('github', url);
+    expect(record).not.toBeNull();
+    expect(record?.notePath).toBe(slugNotePath);
+    expect(record?.mirrors.github?.base).not.toBeNull();
+    const stamped = vault.created[0]!.content.match(/^id: (.+)$/m)?.[1];
+    expect(stamped).toBe(record?.id);
+    expect(vault.created[0]!.content).toContain('type: task');
     expect(projectManagement.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
     ]);
   });
 
-  it('skips issues without a type label', async () => {
-    // Given — a typed issue and an untyped one
+  it('resolves a tracked issue by its github handle, not its note path', async () => {
+    // Given — a tracked issue whose note lives at a path that is neither the
+    // legacy remote-id name nor the fresh slug; the registry record (keyed by
+    // handle) points at it
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set(projectName, identity);
+    const registryPath = 'Projecten/Acme Widgets/taken/7-fix-the-bug.md';
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      notePath: registryPath,
+    });
     const projectManagement = new FakeProjectManagement();
-    projectManagement.detail = {
-      issues: [issueA, { ...issueA, url: `${url}/43`, labels: ['bug'] }],
-      cards: [],
-    };
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    await action.execute(input);
-
-    // Then — only the typed issue materialises
-    expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(notePath);
-  });
-
-  it('pulls a remote body change onto the note', async () => {
-    // Given — a synced note whose remote body moved
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(notePath, TaskNoteMapper.map(issueA, context).content);
-    const projectManagement = new FakeProjectManagement();
-    const changed = { ...issueA, body: 'The bug now also happens on resize.' };
+    const changed = issue({ body: 'The bug now also happens on resize.' });
     projectManagement.detail = { issues: [changed], cards: [card()] };
     const action = makeAction(vault, syncState, projectManagement);
 
     // When — the project is synced
     await action.execute(input);
 
-    // Then — the note is rewritten with the new body
-    expect(vault.written).toHaveLength(1);
-    expect(vault.written[0]!.path).toBe(notePath);
-    expect(vault.written[0]!.content).toContain(
-      'The bug now also happens on resize.',
-    );
+    // Then — the pull lands on the record's note, and no new note is created
+    expect(vault.created).toEqual([]);
+    expect(vault.written).toEqual([
+      {
+        path: registryPath,
+        content: expect.stringContaining('also happens'),
+      },
+    ]);
   });
 
-  it('pushes a vault body change onto the issue', async () => {
+  it('pulls a remote body change onto the note and advances the base', async () => {
+    // Given — a synced note whose remote body moved
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
+    const projectManagement = new FakeProjectManagement();
+    const changedBody = 'The bug now also happens on resize.';
+    projectManagement.detail = {
+      issues: [issue({ body: changedBody })],
+      cards: [card()],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the note is rewritten and the vault writer advanced the base
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.path).toBe(notePath);
+    expect(vault.written[0]!.content).toContain(changedBody);
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.body).toBe(hash(changedBody));
+  });
+
+  it('pushes a vault body change onto the issue and advances the base', async () => {
     // Given — a synced note whose body moved locally
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(
-      notePath,
-      TaskNoteMapper.map({ ...issueA, body: 'Vault edit.' }, context).content,
-    );
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      noteBody: 'Vault edit.',
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [card()] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -364,23 +382,29 @@ describe('SyncGithubTasksAction', () => {
     // When — the project is synced
     await action.execute(input);
 
-    // Then — the issue is updated with the vault body
+    // Then — the issue is updated and the writer advanced the base
     expect(projectManagement.updateCalls).toEqual([
       { url, title: issueA.title, body: 'Vault edit.' },
     ]);
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.body).toBe(
+      hash(toIssueBody('Vault edit.')),
+    );
   });
 
   it('closes the issue and flips the note when the board lane is done', async () => {
     // Given — a tracked open issue whose card moved to the done lane
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(notePath, TaskNoteMapper.map(issueA, context).content);
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = {
       issues: [issueA],
-      cards: [card({ statusOptionName: 'Shipped' })],
+      cards: [card({ statusOptionName: doneLane })],
     };
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -389,17 +413,49 @@ describe('SyncGithubTasksAction', () => {
 
     // Then — the note follows the lane and the issue is closed
     expect(vault.written).toHaveLength(1);
-    expect(vault.written[0]!.content).toContain('status: Shipped');
+    expect(vault.written[0]!.content).toContain(`status: ${doneLane}`);
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
+  });
+
+  it('does not revert a done note when the card lane is stale (the reopen veto)', async () => {
+    // Given — a done note whose issue is closed but whose card sits in an
+    // active lane (eventually-consistent board)
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: doneLane,
+      baseCompletedAt: '',
+      noteStatus: doneLane,
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issue({ state: 'closed' })],
+      cards: [card({ statusOptionName: 'Building' })],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the vault is NOT reverted; the mirror's stale lane catches up to
+    // the closed issue instead
+    expect(vault.written).toEqual([]);
+    expect(projectManagement.boardStatusCalls).toEqual([
+      { issueUrl: url, optionId: 'PVTSSF_5' },
+    ]);
+    expect(projectManagement.stateCalls).toEqual([]);
   });
 
   it('adds a tracked issue missing from the board', async () => {
     // Given — a tracked issue with no card
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(notePath, TaskNoteMapper.map(issueA, context).content);
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -407,9 +463,12 @@ describe('SyncGithubTasksAction', () => {
     // When — the project is synced
     await action.execute(input);
 
-    // Then — the card is added
+    // Then — the card is added in the record's lane
     expect(projectManagement.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
+    ]);
+    expect(projectManagement.boardStatusCalls).toEqual([
+      { issueUrl: url, optionId: 'PVTSSF_1' },
     ]);
   });
 
@@ -417,9 +476,11 @@ describe('SyncGithubTasksAction', () => {
     // Given — a tracked issue already on the board
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(notePath, TaskNoteMapper.map(issueA, context).content);
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [card()] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -431,13 +492,149 @@ describe('SyncGithubTasksAction', () => {
     expect(projectManagement.addBoardItemCalls).toEqual([]);
   });
 
+  it('backfills a card with no lane from the record lane', async () => {
+    // Given — a tracked issue whose card has no Status value
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: 'Building',
+      noteStatus: 'Building',
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issueA],
+      cards: [{ itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url }],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the card is moved into the record's lane; issue and note untouched
+    expect(projectManagement.boardStatusCalls).toEqual([
+      { issueUrl: url, optionId: 'PVTSSF_4' },
+    ]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
+    expect(projectManagement.stateCalls).toEqual([]);
+    expect(vault.written).toEqual([]);
+  });
+
+  it('leaves the issue alone when the board moves between non-done lanes', async () => {
+    // Given — a tracked open issue whose card moved to another non-done lane
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: 'Building',
+      noteStatus: 'Building',
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issueA],
+      cards: [card({ statusOptionName: defaultLane })],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the note follows the lane, the issue is untouched
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.content).toContain(`status: ${defaultLane}`);
+    expect(projectManagement.stateCalls).toEqual([]);
+  });
+
+  it('pulls a remote completion over a stale vault (done-beats-open)', async () => {
+    // Given — both sides changed the status: the vault reopened, the remote
+    // completed
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: 'Building',
+      noteStatus: defaultLane,
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issueA],
+      cards: [card({ statusOptionName: doneLane })],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the completion wins: the note follows and the issue is closed
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.content).toContain(`status: ${doneLane}`);
+    expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
+  });
+
+  it('resolves a body conflict by origin authority when no vault clock is known', async () => {
+    // Given — both sides changed the body since base; the remote edit is
+    // provably newer, but the vault has no mtime to compare against
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      baseBody: 'base body',
+      noteBody: 'vault body',
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [
+        issue({ body: 'remote body', lastEditedAt: '2026-09-20T00:00:00Z' }),
+      ],
+      cards: [card()],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the vault wins (origin authority)
+    expect(projectManagement.updateCalls).toEqual([
+      { url, title: issueA.title, body: 'vault body' },
+    ]);
+  });
+
+  it('backfills the vault-owned type from the issue label', async () => {
+    // Given — a tracked note and record that predate the type promotion
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      baseType: '',
+      noteType: '',
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = { issues: [issueA], cards: [card()] };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the note's frontmatter and the record's base both carry the type
+    const note = vault.notes.get(notePath) ?? '';
+    expect(note).toContain('type: task');
+    const record = await syncState.get('uuid-42');
+    expect(record?.mirrors.github?.base?.type).toBe('task');
+  });
+
   it('skips the fetch when the remote is unmoved and the vault is settled', async () => {
     // Given — a settled project and a closed probe gate
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(notePath, TaskNoteMapper.map(issueA, context).content);
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [card()] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -450,15 +647,15 @@ describe('SyncGithubTasksAction', () => {
   });
 
   it('re-opens the fetch when the vault drifted', async () => {
-    // Given — a closed probe gate but a note that no longer matches its record
+    // Given — a closed probe gate but a note that no longer matches its base
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(
-      notePath,
-      TaskNoteMapper.map({ ...issueA, body: 'Vault edit.' }, context).content,
-    );
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      noteBody: 'Vault edit.',
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [card()] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -477,9 +674,11 @@ describe('SyncGithubTasksAction', () => {
     // Given — a fully settled project
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record());
-    vault.notes.set(notePath, TaskNoteMapper.map(issueA, context).content);
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = { issues: [issueA], cards: [card()] };
     const action = makeAction(vault, syncState, projectManagement);
@@ -506,16 +705,15 @@ describe('SyncGithubTasksAction', () => {
   });
 
   it('materializes a quiet typed issue whose update predates the poll', async () => {
-    // Given — a typed issue last updated long before this poll, with no record
+    // Given — a typed issue last edited long before this poll, with no record
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set(projectName, identity);
     const projectManagement = new FakeProjectManagement();
-    const quiet = {
-      ...issueA,
-      updatedAt: '2026-09-01T00:00:00Z',
+    const quiet = issue({
+      lastEditedAt: '2026-09-01T00:00:00Z',
       labels: ['type: bug'],
-    };
+    });
     projectManagement.detail = { issues: [quiet], cards: [] };
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -525,18 +723,17 @@ describe('SyncGithubTasksAction', () => {
     // Then — the quiet issue materializes, because every poll reconciles the
     // complete tracked set rather than only what changed since a cursor
     expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(notePath);
+    expect(vault.created[0]!.path).toBe(slugNotePath);
   });
 
   it('skips an untracked closed issue without materialising it', async () => {
-    // Given — a closed typed issue with no record and no card (swept, or
-    // pre-plugin history)
+    // Given — a closed typed issue with no record and no card
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set(projectName, identity);
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = {
-      issues: [{ ...issueA, state: 'closed' }],
+      issues: [issue({ state: 'closed' })],
       cards: [],
     };
     const action = makeAction(vault, syncState, projectManagement);
@@ -552,20 +749,19 @@ describe('SyncGithubTasksAction', () => {
     expect(projectManagement.boardStatusCalls).toEqual([]);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(projectManagement.updateCalls).toEqual([]);
-    expect(syncState.setCalls).toEqual([]);
+    expect(await syncState.list()).toEqual([]);
   });
 
   it('materialises an untracked open issue even with a stale done-lane card', async () => {
     // Given — an open typed issue with no record whose stale card sits in the
-    // done lane (the derived completion would read done, but the raw state is
-    // open)
+    // done lane
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = identity;
+    syncState.identities.set(projectName, identity);
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = {
       issues: [issueA],
-      cards: [card({ statusOptionName: 'Shipped' })],
+      cards: [card({ statusOptionName: doneLane })],
     };
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -574,97 +770,14 @@ describe('SyncGithubTasksAction', () => {
 
     // Then — the note materialises; the raw open state gates the decision
     expect(vault.created).toHaveLength(1);
-    expect(vault.created[0]!.path).toBe(notePath);
-  });
-
-  it('leaves the issue alone when the board moves between non-done lanes', async () => {
-    // Given — a tracked open issue whose card moved to another non-done lane
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record({ status: 'Building' }));
-    vault.notes.set(
-      notePath,
-      TaskNoteMapper.map(issueA, { ...context, statusName: 'Building' })
-        .content,
-    );
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.detail = {
-      issues: [issueA],
-      cards: [card({ statusOptionName: 'Unshaped' })],
-    };
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    await action.execute(input);
-
-    // Then — the note follows the lane, the issue is untouched
-    expect(vault.written).toHaveLength(1);
-    expect(vault.written[0]!.content).toContain('status: Unshaped');
-    expect(projectManagement.stateCalls).toEqual([]);
-  });
-
-  it('reopens the issue when the board lane is not done but the issue is closed', async () => {
-    // Given — a tracked closed issue whose card moved to a non-done lane
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record({ status: 'Shipped' }));
-    vault.notes.set(
-      notePath,
-      TaskNoteMapper.map(issueA, { ...context, statusName: 'Shipped' }).content,
-    );
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.detail = {
-      issues: [{ ...issueA, state: 'closed' }],
-      cards: [card({ statusOptionName: 'Building' })],
-    };
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    await action.execute(input);
-
-    // Then — the note follows the lane and the issue is reopened
-    expect(vault.written).toHaveLength(1);
-    expect(vault.written[0]!.content).toContain('status: Building');
-    expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
-  });
-
-  it('backfills a card with no lane from the record lane', async () => {
-    // Given — a tracked issue whose card has no TaskData value
-    const vault = new FakeVault();
-    const syncState = new FakeSyncState();
-    syncState.identity = identity;
-    syncState.statuses.set(url, record({ status: 'Building' }));
-    vault.notes.set(
-      notePath,
-      TaskNoteMapper.map(issueA, { ...context, statusName: 'Building' })
-        .content,
-    );
-    const projectManagement = new FakeProjectManagement();
-    projectManagement.detail = {
-      issues: [issueA],
-      cards: [{ itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url }],
-    };
-    const action = makeAction(vault, syncState, projectManagement);
-
-    // When — the project is synced
-    await action.execute(input);
-
-    // Then — the card is moved into the record's lane, issue and note untouched
-    expect(projectManagement.boardStatusCalls).toEqual([
-      { issueUrl: url, optionId: 'PVTSSF_4' },
-    ]);
-    expect(projectManagement.addBoardItemCalls).toEqual([]);
-    expect(projectManagement.stateCalls).toEqual([]);
-    expect(vault.written).toEqual([]);
+    expect(vault.created[0]!.path).toBe(slugNotePath);
   });
 
   it('skips the poll with a clear error when the project has no stored identity', async () => {
     // Given — a project with no stored identity
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.identity = null;
+    // no identity registered for the project
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
 

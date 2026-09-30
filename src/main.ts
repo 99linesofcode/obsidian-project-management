@@ -149,7 +149,7 @@ export default class ProjectManagementPlugin extends Plugin {
     const github = new GitHubAdapter(transport);
     // The id backfill runs at the chain start, per project, before any half
     // reads notes: every task/to-do note gets its vault-owned uuid first.
-    const ensureNoteIds = new EnsureNoteIdsAction(vault);
+    const ensureNoteIds = new EnsureNoteIdsAction(vault, syncState);
     const createTaskNote = new CreateTaskNoteAction(
       vault,
       syncState,
