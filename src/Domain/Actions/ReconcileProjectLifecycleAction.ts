@@ -1,9 +1,9 @@
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { ArchiveBaselineData } from '../DataTransferObjects/ArchiveBaselineData.js';
 import type { TodoistProjectData } from '../DataTransferObjects/TodoistProjectData.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 
@@ -20,14 +20,15 @@ export interface ReconcileProjectLifecycleInput {
 // The one freeze verdict the chain consumes. todoistProjectId is the resolved
 // Todoist project when task writes are allowed and null when the project is
 // frozen; frozen gates every task write (GitHub and Todoist) while leaving the
-// project observable (it is still polled by id). notePath/locationArchived are
-// the state after any folder backflow, so the caller works from the reconciled
-// location.
+// project observable (it is still polled by id). archivedAt is the reconciled
+// archive state: null when active, the plugin-stamped transition time once
+// archived ('' when the stamp predates the plugin). notePath is the state after
+// any folder backflow, so the caller works from the reconciled location.
 export interface ProjectLifecycleVerdict {
   todoistProjectId: string | null;
   frozen: boolean;
   notePath: string;
-  locationArchived: boolean;
+  archivedAt: string | null;
 }
 
 // UC: reconcile a project's lifecycle in one place — the vault folder position,
@@ -74,7 +75,7 @@ export class ReconcileProjectLifecycleAction {
         todoistProjectId: null,
         frozen: true,
         notePath: input.notePath,
-        locationArchived: input.locationArchived,
+        archivedAt: input.locationArchived ? '' : null,
       };
     }
 
@@ -114,6 +115,9 @@ export class ReconcileProjectLifecycleAction {
       await this.syncState.setArchiveBaseline(input.projectName, {
         locationArchived: input.locationArchived,
         closed: input.closed ?? input.locationArchived,
+        // First sight adopts the location without a transition: an already
+        // archived project carries '' because its transition time is unknown.
+        archivedAt: input.locationArchived ? '' : null,
       });
       if (!input.locationArchived && project !== null) {
         await this.ensureTodoistBookkeeping(input.projectName, input.syncedAt);
@@ -122,7 +126,7 @@ export class ReconcileProjectLifecycleAction {
         todoistProjectId: input.locationArchived ? null : (project?.id ?? null),
         frozen: input.locationArchived,
         notePath: input.notePath,
-        locationArchived: input.locationArchived,
+        archivedAt: input.locationArchived ? '' : null,
       };
     }
 
@@ -160,12 +164,13 @@ export class ReconcileProjectLifecycleAction {
           await this.syncState.setArchiveBaseline(input.projectName, {
             locationArchived: false,
             closed: false,
+            archivedAt: null,
           });
           return {
             todoistProjectId: null,
             frozen: true,
             notePath: this.activeNotePath(input.projectName, input.notePath),
-            locationArchived: false,
+            archivedAt: null,
           };
         }
       }
@@ -173,7 +178,9 @@ export class ReconcileProjectLifecycleAction {
         todoistProjectId: archived ? null : (project?.id ?? null),
         frozen: archived,
         notePath: input.notePath,
-        locationArchived: archived,
+        // A settled archive keeps the stamp it was given at the transition, so
+        // a second pass never re-stamps it.
+        archivedAt: archived ? baseline.archivedAt : null,
       };
     }
 
@@ -218,28 +225,49 @@ export class ReconcileProjectLifecycleAction {
         await this.syncState.setArchiveBaseline(input.projectName, {
           locationArchived: false,
           closed: false,
+          archivedAt: null,
         });
         return {
           todoistProjectId: null,
           frozen: true,
           notePath: this.activeNotePath(input.projectName, notePath),
-          locationArchived: false,
+          archivedAt: null,
         };
       }
     }
+
+    // The stamp the transition earns: syncedAt on a genuine active -> archived
+    // move, the preserved baseline value when already archived.
+    const archivedAt = this.stampedAt(archived, baseline, input.syncedAt);
 
     // Settle the baseline after a successful reconcile.
     await this.syncState.setArchiveBaseline(input.projectName, {
       locationArchived: archived,
       closed: archived,
+      archivedAt,
     });
 
     return {
       todoistProjectId: archived ? null : (project?.id ?? null),
       frozen: archived,
       notePath,
-      locationArchived: archived,
+      archivedAt,
     };
+  }
+
+  // The reconciled archive stamp: null while active; syncedAt on a genuine
+  // active -> archived transition; the preserved baseline stamp when the project
+  // was already archived (so a settled pass never re-stamps); '' when the
+  // project was already archived before a stamp existed (migration).
+  private stampedAt(
+    archived: boolean,
+    baseline: ArchiveBaselineData,
+    syncedAt: string,
+  ): string | null {
+    if (!archived) {
+      return null;
+    }
+    return baseline.locationArchived ? baseline.archivedAt : syncedAt;
   }
 
   // The Todoist project for a note: the anchored one, a name match, or a fresh
@@ -316,31 +344,40 @@ export class ReconcileProjectLifecycleAction {
     fromPrefix: string,
     toPrefix: string,
   ): Promise<void> {
-    for (const status of await this.syncState.list()) {
-      if (status.notePath.startsWith(fromPrefix)) {
+    for (const record of await this.syncState.list()) {
+      if (record.notePath.startsWith(fromPrefix)) {
         await this.syncState.set({
-          ...status,
-          notePath: `${toPrefix}${status.notePath.slice(fromPrefix.length)}`,
+          ...record,
+          notePath: `${toPrefix}${record.notePath.slice(fromPrefix.length)}`,
         });
       }
     }
   }
 
+  // Every tracked issue in the project is a registry record with a github
+  // mirror; the lane it sits in is the github base's status (the last-synced
+  // lane). A record with no github mirror is a Todoist-only to-do with no issue
+  // to lock. The lane is read from the base because the EntityRecord itself
+  // carries no content.
   private async lockUnshippedIssues(projectName: string): Promise<void> {
-    for (const status of await this.trackedIssues(projectName)) {
-      if (status.status === this.doneOptionName) {
+    for (const record of await this.trackedIssues(projectName)) {
+      const handle = record.mirrors.github?.handle;
+      if (
+        handle === undefined ||
+        (record.mirrors.github?.base?.status ?? '') === this.doneOptionName
+      ) {
         continue;
       }
-      const task = await this.projectManagement.fetchTask(status.url);
+      const task = await this.projectManagement.fetchTask(handle);
       await this.projectManagement.lockIssue(task.nodeId);
     }
   }
 
-  private async trackedIssues(projectName: string): Promise<TaskData[]> {
+  private async trackedIssues(projectName: string): Promise<EntityRecord[]> {
     // Either prefix: the relocation may or may not have run for a record yet.
     const prefixes = [`Projecten/${projectName}/`, `Archief/${projectName}/`];
-    return (await this.syncState.list()).filter((status) =>
-      prefixes.some((prefix) => status.notePath.startsWith(prefix)),
+    return (await this.syncState.list()).filter((record) =>
+      prefixes.some((prefix) => record.notePath.startsWith(prefix)),
     );
   }
 

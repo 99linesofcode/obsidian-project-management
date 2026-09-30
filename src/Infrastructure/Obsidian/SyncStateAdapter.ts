@@ -558,9 +558,18 @@ export class SyncStateAdapter implements SyncStatePort {
   private mapArchiveBaseline(
     raw: Record<string, unknown>,
   ): ArchiveBaselineData {
+    const locationArchived = raw.locationArchived === true;
     return {
-      locationArchived: raw.locationArchived === true,
+      locationArchived,
       closed: raw.closed === true,
+      // A legacy baseline predates the stamp: an already-archived project
+      // carries '' (unknown transition time), an active one null.
+      archivedAt:
+        typeof raw.archivedAt === 'string'
+          ? raw.archivedAt
+          : locationArchived
+            ? ''
+            : null,
     };
   }
 

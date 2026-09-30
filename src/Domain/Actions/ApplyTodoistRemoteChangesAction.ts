@@ -199,7 +199,12 @@ export class ApplyTodoistRemoteChangesAction {
     const baseParent = base?.parent ?? null;
 
     const contentChanged = twin.content !== baseContent;
-    const laneChanged = baseLane !== null && remoteLane !== baseLane;
+    // Only a lane-controlled item (a top-level task with lanes) has a lane to
+    // compare; a to-do or subtask carries the open/completed vocabulary in its
+    // base, which is not a lane, so comparing it would restamp the base every
+    // pass (the projection writes 'open'/'completed' there).
+    const laneChanged =
+      laneControlled && baseLane !== null && remoteLane !== baseLane;
     const parentChanged = remoteParent !== baseParent;
 
     const vaultLane = laneControlled ? fields.status : null;

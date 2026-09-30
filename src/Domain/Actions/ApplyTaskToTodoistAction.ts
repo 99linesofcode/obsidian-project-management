@@ -381,12 +381,22 @@ export class ApplyTaskToTodoistAction {
 
   // The vault-owned uuid of a note, read from its frontmatter id. Used when no
   // registry record exists yet (the writer is the first to mirror the note).
+  // A note created mid-chain (a checklist promotion) has no id yet — the
+  // chain-start backfill has already run — so one is minted and stamped here,
+  // matching the capture path; without it the twin could not anchor and a later
+  // pass would create a duplicate.
   private async noteId(notePath: string): Promise<string> {
     const note = await this.vault.getNoteByPath(notePath);
     if (note === null) {
       return '';
     }
-    return splitFrontmatter(note.content)?.fields.get('id') ?? '';
+    const existing = splitFrontmatter(note.content)?.fields.get('id') ?? '';
+    if (existing !== '') {
+      return existing;
+    }
+    const id = crypto.randomUUID();
+    await stampFrontmatterField(this.vault, notePath, note.content, 'id', id);
+    return id;
   }
 }
 

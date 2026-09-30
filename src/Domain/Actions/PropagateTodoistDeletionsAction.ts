@@ -62,7 +62,15 @@ export class PropagateTodoistDeletionsAction {
     for (const record of deleted) {
       await this.taskManager.deleteTask(record.mirrors.todoist?.handle ?? '');
     }
+    // A hub record that still carries a github mirror is removed by the chain's
+    // GitHub deletion sweep, which needs the record to delete the card and close
+    // the issue. Evicting it here would strand the card and leave the issue open,
+    // so the untracked-closed gate would re-materialise the deleted note. This
+    // action still deletes the twin above; only the record removal is deferred.
     for (const record of doomed.values()) {
+      if (record.mirrors.github !== undefined) {
+        continue;
+      }
       await this.syncState.remove(record.id);
     }
   }

@@ -139,7 +139,7 @@ export class SyncProjectAction {
       return await this.reconcileProjectLifecycle.execute({
         projectName: project,
         notePath: note.path,
-        locationArchived: note.archived,
+        locationArchived: note.archivedAt !== null,
         syncedAt,
         ...(state === undefined ? {} : { closed: state.closed }),
       });
@@ -153,9 +153,9 @@ export class SyncProjectAction {
       // archive signal, preserving the halves' error isolation.
       return {
         todoistProjectId: null,
-        frozen: note.archived || (state?.closed ?? false),
+        frozen: note.archivedAt !== null || (state?.closed ?? false),
         notePath: note.path,
-        locationArchived: note.archived,
+        archivedAt: note.archivedAt,
       };
     }
   }

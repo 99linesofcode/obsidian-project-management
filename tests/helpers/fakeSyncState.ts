@@ -20,6 +20,14 @@ export class FakeSyncState implements SyncStatePort {
   todoistProjects = new Map<string, TodoistProjectStateData>();
   setCalls: EntityRecord[] = [];
   removed: string[] = [];
+  baselineSets: Array<{ projectName: string; baseline: ArchiveBaselineData }> =
+    [];
+  watchSets: Array<{ projectName: string; state: WatchStateData }> = [];
+  todoistSets: Array<{
+    projectName: string;
+    state: TodoistProjectStateData;
+  }> = [];
+  lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
 
   async get(id: string): Promise<EntityRecord | null> {
     return this.records.get(id) ?? null;
@@ -89,6 +97,7 @@ export class FakeSyncState implements SyncStatePort {
 
   async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
     this.lastUpdates.set(projectName, iso);
+    this.lastUpdateSets.push({ projectName, iso });
   }
 
   async getArchiveBaseline(
@@ -102,6 +111,7 @@ export class FakeSyncState implements SyncStatePort {
     baseline: ArchiveBaselineData,
   ): Promise<void> {
     this.baselines.set(projectName, baseline);
+    this.baselineSets.push({ projectName, baseline });
   }
 
   async getWatchState(projectName: string): Promise<WatchStateData> {
@@ -113,6 +123,7 @@ export class FakeSyncState implements SyncStatePort {
     state: WatchStateData,
   ): Promise<void> {
     this.watches.set(projectName, state);
+    this.watchSets.push({ projectName, state });
   }
 
   async getTodoistProjectState(
@@ -126,5 +137,6 @@ export class FakeSyncState implements SyncStatePort {
     state: TodoistProjectStateData,
   ): Promise<void> {
     this.todoistProjects.set(projectName, state);
+    this.todoistSets.push({ projectName, state });
   }
 }

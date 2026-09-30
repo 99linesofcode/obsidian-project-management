@@ -254,6 +254,7 @@ describe('SyncStateAdapter', () => {
     await adapter.setArchiveBaseline('Acme Widgets', {
       locationArchived: true,
       closed: false,
+      archivedAt: '2026-09-18T09:00:00Z',
     });
     await adapter.setWatchState('Acme Widgets', {
       etag: 'W/"abc"',
@@ -272,6 +273,7 @@ describe('SyncStateAdapter', () => {
     expect(await adapter.getArchiveBaseline('Acme Widgets')).toEqual({
       locationArchived: true,
       closed: false,
+      archivedAt: '2026-09-18T09:00:00Z',
     });
     expect(await adapter.getWatchState('Acme Widgets')).toEqual({
       etag: 'W/"abc"',
