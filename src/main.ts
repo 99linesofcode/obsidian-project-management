@@ -228,6 +228,8 @@ export default class ProjectManagementPlugin extends Plugin {
       todoist,
       vault,
       syncState,
+      applyTaskToVault,
+      this.settings.doneOptionName,
     );
     // t6: a deleted note's twin is removed, subtree included, and its records
     // evicted. Keyed on the note's absence, so a completed twin (absent from

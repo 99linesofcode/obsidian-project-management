@@ -27,7 +27,7 @@ export class RelinkRenamedTodoAction {
   ) {}
 
   async execute(input: RelinkRenamedTodoInput): Promise<void> {
-    await this.moveTodoistState(input.oldPath, input.newPath);
+    await this.moveRecord(input.oldPath, input.newPath);
 
     const todo = await this.vault.getNoteByPath(input.newPath);
     if (!todo) {
@@ -70,18 +70,16 @@ export class RelinkRenamedTodoAction {
     );
   }
 
-  // Re-keys the to-do's TodoistState to the new path. The adapter evicts the
-  // record's old key (one record per todoistId), so this is a move, not a copy.
-  private async moveTodoistState(
+  // Moves the to-do's registry record to the new path. The record is keyed by
+  // its uuid, so this is a notePath update, not a re-key; the mirror handles
+  // and base travel with it.
+  private async moveRecord(
     oldPath: string,
     newPath: string,
   ): Promise<void> {
-    const state = await this.syncState.getTodoistState(oldPath);
-    if (state) {
-      await this.syncState.setTodoistState(newPath, {
-        ...state,
-        notePath: newPath,
-      });
+    const record = await this.syncState.findByNotePath(oldPath);
+    if (record) {
+      await this.syncState.set({ ...record, notePath: newPath });
     }
   }
 }

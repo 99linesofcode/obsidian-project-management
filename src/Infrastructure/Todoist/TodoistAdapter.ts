@@ -281,6 +281,12 @@ export class TodoistAdapter implements TaskManagerPort {
         typeof raw.url === 'string'
           ? raw.url
           : `https://app.todoist.com/app/task/${id}`,
+      // The provider clocks the conflict ladder may use. A missing clock is ''
+      // rather than null so the transport shape stays uniform.
+      addedAt: this.stringOrEmpty(raw.added_at),
+      updatedAt: this.stringOrEmpty(raw.updated_at),
+      completedAt:
+        typeof raw.completed_at === 'string' ? raw.completed_at : null,
     };
   }
 
@@ -360,6 +366,12 @@ export class TodoistAdapter implements TaskManagerPort {
 
   private nullableString(value: unknown): string | null {
     return typeof value === 'string' ? value : null;
+  }
+
+  // A provider clock is carried as a string; an absent one is the empty string
+  // so callers never have to branch on undefined.
+  private stringOrEmpty(value: unknown): string {
+    return typeof value === 'string' ? value : '';
   }
 
   private stringList(value: unknown): string[] {

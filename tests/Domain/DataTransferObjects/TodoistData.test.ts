@@ -52,6 +52,9 @@ describe('TodoistTaskData', () => {
       labels: ['task'],
       isCompleted: false,
       url: 'https://app.todoist.com/app/task/T1',
+      addedAt: '2026-09-18T09:00:00Z',
+      updatedAt: '2026-09-18T10:00:00Z',
+      completedAt: null,
     };
 
     // When/Then — the fields are readable as authored
@@ -59,6 +62,8 @@ describe('TodoistTaskData', () => {
     expect(data.parentId).toBeNull();
     expect(data.labels).toEqual(['task']);
     expect(data.isCompleted).toBe(false);
+    expect(data.updatedAt).toBe('2026-09-18T10:00:00Z');
+    expect(data.completedAt).toBeNull();
   });
 });
 

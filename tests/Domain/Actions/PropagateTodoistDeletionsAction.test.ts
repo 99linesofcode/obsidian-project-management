@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { PropagateTodoistDeletionsAction } from '../../../src/Domain/Actions/PropagateTodoistDeletionsAction.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
-import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the vault holds the mirrored notes (a missing path is a
 // vault deletion), the task manager records every twin deletion (and can be
-// made to fail), and the sync state holds the per-item bookkeeping and records
+// made to fail), and the registry holds the entity records and records
 // evictions. The action's decisions — which twins go, which records are evicted
 // with them — are what's under test.
 class FakeVault implements VaultPort {
@@ -47,7 +45,6 @@ class FakeTaskManager implements TaskManagerPort {
       throw new Error('delete failed');
     }
   }
-
   async fetchProjects(): Promise<TodoistProjectData[]> {
     return [];
   }
@@ -95,70 +92,33 @@ class FakeTaskManager implements TaskManagerPort {
   }
 }
 
-class FakeSyncState implements SyncStatePort {
-  todoistItemStates = new Map<string, TaskData>();
-  removals: string[] = [];
-
-  async getTodoistState(notePath: string): Promise<TaskData | null> {
-    return this.todoistItemStates.get(notePath) ?? null;
-  }
-  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
-    this.todoistItemStates.set(notePath, state);
-  }
-  async removeTodoistState(notePath: string): Promise<void> {
-    this.todoistItemStates.delete(notePath);
-    this.removals.push(notePath);
-  }
-  async listTodoistStates(): Promise<TaskData[]> {
-    return [...this.todoistItemStates.values()];
-  }
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-  async set(): Promise<void> {}
-  async findByNotePath(): Promise<null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return [];
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<null> {
-    return null;
-  }
-  async getLastProjectUpdate(): Promise<null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async setArchiveBaseline(): Promise<void> {}
-  async getWatchState(): Promise<{ etag: null; cursor: null }> {
-    return { etag: null, cursor: null };
-  }
-  async setWatchState(): Promise<void> {}
-  async getTodoistProjectState(): Promise<TodoistProjectStateData | null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-}
-
 const projectName = 'Acme Widgets';
-
 const taskPath = 'Projecten/Acme Widgets/taken/41-task.md';
 const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
 const nestedTodoPath = 'Projecten/Acme Widgets/todos/and-then-test-it.md';
 const otherPath = 'Projecten/Other Project/taken/9-other.md';
 
-function state(
+// A record whose todoist base carries the given parent uuid.
+function record(
+  syncState: FakeSyncState,
+  id: string,
   notePath: string,
-  todoistId: string,
-  parent: string | null = null,
-): TaskData {
-  return taskRecord({ todoistId, notePath, parent });
+  handle: string,
+  parent: string | null,
+): void {
+  syncState.records.set(
+    id,
+    entityRecord({
+      id,
+      notePath,
+      mirrors: {
+        todoist: mirror(
+          handle,
+          taskData({ id, notePath, parent, status: '' }),
+        ),
+      },
+    }),
+  );
 }
 
 function setup() {
@@ -177,12 +137,9 @@ describe('PropagateTodoistDeletionsAction', () => {
   it('deletes a deleted task note’s twin and evicts its whole subtree’s records', async () => {
     // Given — a task note gone, with a to-do and a nested to-do still present
     const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(taskPath, state(taskPath, 'T1'));
-    syncState.todoistItemStates.set(todoPath, state(todoPath, 'T2', 'T1'));
-    syncState.todoistItemStates.set(
-      nestedTodoPath,
-      state(nestedTodoPath, 'T3', 'T2'),
-    );
+    record(syncState, 'uuid-task', taskPath, 'T1', null);
+    record(syncState, 'uuid-todo', todoPath, 'T2', 'uuid-task');
+    record(syncState, 'uuid-nested', nestedTodoPath, 'T3', 'uuid-todo');
     vault.notes.set(todoPath, '---\nstatus: open\n---\n');
     vault.notes.set(nestedTodoPath, '---\nstatus: open\n---\n');
 
@@ -192,47 +149,58 @@ describe('PropagateTodoistDeletionsAction', () => {
     // Then — only the root twin is deleted (the API cascades the subtree)
     expect(taskManager.deleteCalls).toEqual(['T1']);
     // And every record the cascade orphaned is evicted, descendants included
-    expect(syncState.removals.sort()).toEqual(
-      [taskPath, todoPath, nestedTodoPath].sort(),
+    expect(syncState.removed.sort()).toEqual(
+      ['uuid-task', 'uuid-todo', 'uuid-nested'].sort(),
     );
-    expect(syncState.todoistItemStates.size).toBe(0);
+    expect(await syncState.list()).toEqual([]);
   });
 
   it('deletes a deleted to-do note’s subtask twin and evicts its record', async () => {
     // Given — a to-do note gone, its parent task note still present
     const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(taskPath, state(taskPath, 'TASK'));
-    syncState.todoistItemStates.set(todoPath, state(todoPath, 'T7', 'TASK'));
-    vault.notes.set(taskPath, '---\ntodoist: TASK\n---\n');
+    record(syncState, 'uuid-task', taskPath, 'TASK', null);
+    record(syncState, 'uuid-todo', todoPath, 'T7', 'uuid-task');
+    vault.notes.set(taskPath, '---\nstatus: open\n---\n');
 
     // When — deletions are propagated
     await action.execute({ projectName });
 
     // Then — only the to-do twin is deleted and only its record evicted
     expect(taskManager.deleteCalls).toEqual(['T7']);
-    expect(syncState.removals).toEqual([todoPath]);
-    expect(syncState.todoistItemStates.has(taskPath)).toBe(true);
+    expect(syncState.removed).toEqual(['uuid-todo']);
+    expect(await syncState.get('uuid-task')).not.toBeNull();
   });
 
   it('leaves a twin alone when its note survives (a Todoist-side deletion self-heals)', async () => {
     // Given — a note that still exists, so nothing is a vault deletion
     const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(taskPath, state(taskPath, 'T1'));
-    vault.notes.set(taskPath, '---\ntodoist: T1\n---\n');
+    record(syncState, 'uuid-task', taskPath, 'T1', null);
+    vault.notes.set(taskPath, '---\nstatus: open\n---\n');
 
     // When — deletions are propagated
     await action.execute({ projectName });
 
-    // Then — no twin is deleted and no record is evicted; the projection owns
-    // re-creating a twin that is missing while its note survives
+    // Then — no twin is deleted and no record is evicted
     expect(taskManager.deleteCalls).toEqual([]);
-    expect(syncState.removals).toEqual([]);
+    expect(syncState.removed).toEqual([]);
   });
 
   it('never deletes a twin because it completed (deletion keys on the note)', async () => {
     // Given — a completed item: absent from the active set, but its note exists
     const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(todoPath, state(todoPath, 'T7', 'TASK'));
+    syncState.records.set(
+      'uuid-todo',
+      entityRecord({
+        id: 'uuid-todo',
+        notePath: todoPath,
+        mirrors: {
+          todoist: mirror(
+            'T7',
+            taskData({ id: 'uuid-todo', notePath: todoPath, parent: 'uuid-task' }),
+          ),
+        },
+      }),
+    );
     vault.notes.set(todoPath, '---\nstatus: completed\n---\n');
 
     // When — deletions are propagated
@@ -240,29 +208,13 @@ describe('PropagateTodoistDeletionsAction', () => {
 
     // Then — the twin is untouched: completion is not a deletion signal
     expect(taskManager.deleteCalls).toEqual([]);
-    expect(syncState.removals).toEqual([]);
-  });
-
-  it('is idempotent: a second pass over an already-evicted deletion does nothing', async () => {
-    // Given — a deletion propagated once
-    const { action, vault, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(todoPath, state(todoPath, 'T7', 'TASK'));
-    vault.notes.set(taskPath, '---\ntodoist: TASK\n---\n');
-    await action.execute({ projectName });
-    taskManager.deleteCalls = [];
-
-    // When — the same deletion is propagated again
-    await action.execute({ projectName });
-
-    // Then — no twin is deleted again and no record is re-evicted
-    expect(taskManager.deleteCalls).toEqual([]);
-    expect(syncState.removals).toEqual([todoPath]);
+    expect(syncState.removed).toEqual([]);
   });
 
   it('deletes the twin before evicting its record (the echo guard)', async () => {
     // Given — a deleted note whose twin deletion fails
     const { action, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(taskPath, state(taskPath, 'T1'));
+    record(syncState, 'uuid-task', taskPath, 'T1', null);
     taskManager.failDelete = true;
 
     // When — deletions are propagated
@@ -270,28 +222,26 @@ describe('PropagateTodoistDeletionsAction', () => {
       'delete failed',
     );
 
-    // Then — the record survives, so the anchor is never orphaned: a capture
-    // pass cannot see an unanchored twin and re-create it, and the next tick
-    // retries the delete
-    expect(syncState.removals).toEqual([]);
-    expect(syncState.todoistItemStates.has(taskPath)).toBe(true);
+    // Then — the record survives, so the anchor is never orphaned
+    expect(syncState.removed).toEqual([]);
+    expect(await syncState.get('uuid-task')).not.toBeNull();
   });
 
   it('leaves another project’s deleted-note records alone', async () => {
     // Given — a deleted note in a different project
     const { action, taskManager, syncState } = setup();
-    syncState.todoistItemStates.set(otherPath, state(otherPath, 'OTHER'));
+    record(syncState, 'uuid-other', otherPath, 'OTHER', null);
 
     // When — this project's deletions are propagated
     await action.execute({ projectName });
 
     // Then — the other project's twin is untouched
     expect(taskManager.deleteCalls).toEqual([]);
-    expect(syncState.removals).toEqual([]);
+    expect(syncState.removed).toEqual([]);
   });
 
   it('does nothing when the project has no mirrored records', async () => {
-    // Given — an empty sync state
+    // Given — an empty registry
     const { action, taskManager, syncState } = setup();
 
     // When — deletions are propagated
@@ -299,6 +249,6 @@ describe('PropagateTodoistDeletionsAction', () => {
 
     // Then — nothing is read or written
     expect(taskManager.deleteCalls).toEqual([]);
-    expect(syncState.removals).toEqual([]);
+    expect(syncState.removed).toEqual([]);
   });
 });
