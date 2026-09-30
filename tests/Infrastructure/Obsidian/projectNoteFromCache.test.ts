@@ -23,7 +23,7 @@ describe('projectNoteFromCache', () => {
     expect(note).toEqual({
       path,
       projectName: 'Acme Widgets',
-      archived: false,
+      archivedAt: null,
       pm: 'github',
       url: 'https://github.com/acme/widgets',
       board: 'https://github.com/orgs/acme/projects/1',
@@ -39,10 +39,11 @@ describe('projectNoteFromCache', () => {
     const note = projectNoteFromCache(path, frontmatter);
 
     // Then — the project name is the folder segment and the note is archived
+    // with an unknown stamp (the reconcile pass owns the real one)
     expect(note).toEqual({
       path,
       projectName: 'Acme Widgets',
-      archived: true,
+      archivedAt: '',
       pm: 'github',
       url: '',
       board: '',

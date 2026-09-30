@@ -13,13 +13,12 @@ export interface PropagateStatusInput {
 
 // UC6/UC7: propagate a task note's status onto its GitHub issue and mirror it
 // onto the board. The done lane closes the issue, every other lane reopens
-// it; the card moves to the lane the note carries. The Status record is
-// refreshed so the baseline tracks the new lane (the echo guard depends on
-// every write refreshing the full record).
+// it; the card moves to the lane the note carries. The mirror's base lane is
+// refreshed so the next pass sees the remote as settled (the echo guard).
 //
-// The issue state write is GATED: the stored record's lane already names the
-// issue's open/closed state, so a lane that does not flip done-ness is not
-// re-written. The gate IS the diff — only a real state change reaches GitHub.
+// The issue state write is GATED: the base's lane already names the issue's
+// open/closed state, so a lane that does not flip done-ness is not re-written.
+// The gate IS the diff — only a real state change reaches GitHub.
 export class PropagateStatusAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -29,25 +28,16 @@ export class PropagateStatusAction {
   ) {}
 
   async execute(input: PropagateStatusInput): Promise<void> {
-    const status = await this.syncState.get(input.url);
+    const record = await this.syncState.findByMirror('github', input.url);
     const next = stateFromStatus(input.statusName, this.doneOptionName);
+    const baseLane = record?.mirrors.github?.base?.status ?? '';
+    const baseState = stateFromStatus(baseLane, this.doneOptionName);
 
     // No record: the note is untracked, so there is no baseline to compare
-    // against and the state is written. A record whose stored lane already
+    // against and the state is written. A record whose base lane already
     // implies the same state is skipped (the write would be a no-op).
-    let updatedAt = status?.updatedAt ?? '';
-    if (!status) {
-      const updated = await this.projectManagement.setTaskState(
-        input.url,
-        next,
-      );
-      updatedAt = updated.updatedAt;
-    } else if (stateFromStatus(status.status, this.doneOptionName) !== next) {
-      const updated = await this.projectManagement.setTaskState(
-        input.url,
-        next,
-      );
-      updatedAt = updated.updatedAt;
+    if (record === null || baseState !== next) {
+      await this.projectManagement.setTaskState(input.url, next);
     }
 
     await this.boardStatus.execute({
@@ -56,23 +46,17 @@ export class PropagateStatusAction {
       statusName: input.statusName,
     });
 
-    if (!status) {
+    if (record === null) {
       return;
     }
 
-    await this.syncState.set({
-      url: status.url,
-      remoteId: status.remoteId,
-      nodeId: status.nodeId,
-      todoistId: status.todoistId,
-      notePath: input.notePath,
-      title: status.title,
-      body: status.body,
-      status: input.statusName,
-      completed: input.statusName === this.doneOptionName,
-      parent: status.parent,
-      labels: status.labels,
-      updatedAt,
-    });
+    // Refresh the base's lane and completion so the echo guard sees the new
+    // state. Only the lane dimension moves; content is untouched.
+    const base = record.mirrors.github?.base ?? null;
+    if (base !== null) {
+      base.status = input.statusName;
+      base.completedAt = next === 'closed' ? (base.completedAt ?? '') : null;
+    }
+    await this.syncState.set(record);
   }
 }

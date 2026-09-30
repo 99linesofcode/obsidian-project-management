@@ -105,7 +105,7 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
   return {
     path: 'Projecten/Acme Widgets/_home.md',
     projectName: 'Acme Widgets',
-    archived: false,
+    archivedAt: null,
     pm: 'github',
     url: 'https://github.com/acme/widgets',
     board: 'https://github.com/orgs/acme/projects/1',

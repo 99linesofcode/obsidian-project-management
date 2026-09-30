@@ -7,9 +7,11 @@ import { stripLink } from '../Notes/stripLink.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { withStatus } from '../Notes/TaskNoteParser.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
+import { Mirror } from '../DataTransferObjects/Mirror.js';
+import { TaskData } from '../DataTransferObjects/TaskData.js';
+import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
-import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { PropagateStatusAction } from './PropagateStatusAction.js';
@@ -40,13 +42,16 @@ interface VerdictContext {
   // A twin id's note stem, so a remote parent id resolves to the affiliation
   // link a vault note carries.
   stemByTwinId: Map<string, string>;
+  // A twin id's entity uuid, so structural comparisons speak the canonical
+  // parent representation the base stores.
+  uuidByTwinId: Map<string, string>;
 }
 
 // UC: apply Todoist -> vault verdicts for anchored items (t5). An anchored item
-// is one whose id is in the TodoistState bookkeeping; the note it mirrors is at
+// is one whose todoist handle is in the registry; the note it mirrors is at
 // that record's notePath. On each pass the fetched remote state (the active set
-// plus the completed-since window) is compared to the stored snapshot per
-// field (dt-08), because a hash alone cannot say which field moved:
+// plus the completed-since window) is compared to the mirror's base per field
+// (dt-08), because a hash alone cannot say which field moved:
 //
 //   - content rename  -> rename the vault note through the existing rename
 //                        propagation (checklists relink, bookkeeping follows)
@@ -57,18 +62,13 @@ interface VerdictContext {
 //
 // A field changed on both sides is a conflict: the vault wins (dt-01), so the
 // remote value is not applied and the projection re-pushes the vault state on
-// this tick; the snapshot is re-stamped either way so the next poll does not
-// re-trigger. A task twin that is active again while the snapshot says completed
-// is a remote reopen (t7): the same signal t4 uses for to-dos, extended to
-// tasks. The twin's section is the done section (the projection moved it there
-// when it completed), so the section cannot name the lane to return to; the
-// reopen pulls the note out of done into the default lane and propagates the
-// status, which reopens the issue and moves the board card. To-do completion and
-// reopen stay owned by ApplyTodoistCompletionAction (t4) and are not revisited
-// here. A twin absent from both the active set and the completed window is a
-// Todoist-side deletion when its note survives (t6): the record is evicted so
-// the projection re-creates the twin in the same tick (vault wins); a missing
-// note is left to PropagateTodoistDeletionsAction.
+// this tick; the base is re-stamped either way so the next poll does not
+// re-trigger. Completion and reopen (a twin completed, or active again while
+// its base says completed) are owned by ApplyTodoistCompletionAction (t4) and
+// are not revisited here. A twin absent from both the active set and the
+// completed window is a Todoist-side deletion when its note survives (t6): the
+// record is evicted so the projection re-creates the twin in the same tick
+// (vault wins); a missing note is left to PropagateTodoistDeletionsAction.
 export class ApplyTodoistRemoteChangesAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
@@ -106,12 +106,20 @@ export class ApplyTodoistRemoteChangesAction {
     const hasLanes = (identity?.statusOptions.length ?? 0) > 0;
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 
-    const states = (await this.syncState.listTodoistStates()).filter((state) =>
-      isMirroredPath(state.notePath, input.projectName),
+    const records = (await this.syncState.list()).filter(
+      (record) =>
+        isMirroredPath(record.notePath, input.projectName) &&
+        record.mirrors.todoist !== undefined,
     );
     const stemByTwinId = new Map<string, string>();
-    for (const state of states) {
-      stemByTwinId.set(state.todoistId, stemOf(state.notePath));
+    const uuidByTwinId = new Map<string, string>();
+    for (const record of records) {
+      const handle = record.mirrors.todoist?.handle ?? '';
+      if (handle === '') {
+        continue;
+      }
+      stemByTwinId.set(handle, stemOf(record.notePath));
+      uuidByTwinId.set(handle, record.id);
     }
 
     const context: VerdictContext = {
@@ -122,41 +130,46 @@ export class ApplyTodoistRemoteChangesAction {
       doneLane: this.doneOptionName,
       hasLanes,
       stemByTwinId,
+      uuidByTwinId,
     };
 
-    for (const state of states) {
-      const twin = twinById.get(state.todoistId);
+    for (const record of records) {
+      const handle = record.mirrors.todoist?.handle ?? '';
+      const twin = twinById.get(handle);
       if (!twin) {
         // Absent from both the active set and the completed-since window. A
-        // completed twin naturally ages out of that window (the cursor advances
-        // past its completion) and is never in the active set, so the snapshot's
-        // completion stamp says it is a persisted completed twin (dt-22 mirror),
-        // not a deletion. Evicting it would re-create the twin every tick — the
-        // dt-17 churn — so a completed record is left untouched.
-        if (state.completed) {
+        // completed twin naturally ages out of that window and is never in the
+        // active set, so a completed base says it is a persisted completed
+        // twin, not a deletion. Evicting it would re-create the twin every
+        // tick — the dt-17 churn — so a completed record is left untouched.
+        if (baseDone(record)) {
           continue;
         }
         // A missing note is a vault deletion (PropagateTodoistDeletionsAction
         // owns it, later in the same tick). When the note survives, the twin
-        // was deleted on the Todoist side: that is not a vault deletion and not
-        // a completion (a completion would be in the completed window). The
-        // vault wins, so the record is evicted and the projection re-creates
-        // the twin later in this same tick — the self-heal.
-        if (await this.vault.getNoteByPath(state.notePath)) {
-          await this.syncState.removeTodoistState(state.notePath);
+        // was deleted on the Todoist side: the vault wins, so the record is
+        // evicted and the projection re-creates the twin later in this same
+        // tick — the self-heal.
+        if (await this.vault.getNoteByPath(record.notePath)) {
+          await this.syncState.remove(record.id);
         }
         continue;
       }
-      await this.applyVerdict(state, twin, context);
+      // Completion and reopen are the completion action's (t4): a completed
+      // twin, or an active twin whose base says completed, is skipped here.
+      if (twin.isCompleted || baseDone(record)) {
+        continue;
+      }
+      await this.applyVerdict(record, twin, context);
     }
   }
 
   private async applyVerdict(
-    state: TaskData,
+    record: EntityRecord,
     twin: TodoistTaskData,
     context: VerdictContext,
   ): Promise<void> {
-    const note = await this.vault.getNoteByPath(state.notePath);
+    const note = await this.vault.getNoteByPath(record.notePath);
     if (!note) {
       return;
     }
@@ -165,99 +178,75 @@ export class ApplyTodoistRemoteChangesAction {
       return;
     }
 
-    const isTask = isTaskPath(state.notePath, context.projectName);
+    const base = record.mirrors.todoist?.base ?? null;
+    const isTask = isTaskPath(record.notePath, context.projectName);
     // A top-level task's lane is its section; a subtask inherits its parent's
     // section (dt-02), so its lane is not a controlled field.
     const topLevel = twin.parentId === null;
     const laneControlled = isTask && topLevel && context.hasLanes;
-    // A task twin that is active while the snapshot says completed is a remote
-    // reopen (t7). The twin's section is the done section (the projection moved
-    // it there when it completed), so the section cannot name the lane to return
-    // to; the reopen returns the note to the default lane. A project without
-    // lanes has no lane to return to, so there is nothing to pull out of done.
-    const reopened =
-      isTask &&
-      state.completed === true &&
-      !twin.isCompleted &&
-      context.defaultLane !== null;
-    // A completed top-level item is in the done lane regardless of its section
-    // (dt-07: is_completed ⇔ done lane); a section-less open item lands in the
-    // default lane. This is the lane the twin actually sits in, which is what
-    // the snapshot records; a reopen is a separate signal below.
+    // The lane the twin actually sits in. A completed twin never reaches here
+    // (the completion action owns it), so the lane is its section.
     const remoteLane = laneControlled
-      ? twin.isCompleted
-        ? context.doneLane
-        : (laneForSection(context.sections, twin.sectionId) ??
-          context.defaultLane)
+      ? (laneForSection(context.sections, twin.sectionId) ?? context.defaultLane)
       : null;
+    const remoteParent = parentUuid(context, twin.parentId);
 
-    // The canonical snapshot: the stored record's content. An empty status is
+    // The canonical base: the stored diff view's content. An empty status is
     // the canonical encoding for "lane not controlled" (a to-do or a subtask);
     // a null parent is a top-level item.
-    const baseContent = state.title;
-    const baseLane = state.status === '' ? null : state.status;
-    const baseParent = state.parent;
+    const baseContent = base?.title ?? '';
+    const baseLane = base?.status === undefined || base.status === '' ? null : base.status;
+    const baseParent = base?.parent ?? null;
 
     const contentChanged = twin.content !== baseContent;
-    const laneChanged = baseLane !== null && remoteLane !== baseLane;
-    const parentChanged = twin.parentId !== baseParent;
+    // Only a lane-controlled item (a top-level task with lanes) has a lane to
+    // compare; a to-do or subtask carries the open/completed vocabulary in its
+    // base, which is not a lane, so comparing it would restamp the base every
+    // pass (the projection writes 'open'/'completed' there).
+    const laneChanged =
+      laneControlled && baseLane !== null && remoteLane !== baseLane;
+    const parentChanged = remoteParent !== baseParent;
 
     const vaultLane = laneControlled ? fields.status : null;
-    const vaultParent = parentIdFromAffiliation(
-      fields.affiliation,
-      context,
-      isTask,
-    );
+    const vaultParent = parentUuidFromAffiliation(fields.affiliation, context, isTask);
     const localContentChanged =
-      slugify(baseContent) !== stemWithoutId(state.notePath);
+      slugify(baseContent) !== stemWithoutId(record.notePath);
     const localLaneChanged = baseLane !== null && vaultLane !== baseLane;
     // An unresolved parent link (its twin has no anchored note) is unknown, not
     // a change: comparing it would read every unanchored parent as a vault edit.
     const localParentChanged =
       vaultParent !== undefined && vaultParent !== baseParent;
 
-    const remoteChanged =
-      contentChanged || laneChanged || parentChanged || reopened;
+    const remoteChanged = contentChanged || laneChanged || parentChanged;
     const localChanged =
       localContentChanged || localLaneChanged || localParentChanged;
-
-    // For a task the completion base is the twin's own state: the completion
-    // action owns only to-dos, so a task's base must follow the twin or a
-    // reopen would never settle. For a to-do it is preserved, so a remote
-    // completion racing a rename is not mistaken for our own echo (t4).
-    const completedBase = isTask ? twin.isCompleted : state.completed;
 
     if (remoteChanged && localChanged) {
       // The vault wins: leave the note alone and re-stamp from the remote, so
       // the next poll reads it as settled. The projection re-pushes the vault
       // state later in this same tick.
-      await this.stamp(state.notePath, twin, remoteLane, completedBase);
+      await this.stamp(record, twin, remoteLane, remoteParent);
       return;
     }
 
     if (remoteChanged) {
-      let notePath = state.notePath;
+      let notePath = record.notePath;
       if (contentChanged) {
         notePath = await this.renameNote(notePath, twin, isTask, context);
       }
-      if (reopened) {
-        // The reopen is a lane move out of done; it takes precedence over the
-        // section-derived lane, which still reads as done.
-        await this.applyLane(notePath, context.defaultLane!, context);
-      } else if (laneChanged && remoteLane !== null) {
-        await this.applyLane(notePath, remoteLane, context);
+      if (laneChanged && remoteLane !== null) {
+        await this.applyLane(notePath, remoteLane, record, context);
       }
       if (parentChanged) {
         await this.applyParent(notePath, twin.parentId, context, isTask);
       }
-      await this.stamp(notePath, twin, remoteLane, completedBase);
-      return;
+      await this.stamp(record, twin, remoteLane, remoteParent);
     }
   }
 
   // Renames the note to follow the remote content, then propagates the rename
-  // through the existing machinery: a task note moves its Status/bookkeeping
-  // record, a to-do relinks its parent checklist line. Returns the new path.
+  // through the existing machinery: a task note moves its registry record, a
+  // to-do relinks its parent checklist line. Returns the new path.
   private async renameNote(
     oldPath: string,
     twin: TodoistTaskData,
@@ -286,10 +275,12 @@ export class ApplyTodoistRemoteChangesAction {
 
   // A remote lane drag: rewrite the note's status, then mirror the move onto
   // GitHub. An issue-backed note propagates its status (issue state + board
-  // card + baseline); a captured draft has no issue, so only the note moves.
+  // card + baseline); a captured draft has no github handle, so only the note
+  // moves.
   private async applyLane(
     notePath: string,
     lane: string,
+    record: EntityRecord,
     context: VerdictContext,
   ): Promise<void> {
     const note = await this.vault.getNoteByPath(notePath);
@@ -298,7 +289,7 @@ export class ApplyTodoistRemoteChangesAction {
     }
     await this.vault.writeNote(notePath, withStatus(note.content, lane));
 
-    const url = splitFrontmatter(note.content)?.fields.get('url') ?? '';
+    const url = record.mirrors.github?.handle ?? '';
     if (url !== '') {
       await this.propagateStatus.execute({
         url,
@@ -315,7 +306,7 @@ export class ApplyTodoistRemoteChangesAction {
   // for to-do structure and the projection re-pushes it.
   private async applyParent(
     notePath: string,
-    remoteParent: string | null,
+    remoteParentTwin: string | null,
     context: VerdictContext,
     isTask: boolean,
   ): Promise<void> {
@@ -323,8 +314,8 @@ export class ApplyTodoistRemoteChangesAction {
       return;
     }
     let parentLink: string | null = null;
-    if (remoteParent !== null) {
-      parentLink = context.stemByTwinId.get(remoteParent) ?? null;
+    if (remoteParentTwin !== null) {
+      parentLink = context.stemByTwinId.get(remoteParentTwin) ?? null;
       // The parent has no anchored note yet; wait for the next tick.
       if (parentLink === null) {
         return;
@@ -338,8 +329,8 @@ export class ApplyTodoistRemoteChangesAction {
 
     // The gate IS the diff: the note's current affiliation already names the
     // desired parent, so the rewrite is skipped. This keeps a note whose
-    // affiliation was just rewritten (by the capture pass or the projection) out
-    // of a redundant write.
+    // affiliation was just rewritten (by the capture pass or the projection)
+    // out of a redundant write.
     const currentLinks = parseAffiliation(
       splitFrontmatter(note.content)?.fields.get('affiliation'),
     )
@@ -358,37 +349,59 @@ export class ApplyTodoistRemoteChangesAction {
     await this.vault.writeNote(notePath, withAffiliation(note.content, value));
   }
 
+  // Writes the todoist mirror's base as a diff view. The base is what the next
+  // poll compares against, so stamping it here settles the item.
   private async stamp(
-    notePath: string,
+    record: EntityRecord,
     twin: TodoistTaskData,
     remoteLane: string | null,
-    lastSyncedCompleted: boolean,
+    remoteParent: string | null,
   ): Promise<void> {
-    await this.syncState.setTodoistState(notePath, {
-      url: '',
-      remoteId: 0,
-      nodeId: '',
-      todoistId: twin.id,
-      notePath,
-      title: twin.content,
-      body: '',
-      status: remoteLane ?? '',
-      // The completion base belongs to the completion action (t4): preserve it
-      // rather than restamping from the twin, or a remote completion racing a
-      // content change would read as our own echo and never be applied.
-      completed: lastSyncedCompleted,
-      parent: twin.parentId,
-      labels: [...twin.labels],
-      updatedAt: '',
+    const previous = record.mirrors.todoist?.base ?? null;
+    const view = toDiffViewWithBody(
+      new TaskData(
+        record.id,
+        record.notePath,
+        {}, // bases carry no handles
+        twin.content,
+        '', // the Todoist description is not vault content
+        remoteLane ?? '',
+        // Completion is the completion action's field (t4); this action never
+        // handles a completed twin, so the base's completion stays clear.
+        null,
+        '', // the vault-owned type never rides a Todoist base
+        remoteParent,
+        previous?.createdAt ?? null,
+        twin.updatedAt || null,
+      ),
+    );
+    const mirrors = {
+      ...record.mirrors,
+      todoist: new Mirror(record.mirrors.todoist?.handle ?? '', view),
+    };
+    await this.syncState.set({
+      id: record.id,
+      notePath: record.notePath,
+      mirrors,
     });
   }
 }
 
-// The parent twin id a note's affiliation implies. A task's first non-project
-// link is its slice; a to-do's second is its parent to-do when nested, else its
-// task. Returns null when the note has no parent link, and undefined when it
-// has one whose twin has no anchored note (unknown — not a change).
-function parentIdFromAffiliation(
+// The entity uuid a parent twin id names, or null for a top-level item. Used so
+// the canonical base's parent is a uuid on both sides.
+function parentUuid(context: VerdictContext, twinId: string | null): string | null {
+  if (twinId === null) {
+    return null;
+  }
+  return context.uuidByTwinId.get(twinId) ?? null;
+}
+
+// The parent entity uuid a note's affiliation implies. A task's first
+// non-project link is its slice; a to-do's second is its parent to-do when
+// nested, else its task. Returns null when the note has no parent link, and
+// undefined when it has one whose twin has no anchored note (unknown — not a
+// change).
+function parentUuidFromAffiliation(
   affiliation: string[],
   context: VerdictContext,
   isTask: boolean,
@@ -400,7 +413,11 @@ function parentIdFromAffiliation(
   if (parentLink === undefined) {
     return null;
   }
-  return context.stemByTwinId.get(parentLink);
+  const twinId = context.stemByTwinId.get(parentLink);
+  if (twinId === undefined) {
+    return undefined;
+  }
+  return context.uuidByTwinId.get(twinId) ?? undefined;
 }
 
 // A task note's rename target: the project's taken folder, keeping any leading
@@ -457,4 +474,10 @@ function stemWithoutId(path: string): string {
 
 function isTaskPath(path: string, projectName: string): boolean {
   return path.startsWith(`Projecten/${projectName}/taken/`);
+}
+
+// Whether the record's todoist base already records the item as completed.
+function baseDone(record: EntityRecord): boolean {
+  const base = record.mirrors.todoist?.base ?? null;
+  return base !== null && base.completedAt !== null;
 }

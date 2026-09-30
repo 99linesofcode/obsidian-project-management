@@ -23,10 +23,24 @@ export class PromoteCardAction {
 
     const identity = await this.syncState.getIdentity(input.projectName);
     await this.createTaskNote.execute({
-      task,
+      url: task.url,
+      title: task.title,
+      body: task.body,
+      type: typeFromLabels(task.labels),
       projectName: input.projectName,
       syncedAt: new Date().toISOString(),
       statusName: defaultStatusName(identity?.statusOptions ?? []),
     });
   }
+}
+
+// The vault-owned content type carried by the task's `type:` label, or '' when
+// the issue carries none (the GitHub half backfills it later).
+function typeFromLabels(labels: string[]): string {
+  for (const label of labels) {
+    if (label.startsWith('type:')) {
+      return label.slice('type:'.length).trim();
+    }
+  }
+  return '';
 }

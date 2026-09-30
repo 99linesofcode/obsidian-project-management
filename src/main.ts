@@ -18,6 +18,7 @@ import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCr
 import { CompleteTaskCascadeAction } from './Domain/Actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
+import { EnsureNoteIdsAction } from './Domain/Actions/EnsureNoteIdsAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
@@ -146,6 +147,9 @@ export default class ProjectManagementPlugin extends Plugin {
     );
 
     const github = new GitHubAdapter(transport);
+    // The id backfill runs at the chain start, per project, before any half
+    // reads notes: every task/to-do note gets its vault-owned uuid first.
+    const ensureNoteIds = new EnsureNoteIdsAction(vault, syncState);
     const createTaskNote = new CreateTaskNoteAction(
       vault,
       syncState,
@@ -187,7 +191,7 @@ export default class ProjectManagementPlugin extends Plugin {
       vault,
       applyTaskToGithub,
       applyTaskToVault,
-      new VerdictResolver(),
+      new VerdictResolver(this.settings.doneOptionName),
       this.settings.doneOptionName,
     );
     const discoverProjects = new DiscoverProjectsAction(
@@ -224,6 +228,8 @@ export default class ProjectManagementPlugin extends Plugin {
       todoist,
       vault,
       syncState,
+      applyTaskToVault,
+      this.settings.doneOptionName,
     );
     // t6: a deleted note's twin is removed, subtree included, and its records
     // evicted. Keyed on the note's absence, so a completed twin (absent from
@@ -305,12 +311,7 @@ export default class ProjectManagementPlugin extends Plugin {
       propagateTodoistDeletions,
       this.settings.doneOptionName,
     );
-    const detectNoteRenames = new DetectNoteRenamesAction(
-      vault,
-      syncState,
-      relinkRenamedTodo,
-      relocateTaskStatus,
-    );
+    const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
     const syncProject = new SyncProjectAction(
       vault,
       syncState,
@@ -323,6 +324,7 @@ export default class ProjectManagementPlugin extends Plugin {
       mirrorTodoStatus,
       syncTodoistTasks,
       handleDeletedNote,
+      ensureNoteIds,
     );
     const queue = new SyncQueue(syncProject);
     const scheduler = new SyncScheduler(

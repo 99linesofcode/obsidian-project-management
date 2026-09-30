@@ -1,56 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { snapshotHash } from '../../../src/Domain/Reconciliation/snapshotHash.js';
+import { taskData } from './taskView.js';
 
-const shape = {
-  content: 'Fix the bug',
-  labels: ['task'],
-  sectionId: 'S1',
-  parentId: null,
-  isCompleted: false,
-};
+// snapshotHash() now lives on the canonical base class: one canonical
+// serialization per DTO, hashed once. These tests pin the determinism the diff
+// and the base store rely on.
+describe('DataTransferObject.snapshotHash', () => {
+  it('is deterministic for the same canonical values', () => {
+    // Given — two tasks with equal content
 
-describe('snapshotHash', () => {
-  it('is deterministic for the same shape', () => {
-    // Given — one snapshot shape
-
-    // When — it is hashed twice
-    const first = snapshotHash(shape);
-    const second = snapshotHash(shape);
-
-    // Then — both hashes are identical
-    expect(second).toBe(first);
-  });
-
-  it('ignores label order', () => {
-    // Given — the same labels in a different order
-
-    // When — both shapes are hashed
-    const first = snapshotHash({ ...shape, labels: ['task', 'slice'] });
-    const second = snapshotHash({ ...shape, labels: ['slice', 'task'] });
+    // When — both are hashed
 
     // Then — the hashes agree
-    expect(second).toBe(first);
+    expect(taskData().snapshotHash()).toBe(taskData().snapshotHash());
   });
 
-  it('changes when a content field changes', () => {
-    // Given — a shape whose completion moved
+  it('changes when a diffed field changes', () => {
+    // Given — a task whose content moved
 
-    // When — both shapes are hashed
-    const first = snapshotHash(shape);
-    const second = snapshotHash({ ...shape, isCompleted: true });
+    // When — both are hashed
 
     // Then — the hashes differ
-    expect(second).not.toBe(first);
+    expect(taskData({ title: 'Other' }).snapshotHash()).not.toBe(
+      taskData().snapshotHash(),
+    );
   });
 
-  it('treats a null section as empty', () => {
-    // Given — a subtask whose section is not controlled
+  it('ignores identity and provenance', () => {
+    // Given — a task whose id and timestamps moved
 
-    // When — both shapes are hashed
-    const first = snapshotHash({ ...shape, sectionId: null });
-    const second = snapshotHash({ ...shape, sectionId: '' });
+    // When — both are hashed
 
     // Then — the hashes agree
-    expect(second).toBe(first);
+    const moved = taskData({
+      id: 'task-2',
+      updatedAt: '2020-01-01T00:00:00Z',
+    });
+    expect(moved.snapshotHash()).toBe(taskData().snapshotHash());
   });
 });

@@ -1,22 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { ReconcileProjectLifecycleAction } from '../../../src/Domain/Actions/ReconcileProjectLifecycleAction.js';
-import type { ArchiveBaselineData } from '../../../src/Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { CreateTodoistTaskData } from '../../../src/Domain/DataTransferObjects/CreateTodoistTaskData.js';
-import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/ProjectNoteData.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
-import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { WatchStateData } from '../../../src/Domain/DataTransferObjects/WatchStateData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { EntityRecord } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the vault holds note content and actually moves folders,
 // the sync state holds TaskData records, baselines, watch state and the Todoist
@@ -64,96 +61,6 @@ class FakeVault implements VaultPort {
   onNoteChanged(): void {}
   onNoteDeleted(): void {}
   onNoteRenamed(): void {}
-}
-
-class FakeSyncState implements SyncStatePort {
-  identity: ProjectIdentityData | null = {
-    repoUrl: 'https://github.com/acme/widgets',
-    repoNodeId: 'R_kgDOAAAA',
-    projectNodeId: 'PVT_123',
-    statusFieldId: 'PVTF_456',
-    statusOptions: [],
-  };
-  records: TaskData[] = [];
-  saved: TaskData[] = [];
-  baselines = new Map<string, ArchiveBaselineData>();
-  baselineSets: Array<{ projectName: string; baseline: ArchiveBaselineData }> =
-    [];
-  watch: WatchStateData = { etag: null, cursor: null };
-  watchSets: WatchStateData[] = [];
-  todoistStates = new Map<string, TodoistProjectStateData>();
-  todoistSets: Array<{ projectName: string; state: TodoistProjectStateData }> =
-    [];
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-  async set(status: TaskData): Promise<void> {
-    this.saved.push(status);
-    const index = this.records.findIndex((record) => record.url === status.url);
-    if (index >= 0) {
-      this.records[index] = status;
-    } else {
-      this.records.push(status);
-    }
-  }
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-  async remove(): Promise<void> {}
-  async list(): Promise<TaskData[]> {
-    return this.records;
-  }
-  async setIdentity(): Promise<void> {}
-  async getIdentity(): Promise<ProjectIdentityData | null> {
-    return this.identity;
-  }
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(
-    projectName: string,
-  ): Promise<ArchiveBaselineData | null> {
-    return this.baselines.get(projectName) ?? null;
-  }
-  async setArchiveBaseline(
-    projectName: string,
-    baseline: ArchiveBaselineData,
-  ): Promise<void> {
-    this.baselineSets.push({ projectName, baseline });
-    this.baselines.set(projectName, baseline);
-  }
-  async getWatchState(): Promise<WatchStateData> {
-    return this.watch;
-  }
-  async setWatchState(
-    _projectName: string,
-    state: WatchStateData,
-  ): Promise<void> {
-    this.watch = state;
-    this.watchSets.push(state);
-  }
-  async getTodoistProjectState(
-    projectName: string,
-  ): Promise<TodoistProjectStateData | null> {
-    return this.todoistStates.get(projectName) ?? null;
-  }
-  async setTodoistProjectState(
-    projectName: string,
-    state: TodoistProjectStateData,
-  ): Promise<void> {
-    this.todoistSets.push({ projectName, state });
-    this.todoistStates.set(projectName, state);
-  }
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-  async removeTodoistState(): Promise<void> {}
 }
 
 class FakeTaskManager implements TaskManagerPort {
@@ -279,6 +186,8 @@ class FakeProjectManagement implements ProjectManagementPort {
       title: 'Fix the bug',
       body: '',
       state: 'open',
+      createdAt: '2026-09-18T09:00:00Z',
+      lastEditedAt: '2026-09-18T11:00:00Z',
       updatedAt: '2026-09-18T11:00:00Z',
       labels: [],
     };
@@ -325,16 +234,25 @@ function project(
   return { id: 'P1', name: 'Acme Widgets', isArchived: false, ...overrides };
 }
 
-function record(notePath: string, overrides: Partial<TaskData> = {}): TaskData {
-  return taskRecord({
-    url: issueUrl,
-    remoteId: 42,
+// A tracked issue: the registry record carries the github handle and the
+// last-synced base whose status is the lane the lock sweep reads.
+function record(
+  notePath: string,
+  overrides: Partial<TaskData> = {},
+): EntityRecord {
+  const base = taskData({
+    id: 'entity-42',
     notePath,
-    body: 'abc',
-    updatedAt: '2026-09-18T11:00:00Z',
-    status: 'Building',
     title: 'Fix the bug',
+    body: 'abc',
+    status: 'Building',
+    updatedAt: '2026-09-18T11:00:00Z',
     ...overrides,
+  });
+  return entityRecord({
+    id: 'entity-42',
+    notePath,
+    mirrors: { github: mirror(issueUrl, base) },
   });
 }
 
@@ -345,7 +263,14 @@ function setup(anchor = 'P1') {
   const taskManager = new FakeTaskManager();
   taskManager.projects = [project()];
   const syncState = new FakeSyncState();
-  syncState.records = [record(taskPath)];
+  syncState.identities.set('Acme Widgets', {
+    repoUrl: 'https://github.com/acme/widgets',
+    repoNodeId: 'R_kgDOAAAA',
+    projectNodeId: 'PVT_123',
+    statusFieldId: 'PVTF_456',
+    statusOptions: [],
+  });
+  syncState.records.set('entity-42', record(taskPath));
   const port = new FakeProjectManagement();
   const action = new ReconcileProjectLifecycleAction(
     port,
@@ -380,10 +305,12 @@ function setupArchived() {
   h.vault.notes.delete(activeNote);
   h.vault.notes.set(archivedNote, note('P1'));
   h.taskManager.projects = [project({ isArchived: true })];
-  h.syncState.records = [record(archivedTaskPath)];
+  h.syncState.records.clear();
+  h.syncState.records.set('entity-42', record(archivedTaskPath));
   h.syncState.baselines.set('Acme Widgets', {
     locationArchived: true,
     closed: true,
+    archivedAt: '',
   });
   return h;
 }
@@ -475,6 +402,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
       expect(h.vault.moveCalls).toEqual([]);
       expect(h.port.closedCalls).toEqual([]);
@@ -487,6 +415,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles an archived folder with an open board
@@ -499,6 +428,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: true,
         closed: true,
+        archivedAt: syncedAt,
       });
     });
 
@@ -509,6 +439,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
+        archivedAt: '',
       });
 
       // When — the lifecycle reconciles an active folder with a still-closed
@@ -527,6 +458,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles with closed: true
@@ -536,17 +468,21 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.vault.moveCalls).toEqual([
         { from: 'Projecten/Acme Widgets', to: 'Archief/Acme Widgets' },
       ]);
-      expect(h.syncState.records[0]!.notePath).toBe(archivedTaskPath);
+      expect([...h.syncState.records.values()][0]!.notePath).toBe(
+        archivedTaskPath,
+      );
     });
 
     it('applies a GitHub gesture back: a reopened board unarchives the folder', async () => {
       // Given — a settled archived project whose board just reopened
       const h = setup();
       h.vault.notes.set(archivedNote, note('P1'));
-      h.syncState.records = [record(archivedTaskPath)];
+      h.syncState.records.clear();
+      h.syncState.records.set('entity-42', record(archivedTaskPath));
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
+        archivedAt: '',
       });
 
       // When — the lifecycle reconciles with closed: false
@@ -565,6 +501,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the folder is archived while the board still reads open
@@ -583,6 +520,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles
@@ -600,6 +538,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles a closed board
@@ -611,6 +550,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
     });
 
@@ -620,6 +560,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
       await h.action.execute({ ...activeInput, closed: true });
 
@@ -635,13 +576,58 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.syncState.baselineSets).toEqual([]);
     });
 
-    it('skips a transition for a project with no stored identity', async () => {
-      // Given — a project with no GitHub identity
+    it('stamps archivedAt once on the freeze transition and preserves it', async () => {
+      // Given — a settled active project whose board just closed
       const h = setup();
-      h.syncState.identity = null;
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
+      });
+
+      // When — the archive transition runs
+      await h.action.execute({ ...activeInput, closed: true });
+
+      // Then — the transition is stamped with the pass's syncedAt
+      expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
+        locationArchived: true,
+        closed: true,
+        archivedAt: syncedAt,
+      });
+
+      // And — a settled pass preserves the original stamp, never re-stamping
+      h.syncState.baselineSets = [];
+      await h.action.execute(archivedInput);
+      expect(h.syncState.baselines.get('Acme Widgets')?.archivedAt).toBe(
+        syncedAt,
+      );
+      expect(h.syncState.baselineSets).toEqual([]);
+    });
+
+    it('clears archivedAt when a Todoist unarchive flows back', async () => {
+      // Given — a settled archived project unarchived on the Todoist side
+      const h = setupArchived();
+      h.taskManager.projects = [project({ isArchived: false })];
+
+      // When — the lifecycle reconciles
+      await h.action.execute(archivedInput);
+
+      // Then — the project is active again and the stamp is cleared
+      expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
+        locationArchived: false,
+        closed: false,
+        archivedAt: null,
+      });
+    });
+
+    it('skips a transition for a project with no stored identity', async () => {
+      // Given — a project with no GitHub identity
+      const h = setup();
+      h.syncState.identities.clear();
+      h.syncState.baselines.set('Acme Widgets', {
+        locationArchived: false,
+        closed: false,
+        archivedAt: null,
       });
 
       // When — the board reports closed
@@ -661,6 +647,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles
@@ -679,10 +666,12 @@ describe('ReconcileProjectLifecycleAction', () => {
       // Given — a settled archived project unarchived on the Todoist side
       const h = setup();
       h.vault.notes.set(archivedNote, note('P1'));
-      h.syncState.records = [record(archivedTaskPath)];
+      h.syncState.records.clear();
+      h.syncState.records.set('entity-42', record(archivedTaskPath));
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
+        archivedAt: '',
       });
 
       // When — the lifecycle reconciles an archived folder with an active
@@ -740,7 +729,10 @@ describe('ReconcileProjectLifecycleAction', () => {
 
       // Then — the cursor is adopted without reactivating
       expect(h.syncState.watchSets).toEqual([
-        { etag: 'etag-1', cursor: '2026-09-20T10:00:00Z' },
+        {
+          projectName: 'Acme Widgets',
+          state: { etag: 'etag-1', cursor: '2026-09-20T10:00:00Z' },
+        },
       ]);
       expect(h.vault.moveCalls).toEqual([]);
     });
@@ -748,7 +740,10 @@ describe('ReconcileProjectLifecycleAction', () => {
     it('re-activates the project when a newer issue appears', async () => {
       // Given — an archived project whose repo gained a newer issue
       const h = setupArchived();
-      h.syncState.watch = { etag: 'etag-1', cursor: '2026-09-20T10:00:00Z' };
+      h.syncState.watches.set('Acme Widgets', {
+        etag: 'etag-1',
+        cursor: '2026-09-20T10:00:00Z',
+      });
       h.port.activity = {
         changed: true,
         newestCreatedAt: '2026-09-25T10:00:00Z',
@@ -771,18 +766,22 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
-      expect(verdict.locationArchived).toBe(false);
+      expect(verdict.archivedAt).toBeNull();
       expect(h.syncState.watchSets.at(-1)).toEqual({
-        etag: null,
-        cursor: null,
+        projectName: 'Acme Widgets',
+        state: { etag: null, cursor: null },
       });
     });
 
     it('refreshes only the etag when the newest issue is not newer', async () => {
       // Given — an archived project with no newer issue
       const h = setupArchived();
-      h.syncState.watch = { etag: 'etag-1', cursor: '2026-09-20T10:00:00Z' };
+      h.syncState.watches.set('Acme Widgets', {
+        etag: 'etag-1',
+        cursor: '2026-09-20T10:00:00Z',
+      });
       h.port.activity = {
         changed: true,
         newestCreatedAt: '2026-09-20T10:00:00Z',
@@ -794,7 +793,10 @@ describe('ReconcileProjectLifecycleAction', () => {
 
       // Then — the etag refreshes and the project stays archived
       expect(h.syncState.watchSets).toEqual([
-        { etag: 'etag-2', cursor: '2026-09-20T10:00:00Z' },
+        {
+          projectName: 'Acme Widgets',
+          state: { etag: 'etag-2', cursor: '2026-09-20T10:00:00Z' },
+        },
       ]);
       expect(h.vault.moveCalls).toEqual([]);
     });
@@ -802,7 +804,7 @@ describe('ReconcileProjectLifecycleAction', () => {
     it('skips the watch for a project with no stored identity', async () => {
       // Given — an archived project with no GitHub identity
       const h = setupArchived();
-      h.syncState.identity = null;
+      h.syncState.identities.clear();
 
       // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
@@ -814,7 +816,10 @@ describe('ReconcileProjectLifecycleAction', () => {
     it('leaves the watch state untouched when re-activation fails', async () => {
       // Given — an archived project whose folder move fails on reactivation
       const h = setupArchived();
-      h.syncState.watch = { etag: 'etag-1', cursor: '2026-09-20T10:00:00Z' };
+      h.syncState.watches.set('Acme Widgets', {
+        etag: 'etag-1',
+        cursor: '2026-09-20T10:00:00Z',
+      });
       h.port.activity = {
         changed: true,
         newestCreatedAt: '2026-09-25T10:00:00Z',
@@ -828,7 +833,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       );
 
       // Then — the watch state survives for the next tick to retry
-      expect(h.syncState.watch).toEqual({
+      expect(h.syncState.watches.get('Acme Widgets')).toEqual({
         etag: 'etag-1',
         cursor: '2026-09-20T10:00:00Z',
       });
@@ -842,6 +847,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles
@@ -854,10 +860,15 @@ describe('ReconcileProjectLifecycleAction', () => {
     it('skips shipped issues when archiving: the vault decides done', async () => {
       // Given — a project whose only record is in the done lane
       const h = setup();
-      h.syncState.records = [record(taskPath, { status: 'Shipped' })];
+      h.syncState.records.clear();
+      h.syncState.records.set(
+        'entity-42',
+        record(taskPath, { status: 'Shipped' }),
+      );
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles an archive
@@ -886,6 +897,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
 
       // When — the lifecycle reconciles
@@ -897,6 +909,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
+        archivedAt: null,
       });
     });
   });

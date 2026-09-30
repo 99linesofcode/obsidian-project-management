@@ -3,6 +3,8 @@ import { GithubTaskMapper } from '../../../src/Domain/Mappers/GithubTaskMapper.j
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 
+const DONE_LANE = 'Shipped';
+
 const issue: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
@@ -10,7 +12,11 @@ const issue: GithubTaskData = {
   title: 'Fix the bug',
   body: 'The bug happens on resize.',
   state: 'open',
-  updatedAt: '2026-09-18T10:00:00Z',
+  createdAt: '2026-09-18T09:00:00Z',
+  // The comment-noisy updatedAt is deliberately later than lastEditedAt, so a
+  // mapper that reads the wrong clock is caught.
+  lastEditedAt: '2026-09-18T10:00:00Z',
+  updatedAt: '2026-09-18T11:30:00Z',
   labels: ['type: task'],
 };
 
@@ -26,43 +32,75 @@ describe('GithubTaskMapper', () => {
     // Given — an issue and its board card
 
     // When — the pair is parsed
-    const task = GithubTaskMapper.parse(issue, card);
+    const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
 
-    // Then — identity and content are carried, the lane comes from the card
-    expect(task.url).toBe(issue.url);
-    expect(task.remoteId).toBe(42);
-    expect(task.nodeId).toBe('I_kwDOAAAA42');
+    // Then — identity is empty (the half composes it from the registry), the
+    // content is carried, the lane comes from the card, and the type comes from
+    // the label
+    expect(task.id).toBe('');
+    expect(task.notePath).toBe('');
+    expect(task.mirrors).toEqual({ github: issue.url });
     expect(task.title).toBe('Fix the bug');
     expect(task.body).toBe('The bug happens on resize.');
     expect(task.status).toBe('Building');
-    expect(task.completed).toBe(false);
+    expect(task.completedAt).toBeNull();
+    expect(task.type).toBe('task');
     expect(task.parent).toBeNull();
-    expect(task.labels).toEqual(['type: task']);
+    expect(task.createdAt).toBe('2026-09-18T09:00:00Z');
+  });
+
+  it('uses lastEditedAt as the content clock, not the comment-noisy updatedAt', () => {
+    // Given — an issue whose updatedAt (a comment) postdates its last edit
+
+    // When — the issue is parsed
+    const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
+
+    // Then — the canonical clock is the edit, never the comment
+    expect(task.updatedAt).toBe('2026-09-18T10:00:00Z');
   });
 
   it('parses a card-less issue with no lane', () => {
     // Given — an issue with no board card
 
     // When — the issue is parsed
-    const task = GithubTaskMapper.parse(issue, null);
+    const task = GithubTaskMapper.parse(issue, null, DONE_LANE);
 
-    // Then — the lane is empty
+    // Then — the lane is empty and no completion is derived
     expect(task.status).toBe('');
+    expect(task.completedAt).toBeNull();
   });
 
-  it('reads a closed issue as completed', () => {
-    // Given — a closed issue
+  it('stamps a done-lane issue as completed (the invariant)', () => {
+    // Given — a card in the project's done lane
 
     // When — the issue is parsed
-    const task = GithubTaskMapper.parse({ ...issue, state: 'closed' }, card);
+    const task = GithubTaskMapper.parse(
+      issue,
+      { ...card, statusOptionName: DONE_LANE },
+      DONE_LANE,
+    );
 
-    // Then — the canonical task is completed
-    expect(task.completed).toBe(true);
+    // Then — completedAt is non-null ('' = done, stamp unknown)
+    expect(task.completedAt).toBe('');
+  });
+
+  it('reads the vault-owned type from the type label', () => {
+    // Given — an issue carrying a legacy no-space type label
+
+    // When — the issue is parsed
+    const task = GithubTaskMapper.parse(
+      { ...issue, labels: ['type:bug'] },
+      card,
+      DONE_LANE,
+    );
+
+    // Then — the type is stripped and trimmed
+    expect(task.type).toBe('bug');
   });
 
   it('round-trips the issue fields and lane through render', () => {
     // Given — a canonical task parsed from an issue and card
-    const task = GithubTaskMapper.parse(issue, card);
+    const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
 
     // When — it is rendered back
     const rendered = GithubTaskMapper.render(task);
@@ -78,7 +116,8 @@ describe('GithubTaskMapper', () => {
 
   it('renders a completed task as a closed issue', () => {
     // Given — a completed canonical task
-    const task = { ...GithubTaskMapper.parse(issue, card), completed: true };
+    const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
+    task.completedAt = '';
 
     // When — it is rendered
     const rendered = GithubTaskMapper.render(task);
@@ -89,7 +128,7 @@ describe('GithubTaskMapper', () => {
 
   it('renders an empty lane as no status', () => {
     // Given — a canonical task with no lane
-    const task = GithubTaskMapper.parse(issue, null);
+    const task = GithubTaskMapper.parse(issue, null, DONE_LANE);
 
     // When — it is rendered
     const rendered = GithubTaskMapper.render(task);

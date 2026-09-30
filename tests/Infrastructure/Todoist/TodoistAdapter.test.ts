@@ -64,6 +64,8 @@ function task(overrides: Record<string, unknown> = {}) {
     content: 'Fix the widget',
     labels: ['task'],
     checked: false,
+    added_at: '2026-09-18T09:00:00Z',
+    updated_at: '2026-09-18T10:00:00Z',
     ...overrides,
   };
 }
@@ -299,6 +301,9 @@ describe('TodoistAdapter', () => {
         labels: ['task'],
         isCompleted: false,
         url: 'https://app.todoist.com/app/task/T1',
+        addedAt: '2026-09-18T09:00:00Z',
+        updatedAt: '2026-09-18T10:00:00Z',
+        completedAt: null,
       },
       {
         id: 'T2',
@@ -309,6 +314,9 @@ describe('TodoistAdapter', () => {
         labels: ['todo'],
         isCompleted: false,
         url: 'https://app.todoist.com/app/task/T2',
+        addedAt: '2026-09-18T09:00:00Z',
+        updatedAt: '2026-09-18T10:00:00Z',
+        completedAt: null,
       },
     ]);
     // And the GET scoped to the project
@@ -356,6 +364,9 @@ describe('TodoistAdapter', () => {
         labels: ['task'],
         isCompleted: true,
         url: 'https://app.todoist.com/app/task/T1',
+        addedAt: '',
+        updatedAt: '',
+        completedAt: '2026-09-24T11:00:00Z',
       },
     ]);
     // And the GET carried since, until and the project scope

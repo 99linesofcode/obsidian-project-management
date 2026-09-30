@@ -1,21 +1,28 @@
 import { laneForSection } from '../Board/laneForSection.js';
+import { TaskData } from '../DataTransferObjects/TaskData.js';
+import { ToDoData } from '../DataTransferObjects/ToDoData.js';
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
 import { TodoistTaskMapper } from '../Mappers/TodoistTaskMapper.js';
 import { parseChecklist } from '../Notes/Checklist.js';
+import { hash } from '../Notes/hash.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { stripLink } from '../Notes/stripLink.js';
 import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { TaskNoteParser } from '../Notes/TaskNoteParser.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
+import type { ConflictHints } from '../Reconciliation/VerdictResolver.js';
 import { VerdictResolver } from '../Reconciliation/VerdictResolver.js';
-import type { TaskData } from '../DataTransferObjects/TaskData.js';
-import type { TodoistSectionData } from '../DataTransferObjects/TodoistSectionData.js';
-import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
+import type {
+  DimensionVerdict,
+  SyncVerdict,
+} from '../Reconciliation/SyncVerdict.js';
+import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
+import type { TodoistSectionData } from '../DataTransferObjects/TodoistSectionData.js';
+import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { ApplyTaskToTodoistAction } from './ApplyTaskToTodoistAction.js';
 import type { ApplyTodoistCompletionAction } from './ApplyTodoistCompletionAction.js';
 import type { ApplyTodoistRemoteChangesAction } from './ApplyTodoistRemoteChangesAction.js';
@@ -30,12 +37,12 @@ export interface SyncTodoistTasksInput {
   syncedAt: string;
 }
 
-// One tracked issue resolved to its vault note: the issue carries the type
-// label and the title, the note carries the lane (its status) and the slice
-// affiliation. The vault is the source of truth for the shape; the issue is the
-// source of the type, which the note does not carry.
+// One tracked issue resolved to its vault note and registry record: the issue
+// carries the type label and the title, the note carries the lane (its status)
+// and the slice affiliation.
 interface ProjectionItem {
   issue: { url: string; title: string; labels: string[] };
+  record: EntityRecord;
   notePath: string;
   noteContent: string;
   type: string;
@@ -50,28 +57,30 @@ interface ToDoItem {
   noteContent: string;
   title: string;
   // The parent task's note path; its twin is resolved from the pass's task
-  // projection (or the stored record), never from a stale note anchor.
+  // projection (or the registry), never from a stale note anchor.
   taskNotePath: string;
   // The parent to-do's note stem when this to-do nests under another to-do
   // (Todoist indent level 4 — the ceiling); null for a direct task child.
   parentStem: string | null;
 }
 
-// The Todoist half on the canonical pipeline: fetch the project's items (the
-// fetch IS the probe — Todoist REST v1 has no conditional request), map each
-// item to canonical TaskData/ToDoData with TodoistTaskMapper, diff it against
-// the vault's desired shape and the snapshot record, and apply the winning side
-// through ApplyTaskToTodoistAction. The remote -> vault absorption
-// (ApplyTodoistRemoteChanges + ApplyTodoistCompletion) runs first and stays
-// retained: the pull side's affiliation/twin-id duality is a later concern, so
-// the absorbers canonicalise the remote->vault direction while the writer owns
-// the vault->remote projection. Captured creations (dt-06) and deletion
-// propagation close the half.
+// The Todoist half on the registry: fetch the project's items (the fetch IS the
+// probe — Todoist REST v1 has no conditional request), resolve each item's
+// entity record by its todoist mirror handle, compose the remote and vault
+// canonical live views, diff them per field against the mirror's base, and
+// apply the winning side through ApplyTaskToTodoistAction. The remote -> vault
+// absorption (ApplyTodoistRemoteChanges + ApplyTodoistCompletion) runs first
+// and stays retained. Captured creations (dt-06) and deletion propagation close
+// the half.
 //
-// The snapshot DTO is read straight from the canonical store (one TaskData per
-// twin): `title` is the content, `status` the lane ('' = not controlled),
-// `completed` the completion bit, `parent` the parent twin id.
+// Identity always comes from the registry, never from the fetch or a note
+// anchor: the mapper leaves id/notePath empty and this action composes them
+// from the record. All diffing operates on diff views (body = digest, type
+// excluded — the vault-owned type never rides a Todoist base); base storage is
+// a diff view.
 export class SyncTodoistTasksAction {
+  private readonly verdictResolver: VerdictResolver;
+
   constructor(
     private readonly taskManager: TaskManagerPort,
     private readonly projectManagement: ProjectManagementPort,
@@ -84,7 +93,9 @@ export class SyncTodoistTasksAction {
     private readonly applyTodoistCompletion: ApplyTodoistCompletionAction,
     private readonly propagateTodoistDeletions: PropagateTodoistDeletionsAction,
     private readonly doneOptionName: string,
-  ) {}
+  ) {
+    this.verdictResolver = new VerdictResolver(doneOptionName);
+  }
 
   async execute(input: SyncTodoistTasksInput): Promise<void> {
     try {
@@ -168,11 +179,12 @@ export class SyncTodoistTasksAction {
 
     const items: ProjectionItem[] = [];
     for (const issue of issues) {
-      const status = await this.syncState.get(issue.url);
-      if (!status) {
+      // Handle-index resolution: the issue url is the github mirror handle.
+      const record = await this.syncState.findByMirror('github', issue.url);
+      if (!record) {
         continue;
       }
-      const note = await this.vault.getNoteByPath(status.notePath);
+      const note = await this.vault.getNoteByPath(record.notePath);
       if (!note) {
         continue;
       }
@@ -186,7 +198,8 @@ export class SyncTodoistTasksAction {
       }
       items.push({
         issue,
-        notePath: status.notePath,
+        record,
+        notePath: record.notePath,
         noteContent: note.content,
         type,
         lane: parsed.status,
@@ -235,7 +248,7 @@ export class SyncTodoistTasksAction {
       const slicePath = sliceNotePath(input.projectName, item.sliceLink!);
       const parentId =
         taskTwinIdByNotePath.get(slicePath) ??
-        (await this.sliceTaskId(slicePath));
+        (await this.twinIdForPath(slicePath));
       if (parentId === null) {
         // The slice has no twin yet; the child waits for the next tick.
         continue;
@@ -261,26 +274,34 @@ export class SyncTodoistTasksAction {
     sections: Record<string, string>,
     input: SyncTodoistTasksInput,
   ): Promise<string> {
-    const stored = await this.syncState.getTodoistState(item.notePath);
-    const current = stored ? (activeById.get(stored.todoistId) ?? null) : null;
+    const handle = item.record.mirrors.todoist?.handle ?? null;
+    const current = handle === null ? null : (activeById.get(handle) ?? null);
+    const base = item.record.mirrors.todoist?.base ?? null;
+    const parentUuid = await this.twinUuid(placement.parentId);
+    const vault = this.vaultView(item, placement, parentUuid);
 
-    const desired = this.desiredTask(item, placement);
     // A missing twin is a membership gap the writer must fill; only a present
     // twin whose remote moved (the absorber's pull) is left to the absorber.
-    if (current !== null && stored !== null) {
-      const verdict = this.verdictResolver.diff(
-        desired,
-        this.remoteTask(current, sections),
-        stored,
+    if (current !== null && handle !== null && base !== null) {
+      const remote = this.remoteView(current, item.record, sections, parentUuid);
+      const vaultDiff = this.diffView(vault);
+      const remoteDiff = this.diffView(remote);
+      const verdicts = this.verdictResolver.diff(vaultDiff, remoteDiff, base);
+      const resolved = this.verdictResolver.resolveConflicts(
+        vaultDiff,
+        remoteDiff,
+        verdicts,
+        this.conflictHints(current),
       );
-      if (verdict === 'pull') {
-        return stored.todoistId;
+      if (overallVerdict(resolved) === 'pull') {
+        return handle;
       }
     }
 
     return this.applyToTodoist.executeTask({
-      task: desired,
+      task: vault,
       current,
+      record: item.record,
       projectId: input.projectId,
       sectionId: placement.sectionId,
       parentId: placement.parentId,
@@ -334,7 +355,7 @@ export class SyncTodoistTasksAction {
     for (const item of nested) {
       const parentId =
         twinIdByStem.get(item.parentStem!) ??
-        (await this.anchorId(
+        (await this.twinIdForPath(
           `Projecten/${input.projectName}/todos/${item.parentStem}.md`,
         ));
       if (parentId === null) {
@@ -346,9 +367,9 @@ export class SyncTodoistTasksAction {
   }
 
   // The parent task's twin id: the pass's own projection first, so a twin
-  // created this pass wins over a stale note anchor, then the stored record for
-  // a captured draft task that is not a tracked issue. Null when neither
-  // exists — the to-do must not be created.
+  // created this pass wins over a stale registry handle, then the registry
+  // record for a captured draft task that is not a tracked issue. Null when
+  // neither exists — the to-do must not be created.
   private async parentTaskTwinId(
     taskNotePath: string,
     taskTwinIdByNotePath: Map<string, string>,
@@ -357,8 +378,7 @@ export class SyncTodoistTasksAction {
     if (planned !== undefined) {
       return planned;
     }
-    const stored = await this.syncState.getTodoistState(taskNotePath);
-    return stored?.todoistId ?? null;
+    return await this.twinIdForPath(taskNotePath);
   }
 
   private async projectToDoItem(
@@ -368,39 +388,18 @@ export class SyncTodoistTasksAction {
     input: SyncTodoistTasksInput,
   ): Promise<string> {
     const parsed = ToDoNoteParser.parse(item.noteContent);
-    const stored = await this.syncState.getTodoistState(item.notePath);
-    const current = stored ? (activeById.get(stored.todoistId) ?? null) : null;
-
-    // The vault owns to-do structure and content, so the diff is informational
-    // here: the writer's field gate is authoritative and a remote completion
-    // was already absorbed by ApplyTodoistCompletionAction.
-    this.verdictResolver.diff(
-      this.comparableToDo(item.title, parsed?.status ?? 'open', parentId),
-      this.comparableToDo(
-        current?.content ?? item.title,
-        current?.isCompleted === true ? 'completed' : 'open',
-        current?.parentId ?? parentId,
-      ),
-      this.comparableToDo(
-        stored?.title ?? item.title,
-        stored?.completed === true ? 'completed' : 'open',
-        stored?.parent ?? parentId,
-      ),
-    );
+    const record = await this.syncState.findByNotePath(item.notePath);
+    const handle = record?.mirrors.todoist?.handle ?? null;
+    const current = handle === null ? null : (activeById.get(handle) ?? null);
+    const todo = await this.vaultToDoView(item, parsed, input.projectName);
 
     return this.applyToTodoist.executeToDo({
-      todo: {
-        todoistId: stored?.todoistId ?? '',
-        notePath: item.notePath,
-        projectName: input.projectName,
-        taskLink: '',
-        parentTodoLink: null,
-        title: item.title,
-        status: parsed?.status === 'completed' ? 'completed' : 'open',
-      },
+      todo,
       current,
+      record,
       projectId: input.projectId,
       parentId,
+      projectName: input.projectName,
       notePath: item.notePath,
       noteContent: item.noteContent,
       syncedAt: input.syncedAt,
@@ -408,67 +407,132 @@ export class SyncTodoistTasksAction {
   }
 
   // The vault's desired canonical task: the issue title, the note's lane and
-  // affiliation and the lane-derived completion. The vault is the source of
-  // truth; the issue supplies the title and the type.
-  private desiredTask(
+  // the lane-derived completion. The vault is the source of truth; the issue
+  // supplies the title and the type. The parent is the resolved uuid, matching
+  // the base's canonical representation.
+  private vaultView(
     item: ProjectionItem,
     placement: { sectionId: string | null; parentId: string | null },
+    parentUuid: string | null,
   ): TaskData {
-    return {
-      url: item.issue.url,
-      remoteId: 0,
-      nodeId: '',
-      todoistId: '',
-      notePath: item.notePath,
-      title: item.issue.title,
-      body: '',
-      status: item.lane,
-      completed: item.lane === this.doneOptionName,
-      parent: placement.parentId,
-      labels: [item.type],
-      updatedAt: '',
-    };
+    // The lane is controlled only for a top-level task (a subtask inherits its
+    // parent's section, dt-02), so a subtask's canonical lane is ''.
+    const lane = placement.parentId === null ? item.lane : '';
+    const done = lane !== '' && lane === this.doneOptionName;
+    return new TaskData(
+      item.record.id,
+      item.notePath,
+      {}, // the vault live view knows no mirror handles
+      item.issue.title,
+      '', // the Todoist description is not vault content
+      lane,
+      done ? '' : null,
+      item.type,
+      parentUuid,
+      null,
+      null,
+    );
   }
 
-  // The remote twin as a canonical task, for the diff.
-  private remoteTask(
+  // The remote twin as a canonical live view, with identity composed from the
+  // registry record and the parent resolved to its uuid.
+  private remoteView(
     twin: TodoistTaskData,
+    record: EntityRecord,
     sections: Record<string, string>,
+    parentUuid: string | null,
   ): TaskData {
     const section: TodoistSectionData = {
       id: twin.sectionId ?? '',
       projectId: twin.projectId,
       name: laneForSection(sections, twin.sectionId) ?? '',
     };
-    return TodoistTaskMapper.parseTask(twin, section, null);
+    const parsed = TodoistTaskMapper.parseTask(twin, section, null);
+    const lane = twin.parentId === null ? parsed.status : '';
+    const done = twin.isCompleted;
+    return new TaskData(
+      record.id,
+      record.notePath,
+      { todoist: twin.id },
+      parsed.title,
+      '', // the Todoist description is not vault content
+      lane,
+      done ? (twin.completedAt ?? '') : null,
+      parsed.type,
+      parentUuid,
+      parsed.createdAt,
+      parsed.updatedAt,
+    );
   }
 
-  // A TaskData-shaped comparable for a to-do, so the same pure diff can read
-  // it. The body is empty and the labels carry no content.
-  private comparableToDo(
-    title: string,
-    status: string,
-    parent: string,
-  ): TaskData {
+  // The vault's canonical to-do live view: title, status and the resolved
+  // parent/task uuids. The writer's field gate is authoritative for to-dos, so
+  // this view is composed but not diffed.
+  private async vaultToDoView(
+    item: ToDoItem,
+    parsed: { status: string; completed: string | null } | null,
+    projectName: string,
+  ): Promise<ToDoData> {
+    const task = await this.syncState.findByNotePath(item.taskNotePath);
+    const parentTodo =
+      item.parentStem === null
+        ? null
+        : await this.syncState.findByNotePath(
+            `Projecten/${projectName}/todos/${item.parentStem}.md`,
+          );
+    return new ToDoData(
+      (await this.syncState.findByNotePath(item.notePath))?.id ?? '',
+      item.notePath,
+      {},
+      item.title,
+      parsed?.status === 'completed' ? 'completed' : 'open',
+      parsed?.status === 'completed' ? (parsed.completed ?? '') : null,
+      parentTodo?.id ?? null,
+      task?.id ?? null,
+      null,
+      null,
+    );
+  }
+
+  // The comparable shape the diff reads: the body is the digest of the empty
+  // comparable body (the Todoist description is not vault content), and the
+  // type is excluded — the vault-owned type never rides a Todoist base.
+  private diffView(task: TaskData): TaskData {
+    return new TaskData(
+      task.id,
+      task.notePath,
+      {},
+      task.title,
+      hash(''),
+      task.status,
+      task.completedAt,
+      '',
+      task.parent,
+      task.createdAt,
+      task.updatedAt,
+    );
+  }
+
+  // The timing evidence the conflict ladder may use. Todoist's updatedAt is the
+  // honest task-scoped content clock; completedAt stamps the completion.
+  private conflictHints(twin: TodoistTaskData): ConflictHints {
+    // TODO: VaultPort exposes no file mtime, so the vault side of the timestamp
+    // ladder is unknown here and the ladder falls through to the semantic rules.
+    const updated = twin.updatedAt || null;
     return {
-      url: '',
-      remoteId: 0,
-      nodeId: '',
-      todoistId: '',
-      notePath: '',
-      title,
-      body: '',
-      status,
-      completed: status === 'completed',
-      parent,
-      labels: [],
-      updatedAt: '',
+      vaultModifiedAt: null,
+      remoteFieldTimes: {
+        title: updated,
+        body: updated,
+        status: updated,
+        completedAt: twin.completedAt,
+      },
     };
   }
 
   // Every to-do linked from a task note's checklist, keyed by the task note
   // that owns it. The anchor is deliberately NOT read here: a to-do's parent
-  // twin is resolved from the pass's task projection, so a task whose twin
+  // twin is resolved from the pass's task projection, so a task whose registry
   // record was lost still gets its to-dos hung off the twin this pass creates.
   // De-duplicated by to-do note path.
   private async collectToDos(projectName: string): Promise<ToDoItem[]> {
@@ -538,21 +602,21 @@ export class SyncTodoistTasksAction {
       : candidate;
   }
 
-  // The slice's twin id, read from the slice note's `todoist` anchor.
-  private async sliceTaskId(slicePath: string): Promise<string | null> {
-    const note = await this.vault.getNoteByPath(slicePath);
-    if (!note) {
+  // The todoist handle of the record at a note path, or null when the note has
+  // no mirror yet. The registry is the anchor now, not the note's frontmatter.
+  private async twinIdForPath(notePath: string): Promise<string | null> {
+    const record = await this.syncState.findByNotePath(notePath);
+    return record?.mirrors.todoist?.handle ?? null;
+  }
+
+  // The entity uuid a twin id names, or null for a top-level item / an
+  // unanchored parent.
+  private async twinUuid(twinId: string | null): Promise<string | null> {
+    if (twinId === null) {
       return null;
     }
-    return anchorOf(note.content);
+    return (await this.syncState.findByMirror('todoist', twinId))?.id ?? null;
   }
-
-  private async anchorId(notePath: string): Promise<string | null> {
-    const note = await this.vault.getNoteByPath(notePath);
-    return note === null ? null : anchorOf(note.content);
-  }
-
-  private readonly verdictResolver = new VerdictResolver();
 }
 
 // The type a tracked issue carries: the `type: ` prefix is stripped (dt-09).
@@ -570,12 +634,6 @@ function sliceNotePath(projectName: string, link: string): string {
   return `Projecten/${projectName}/taken/${stemOf(link)}.md`;
 }
 
-// A note's `todoist` frontmatter anchor, or null when absent or empty.
-function anchorOf(content: string): string | null {
-  const anchor = splitFrontmatter(content)?.fields.get('todoist') ?? '';
-  return anchor === '' ? null : anchor;
-}
-
 // The affiliation lists the project first, then the parent task, then — when
 // nested — the parent to-do. The second non-project link is the parent to-do's
 // stem; a to-do with no parent link returns null.
@@ -587,6 +645,27 @@ function parentStemFromAffiliation(
     .map(stripLink)
     .filter((target) => target !== projectName);
   return targets[1] ?? null;
+}
+
+// Collapses the per-field verdicts into the one direction the writer can apply.
+// A vault push takes precedence over a pull (origin authority); after
+// resolveConflicts no field is left 'conflict'.
+function overallVerdict(verdicts: SyncVerdict): DimensionVerdict {
+  const values: DimensionVerdict[] = [
+    verdicts.title,
+    verdicts.body,
+    verdicts.status,
+    verdicts.completedAt,
+    verdicts.type,
+    verdicts.parent,
+  ];
+  if (values.includes('push')) {
+    return 'push';
+  }
+  if (values.includes('pull')) {
+    return 'pull';
+  }
+  return 'none';
 }
 
 // Whether two lane maps agree, so a settled project's bookkeeping is not

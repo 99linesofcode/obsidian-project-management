@@ -23,7 +23,10 @@ export function projectNoteFromCache(
   return {
     path,
     projectName,
-    archived: path.startsWith('Archief/'),
+    // The path says archived-or-not; the exact transition time is the
+    // reconcile pass's to stamp, so discovery carries '' as "unknown" and the
+    // pass replaces it on the baseline.
+    archivedAt: path.startsWith('Archief/') ? '' : null,
     pm: frontmatter.pm,
     url: typeof frontmatter.url === 'string' ? frontmatter.url : '',
     board: typeof frontmatter.board === 'string' ? frontmatter.board : '',

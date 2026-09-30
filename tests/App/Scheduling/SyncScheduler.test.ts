@@ -71,11 +71,14 @@ class FakeQueue {
   }
 }
 
-function projectNote(projectName: string, archived: boolean): ProjectNoteData {
+function projectNote(
+  projectName: string,
+  archivedAt: string | null,
+): ProjectNoteData {
   return {
-    path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
-    archived,
+    archivedAt,
     pm: 'github',
     url: 'https://github.com/acme/widgets',
     board: 'https://github.com/orgs/acme/projects/1',
@@ -112,8 +115,8 @@ describe('SyncScheduler', () => {
     // Given — a scheduler wired to two projects on a 60s interval
     const vault = new FakeVault();
     vault.projectNotes = [
-      projectNote('Acme Widgets', false),
-      projectNote('Other', false),
+      projectNote('Acme Widgets', null),
+      projectNote('Other', null),
     ];
     const queue = new FakeQueue();
     const scheduler = schedulerWith(vault, queue);
@@ -129,7 +132,7 @@ describe('SyncScheduler', () => {
   it('enqueues archived projects too, so the chain can watch them', async () => {
     // Given — an archived project note
     const vault = new FakeVault();
-    vault.projectNotes = [projectNote('Acme Widgets', true)];
+    vault.projectNotes = [projectNote('Acme Widgets', '')];
     const queue = new FakeQueue();
     const scheduler = schedulerWith(vault, queue);
     scheduler.load();

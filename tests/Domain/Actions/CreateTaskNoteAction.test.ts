@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
-import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
-import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
+import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, mirror } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
-// Fakes at the ports: record what the action asked for, so the action's own
-// behaviour (create + record, or no-op) is what's under test.
+// A fake vault at the port: a path→content map plus the create log, so the
+// action's naming and rendering decisions are what's under test.
 class FakeVault implements VaultPort {
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
@@ -24,117 +21,35 @@ class FakeVault implements VaultPort {
     this.created.push({ path, content });
   }
 
-  async writeNote(): Promise<void> {
+  async writeNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async moveFolder(): Promise<void> {}
-  async renameNote(): Promise<void> {
+  async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
-
   async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-
-  onNoteChanged(): void {
-    throw new Error('not used in this test');
-  }
-
-  onNoteDeleted(): void {
-    throw new Error('not used in this test');
-  }
+  onNoteChanged(): void {}
+  onNoteDeleted(): void {}
   onNoteRenamed(): void {}
 }
 
-class FakeSyncState implements SyncStatePort {
-  async getLastProjectUpdate(): Promise<string | null> {
-    return null;
-  }
-
-  async setLastProjectUpdate(): Promise<void> {}
-  async getArchiveBaseline(): Promise<null> {
-    return null;
-  }
-  async getWatchState(): Promise<{
-    etag: string | null;
-    cursor: string | null;
-  }> {
-    return { etag: null, cursor: null };
-  }
-
-  async setWatchState(): Promise<void> {}
-
-  async getTodoistProjectState(): Promise<null> {
-    return null;
-  }
-  async setTodoistProjectState(): Promise<void> {}
-  async getTodoistState(): Promise<null> {
-    return null;
-  }
-  async setTodoistState(): Promise<void> {}
-  async listTodoistStates(): Promise<[]> {
-    return [];
-  }
-  async removeTodoistState(): Promise<void> {}
-
-  async setArchiveBaseline(): Promise<void> {}
-  stored: TaskData[] = [];
-
-  async get(): Promise<TaskData | null> {
-    return null;
-  }
-
-  async set(status: TaskData): Promise<void> {
-    this.stored.push(status);
-  }
-
-  async findByNotePath(): Promise<TaskData | null> {
-    return null;
-  }
-
-  async remove(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
-  async setIdentity(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-
-  async getIdentity(): Promise<null> {
-    return null;
-  }
-
-  async list(): Promise<TaskData[]> {
-    return [];
-  }
-}
-
-const task: GithubTaskData = {
-  url: 'https://github.com/acme/widgets/issues/42',
-  remoteId: 42,
-  nodeId: 'I_kwDOAAAA42',
-  title: 'Fix the Bug!',
-  body: 'The bug happens when the widget is resized.',
-  state: 'open',
-  updatedAt: '2026-09-18T10:00:00Z',
-  labels: [],
-};
-
+const url = 'https://github.com/acme/widgets/issues/42';
 const templatePath = 'Templates/Task.md';
 
 const template = [
   '---',
   'affiliation: []',
-  'url:',
+  'id:',
+  'type:',
   'status:',
   'synced:',
   'created: {{date}}',
@@ -144,41 +59,44 @@ const template = [
   '---',
 ].join('\n');
 
+function input() {
+  return {
+    url,
+    title: 'Fix the Bug!',
+    body: 'The bug happens when the widget is resized.',
+    type: 'task',
+    projectName: 'Acme Widgets',
+    syncedAt: '2026-09-18T12:00:00Z',
+    statusName: 'Building',
+  };
+}
+
 describe('CreateTaskNoteAction', () => {
-  it('creates the note and writes the status record', async () => {
-    // Given — a vault with no existing note and an empty sync state
+  it('creates a slug-named note carrying id, type and status, no url', async () => {
+    // Given — a vault with no existing note and an empty registry
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
     // When — the action materialises the task note
-    await action.execute({
-      task,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
+    await action.execute(input());
 
-    // Then — the note is created at the mapped path with the mapped content
-    const { path, content } = TaskNoteMapper.map(task, {
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
-    expect(vault.created).toEqual([{ path, content }]);
-    // And the status record is written with the body hash and remote updatedAt
-    expect(syncState.stored).toEqual([
-      taskRecord({
-        url: task.url,
-        remoteId: task.remoteId,
-        nodeId: task.nodeId,
-        notePath: path,
-        body: hash(task.body),
-        updatedAt: task.updatedAt,
-        status: 'Building',
-        title: task.title,
-      }),
-    ]);
+    // Then — the note lands at the title slug
+    expect(vault.created).toHaveLength(1);
+    const { path, content } = vault.created[0]!;
+    expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
+    // And — the frontmatter carries the vault-owned uuid, type and status
+    const fields = splitFrontmatter(content)?.fields;
+    expect(fields?.get('id')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fields?.get('type')).toBe('task');
+    expect(fields?.get('status')).toBe('Building');
+    expect(content).not.toContain('url:');
+    // And — the registry record anchors the note by id with the github handle
+    expect(syncState.setCalls).toHaveLength(1);
+    const record = syncState.setCalls[0]!;
+    expect(record.id).toBe(fields?.get('id'));
+    expect(record.notePath).toBe(path);
+    expect(record.mirrors.github?.handle).toBe(url);
   });
 
   it('renders the note from the vault template', async () => {
@@ -189,20 +107,16 @@ describe('CreateTaskNoteAction', () => {
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
     // When — the action materialises the task note
-    await action.execute({
-      task,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
+    await action.execute(input());
 
-    // Then — the note content is the rendered template
-    const { path, content } = TaskNoteMapper.render(template, task, {
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
-    expect(vault.created).toEqual([{ path, content }]);
+    // Then — the rendered content keeps the template's vault-owned fields and
+    // fills the sync fields
+    expect(vault.created).toHaveLength(1);
+    const content = vault.created[0]!.content;
+    expect(content).toContain('type: task');
+    expect(content).toContain('status: Building');
+    expect(content).toContain('created: 2026-09-18');
+    expect(content).toContain('  - "[[Tasks.base|Tasks]]"');
   });
 
   it('falls back to the built-in frontmatter when the template is missing', async () => {
@@ -212,44 +126,31 @@ describe('CreateTaskNoteAction', () => {
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
     // When — the action materialises the task note
-    await action.execute({
-      task,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
+    await action.execute(input());
 
-    // Then — the note content is the built-in mapping
-    const { path, content } = TaskNoteMapper.map(task, {
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
-    expect(vault.created).toEqual([{ path, content }]);
+    // Then — the built-in mapping is used
+    expect(vault.created[0]!.content).toContain('categories: [taken]');
   });
 
-  it('is a no-op when the note already exists', async () => {
-    // Given — a vault that already holds the note
+  it('is a no-op when the issue is already registered', async () => {
+    // Given — a registry that already tracks the issue
     const vault = new FakeVault();
-    const { path } = TaskNoteMapper.map(task, {
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
-    vault.notes.set(path, 'already there');
     const syncState = new FakeSyncState();
+    syncState.records.set(
+      'existing-uuid',
+      entityRecord({
+        id: 'existing-uuid',
+        notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+        mirrors: { github: mirror(url, null) },
+      }),
+    );
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
     // When — the action runs
-    await action.execute({
-      task,
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      statusName: 'Building',
-    });
+    await action.execute(input());
 
-    // Then — nothing is created and no status record is written
+    // Then — nothing is created and no new record is written
     expect(vault.created).toEqual([]);
-    expect(syncState.stored).toEqual([]);
+    expect(syncState.setCalls).toEqual([]);
   });
 });

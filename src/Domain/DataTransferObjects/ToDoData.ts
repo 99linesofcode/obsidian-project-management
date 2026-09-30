@@ -1,17 +1,53 @@
+import { DataTransferObject } from './DataTransferObject.js';
+
 // The canonical to-do: a vault-only checklist item with no GitHub issue and no
-// board card, mirrored as a Todoist subtask. Identity fields link the vault
-// note and its Todoist twin; the content fields are the comparable shape.
-export interface ToDoData {
-  // Identity — links the representations.
-  todoistId: string;
+// board card, mirrored as a Todoist subtask. The parent to-do and owning task
+// are uuid references; the content fields are the shape the diff compares.
+export class ToDoData extends DataTransferObject {
+  id: string;
   notePath: string;
-  projectName: string;
-  taskLink: string;
-  parentTodoLink: string | null;
-  // Content — the comparable shape.
+  mirrors: Record<string, string>;
   title: string;
   status: 'open' | 'completed';
-  // A full ISO datetime stamp — the sync timestamp of the completion, e.g.
-  // 2026-09-18T12:00:00Z. Passed through verbatim; never date-only.
-  completedAt?: string;
+  completedAt: string | null;
+  parentTodo: string | null; // parent to-do's uuid
+  task: string | null; // owning task's uuid
+  createdAt: string | null;
+  updatedAt: string | null;
+
+  constructor(
+    id: string,
+    notePath: string,
+    mirrors: Record<string, string>,
+    title: string,
+    status: 'open' | 'completed',
+    completedAt: string | null,
+    parentTodo: string | null,
+    task: string | null,
+    createdAt: string | null,
+    updatedAt: string | null,
+  ) {
+    super();
+    this.id = id;
+    this.notePath = notePath;
+    this.mirrors = mirrors;
+    this.title = title;
+    this.status = status;
+    this.completedAt = completedAt;
+    this.parentTodo = parentTodo;
+    this.task = task;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+
+  // Called on DIFF VIEWS only. Identity and provenance are excluded.
+  override canonical(): string {
+    return [
+      this.title,
+      this.status,
+      this.completedAt ?? '',
+      this.parentTodo ?? '',
+      this.task ?? '',
+    ].join('\u0000');
+  }
 }

@@ -1,4 +1,6 @@
 import { laneForSection } from '../Board/laneForSection.js';
+import { Mirror } from '../DataTransferObjects/Mirror.js';
+import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { CapturedTaskNoteMapper } from '../Notes/CapturedTaskNoteMapper.js';
 import { parseChecklist, renderChecklist } from '../Notes/Checklist.js';
 import { freePath } from '../Notes/freePath.js';
@@ -10,6 +12,7 @@ import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { ToDoNoteMapper } from '../Notes/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { withBody } from '../Notes/withBody.js';
+import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
@@ -26,7 +29,7 @@ export interface CaptureTodoistCreationsInput {
 const SLICE_LABEL = 'slice';
 
 // UC: capture Todoist-created items into the vault (dt-06). A fetched item with
-// no anchored note is a creation; its kind follows its position in Todoist:
+// no anchored record is a creation; its kind follows its position in Todoist:
 //
 //   - top-level          -> captured task note affiliated to the project
 //   - under a slice twin -> captured task note affiliated to that slice
@@ -34,13 +37,14 @@ const SLICE_LABEL = 'slice';
 //   - under a to-do twin -> nested to-do (Todoist's fourth indent level)
 //
 // A captured task note is a draft: no GitHub issue, no `url` frontmatter, no
-// Status record — the `todoist` anchor and the TodoistState record are its
+// github mirror — the `todoist` mirror and the registry record are its
 // identity. Todoist-created items carry no type label until the user promotes
 // them through the existing UC21 flow, so no type is invented here. The status
 // follows the item's section (the lane whose section it sits in); a section-less
-// item lands in the default lane, a completed one in the done lane. The anchor
-// and the snapshot are stamped immediately (the echo guard): the next poll must
-// read the item as anchored, not as a fresh creation.
+// item lands in the default lane, a completed one in the done lane. The note's
+// vault-owned id, its anchor and the registry record are stamped immediately
+// (the echo guard): the next poll must read the item as anchored, not as a
+// fresh creation.
 //
 // Nothing is ever written back to Todoist from here: no issue, project or
 // section is created from the Todoist side.
@@ -71,12 +75,19 @@ export class CaptureTodoistCreationsAction {
       return;
     }
 
-    const states = (await this.syncState.listTodoistStates()).filter((state) =>
-      isMirroredPath(state.notePath, input.projectName),
+    const records = (await this.syncState.list()).filter(
+      (record) =>
+        isMirroredPath(record.notePath, input.projectName) &&
+        record.mirrors.todoist !== undefined,
     );
-    const anchored = new Set(states.map((state) => state.todoistId));
+    const anchored = new Set(
+      records.map((record) => record.mirrors.todoist?.handle ?? ''),
+    );
     const notePathById = new Map(
-      states.map((state) => [state.todoistId, state.notePath] as const),
+      records.map(
+        (record) =>
+          [record.mirrors.todoist?.handle ?? '', record.notePath] as const,
+      ),
     );
 
     const identity = await this.syncState.getIdentity(input.projectName);
@@ -84,7 +95,7 @@ export class CaptureTodoistCreationsAction {
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 
     const byId = new Map(items.map((item) => [item.id, item] as const));
-    // Parents before children: a captured parent must carry its anchor and
+    // Parents before children: a captured parent must carry its record and
     // bookkeeping before its child can affiliate to it.
     const ordered = [...items].sort(
       (a, b) => depthOf(a, byId) - depthOf(b, byId),
@@ -162,7 +173,7 @@ export class CaptureTodoistCreationsAction {
     // The lane is controlled only for a top-level task (a subtask inherits its
     // parent's section, dt-02).
     const lane = hasLanes && item.parentId === null ? statusName : null;
-    await this.stampCreation(path, item, lane);
+    await this.stampCreation(path, item, lane, input.syncedAt);
     return path;
   }
 
@@ -226,7 +237,7 @@ export class CaptureTodoistCreationsAction {
       path,
     );
     // A to-do is a subtask: its lane is inherited, so it is never controlled.
-    await this.stampCreation(path, item, null);
+    await this.stampCreation(path, item, null, input.syncedAt);
     return path;
   }
 
@@ -256,25 +267,67 @@ export class CaptureTodoistCreationsAction {
     );
   }
 
+  // Mints the note's vault-owned uuid when it has none, then writes the
+  // registry record with the todoist mirror. The base is a diff view whose
+  // parent is the parent entity's uuid, so the deletion sweep can walk the
+  // cascade.
   private async stampCreation(
     notePath: string,
     item: TodoistTaskData,
     lane: string | null,
+    syncedAt: string,
   ): Promise<void> {
-    await this.syncState.setTodoistState(notePath, {
-      url: '',
-      remoteId: 0,
-      nodeId: '',
-      todoistId: item.id,
+    const id = await this.ensureId(notePath);
+    if (id === '') {
+      return;
+    }
+    const parent = await this.parentUuid(item.parentId);
+    const base = toDiffViewWithBody(
+      new TaskData(
+        id,
+        notePath,
+        {}, // bases carry no handles
+        item.content,
+        '', // the Todoist description is not vault content
+        lane ?? '',
+        item.isCompleted ? (item.completedAt || syncedAt) : null,
+        '', // a captured draft has no vault-owned type yet
+        parent,
+        item.addedAt || null,
+        item.updatedAt || null,
+      ),
+    );
+    await this.syncState.set({
+      id,
       notePath,
-      title: item.content,
-      body: '',
-      status: lane ?? '',
-      completed: item.isCompleted,
-      parent: item.parentId,
-      labels: [...item.labels],
-      updatedAt: '',
+      mirrors: { todoist: new Mirror(item.id, base) },
     });
+  }
+
+  // The note's vault-owned uuid, minted and stamped when absent. WHY: the
+  // registry is uuid-keyed, and a captured note is created after the chain's
+  // id backfill has run, so it has no id yet.
+  private async ensureId(notePath: string): Promise<string> {
+    const note = await this.vault.getNoteByPath(notePath);
+    if (!note) {
+      return '';
+    }
+    const existing = splitFrontmatter(note.content)?.fields.get('id') ?? '';
+    if (existing !== '') {
+      return existing;
+    }
+    const id = crypto.randomUUID();
+    await stampFrontmatterField(this.vault, notePath, note.content, 'id', id);
+    return id;
+  }
+
+  // The parent entity's uuid, resolved from the parent twin id through the
+  // registry. A top-level item has none.
+  private async parentUuid(parentId: string | null): Promise<string | null> {
+    if (parentId === null) {
+      return null;
+    }
+    return (await this.syncState.findByMirror('todoist', parentId))?.id ?? null;
   }
 
   // The lane a new item's status starts in: its section's lane; a completed
