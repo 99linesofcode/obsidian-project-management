@@ -10,6 +10,7 @@ import { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/Captu
 import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
+import { CleanupNoteFrontmatterAction } from '../../../src/Domain/Actions/CleanupNoteFrontmatterAction.js';
 import { EnsureTodoistSectionsAction } from '../../../src/Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
@@ -24,7 +25,6 @@ import { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTas
 import { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
 import { VerdictResolver } from '../../../src/Domain/Reconciliation/VerdictResolver.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
-import type { ArchiveBaselineData } from '../../../src/Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectDetailData } from '../../../src/Domain/DataTransferObjects/ProjectDetailData.js';
@@ -33,22 +33,25 @@ import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/Pr
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
-import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { WatchStateData } from '../../../src/Domain/DataTransferObjects/WatchStateData.js';
 import type { CreateTodoistTaskData } from '../../../src/Domain/DataTransferObjects/CreateTodoistTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { taskRecord } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
+import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 const DONE_LANE = 'Shipped';
 
 // A vault fake that records every mutator, so a second pass's writes are
 // observable. Notes are path-keyed; the project notes are the discovery surface.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   projectNotes: ProjectNoteData[] = [];
   mutations: string[] = [];
@@ -90,100 +93,6 @@ class FakeVault implements VaultPort {
   onNoteChanged(): void {}
   onNoteDeleted(): void {}
   onNoteRenamed(): void {}
-}
-
-class FakeSyncState implements SyncStatePort {
-  statuses = new Map<string, TaskData>();
-  todoistStates = new Map<string, TaskData>();
-  identities = new Map<string, ProjectIdentityData>();
-  lastUpdates = new Map<string, string>();
-  baselines = new Map<string, ArchiveBaselineData>();
-  watches = new Map<string, WatchStateData>();
-  todoistProjects = new Map<string, TodoistProjectStateData>();
-
-  async get(url: string): Promise<TaskData | null> {
-    return this.statuses.get(url) ?? null;
-  }
-  async set(status: TaskData): Promise<void> {
-    this.statuses.set(status.url, status);
-  }
-  async findByNotePath(notePath: string): Promise<TaskData | null> {
-    for (const status of this.statuses.values()) {
-      if (status.notePath === notePath) return status;
-    }
-    return null;
-  }
-  async remove(url: string): Promise<void> {
-    this.statuses.delete(url);
-  }
-  async list(): Promise<TaskData[]> {
-    return [...this.statuses.values()];
-  }
-  async setIdentity(
-    projectName: string,
-    identity: ProjectIdentityData,
-  ): Promise<void> {
-    this.identities.set(projectName, identity);
-  }
-  async getIdentity(projectName: string): Promise<ProjectIdentityData | null> {
-    return this.identities.get(projectName) ?? null;
-  }
-  async getLastProjectUpdate(projectName: string): Promise<string | null> {
-    return this.lastUpdates.get(projectName) ?? null;
-  }
-  async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
-    this.lastUpdates.set(projectName, iso);
-  }
-  async getArchiveBaseline(
-    projectName: string,
-  ): Promise<ArchiveBaselineData | null> {
-    return this.baselines.get(projectName) ?? null;
-  }
-  async setArchiveBaseline(
-    projectName: string,
-    baseline: ArchiveBaselineData,
-  ): Promise<void> {
-    this.baselines.set(projectName, baseline);
-  }
-  async getWatchState(projectName: string): Promise<WatchStateData> {
-    return this.watches.get(projectName) ?? { etag: null, cursor: null };
-  }
-  async setWatchState(
-    projectName: string,
-    state: WatchStateData,
-  ): Promise<void> {
-    this.watches.set(projectName, state);
-  }
-  async getTodoistProjectState(
-    projectName: string,
-  ): Promise<TodoistProjectStateData | null> {
-    return this.todoistProjects.get(projectName) ?? null;
-  }
-  async setTodoistProjectState(
-    projectName: string,
-    state: TodoistProjectStateData,
-  ): Promise<void> {
-    this.todoistProjects.set(projectName, state);
-  }
-  async getTodoistState(notePath: string): Promise<TaskData | null> {
-    return this.todoistStates.get(notePath) ?? null;
-  }
-  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
-    if (state.todoistId !== '') {
-      for (const [key, value] of this.todoistStates) {
-        if (key !== notePath && value.todoistId === state.todoistId) {
-          this.todoistStates.delete(key);
-        }
-      }
-    }
-    this.todoistStates.set(notePath, state);
-  }
-  async removeTodoistState(notePath: string): Promise<void> {
-    this.todoistStates.delete(notePath);
-  }
-  async listTodoistStates(): Promise<TaskData[]> {
-    return [...this.todoistStates.values()];
-  }
 }
 
 class FakeProjectManagement implements ProjectManagementPort {
@@ -281,6 +190,7 @@ class FakeProjectManagement implements ProjectManagementPort {
       itemId: `C${this.nextCardId++}`,
       type: 'ISSUE',
       issueUrl,
+      updatedAt: null,
     });
   }
   async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
@@ -372,6 +282,9 @@ class FakeTaskManager implements TaskManagerPort {
       labels: [...(input.labels ?? [])],
       isCompleted: false,
       url: '',
+      addedAt: UPDATED_AT,
+      updatedAt: UPDATED_AT,
+      completedAt: null,
     };
     this.active.push(task);
     this.mutations.push(`createTask:${task.content}`);
@@ -405,6 +318,7 @@ class FakeTaskManager implements TaskManagerPort {
       this.completed.find((candidate) => candidate.id === id);
     if (task) {
       task.isCompleted = completed;
+      task.completedAt = completed ? UPDATED_AT : null;
       // Model the real API: a completed task leaves the active set and is only
       // visible through the completed-since window.
       this.active = this.active.filter((candidate) => candidate.id !== id);
@@ -447,11 +361,13 @@ const NOTE_PATH = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const TODO_PATH = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
 const UPDATED_AT = '2026-09-18T11:00:00Z';
+const ENTITY_ID = 'uuid-42';
 
 function taskNote(): string {
   return [
     '---',
-    `url: ${ISSUE_URL}`,
+    `id: ${ENTITY_ID}`,
+    'type: task',
     'status: Building',
     'affiliation: ["[[Acme Widgets]]"]',
     '---',
@@ -473,15 +389,40 @@ function toDoNote(): string {
   ].join('\n');
 }
 
-function projectNote(projectName: string, archived: boolean): ProjectNoteData {
+function projectNote(
+  projectName: string,
+  archivedAt: string | null,
+): ProjectNoteData {
   return {
-    path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
-    archived,
+    archivedAt,
     pm: 'github',
     url: 'https://github.com/acme/widgets',
     board: 'https://github.com/orgs/acme/projects/1',
   };
+}
+
+// The canonical base the harness seeds for the tracked issue: the diff view the
+// first pass compares against.
+function githubBase(overrides: Partial<TaskData> = {}): TaskData {
+  return taskData({
+    id: ENTITY_ID,
+    notePath: NOTE_PATH,
+    title: 'Fix the bug',
+    body: hash('- [ ] Fix the bug'),
+    status: 'Building',
+    updatedAt: UPDATED_AT,
+    type: 'task',
+    ...overrides,
+  });
+}
+
+// Seeds (or replaces) the tracked issue's registry record.
+function seedRecord(syncState: FakeSyncState, base: TaskData): void {
+  syncState.seed(entityRecord({ id: ENTITY_ID, notePath: base.notePath }), {
+    github: { handle: ISSUE_URL, base },
+  });
 }
 
 interface Harness {
@@ -501,8 +442,8 @@ function harness(): Harness {
   // The active project: pm-note, a task note with a checklist, and the to-do the
   // checklist links.
   vault.projectNotes = [
-    projectNote('Acme Widgets', false),
-    projectNote('Old Project', true),
+    projectNote('Acme Widgets', null),
+    projectNote('Old Project', ''),
   ];
   vault.notes.set(
     'Projecten/Acme Widgets/_home.md',
@@ -515,20 +456,7 @@ function harness(): Harness {
   vault.notes.set(NOTE_PATH, taskNote());
   vault.notes.set(TODO_PATH, toDoNote());
 
-  syncState.statuses.set(
-    ISSUE_URL,
-    taskRecord({
-      url: ISSUE_URL,
-      remoteId: 42,
-      nodeId: 'I',
-      notePath: NOTE_PATH,
-      title: 'Fix the bug',
-      body: hash('- [ ] Fix the bug'),
-      status: 'Building',
-      updatedAt: UPDATED_AT,
-      labels: ['type: task'],
-    }),
-  );
+  seedRecord(syncState, githubBase());
 
   syncState.identities.set('Acme Widgets', {
     repoUrl: 'https://github.com/acme/widgets',
@@ -551,6 +479,8 @@ function harness(): Harness {
         title: 'Fix the bug',
         body: '- [ ] Fix the bug',
         state: 'open',
+        createdAt: '2026-09-18T09:00:00Z',
+        lastEditedAt: UPDATED_AT,
         updatedAt: UPDATED_AT,
         labels: ['type: task'],
       },
@@ -561,6 +491,7 @@ function harness(): Harness {
         type: 'ISSUE',
         issueUrl: ISSUE_URL,
         statusOptionName: 'Building',
+        updatedAt: null,
       },
     ],
   };
@@ -610,7 +541,7 @@ function harness(): Harness {
     vault,
     applyToGithub,
     applyToVault,
-    new VerdictResolver(),
+    new VerdictResolver(DONE_LANE),
     DONE_LANE,
   );
   const applyToTodoist = new ApplyTaskToTodoistAction(
@@ -622,6 +553,8 @@ function harness(): Harness {
     todoist,
     vault,
     syncState,
+    applyToVault,
+    DONE_LANE,
   );
   const propagateTodoistDeletions = new PropagateTodoistDeletionsAction(
     todoist,
@@ -666,12 +599,7 @@ function harness(): Harness {
     syncState,
     DONE_LANE,
   );
-  const renames = new DetectNoteRenamesAction(
-    vault,
-    syncState,
-    relinkRenamedTodo,
-    relocateTaskStatus,
-  );
+  const renames = new DetectNoteRenamesAction(vault, syncState);
   const syncChecklist = new SyncChecklistAction(vault, '');
   const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
   const handleDeletedNote = new HandleDeletedNoteAction(
@@ -679,6 +607,7 @@ function harness(): Harness {
     github,
     DONE_LANE,
   );
+  const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
   const chain = new SyncProjectAction(
     vault,
     syncState,
@@ -691,22 +620,38 @@ function harness(): Harness {
     mirrorTodoStatus,
     syncTodoistTasks,
     handleDeletedNote,
+    cleanupNoteFrontmatter,
   );
 
   return { chain, vault, syncState, github, todoist };
 }
 
-// A stable fingerprint of the per-entity snapshot records, so the two runs can
-// be compared without depending on Map iteration order.
-function records(state: FakeSyncState): string {
-  const sort = (a: string, b: string) => a.localeCompare(b);
-  const statuses = [...state.statuses.values()].sort((a, b) =>
-    sort(a.url, b.url),
+// A stable fingerprint of the whole sync state — the registry plus every
+// project-level namespace — so the two runs can be compared without depending
+// on Map iteration order. The completed-since cursor is excluded: it is the
+// window watermark and legitimately advances to syncedAt on every pass, so it
+// is bookkeeping, not a reconciliation write. Everything else must be identical.
+function fingerprint(state: FakeSyncState): string {
+  const sorted = <T>(entries: Iterable<[string, T]>) =>
+    [...entries].sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(
+    {
+      records: [...state.records.values()].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      ),
+      identities: sorted(state.identities),
+      lastUpdates: sorted(state.lastUpdates),
+      baselines: sorted(state.baselines),
+      watches: sorted(state.watches),
+      todoistProjects: sorted(
+        [...state.todoistProjects.entries()].map(
+          ([name, project]) => [name, { sections: project.sections }] as const,
+        ),
+      ),
+    },
+    null,
+    2,
   );
-  const todoist = [...state.todoistStates.values()].sort((a, b) =>
-    sort(a.notePath, b.notePath),
-  );
-  return JSON.stringify({ statuses, todoist }, null, 2);
 }
 
 // A GitHub-side external change: the probe's project updatedAt advances so the
@@ -735,7 +680,7 @@ describe('SyncProjectAction double-sync invariance', () => {
     // When — the full chain runs once, reconciling the fresh state
     await h.chain.execute('Acme Widgets');
     await h.chain.execute('Old Project');
-    const afterFirst = records(h.syncState);
+    const afterFirst = fingerprint(h.syncState);
     // The first pass genuinely reconciled: it materialised the Todoist twins
     // (and stamped the vault anchors), so the second-pass assertion is not
     // vacuous.
@@ -758,7 +703,7 @@ describe('SyncProjectAction double-sync invariance', () => {
     expect(h.todoist.mutations).toEqual([]);
 
     // And — the canonical per-entity records are identical after both runs
-    expect(records(h.syncState)).toBe(afterFirst);
+    expect(fingerprint(h.syncState)).toBe(afterFirst);
   });
 
   it('does not advance the cursor when an apply fails, and retries next pass', async () => {
@@ -766,18 +711,9 @@ describe('SyncProjectAction double-sync invariance', () => {
     // GitHub write that throws on the first attempt
     const h = harness();
     h.github.detail.issues[0]!.body = '- [ ] Old text';
-    h.syncState.statuses.set(
-      ISSUE_URL,
-      taskRecord({
-        url: ISSUE_URL,
-        remoteId: 42,
-        nodeId: 'I',
-        notePath: NOTE_PATH,
-        title: 'Fix the bug',
-        body: hash('- [ ] Old text'),
-        status: 'Building',
-        updatedAt: UPDATED_AT,
-      }),
+    seedRecord(
+      h.syncState,
+      githubBase({ body: hash('- [ ] Old text') }),
     );
     let failNext = true;
     const original = h.github.updateTask.bind(h.github);
@@ -810,7 +746,7 @@ describe('SyncProjectAction double-sync invariance', () => {
 describe('SyncProjectAction status cascade', () => {
   it('completes a done task to-dos when the vault edit drove the status', async () => {
     // Given — the user set the note's status to the done lane; the remote is
-    // still open and the snapshot still reads Building
+    // still open and the base still reads Building
     const h = harness();
     h.vault.notes.set(NOTE_PATH, doneTaskNote());
 
@@ -823,23 +759,16 @@ describe('SyncProjectAction status cascade', () => {
   });
 
   it('completes a done task to-dos when the status already arrived from a remote', async () => {
-    // Given — the absorber already wrote the done status; the snapshot and the
-    // remote agree, so the GitHub half writes nothing
+    // Given — the base already reads done; the remote and the vault agree, so
+    // the GitHub half writes nothing
     const h = harness();
     h.vault.notes.set(NOTE_PATH, doneTaskNote());
-    h.syncState.statuses.set(
-      ISSUE_URL,
-      taskRecord({
-        url: ISSUE_URL,
-        remoteId: 42,
-        nodeId: 'I',
-        notePath: NOTE_PATH,
-        title: 'Fix the bug',
-        body: hash('- [ ] Fix the bug'),
+    seedRecord(
+      h.syncState,
+      githubBase({
         status: DONE_LANE,
-        completed: true,
-        updatedAt: UPDATED_AT,
-        labels: ['type: task'],
+        completedAt: '',
+        body: hash('- [ ] Fix the bug'),
       }),
     );
     h.github.detail.issues[0]!.state = 'closed';
@@ -864,8 +793,8 @@ describe('SyncProjectAction deletion sweep', () => {
     // its Todoist twin
     const h = harness();
     await h.chain.execute('Acme Widgets');
-    expect(h.syncState.statuses.has(ISSUE_URL)).toBe(true);
-    expect(h.syncState.todoistStates.has(NOTE_PATH)).toBe(true);
+    expect(await h.syncState.findByMirror('github', ISSUE_URL)).not.toBeNull();
+    expect(await h.syncState.findByNotePath(NOTE_PATH)).not.toBeNull();
 
     // And — the user deletes the task note
     h.vault.notes.delete(NOTE_PATH);
@@ -879,7 +808,7 @@ describe('SyncProjectAction deletion sweep', () => {
     // Then — the card is deleted, the issue closed and the record removed
     expect(h.github.mutations).toContain(`deleteCard:PVT:${ISSUE_URL}`);
     expect(h.github.mutations).toContain(`setTaskState:${ISSUE_URL}:closed`);
-    expect(h.syncState.statuses.has(ISSUE_URL)).toBe(false);
+    expect(await h.syncState.findByMirror('github', ISSUE_URL)).toBeNull();
     expect(h.github.detail.cards).toEqual([]);
 
     // And — the Todoist twin is deleted (the API cascades the to-do subtask
@@ -887,8 +816,8 @@ describe('SyncProjectAction deletion sweep', () => {
     expect(h.todoist.mutations).toContain(`deleteTask:${TASK_TWIN}`);
     expect(h.todoist.active).toEqual([]);
     expect(h.todoist.completed).toEqual([]);
-    expect(h.syncState.todoistStates.has(NOTE_PATH)).toBe(false);
-    expect(h.syncState.todoistStates.has(TODO_PATH)).toBe(false);
+    expect(await h.syncState.findByNotePath(NOTE_PATH)).toBeNull();
+    expect(await h.syncState.findByNotePath(TODO_PATH)).toBeNull();
 
     // And — the mutator logs are cleared, then two more passes run
     h.vault.mutations = [];
@@ -910,32 +839,25 @@ describe('SyncProjectAction deletion sweep', () => {
   });
 });
 
-// dt-17 churn fix: once a task/to-do has completed and its snapshot record
-// carries the stamp, no later pass may re-complete, re-archive or re-write it —
-// even after the completed-since window has aged past the completion and the
-// twin is returned by neither fetch. The mirror policy (dt-22) keeps the
-// completed twin; the settle gate stops the recreate-every-tick loop.
+// dt-17 churn fix: once a task/to-do has completed and its base carries the
+// stamp, no later pass may re-complete, re-archive or re-write it — even after
+// the completed-since window has aged past the completion and the twin is
+// returned by neither fetch. The mirror policy (dt-22) keeps the completed twin;
+// the settle gate stops the recreate-every-tick loop.
 describe('SyncProjectAction completion settle', () => {
   it('performs zero completion writes on N passes after a completion settles', async () => {
     // Given — a task note in the done lane with its checklist line already
-    // checked, its issue closed and its card in the done lane, and a snapshot
-    // that already reads done — so the only remaining work is completing the
+    // checked, its issue closed and its card in the done lane, and a base that
+    // already reads done — so the only remaining work is completing the
     // still-open to-do and materialising the twins
     const h = harness();
     h.vault.notes.set(NOTE_PATH, doneTaskNote().replace('- [ ]', '- [x]'));
-    h.syncState.statuses.set(
-      ISSUE_URL,
-      taskRecord({
-        url: ISSUE_URL,
-        remoteId: 42,
-        nodeId: 'I',
-        notePath: NOTE_PATH,
-        title: 'Fix the bug',
-        body: hash('- [x] Fix the bug'),
+    seedRecord(
+      h.syncState,
+      githubBase({
         status: DONE_LANE,
-        completed: true,
-        updatedAt: UPDATED_AT,
-        labels: ['type: task'],
+        completedAt: '',
+        body: hash('- [x] Fix the bug'),
       }),
     );
     h.github.detail.issues[0]!.body = '- [x] Fix the bug';
@@ -1127,18 +1049,18 @@ describe('SyncProjectAction checklist mirror from GitHub', () => {
     // And — its Todoist twin is deleted and its record evicted
     expect(h.todoist.mutations).toContain(`deleteTask:${TODO_TWIN}`);
     expect(h.todoist.active.map((task) => task.id)).not.toContain(TODO_TWIN);
-    expect(h.syncState.todoistStates.has(TODO_PATH)).toBe(false);
+    expect(await h.syncState.findByNotePath(TODO_PATH)).toBeNull();
 
     // And — nothing else is touched: the task twin and its record survive
     expect(h.todoist.active.map((task) => task.id)).toContain(TASK_TWIN);
-    expect(h.syncState.todoistStates.has(NOTE_PATH)).toBe(true);
+    expect(await h.syncState.findByNotePath(NOTE_PATH)).not.toBeNull();
   });
 });
 
-// Reopen after the deletion sweep: fix A materialises only OPEN untracked
-// issues, so reopening the swept issue makes it materialise again — a fresh
-// note, a NEW board card and a recreated Todoist twin — and the system then
-// converges (the next pass writes nothing).
+// Reopen after the deletion sweep: the GitHub half materialises only OPEN
+// untracked issues, so reopening the swept issue makes it materialise again — a
+// fresh note, a NEW board card and a recreated Todoist twin — and the system
+// then converges (the next pass writes nothing).
 describe('SyncProjectAction reopen after delete', () => {
   it('re-materialises the note, adds a new card and recreates the twin when the issue is reopened', async () => {
     // Given — a settled task whose note is deleted and swept
@@ -1146,7 +1068,7 @@ describe('SyncProjectAction reopen after delete', () => {
     await h.chain.execute('Acme Widgets');
     h.vault.notes.delete(NOTE_PATH);
     await h.chain.execute('Acme Widgets');
-    expect(h.syncState.statuses.has(ISSUE_URL)).toBe(false);
+    expect(await h.syncState.findByMirror('github', ISSUE_URL)).toBeNull();
     expect(h.github.detail.cards).toEqual([]);
     expect(h.todoist.active).toEqual([]);
 
@@ -1157,28 +1079,27 @@ describe('SyncProjectAction reopen after delete', () => {
     // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the open untracked issue materialises a fresh note
-    expect(h.vault.notes.has(NOTE_PATH)).toBe(true);
+    // Then — the open untracked issue materialises a fresh note at the slug path
+    const freshPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    expect(h.vault.notes.has(freshPath)).toBe(true);
 
     // And — a NEW board card is added in the default lane
     expect(h.github.mutations).toContain(`addBoardItem:${ISSUE_URL}`);
     expect(h.github.detail.cards).toHaveLength(1);
     expect(h.github.detail.cards[0]!.statusOptionName).toBe('Unshaped');
 
-    // And — the task and its to-do twin are recreated by the projection. The
-    // to-do note gets a `-2` slug: the sweep leaves the old to-do note orphaned
-    // (only its twin is cascaded away), so the checklist promotes the item at
-    // the next free slug and then trashes the orphan in the same pass.
+    // And — the task and its to-do twin are recreated by the projection
     expect(h.todoist.active).toHaveLength(2);
     const taskTwin = h.todoist.active.find((task) => task.parentId === null);
     expect(taskTwin).toBeDefined();
     expect(
       h.todoist.active.some((task) => task.parentId === taskTwin!.id),
     ).toBe(true);
-    expect(h.syncState.todoistStates.has(NOTE_PATH)).toBe(true);
+    expect(await h.syncState.findByNotePath(freshPath)).not.toBeNull();
+    const records = await h.syncState.list();
     expect(
-      [...h.syncState.todoistStates.keys()].some((path) =>
-        path.startsWith('Projecten/Acme Widgets/todos/'),
+      records.some((record) =>
+        record.notePath.startsWith('Projecten/Acme Widgets/todos/'),
       ),
     ).toBe(true);
 
@@ -1209,6 +1130,7 @@ describe('SyncProjectAction completed-twin churn', () => {
       capturedPath,
       [
         '---',
+        'id: uuid-captured',
         'status: Unshaped',
         'affiliation: ["[[Acme Widgets]]"]',
         `todoist: ${capturedTwin}`,
@@ -1216,15 +1138,20 @@ describe('SyncProjectAction completed-twin churn', () => {
         '- [ ] Captured draft',
       ].join('\n'),
     );
-    h.syncState.todoistStates.set(
-      capturedPath,
-      taskRecord({
-        todoistId: capturedTwin,
-        notePath: capturedPath,
-        title: 'Captured draft',
-        status: 'Unshaped',
-        completed: true,
-      }),
+    h.syncState.seed(
+      entityRecord({ id: 'uuid-captured', notePath: capturedPath }),
+      {
+        todoist: {
+          handle: capturedTwin,
+          base: taskData({
+            id: 'uuid-captured',
+            notePath: capturedPath,
+            title: 'Captured draft',
+            status: 'Unshaped',
+            completedAt: '',
+          }),
+        },
+      },
     );
     h.todoist.completed.push({
       id: capturedTwin,
@@ -1235,6 +1162,9 @@ describe('SyncProjectAction completed-twin churn', () => {
       labels: ['task'],
       isCompleted: true,
       url: '',
+      addedAt: UPDATED_AT,
+      updatedAt: UPDATED_AT,
+      completedAt: UPDATED_AT,
     });
 
     // And — the captured note vanishes
@@ -1247,7 +1177,7 @@ describe('SyncProjectAction completed-twin churn', () => {
     await h.chain.execute('Acme Widgets');
 
     // Then — the stale record is evicted and the twin deleted
-    expect(h.syncState.todoistStates.has(capturedPath)).toBe(false);
+    expect(await h.syncState.findByNotePath(capturedPath)).toBeNull();
     expect(h.todoist.active.map((task) => task.id)).not.toContain(capturedTwin);
     expect(h.todoist.completed.map((task) => task.id)).not.toContain(
       capturedTwin,
@@ -1265,7 +1195,7 @@ describe('SyncProjectAction completed-twin churn', () => {
     expect(
       h.todoist.mutations.filter((m) => m.startsWith('createTask:')),
     ).toEqual([]);
-    expect(h.syncState.todoistStates.has(capturedPath)).toBe(false);
+    expect(await h.syncState.findByNotePath(capturedPath)).toBeNull();
     expect(h.vault.mutations).toEqual([]);
     expect(h.github.mutations).toEqual([]);
     expect(h.todoist.mutations).toEqual([]);

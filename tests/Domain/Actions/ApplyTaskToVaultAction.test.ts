@@ -7,12 +7,17 @@ import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // A fake vault that records every mutator, so the writer's field-level gates
 // and its path decisions are what's under test.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
   written: Array<{ path: string; content: string }> = [];
@@ -75,7 +80,6 @@ function task(overrides: Partial<TaskData> = {}): TaskData {
 function noteFor(t: TaskData): string {
   return TaskNoteMapper.map(
     {
-      id: t.id,
       type: t.type,
       title: t.title,
       body: t.body,
@@ -102,14 +106,9 @@ function seedRecord(
   syncState: FakeSyncState,
   base: TaskData | null = null,
 ): void {
-  syncState.records.set(
-    'uuid-42',
-    entityRecord({
-      id: 'uuid-42',
-      notePath,
-      mirrors: { github: mirror(url, base) },
-    }),
-  );
+  syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+    github: { handle: url, base },
+  });
 }
 
 describe('ApplyTaskToVaultAction', () => {
@@ -135,7 +134,7 @@ describe('ApplyTaskToVaultAction', () => {
     const record = await syncState.findByMirror('github', url);
     expect(record?.notePath).toBe(notePath);
     // And — a pull advanced the github base after the durable write
-    expect(record?.mirrors.github?.base?.body).toBe(hash(task().body));
+    expect(syncState.baseOf(record!.id, 'github')?.body).toBe(hash(task().body));
   });
 
   it('renames the note when the title changed', async () => {
@@ -190,7 +189,10 @@ describe('ApplyTaskToVaultAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
-    vault.notes.set(notePath, noteFor(task()).replace('id: ', 'todoist: T9\nid: '));
+    vault.notes.set(
+      notePath,
+      noteFor(task()).replace('---\n', '---\ntodoist: T9\n'),
+    );
     const action = makeAction(vault, syncState);
     const changed = task({ body: 'The bug now also happens on resize.' });
 
@@ -278,7 +280,6 @@ describe('ApplyTaskToVaultAction', () => {
     const expected = TaskNoteMapper.render(
       template,
       {
-        id: changed.id,
         type: changed.type,
         title: changed.title,
         body: changed.body,
@@ -412,9 +413,8 @@ describe('ApplyTaskToVaultAction', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const slicePath = 'Projecten/Acme Widgets/taken/the-slice.md';
-    syncState.records.set(
-      'slice-uuid',
-      entityRecord({ id: 'slice-uuid', notePath: slicePath, mirrors: {} }),
+    syncState.seed(
+      entityRecord({ id: 'slice-uuid', notePath: slicePath }),
     );
     seedRecord(syncState);
     const content = noteFor(task()).replace(
@@ -435,8 +435,7 @@ describe('ApplyTaskToVaultAction', () => {
     });
 
     // Then — the applied base carries the resolved parent uuid
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.parent).toBe('slice-uuid');
+    expect(syncState.baseOf('uuid-42', 'github')?.parent).toBe('slice-uuid');
   });
 
   it('advances mirrors.github.base only on a pull', async () => {
@@ -465,8 +464,7 @@ describe('ApplyTaskToVaultAction', () => {
     });
 
     // Then — the base advanced to the applied remote state, after the write
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.body).toBe(hash(changed.body));
+    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(hash(changed.body));
     expect(vault.written).toHaveLength(1);
   });
 
@@ -484,7 +482,7 @@ describe('ApplyTaskToVaultAction', () => {
     seedRecord(syncState, oldBase);
     vault.notes.set(notePath, noteFor(task()));
     const action = makeAction(vault, syncState);
-    const before = (await syncState.get('uuid-42'))?.mirrors.github?.base;
+    const before = syncState.baseOf('uuid-42', 'github');
 
     // When — the vault won (a push)
     await action.execute({
@@ -496,7 +494,7 @@ describe('ApplyTaskToVaultAction', () => {
     });
 
     // Then — the base is untouched: the GitHub writer owns it
-    const after = (await syncState.get('uuid-42'))?.mirrors.github?.base;
+    const after = syncState.baseOf('uuid-42', 'github');
     expect(after).toBe(before);
   });
 });

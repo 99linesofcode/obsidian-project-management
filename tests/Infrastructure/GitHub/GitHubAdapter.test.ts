@@ -703,12 +703,14 @@ describe('GitHubAdapter', () => {
         type: 'ISSUE',
         issueUrl: 'https://github.com/acme/widgets/issues/42',
         statusOptionName: 'Done',
+        updatedAt: null,
       },
       {
         itemId: 'PVTI_2',
         type: 'DRAFT_ISSUE',
         issueUrl: undefined,
         statusOptionName: undefined,
+        updatedAt: null,
       },
     ]);
     // And the query targeted the project node id
@@ -751,6 +753,7 @@ describe('GitHubAdapter', () => {
         type: 'DRAFT_ISSUE',
         draftTitle: 'An idea',
         draftBody: 'The draft body.',
+        updatedAt: null,
       },
     ]);
     // And the query asks for the draft content
@@ -797,6 +800,7 @@ describe('GitHubAdapter', () => {
                 {
                   id: 'PVTI_1',
                   type: 'ISSUE',
+                  updatedAt: '2026-09-18T12:00:00Z',
                   content: {
                     url: 'https://github.com/acme/widgets/issues/42',
                   },
@@ -845,6 +849,7 @@ describe('GitHubAdapter', () => {
         type: 'ISSUE',
         issueUrl: 'https://github.com/acme/widgets/issues/42',
         statusOptionName: 'Building',
+        updatedAt: '2026-09-18T12:00:00Z',
       },
     ]);
   });

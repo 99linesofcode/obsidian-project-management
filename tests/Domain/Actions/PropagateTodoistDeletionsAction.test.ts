@@ -4,7 +4,7 @@ import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the vault holds the mirrored notes (a missing path is a
@@ -13,6 +13,11 @@ import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 // evictions. The action's decisions — which twins go, which records are evicted
 // with them — are what's under test.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
@@ -106,19 +111,12 @@ function record(
   handle: string,
   parent: string | null,
 ): void {
-  syncState.records.set(
-    id,
-    entityRecord({
-      id,
-      notePath,
-      mirrors: {
-        todoist: mirror(
-          handle,
-          taskData({ id, notePath, parent, status: '' }),
-        ),
-      },
-    }),
-  );
+  syncState.seed(entityRecord({ id, notePath }), {
+    todoist: {
+      handle,
+      base: taskData({ id, notePath, parent, status: '' }),
+    },
+  });
 }
 
 function setup() {
@@ -188,19 +186,16 @@ describe('PropagateTodoistDeletionsAction', () => {
   it('never deletes a twin because it completed (deletion keys on the note)', async () => {
     // Given — a completed item: absent from the active set, but its note exists
     const { action, vault, taskManager, syncState } = setup();
-    syncState.records.set(
-      'uuid-todo',
-      entityRecord({
-        id: 'uuid-todo',
-        notePath: todoPath,
-        mirrors: {
-          todoist: mirror(
-            'T7',
-            taskData({ id: 'uuid-todo', notePath: todoPath, parent: 'uuid-task' }),
-          ),
-        },
-      }),
-    );
+    syncState.seed(entityRecord({ id: 'uuid-todo', notePath: todoPath }), {
+      todoist: {
+        handle: 'T7',
+        base: taskData({
+          id: 'uuid-todo',
+          notePath: todoPath,
+          parent: 'uuid-task',
+        }),
+      },
+    });
     vault.notes.set(todoPath, '---\nstatus: completed\n---\n');
 
     // When — deletions are propagated

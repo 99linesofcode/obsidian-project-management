@@ -6,10 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 // machinery the scheduler test already uses.
 const { TFile } = vi.hoisted(() => {
   class TFile {
+    stat: { mtime: number };
     constructor(
       public path: string,
       public extension: string,
-    ) {}
+      stat?: { mtime: number },
+    ) {
+      this.stat = stat ?? { mtime: 0 };
+    }
   }
   return { TFile };
 });
@@ -170,6 +174,30 @@ describe('VaultAdapter.onNoteRenamed', () => {
 
     // Then — the callback is not invoked
     expect(renamed).toEqual([]);
+  });
+});
+
+describe('VaultAdapter.modifiedTime', () => {
+  it('returns the file mtime as ISO 8601 and null for an unknown path', async () => {
+    // Given — a vault holding one note with a known stat mtime
+    const file = new TFile(
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+      'md',
+      { mtime: 1758196800000 },
+    );
+    const vault = {
+      getAbstractFileByPath: (path: string) =>
+        path === file.path ? file : null,
+    };
+    const app = { vault } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    // When — the note's modified time is read
+    const iso = await adapter.modifiedTime(file.path);
+
+    // Then — it is the mtime as ISO 8601, and an absent note is null
+    expect(iso).toBe(new Date(1758196800000).toISOString());
+    expect(await adapter.modifiedTime('Projecten/missing.md')).toBeNull();
   });
 });
 

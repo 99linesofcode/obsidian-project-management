@@ -79,7 +79,7 @@ export class RelinkRenamedTodoAction {
   ): Promise<void> {
     const record = await this.syncState.findByNotePath(oldPath);
     if (record) {
-      await this.syncState.set({ ...record, notePath: newPath });
+      await this.syncState.setEntity({ ...record, notePath: newPath });
     }
   }
 }

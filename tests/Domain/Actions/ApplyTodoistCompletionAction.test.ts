@@ -12,10 +12,15 @@ import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData, todoistTask } from '../../helpers/records.js';
+import { entityRecord, taskData, todoistTask } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   writes: Array<{ path: string; content: string }> = [];
 
@@ -133,7 +138,7 @@ const todoPath = 'Projecten/Acme Widgets/todos/step-one.md';
 
 function taskNote(status: string): string {
   return TaskNoteMapper.map(
-    { id: 'uuid-task', type: 'task', title: 'fix the widget', body: '', createdAt: null },
+    { type: 'task', title: 'fix the widget', body: '', createdAt: null },
     { projectName, syncedAt, statusName: status },
   ).content;
 }
@@ -155,10 +160,9 @@ function seedRecord(
   handle: string,
   base: TaskData,
 ): void {
-  syncState.records.set(
-    id,
-    entityRecord({ id, notePath, mirrors: { todoist: mirror(handle, base) } }),
-  );
+  syncState.seed(entityRecord({ id, notePath }), {
+    todoist: { handle, base },
+  });
 }
 
 function setup() {
@@ -212,9 +216,9 @@ describe('ApplyTodoistCompletionAction', () => {
     // now says completed
     expect(vault.notes.get(todoPath)).toContain('status: completed');
     expect(vault.notes.get(todoPath)).toContain(`completed: ${syncedAt}`);
-    const record = await syncState.get('uuid-todo');
-    expect(record?.mirrors.todoist?.base?.completedAt).not.toBeNull();
-    expect(record?.mirrors.todoist?.base?.status).toBe('completed');
+    const base = syncState.baseOf('uuid-todo', 'todoist');
+    expect(base?.completedAt).not.toBeNull();
+    expect(base?.status).toBe('completed');
   });
 
   it('completes a TASK twin: the note takes the done lane and the base is stamped', async () => {
@@ -238,9 +242,9 @@ describe('ApplyTodoistCompletionAction', () => {
     // Then — the note is done and the todoist base is stamped (the ownership
     // fix: a task twin is no longer left to the task-side reconciliation)
     expect(vault.notes.get(taskPath)).toContain(`status: ${doneLane}`);
-    const record = await syncState.get('uuid-task');
-    expect(record?.mirrors.todoist?.base?.status).toBe(doneLane);
-    expect(record?.mirrors.todoist?.base?.completedAt).toBe(cursor);
+    const base = syncState.baseOf('uuid-task', 'todoist');
+    expect(base?.status).toBe(doneLane);
+    expect(base?.completedAt).toBe(cursor);
   });
 
   it('regression: a task twin completed remotely makes an open vault/GitHub task done', async () => {
@@ -290,8 +294,8 @@ describe('ApplyTodoistCompletionAction', () => {
     // And the to-do is NOT reopened (the cascade's asymmetry)
     expect(vault.notes.get(todoPath)).toContain('status: completed');
     // And the base now says open
-    const record = await syncState.get('uuid-task');
-    expect(record?.mirrors.todoist?.base?.completedAt).toBeNull();
+    const base = syncState.baseOf('uuid-task', 'todoist');
+    expect(base?.completedAt).toBeNull();
   });
 
   it('clears the completion stamp when Todoist reopened a to-do twin', async () => {

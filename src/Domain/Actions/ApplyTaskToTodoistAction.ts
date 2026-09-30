@@ -1,9 +1,8 @@
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { sameLabels } from '../Labels/sameLabels.js';
+import { projectFromNotePath } from '../Notes/projectFromNotePath.js';
 import { projectFromTodoPath } from '../Notes/projectFromTodoPath.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
-import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
@@ -23,9 +22,8 @@ export interface ApplyTaskToTodoistInput {
   projectId: string;
   sectionId: string | null;
   parentId: string | null;
-  // The derived label set (dt-09) and the issue deep link (empty for a draft).
+  // The derived label set (dt-09).
   labels: string[];
-  description: string;
   // The vault note the task mirrors, for the anchor and the registry record.
   notePath: string;
   noteContent: string;
@@ -33,6 +31,9 @@ export interface ApplyTaskToTodoistInput {
   // The registry record the caller already resolved, when it has one. Falls
   // back to a note-path lookup so the writer stays usable on its own.
   record?: EntityRecord | null;
+  // The todoist mirror handle the caller resolved from the registry's port
+  // items. The handle is not on the entity in v3, so the caller passes it.
+  handle?: string | null;
 }
 
 export interface ApplyToDoToTodoistInput {
@@ -48,6 +49,9 @@ export interface ApplyToDoToTodoistInput {
   noteContent: string;
   syncedAt: string;
   record?: EntityRecord | null;
+  // The todoist mirror handle the caller resolved from the registry's port
+  // items.
+  handle?: string | null;
 }
 
 // The label every to-do carries (dt-09); the label set is derived, never
@@ -75,7 +79,9 @@ export class ApplyTaskToTodoistAction {
   // child under its slice). A settled twin is left untouched.
   async executeTask(input: ApplyTaskToTodoistInput): Promise<string> {
     const record = await this.resolveRecord(input.record, input.notePath);
-    const handle = record?.mirrors.todoist?.handle ?? null;
+    const handle =
+      input.handle ?? (await this.lookupHandle(record, input.notePath));
+    const base = await this.mirrorBase(handle);
     const desired = {
       content: input.task.title,
       labels: input.labels,
@@ -89,6 +95,11 @@ export class ApplyTaskToTodoistAction {
     const current = input.current;
 
     if (handle !== null && current && matches(desired, current)) {
+      // A settled twin still advances the base: after the fingerprint widened,
+      // an old-format digest reads as a change on both sides, and this skip is
+      // the repair path that rewrites the base to the current digest without a
+      // remote write.
+      await this.advanceBase(input, record, handle, desired);
       return handle;
     }
 
@@ -100,7 +111,6 @@ export class ApplyTaskToTodoistAction {
         ...(input.parentId === null ? {} : { parentId: input.parentId }),
         content: desired.content,
         labels: desired.labels,
-        description: input.description,
       });
       await stampFrontmatterField(
         this.vault,
@@ -123,7 +133,7 @@ export class ApplyTaskToTodoistAction {
     // re-completed and re-stamped on every pass once the completed-since window
     // has aged past its completion. An active vault reopens it.
     if (!current) {
-      if (desired.isCompleted && baseDone(record)) {
+      if (desired.isCompleted && baseDone(base)) {
         return id;
       }
       if (!desired.isCompleted) {
@@ -170,7 +180,8 @@ export class ApplyTaskToTodoistAction {
   // absorbed by ApplyTodoistCompletionAction before the projection runs).
   async executeToDo(input: ApplyToDoToTodoistInput): Promise<string> {
     const record = await this.resolveRecord(input.record, input.notePath);
-    const handle = record?.mirrors.todoist?.handle ?? null;
+    const handle =
+      input.handle ?? (await this.lookupHandle(record, input.notePath));
     // A to-do's identity is its note in the project's to-do folder. Anything
     // else — a legacy bare-stem path above all — must never create, stamp or
     // write, or the twin is re-created and re-captured every tick. Refuse and
@@ -190,7 +201,8 @@ export class ApplyTaskToTodoistAction {
       isCompleted: input.todo.status === 'completed',
     };
     const current = input.current;
-    const baseCompleted = baseDone(record);
+    const base = await this.mirrorBase(handle);
+    const baseCompleted = baseDone(base);
 
     if (handle === null) {
       await this.taskManager.ensureLabel(TODO_LABEL);
@@ -274,6 +286,27 @@ export class ApplyTaskToTodoistAction {
     return record ?? (await this.syncState.findByNotePath(notePath));
   }
 
+  // The entity's todoist handle, resolved from the registry's port items when
+  // the caller did not pass one. The entity no longer carries the handle, so a
+  // standalone call still anchors correctly.
+  private async lookupHandle(
+    record: EntityRecord | null,
+    notePath: string,
+  ): Promise<string | null> {
+    if (record === null) {
+      return null;
+    }
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectFromNotePath(notePath),
+      'todoist',
+    )) {
+      if (item.entityId === record.id) {
+        return handle;
+      }
+    }
+    return null;
+  }
+
   // Stores what the twin now carries as the todoist mirror's base. WHY the base
   // advances only here, after every write above resolved: a base advanced
   // before the write lands makes the next pass compare the twin against a base
@@ -327,9 +360,9 @@ export class ApplyTaskToTodoistAction {
     });
   }
 
-  // Persists the todoist mirror on the entity record, creating the record when
-  // the writer is the first to mirror the note (a vault to-do). The base is a
-  // DIFF VIEW (body = digest), matching what the next diff reads.
+  // Persists the todoist mirror item, creating the hub entity when the writer
+  // is the first to mirror the note (a vault to-do). The base is a DIFF VIEW
+  // (body = digest), matching what the next diff reads.
   private async writeBase(
     record: EntityRecord | null,
     notePath: string,
@@ -343,7 +376,7 @@ export class ApplyTaskToTodoistAction {
       updatedAt: string | null;
     },
   ): Promise<void> {
-    const id = record?.id ?? (await this.noteId(notePath));
+    const id = record?.id ?? (await this.ensureEntity(notePath));
     if (id === '') {
       return;
     }
@@ -362,11 +395,27 @@ export class ApplyTaskToTodoistAction {
         shape.updatedAt,
       ),
     );
-    const mirrors = {
-      ...(record?.mirrors ?? {}),
-      todoist: new Mirror(handle, base),
-    };
-    await this.syncState.set({ id, notePath, mirrors });
+    // Skip the write when the stored base already carries this diff view: the
+    // no-op skip path advances the base only to repair a stale digest, never to
+    // rewrite an unchanged one on every pass.
+    const existing = await this.mirrorBase(handle);
+    if (existing !== null && existing.canonical() === base.canonical()) {
+      return;
+    }
+    await this.syncState.setMirrorItem(
+      projectFromNotePath(notePath),
+      'todoist',
+      handle,
+      { entityId: id, base },
+    );
+  }
+
+  // The todoist mirror's stored base for a handle, or null when no item exists.
+  private async mirrorBase(handle: string | null): Promise<TaskData | null> {
+    if (handle === null) {
+      return null;
+    }
+    return (await this.syncState.findMirrorItem('todoist', handle))?.base ?? null;
   }
 
   // The parent entity's uuid, resolved from the parent twin id through the
@@ -376,18 +425,29 @@ export class ApplyTaskToTodoistAction {
     if (parentId === null) {
       return null;
     }
-    return (await this.syncState.findByMirror('todoist', parentId))?.id ?? null;
+    return (await this.syncState.findMirrorItem('todoist', parentId))?.entityId ?? null;
   }
 
-  // The vault-owned uuid of a note, read from its frontmatter id. Used when no
-  // registry record exists yet (the writer is the first to mirror the note).
-  private async noteId(notePath: string): Promise<string> {
-    const note = await this.vault.getNoteByPath(notePath);
-    if (note === null) {
-      return '';
+  // The vault-owned uuid of a note, minted at record creation when the writer
+  // is the first to mirror the note. The registry is the id's home now — the
+  // note frontmatter no longer carries one (dt-20) — so an unregistered note
+  // gets a fresh entity before its mirror item is written.
+  private async ensureEntity(notePath: string): Promise<string> {
+    const existing = await this.syncState.findByNotePath(notePath);
+    if (existing !== null) {
+      return existing.id;
     }
-    return splitFrontmatter(note.content)?.fields.get('id') ?? '';
+    const id = crypto.randomUUID();
+    await this.syncState.setEntity({ id, notePath });
+    return id;
   }
+}
+
+// Whether the stored todoist base already records the item as completed. A
+// completed base is what tells our own close from a remote one (the echo
+// guard).
+function baseDone(base: TaskData | null): boolean {
+  return base !== null && base.completedAt !== null;
 }
 
 // Whether the twin already carries the desired shape. A null desired section
@@ -416,12 +476,4 @@ function matches(
     return false;
   }
   return current.isCompleted === desired.isCompleted;
-}
-
-// Whether the record's todoist base already records the item as completed. A
-// completed base is what tells our own close from a remote one (the echo
-// guard).
-function baseDone(record: EntityRecord | null): boolean {
-  const base = record?.mirrors.todoist?.base ?? null;
-  return base !== null && base.completedAt !== null;
 }

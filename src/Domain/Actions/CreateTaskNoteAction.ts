@@ -1,4 +1,3 @@
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { freePath } from '../Notes/freePath.js';
 import { TaskNoteMapper } from '../Notes/TaskNoteMapper.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -34,7 +33,7 @@ export class CreateTaskNoteAction {
     // any task with the same title, so path existence no longer means "ours".
     if (
       input.url !== '' &&
-      (await this.syncState.findByMirror('github', input.url)) !== null
+      (await this.syncState.findMirrorItem('github', input.url)) !== null
     ) {
       return;
     }
@@ -44,7 +43,6 @@ export class CreateTaskNoteAction {
     const { path: base, content } = TaskNoteMapper.render(
       template,
       {
-        id,
         type: input.type,
         title: input.title,
         body: input.body,
@@ -61,12 +59,13 @@ export class CreateTaskNoteAction {
     const path = await freePath(this.vault, base);
 
     await this.vault.createNote(path, content);
-    await this.syncState.set({
-      id,
-      notePath: path,
-      mirrors:
-        input.url === '' ? {} : { github: new Mirror(input.url, null) },
-    });
+    await this.syncState.setEntity({ id, notePath: path });
+    if (input.url !== '') {
+      await this.syncState.setMirrorItem(input.projectName, 'github', input.url, {
+        entityId: id,
+        base: null,
+      });
+    }
   }
 
   // The template note's content, or null when it does not exist — render

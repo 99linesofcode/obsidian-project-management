@@ -1,7 +1,10 @@
-import { Mirror } from '../../src/Domain/DataTransferObjects/Mirror.js';
 import { TaskData } from '../../src/Domain/DataTransferObjects/TaskData.js';
 import type { TodoistTaskData } from '../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { EntityRecord } from '../../src/Domain/Ports/SyncStatePort.js';
+import type {
+  EntityRecord,
+  MirrorItem,
+  PortState,
+} from '../../src/Domain/Ports/SyncStatePort.js';
 
 // A canonical task with sensible defaults, so a test names only the fields it
 // cares about. TaskData is a class, so the factory constructs it: the registry,
@@ -22,13 +25,8 @@ export function taskData(overrides: Partial<TaskData> = {}): TaskData {
   );
 }
 
-// One mirror of a hub entity: an address plus its last-synced diff view.
-export function mirror(handle: string, base: TaskData | null = null): Mirror {
-  return new Mirror(handle, base);
-}
-
-// A registry record with sensible defaults, mirroring taskData. `mirrors` is a
-// per-provider map of Mirror; an empty map is a not-yet-mirrored entity.
+// A hub entity: its uuid and where its note lives. The mirrors are NOT on the
+// entity in v3 — a port item holds them.
 export function entityRecord(
   overrides: Partial<EntityRecord> = {},
 ): EntityRecord {
@@ -36,7 +34,24 @@ export function entityRecord(
     id: overrides.id ?? 'entity-uuid',
     notePath:
       overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    mirrors: overrides.mirrors ?? {},
+  };
+}
+
+// One mirror item: the hub entity it belongs to and its last-synced diff view.
+export function mirrorItem(
+  entityId: string,
+  base: TaskData | null = null,
+): MirrorItem {
+  return { entityId, base };
+}
+
+// One port's per-project state, with provider-agnostic defaults.
+export function portState(overrides: Partial<PortState> = {}): PortState {
+  return {
+    provider: overrides.provider ?? 'todoist',
+    lastPoll: overrides.lastPoll ?? null,
+    lanes: overrides.lanes ?? {},
+    tags: overrides.tags ?? {},
   };
 }
 

@@ -94,7 +94,9 @@ export class SyncGithubTasksAction {
     for (const issue of issues) {
       const card = cardByUrl.get(issue.url) ?? null;
       // Handle-index resolution: the issue url is the github mirror handle.
-      const record = await this.syncState.findByMirror('github', issue.url);
+      const item = await this.syncState.findMirrorItem('github', issue.url);
+      const record =
+        item === null ? null : await this.syncState.getEntity(item.entityId);
       if (record === null) {
         await this.materializeUntracked(
           issue,
@@ -109,6 +111,7 @@ export class SyncGithubTasksAction {
         issue,
         card,
         record,
+        item?.base ?? null,
         input,
         doneLane,
         defaultLane,
@@ -134,6 +137,7 @@ export class SyncGithubTasksAction {
     }
     const { remote, raw } = this.remoteViews(
       issue,
+      null,
       null,
       card,
       doneLane,
@@ -162,6 +166,7 @@ export class SyncGithubTasksAction {
     issue: GithubTaskData,
     card: BoardItemData | null,
     record: EntityRecord,
+    base: TaskData | null,
     input: SyncGithubTasksInput,
     doneLane: string,
     defaultLane: string,
@@ -178,10 +183,14 @@ export class SyncGithubTasksAction {
     if (vault === null) {
       return;
     }
+    // The parser no longer carries the id (dt-20); the registry record is the
+    // identity source, so compose it here.
+    vault.id = record.id;
 
     const { remote, raw } = this.remoteViews(
       issue,
       record,
+      base,
       card,
       doneLane,
       defaultLane,
@@ -193,19 +202,28 @@ export class SyncGithubTasksAction {
 
     // Type backfill: a note or record that predates the type promotion adopts
     // the issue's type label. Stamping both settles the type field.
-    const base = await this.backfillType(issue, record, vault, note.content);
+    const effectiveBase = await this.backfillType(
+      issue,
+      record,
+      base,
+      vault,
+      note.content,
+      input.projectName,
+    );
 
     const vaultDiff = this.diffView(vault, hash(toIssueBody(vault.body)));
     const remoteDiff = this.diffView(remote, hash(remote.body));
     const baseDiff =
-      base === null ? remoteDiff : this.diffView(base, base.body);
+      effectiveBase === null
+        ? remoteDiff
+        : this.diffView(effectiveBase, effectiveBase.body);
 
     const verdicts = this.verdictResolver.diff(vaultDiff, remoteDiff, baseDiff);
     const resolved = this.verdictResolver.resolveConflicts(
       vaultDiff,
       remoteDiff,
       verdicts,
-      this.conflictHints(issue),
+      await this.conflictHints(issue, card, record.notePath),
     );
     const overall = overallVerdict(resolved);
 
@@ -280,12 +298,12 @@ export class SyncGithubTasksAction {
   private remoteViews(
     issue: GithubTaskData,
     record: EntityRecord | null,
+    base: TaskData | null,
     card: BoardItemData | null,
     doneLane: string,
     defaultLane: string,
   ): { remote: TaskData; raw: TaskData } {
     const parsed = GithubTaskMapper.parse(issue, card, doneLane);
-    const base = record?.mirrors.github?.base ?? null;
     const lane = effectiveLane(card, issue, base, doneLane, defaultLane);
     const laneDone = doneLane !== '' && lane === doneLane;
     const stateDone = issue.state === 'closed';
@@ -323,24 +341,20 @@ export class SyncGithubTasksAction {
     return { remote, raw };
   }
 
-  // The timing evidence the conflict ladder may use. GitHub's lastEditedAt is
-  // the honest title/body clock.
-  private conflictHints(issue: GithubTaskData): ConflictHints {
-    // TODO: VaultPort exposes no file mtime, so the vault side of the timestamp
-    // ladder is unknown here and the ladder falls through to the semantic rules
-    // (done-beats-open for status, origin authority otherwise). Adding a
-    // lastModified read to VaultPort is a later ticket.
-    //
-    // BoardItemData carries no updatedAt, so the lane has no honest timestamp;
-    // the status hint stays null until the transport surfaces one.
-    const cardUpdatedAt: string | null = null;
+  // The timing evidence the conflict ladder may use: the note's real mtime and
+  // the issue's honest clocks. GitHub's lastEditedAt is the title/body clock
+  // (comments never move it); the card's own updatedAt is the lane clock.
+  private async conflictHints(
+    issue: GithubTaskData,
+    card: BoardItemData | null,
+    notePath: string,
+  ): Promise<ConflictHints> {
     return {
-      vaultModifiedAt: null,
+      vaultModifiedAt: await this.vault.modifiedTime(notePath),
       remoteFieldTimes: {
-        // lastEditedAt moves only on title/body edits — never on comments.
         title: issue.lastEditedAt,
         body: issue.lastEditedAt,
-        status: cardUpdatedAt,
+        status: card?.updatedAt ?? null,
       },
     };
   }
@@ -388,7 +402,7 @@ export class SyncGithubTasksAction {
       return null;
     }
     // A uuid reference resolves directly; a link target resolves by path.
-    if ((await this.syncState.get(link)) !== null) {
+    if ((await this.syncState.getEntity(link)) !== null) {
       return link;
     }
     for (const candidate of [
@@ -411,10 +425,11 @@ export class SyncGithubTasksAction {
   private async backfillType(
     issue: GithubTaskData,
     record: EntityRecord,
+    base: TaskData | null,
     vault: TaskData,
     content: string,
+    projectName: string,
   ): Promise<TaskData | null> {
-    const base = record.mirrors.github?.base ?? null;
     const issueType = typeFromLabels(issue.labels);
     if (issueType === '') {
       return base;
@@ -431,27 +446,32 @@ export class SyncGithubTasksAction {
     }
     if (base !== null && base.type === '') {
       base.type = vault.type !== '' ? vault.type : issueType;
-      await this.syncState.set(record);
+      await this.syncState.setMirrorItem(projectName, 'github', issue.url, {
+        entityId: record.id,
+        base,
+      });
     }
     return base;
   }
 
-  // A vault-side drift: a github-mirrored record whose note no longer matches
-  // its base. A project with no such records is unknown and counts as drift, so
-  // a newly tracked issue is never starved by the probe gate.
+  // A vault-side drift: a github-mirrored entity whose note no longer matches
+  // its base. A project with no such entities is unknown and counts as drift,
+  // so a newly tracked issue is never starved by the probe gate.
   private async hasVaultDrift(projectName: string): Promise<boolean> {
     const prefix = `Projecten/${projectName}/`;
-    const records = (await this.syncState.list()).filter(
-      (record) =>
-        record.notePath.startsWith(prefix) &&
-        record.mirrors.github !== undefined,
-    );
+    const entries = await this.syncState.listMirrorItems(projectName, 'github');
+    const records: Array<{ record: EntityRecord; base: TaskData | null }> = [];
+    for (const entry of entries) {
+      const record = await this.syncState.getEntity(entry.item.entityId);
+      if (record !== null && record.notePath.startsWith(prefix)) {
+        records.push({ record, base: entry.item.base });
+      }
+    }
     if (records.length === 0) {
       return true;
     }
 
-    for (const record of records) {
-      const base = record.mirrors.github?.base ?? null;
+    for (const { record, base } of records) {
       if (base === null) {
         return true;
       }

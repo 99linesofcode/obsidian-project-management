@@ -3,7 +3,6 @@ import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 import type { TaskNoteSource } from '../../../src/Domain/Notes/TaskNoteMapper.js';
 
 const task: TaskNoteSource = {
-  id: 'uuid-42',
   type: 'task',
   title: 'Fix the Bug!',
   body: 'The bug happens when the widget is resized.',
@@ -27,18 +26,17 @@ describe('TaskNoteMapper', () => {
     expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
   });
 
-  it('writes the vault-owned identity and sync frontmatter, no url', () => {
+  it('writes the sync frontmatter and no machine id or url', () => {
     // Given — a promoted task and its project context
 
     // When — the note is mapped
     const { content } = TaskNoteMapper.map(task, context);
 
-    // Then — the frontmatter carries id and type, and no url is written
+    // Then — the frontmatter carries type and status; no id or url is written
     expect(content).toBe(
       [
         '---',
         'categories: [taken]',
-        'id: uuid-42',
         'type: task',
         'status: Building',
         'affiliation: ["[[Acme Widgets]]"]',
@@ -49,6 +47,7 @@ describe('TaskNoteMapper', () => {
       ].join('\n'),
     );
     expect(content).not.toContain('url:');
+    expect(content).not.toContain('id:');
   });
 
   it('writes the status name verbatim — the lane the card sits in', () => {
@@ -92,7 +91,6 @@ describe('TaskNoteMapper.render', () => {
   const template = [
     '---',
     'affiliation: []',
-    'id:',
     'type:',
     'status:',
     'synced:',
@@ -114,7 +112,6 @@ describe('TaskNoteMapper.render', () => {
       [
         '---',
         'affiliation: ["[[Acme Widgets]]"]',
-        'id: uuid-42',
         'type: task',
         'status: Building',
         'synced: 2026-09-18T12:00:00Z',
@@ -152,7 +149,6 @@ describe('TaskNoteMapper.render', () => {
         '---',
         'status: Building',
         'created: 2026-09-18',
-        'id: uuid-42',
         'type: task',
         'affiliation: ["[[Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',

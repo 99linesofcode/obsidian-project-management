@@ -7,6 +7,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // Fakes at the vault port: a path-keyed note store that records writes, so the
 // mirror's single decision (flip the checkbox or not) is observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   written: Array<{ path: string; content: string }> = [];
 

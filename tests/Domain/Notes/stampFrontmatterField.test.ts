@@ -5,6 +5,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // A vault fake that records writes, so the stamp's single decision (fill in
 // place, append, or leave alone) is observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   written: Array<{ path: string; content: string }> = [];
 
   async getNoteByPath(): Promise<never> {

@@ -18,7 +18,7 @@ import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCr
 import { CompleteTaskCascadeAction } from './Domain/Actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
-import { EnsureNoteIdsAction } from './Domain/Actions/EnsureNoteIdsAction.js';
+import { CleanupNoteFrontmatterAction } from './Domain/Actions/CleanupNoteFrontmatterAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
@@ -147,9 +147,9 @@ export default class ProjectManagementPlugin extends Plugin {
     );
 
     const github = new GitHubAdapter(transport);
-    // The id backfill runs at the chain start, per project, before any half
-    // reads notes: every task/to-do note gets its vault-owned uuid first.
-    const ensureNoteIds = new EnsureNoteIdsAction(vault, syncState);
+    // The frontmatter cleanup runs at the chain start, per project, before any
+    // half reads notes: it strips the legacy `id:`/`url:` fields (dt-20).
+    const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
     const createTaskNote = new CreateTaskNoteAction(
       vault,
       syncState,
@@ -324,7 +324,7 @@ export default class ProjectManagementPlugin extends Plugin {
       mirrorTodoStatus,
       syncTodoistTasks,
       handleDeletedNote,
-      ensureNoteIds,
+      cleanupNoteFrontmatter,
     );
     const queue = new SyncQueue(syncProject);
     const scheduler = new SyncScheduler(

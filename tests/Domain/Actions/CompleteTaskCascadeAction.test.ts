@@ -6,6 +6,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // the cascade's gates (an already-done to-do, an already-checked line) are
 // observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   written: Array<{ path: string; content: string }> = [];
   trashed: string[] = [];

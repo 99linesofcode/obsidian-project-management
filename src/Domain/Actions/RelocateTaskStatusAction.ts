@@ -17,7 +17,7 @@ export class RelocateTaskStatusAction {
   async execute(input: RelocateTaskStatusInput): Promise<void> {
     const record = await this.syncState.findByNotePath(input.oldPath);
     if (record) {
-      await this.syncState.set({ ...record, notePath: input.newPath });
+      await this.syncState.setEntity({ ...record, notePath: input.newPath });
     }
   }
 }

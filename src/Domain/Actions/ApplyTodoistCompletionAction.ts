@@ -1,4 +1,3 @@
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { ToDoNoteParser, withToDoStatus } from '../Notes/ToDoNoteParser.js';
 import { VaultTaskMapper } from '../Mappers/VaultTaskMapper.js';
@@ -45,10 +44,11 @@ export class ApplyTodoistCompletionAction {
   ) {}
 
   async execute(input: ApplyTodoistCompletionInput): Promise<void> {
-    const projectState = await this.syncState.getTodoistProjectState(
+    const portState = await this.syncState.getPortState(
       input.projectName,
+      'todoist',
     );
-    const since = projectState?.lastCompletedPoll || input.syncedAt;
+    const since = portState?.lastPoll || input.syncedAt;
 
     // Both fetches must succeed before any vault write or cursor move.
     const completed = await this.taskManager.fetchCompletedTasks(
@@ -58,48 +58,78 @@ export class ApplyTodoistCompletionAction {
     const active = await this.taskManager.fetchActiveTasks(input.projectId);
     const activeById = new Map(active.map((task) => [task.id, task]));
 
-    const records = (await this.syncState.list()).filter((record) =>
-      record.notePath.startsWith(`Projecten/${input.projectName}/`),
-    );
-    const byHandle = new Map<string, EntityRecord>();
-    for (const record of records) {
-      const handle = record.mirrors.todoist?.handle ?? '';
-      if (handle !== '') {
-        byHandle.set(handle, record);
-      }
+    // The project's todoist items, joined to their hub entities: an item's
+    // entityId is the hub reference now that the entity no longer carries the
+    // handle.
+    const entries = await this.todoistEntries(input.projectName);
+    const byHandle = new Map<
+      string,
+      { record: EntityRecord; base: TaskData | null }
+    >();
+    for (const entry of entries) {
+      byHandle.set(entry.handle, { record: entry.record, base: entry.base });
     }
 
     for (const task of completed) {
-      const record = byHandle.get(task.id);
-      if (!record) {
+      const entry = byHandle.get(task.id);
+      if (!entry) {
         continue;
       }
       // Our own close: the base already says completed, so this entry is the
       // echo of a vault-driven completion, not a remote change.
-      if (baseDone(record)) {
+      if (baseDone(entry.base)) {
         continue;
       }
-      await this.applyCompletion(record, task, input);
+      await this.applyCompletion(
+        entry.record,
+        task.id,
+        entry.base,
+        task,
+        input,
+      );
     }
 
-    for (const record of records) {
-      const handle = record.mirrors.todoist?.handle ?? '';
-      const twin = handle === '' ? undefined : activeById.get(handle);
+    for (const [handle, entry] of byHandle) {
+      const twin = activeById.get(handle);
       // Not in the active set: still completed (or gone), no reopen to apply.
       if (!twin) {
         continue;
       }
       // The base said open, so an active twin is no change at all.
-      if (!baseDone(record)) {
+      if (!baseDone(entry.base)) {
         continue;
       }
-      await this.applyReopen(record, twin, input);
+      await this.applyReopen(entry.record, handle, entry.base, twin, input);
     }
 
-    await this.syncState.setTodoistProjectState(input.projectName, {
-      sections: projectState?.sections ?? {},
-      lastCompletedPoll: input.syncedAt,
+    await this.syncState.setPortState(input.projectName, 'todoist', {
+      provider: 'todoist',
+      lastPoll: input.syncedAt,
+      lanes: portState?.lanes ?? {},
+      tags: portState?.tags ?? {},
     });
+  }
+
+  // The project's todoist items joined to their hub entities, so the completion
+  // and reopen passes can key on the twin handle and read the base.
+  private async todoistEntries(projectName: string): Promise<
+    Array<{ handle: string; record: EntityRecord; base: TaskData | null }>
+  > {
+    const result: Array<{
+      handle: string;
+      record: EntityRecord;
+      base: TaskData | null;
+    }> = [];
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectName,
+      'todoist',
+    )) {
+      const record = await this.syncState.getEntity(item.entityId);
+      if (record !== null) {
+        result.push({ handle, record, base: item.base });
+      }
+    }
+    return result;
   }
 
   // Completes a note the remote closed, then stamps the twin's base. A note
@@ -107,6 +137,8 @@ export class ApplyTodoistCompletionAction {
   // through the vault writer so the done lane and the dt-13 cascade both fire.
   private async applyCompletion(
     record: EntityRecord,
+    handle: string,
+    base: TaskData | null,
     task: TodoistTaskData,
     input: ApplyTodoistCompletionInput,
   ): Promise<void> {
@@ -127,7 +159,7 @@ export class ApplyTodoistCompletionAction {
           withToDoStatus(note.content, 'completed', input.syncedAt),
         );
       }
-      await this.stampBase(record, {
+      await this.stampBase(record, handle, base, input.projectName, {
         title: task.content,
         status: 'completed',
         completedAt: stamp,
@@ -155,7 +187,7 @@ export class ApplyTodoistCompletionAction {
         record,
       });
     }
-    await this.stampBase(record, {
+    await this.stampBase(record, handle, base, input.projectName, {
       title: current.title,
       status: this.doneOptionName,
       completedAt: stamp,
@@ -168,6 +200,8 @@ export class ApplyTodoistCompletionAction {
   // to-dos stay completed.
   private async applyReopen(
     record: EntityRecord,
+    handle: string,
+    base: TaskData | null,
     twin: TodoistTaskData,
     input: ApplyTodoistCompletionInput,
   ): Promise<void> {
@@ -187,7 +221,7 @@ export class ApplyTodoistCompletionAction {
           withToDoStatus(note.content, 'open', null),
         );
       }
-      await this.stampBase(record, {
+      await this.stampBase(record, handle, base, input.projectName, {
         title: twin.content,
         status: 'open',
         completedAt: null,
@@ -221,20 +255,22 @@ export class ApplyTodoistCompletionAction {
         record,
       });
     }
-    await this.stampBase(record, {
+    await this.stampBase(record, handle, base, input.projectName, {
       title: current.title,
       status: defaultLane,
       completedAt: null,
     });
   }
 
-  // Writes the todoist mirror's base as a diff view. The base is what the next
-  // poll compares against, so stamping it here is the echo guard.
+  // Writes the todoist mirror item's base as a diff view. The base is what the
+  // next poll compares against, so stamping it here is the echo guard.
   private async stampBase(
     record: EntityRecord,
+    handle: string,
+    base: TaskData | null,
+    projectName: string,
     shape: { title: string; status: string; completedAt: string | null },
   ): Promise<void> {
-    const base = record.mirrors.todoist?.base ?? null;
     const id = record.id;
     const view = toDiffViewWithBody(
       new TaskData(
@@ -251,11 +287,10 @@ export class ApplyTodoistCompletionAction {
         base?.updatedAt ?? null,
       ),
     );
-    const mirrors = {
-      ...record.mirrors,
-      todoist: new Mirror(record.mirrors.todoist?.handle ?? '', view),
-    };
-    await this.syncState.set({ id, notePath: record.notePath, mirrors });
+    await this.syncState.setMirrorItem(projectName, 'todoist', handle, {
+      entityId: id,
+      base: view,
+    });
   }
 }
 
@@ -299,10 +334,9 @@ function withReopen(current: TaskData, defaultLane: string): TaskData {
   );
 }
 
-// Whether the record's todoist base already records the item as completed. A
+// Whether the stored todoist base already records the item as completed. A
 // completed base is what tells our own close from a remote one.
-function baseDone(record: EntityRecord): boolean {
-  const base = record.mirrors.todoist?.base ?? null;
+function baseDone(base: TaskData | null): boolean {
   return base !== null && base.completedAt !== null;
 }
 

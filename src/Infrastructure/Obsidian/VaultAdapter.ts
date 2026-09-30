@@ -81,6 +81,16 @@ export class VaultAdapter implements VaultPort {
       .map((file) => file.path);
   }
 
+  // The TFile's stat mtime, rendered as ISO 8601 so the conflict ladder can
+  // compare it against a provider's timestamps.
+  async modifiedTime(path: string): Promise<string | null> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+    return new Date(file.stat.mtime).toISOString();
+  }
+
   async trashNote(path: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (file instanceof TFile) {

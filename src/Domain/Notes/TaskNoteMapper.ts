@@ -2,10 +2,9 @@ import { fillFrontmatterFields } from './fillFrontmatterFields.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
 
 // The task fields a note is rendered from. Structural, so the canonical
-// TaskData satisfies it directly. The url is deliberately absent: identity is
-// the vault-owned uuid, and a new note carries no url.
+// TaskData satisfies it directly. The id is deliberately absent (dt-20): the
+// note no longer carries a machine id, and the registry owns identity.
 export interface TaskNoteSource {
-  id: string;
   type: string;
   title: string;
   body: string;
@@ -56,7 +55,6 @@ export const TaskNoteMapper = {
     const content = [
       '---',
       'categories: [taken]',
-      `id: ${task.id}`,
       `type: ${task.type}`,
       `status: ${context.statusName}`,
       `affiliation: ["[[${context.projectName}]]"]`,
@@ -106,7 +104,7 @@ function createdValue(
 }
 
 // Sync-owned frontmatter fields, in append order when a template omits one.
-// `url` is deliberately not managed: it is no longer written for new notes.
+// `id` is deliberately not managed (dt-20): the note carries no machine id.
 // `created` is left to the template's {{date}} placeholder and the built-in
 // mapping, so a vault-authored created stamp survives the template path.
 function managedValues(
@@ -114,7 +112,6 @@ function managedValues(
   context: TaskNoteContext,
 ): Map<string, string> {
   return new Map([
-    ['id', task.id],
     ['type', task.type],
     ['status', context.statusName],
     ['affiliation', `["[[${context.projectName}]]"]`],

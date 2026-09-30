@@ -8,6 +8,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // Fakes at the vault port: a path-keyed note store that records every create,
 // write and trash, so the action's own lifecycle decisions are observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
   written: Array<{ path: string; content: string }> = [];

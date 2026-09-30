@@ -14,6 +14,10 @@ export interface VaultPort {
   moveFolder(fromPrefix: string, toPrefix: string): Promise<void>;
   // Markdown paths under a folder prefix — used to find a task's to-dos.
   listNotesInFolder(folder: string): Promise<string[]>;
+  // The note's last-modified time as ISO 8601, or null when unknown. The
+  // conflict ladder's decisive-timestamp rule compares it against a remote
+  // field's timestamp; null falls through to the semantic rules.
+  modifiedTime(notePath: string): Promise<string | null>;
   // Moves a note to the vault-internal trash; never a permanent delete.
   trashNote(path: string): Promise<void>;
   findProjectNotes(): Promise<ProjectNoteData[]>;

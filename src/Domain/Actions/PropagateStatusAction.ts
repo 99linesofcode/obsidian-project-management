@@ -28,15 +28,16 @@ export class PropagateStatusAction {
   ) {}
 
   async execute(input: PropagateStatusInput): Promise<void> {
-    const record = await this.syncState.findByMirror('github', input.url);
+    const item = await this.syncState.findMirrorItem('github', input.url);
     const next = stateFromStatus(input.statusName, this.doneOptionName);
-    const baseLane = record?.mirrors.github?.base?.status ?? '';
+    const base = item?.base ?? null;
+    const baseLane = base?.status ?? '';
     const baseState = stateFromStatus(baseLane, this.doneOptionName);
 
-    // No record: the note is untracked, so there is no baseline to compare
-    // against and the state is written. A record whose base lane already
-    // implies the same state is skipped (the write would be a no-op).
-    if (record === null || baseState !== next) {
+    // No item: the note is untracked, so there is no baseline to compare
+    // against and the state is written. A base lane that already implies the
+    // same state is skipped (the write would be a no-op).
+    if (item === null || baseState !== next) {
       await this.projectManagement.setTaskState(input.url, next);
     }
 
@@ -46,17 +47,19 @@ export class PropagateStatusAction {
       statusName: input.statusName,
     });
 
-    if (record === null) {
+    if (item === null) {
       return;
     }
 
     // Refresh the base's lane and completion so the echo guard sees the new
     // state. Only the lane dimension moves; content is untouched.
-    const base = record.mirrors.github?.base ?? null;
     if (base !== null) {
       base.status = input.statusName;
       base.completedAt = next === 'closed' ? (base.completedAt ?? '') : null;
+      await this.syncState.setMirrorItem(input.projectName, 'github', input.url, {
+        entityId: item.entityId,
+        base,
+      });
     }
-    await this.syncState.set(record);
   }
 }

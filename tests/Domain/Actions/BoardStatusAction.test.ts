@@ -3,7 +3,7 @@ import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: hold the stored identity and record the board status
@@ -150,15 +150,12 @@ describe('BoardStatusAction', () => {
     // Given — a record whose github base lane is the one being mirrored
     const h = harness();
     h.syncState.identities.set('Acme Widgets', identity);
-    h.syncState.records.set(
-      'uuid-42',
-      entityRecord({
-        id: 'uuid-42',
-        mirrors: {
-          github: mirror(url, taskData({ id: 'uuid-42', status: 'Building' })),
-        },
-      }),
-    );
+    h.syncState.seed(entityRecord({ id: 'uuid-42' }), {
+      github: {
+        handle: url,
+        base: taskData({ id: 'uuid-42', status: 'Building' }),
+      },
+    });
 
     // When — the same lane is mirrored
     await h.action.execute({

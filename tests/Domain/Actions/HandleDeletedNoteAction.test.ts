@@ -3,7 +3,7 @@ import { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDelet
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: record the card deletion, the state change and the
@@ -94,19 +94,12 @@ const identity: ProjectIdentityData = {
 
 function seed(syncState: FakeSyncState, lane = 'Building'): void {
   syncState.identities.set(projectName, identity);
-  syncState.records.set(
-    'uuid-42',
-    entityRecord({
-      id: 'uuid-42',
-      notePath,
-      mirrors: {
-        github: mirror(
-          url,
-          taskData({ id: 'uuid-42', notePath, status: lane }),
-        ),
-      },
-    }),
-  );
+  syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+    github: {
+      handle: url,
+      base: taskData({ id: 'uuid-42', notePath, status: lane }),
+    },
+  });
 }
 
 function makeAction(

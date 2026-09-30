@@ -3,7 +3,7 @@ import { PropagateStatusAction } from '../../../src/Domain/Actions/PropagateStat
 import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: record the state change the action asks for and hold the
@@ -106,19 +106,12 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
 }
 
 function seedBase(syncState: FakeSyncState, lane: string): void {
-  syncState.records.set(
-    'uuid-42',
-    entityRecord({
-      id: 'uuid-42',
-      notePath,
-      mirrors: {
-        github: mirror(
-          url,
-          taskData({ id: 'uuid-42', notePath, status: lane }),
-        ),
-      },
-    }),
-  );
+  syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+    github: {
+      handle: url,
+      base: taskData({ id: 'uuid-42', notePath, status: lane }),
+    },
+  });
 }
 
 function makeAction(
@@ -152,9 +145,9 @@ describe('PropagateStatusAction', () => {
 
     // Then — the issue is closed and the base lane follows
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.status).toBe('Shipped');
-    expect(record?.mirrors.github?.base?.completedAt).toBe('');
+    const base = syncState.baseOf('uuid-42', 'github');
+    expect(base?.status).toBe('Shipped');
+    expect(base?.completedAt).toBe('');
   });
 
   it('reopens the issue for an open note and refreshes the base lane', async () => {
@@ -174,9 +167,9 @@ describe('PropagateStatusAction', () => {
 
     // Then — the issue is reopened and the base lane follows
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.status).toBe('Unshaped');
-    expect(record?.mirrors.github?.base?.completedAt).toBeNull();
+    const base = syncState.baseOf('uuid-42', 'github');
+    expect(base?.status).toBe('Unshaped');
+    expect(base?.completedAt).toBeNull();
   });
 
   it('skips the issue state write when the lane done-ness is unchanged', async () => {

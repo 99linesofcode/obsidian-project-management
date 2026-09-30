@@ -98,6 +98,7 @@ const BOARD_ITEMS_QUERY = `
           nodes {
             id
             type
+            updatedAt
             content {
               ... on Issue {
                 url
@@ -157,6 +158,7 @@ const PROJECT_DETAIL_QUERY = `
           nodes {
             id
             type
+            updatedAt
             content {
               ... on Issue {
                 url
@@ -716,7 +718,13 @@ export class GitHubAdapter implements ProjectManagementPort {
     const draftBody =
       content && typeof content.body === 'string' ? content.body : undefined;
     const statusOptionName = this.statusOptionName(node.fieldValues);
-    const item: BoardItemData = { itemId: node.id, type };
+    const item: BoardItemData = {
+      itemId: node.id,
+      type,
+      // ProjectV2Item.updatedAt is the honest lane clock; a board that omits it
+      // leaves the hint null and the ladder falls through to the semantic rule.
+      updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : null,
+    };
     if (issueUrl !== undefined) {
       item.issueUrl = issueUrl;
     }

@@ -1,5 +1,6 @@
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { TaskData } from '../DataTransferObjects/TaskData.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
@@ -29,7 +30,9 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    const github = record.mirrors.github;
+    // The github handle and base are port items now, not entity fields; the
+    // deleted note's entity resolves them through the port listing.
+    const github = await this.githubItem(record.id, input.projectName);
     const url = github?.handle ?? '';
 
     // The card goes first: a deleted note must leave no card behind. An issue
@@ -47,6 +50,22 @@ export class HandleDeletedNoteAction {
     if (url !== '' && lane !== this.doneOptionName) {
       await this.projectManagement.setTaskState(url, 'closed');
     }
-    await this.syncState.remove(record.id);
+    await this.syncState.removeEntity(record.id);
+  }
+
+  // The entity's github mirror item, or null when it has none.
+  private async githubItem(
+    entityId: string,
+    projectName: string,
+  ): Promise<{ handle: string; base: TaskData | null } | null> {
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectName,
+      'github',
+    )) {
+      if (item.entityId === entityId) {
+        return { handle, base: item.base };
+      }
+    }
+    return null;
   }
 }

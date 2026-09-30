@@ -48,6 +48,10 @@ interface ProjectionItem {
   type: string;
   lane: string;
   sliceLink: string | null;
+  // The todoist mirror handle and base, resolved from the registry's port
+  // items because the entity no longer carries them.
+  handle: string | null;
+  base: TaskData | null;
 }
 
 // One to-do linked from a tracked task's checklist, resolved to its note and
@@ -154,10 +158,11 @@ export class SyncTodoistTasksAction {
       return taskTwinIdByNotePath;
     }
 
-    const projectState = await this.syncState.getTodoistProjectState(
+    const portState = await this.syncState.getPortState(
       input.projectName,
+      'todoist',
     );
-    const storedSections = projectState?.sections ?? {};
+    const storedSections = portState?.lanes ?? {};
     const sections = await this.ensureSections.execute({
       projectId: input.projectId,
       laneNames: identity.statusOptions.map((option) => option.name),
@@ -165,10 +170,12 @@ export class SyncTodoistTasksAction {
     });
     // Only rewrite the bookkeeping when the lane map actually moved, so a
     // settled project performs no write at all.
-    if (!projectState || !sameSections(sections, storedSections)) {
-      await this.syncState.setTodoistProjectState(input.projectName, {
-        sections,
-        lastCompletedPoll: projectState?.lastCompletedPoll ?? input.syncedAt,
+    if (!portState || !sameSections(sections, storedSections)) {
+      await this.syncState.setPortState(input.projectName, 'todoist', {
+        provider: 'todoist',
+        lastPoll: portState?.lastPoll ?? input.syncedAt,
+        lanes: sections,
+        tags: portState?.tags ?? {},
       });
     }
 
@@ -176,11 +183,16 @@ export class SyncTodoistTasksAction {
       await this.projectManagement.fetchTrackedIssues(identity.repoUrl)
     ).filter((issue) => hasTypeLabel(issue.labels));
     const activeById = new Map(active.map((task) => [task.id, task] as const));
+    const todoistByEntity = await this.todoistItems(input.projectName);
 
     const items: ProjectionItem[] = [];
     for (const issue of issues) {
       // Handle-index resolution: the issue url is the github mirror handle.
-      const record = await this.syncState.findByMirror('github', issue.url);
+      const mirror = await this.syncState.findMirrorItem('github', issue.url);
+      const record =
+        mirror === null
+          ? null
+          : await this.syncState.getEntity(mirror.entityId);
       if (!record) {
         continue;
       }
@@ -196,6 +208,7 @@ export class SyncTodoistTasksAction {
       if (type === null) {
         continue;
       }
+      const todoist = todoistByEntity.get(record.id);
       items.push({
         issue,
         record,
@@ -207,6 +220,8 @@ export class SyncTodoistTasksAction {
           parsed.affiliation,
           input.projectName,
         ),
+        handle: todoist?.handle ?? null,
+        base: todoist?.base ?? null,
       });
     }
 
@@ -248,7 +263,7 @@ export class SyncTodoistTasksAction {
       const slicePath = sliceNotePath(input.projectName, item.sliceLink!);
       const parentId =
         taskTwinIdByNotePath.get(slicePath) ??
-        (await this.twinIdForPath(slicePath));
+        (await this.twinIdForPath(slicePath, todoistByEntity));
       if (parentId === null) {
         // The slice has no twin yet; the child waits for the next tick.
         continue;
@@ -274,9 +289,9 @@ export class SyncTodoistTasksAction {
     sections: Record<string, string>,
     input: SyncTodoistTasksInput,
   ): Promise<string> {
-    const handle = item.record.mirrors.todoist?.handle ?? null;
+    const handle = item.handle;
     const current = handle === null ? null : (activeById.get(handle) ?? null);
-    const base = item.record.mirrors.todoist?.base ?? null;
+    const base = item.base;
     const parentUuid = await this.twinUuid(placement.parentId);
     const vault = this.vaultView(item, placement, parentUuid);
 
@@ -291,7 +306,7 @@ export class SyncTodoistTasksAction {
         vaultDiff,
         remoteDiff,
         verdicts,
-        this.conflictHints(current),
+        await this.conflictHints(current, item.notePath),
       );
       if (overallVerdict(resolved) === 'pull') {
         return handle;
@@ -302,11 +317,11 @@ export class SyncTodoistTasksAction {
       task: vault,
       current,
       record: item.record,
+      handle,
       projectId: input.projectId,
       sectionId: placement.sectionId,
       parentId: placement.parentId,
       labels: [item.type],
-      description: item.issue.url,
       notePath: item.notePath,
       noteContent: item.noteContent,
       syncedAt: input.syncedAt,
@@ -328,6 +343,7 @@ export class SyncTodoistTasksAction {
       return;
     }
     const activeById = new Map(active.map((task) => [task.id, task] as const));
+    const todoistByEntity = await this.todoistItems(input.projectName);
 
     const roots = items.filter((item) => item.parentStem === null);
     const nested = items.filter((item) => item.parentStem !== null);
@@ -337,6 +353,7 @@ export class SyncTodoistTasksAction {
       const parentId = await this.parentTaskTwinId(
         item.taskNotePath,
         taskTwinIdByNotePath,
+        todoistByEntity,
       );
       if (parentId === null) {
         // The parent task has no twin and none can exist this pass (it is not a
@@ -348,7 +365,13 @@ export class SyncTodoistTasksAction {
         );
         continue;
       }
-      const id = await this.projectToDoItem(item, parentId, activeById, input);
+      const id = await this.projectToDoItem(
+        item,
+        parentId,
+        activeById,
+        todoistByEntity,
+        input,
+      );
       twinIdByStem.set(stemOf(item.notePath), id);
     }
 
@@ -357,12 +380,19 @@ export class SyncTodoistTasksAction {
         twinIdByStem.get(item.parentStem!) ??
         (await this.twinIdForPath(
           `Projecten/${input.projectName}/todos/${item.parentStem}.md`,
+          todoistByEntity,
         ));
       if (parentId === null) {
         // The parent to-do has no twin yet; the child waits for the next tick.
         continue;
       }
-      await this.projectToDoItem(item, parentId, activeById, input);
+      await this.projectToDoItem(
+        item,
+        parentId,
+        activeById,
+        todoistByEntity,
+        input,
+      );
     }
   }
 
@@ -373,23 +403,26 @@ export class SyncTodoistTasksAction {
   private async parentTaskTwinId(
     taskNotePath: string,
     taskTwinIdByNotePath: Map<string, string>,
+    todoistByEntity: Map<string, { handle: string; base: TaskData | null }>,
   ): Promise<string | null> {
     const planned = taskTwinIdByNotePath.get(taskNotePath);
     if (planned !== undefined) {
       return planned;
     }
-    return await this.twinIdForPath(taskNotePath);
+    return await this.twinIdForPath(taskNotePath, todoistByEntity);
   }
 
   private async projectToDoItem(
     item: ToDoItem,
     parentId: string,
     activeById: Map<string, TodoistTaskData>,
+    todoistByEntity: Map<string, { handle: string; base: TaskData | null }>,
     input: SyncTodoistTasksInput,
   ): Promise<string> {
     const parsed = ToDoNoteParser.parse(item.noteContent);
     const record = await this.syncState.findByNotePath(item.notePath);
-    const handle = record?.mirrors.todoist?.handle ?? null;
+    const handle =
+      record === null ? null : (todoistByEntity.get(record.id)?.handle ?? null);
     const current = handle === null ? null : (activeById.get(handle) ?? null);
     const todo = await this.vaultToDoView(item, parsed, input.projectName);
 
@@ -397,6 +430,7 @@ export class SyncTodoistTasksAction {
       todo,
       current,
       record,
+      handle,
       projectId: input.projectId,
       parentId,
       projectName: input.projectName,
@@ -513,14 +547,16 @@ export class SyncTodoistTasksAction {
     );
   }
 
-  // The timing evidence the conflict ladder may use. Todoist's updatedAt is the
-  // honest task-scoped content clock; completedAt stamps the completion.
-  private conflictHints(twin: TodoistTaskData): ConflictHints {
-    // TODO: VaultPort exposes no file mtime, so the vault side of the timestamp
-    // ladder is unknown here and the ladder falls through to the semantic rules.
+  // The timing evidence the conflict ladder may use: the note's real mtime and
+  // Todoist's honest task-scoped content clock. completedAt stamps the
+  // completion.
+  private async conflictHints(
+    twin: TodoistTaskData,
+    notePath: string,
+  ): Promise<ConflictHints> {
     const updated = twin.updatedAt || null;
     return {
-      vaultModifiedAt: null,
+      vaultModifiedAt: await this.vault.modifiedTime(notePath),
       remoteFieldTimes: {
         title: updated,
         body: updated,
@@ -602,11 +638,31 @@ export class SyncTodoistTasksAction {
       : candidate;
   }
 
+  // The project's todoist items keyed by hub entity, so a record's handle and
+  // base resolve without the entity carrying them.
+  private async todoistItems(
+    projectName: string,
+  ): Promise<Map<string, { handle: string; base: TaskData | null }>> {
+    const result = new Map<string, { handle: string; base: TaskData | null }>();
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectName,
+      'todoist',
+    )) {
+      result.set(item.entityId, { handle, base: item.base });
+    }
+    return result;
+  }
+
   // The todoist handle of the record at a note path, or null when the note has
   // no mirror yet. The registry is the anchor now, not the note's frontmatter.
-  private async twinIdForPath(notePath: string): Promise<string | null> {
+  private async twinIdForPath(
+    notePath: string,
+    todoistByEntity: Map<string, { handle: string; base: TaskData | null }>,
+  ): Promise<string | null> {
     const record = await this.syncState.findByNotePath(notePath);
-    return record?.mirrors.todoist?.handle ?? null;
+    return record === null
+      ? null
+      : (todoistByEntity.get(record.id)?.handle ?? null);
   }
 
   // The entity uuid a twin id names, or null for a top-level item / an
@@ -615,7 +671,9 @@ export class SyncTodoistTasksAction {
     if (twinId === null) {
       return null;
     }
-    return (await this.syncState.findByMirror('todoist', twinId))?.id ?? null;
+    return (
+      (await this.syncState.findMirrorItem('todoist', twinId))?.entityId ?? null
+    );
   }
 }
 

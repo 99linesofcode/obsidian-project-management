@@ -3,7 +3,7 @@ import type { ProjectStateData } from '../DataTransferObjects/ProjectStateData.j
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
-import type { EnsureNoteIdsAction } from './EnsureNoteIdsAction.js';
+import type { CleanupNoteFrontmatterAction } from './CleanupNoteFrontmatterAction.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from './ProbeProjectsAction.js';
@@ -47,9 +47,10 @@ export class SyncProjectAction {
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     private readonly syncTodoistTasks: SyncTodoistTasksAction,
     private readonly handleDeletedNote: HandleDeletedNoteAction,
-    // The id backfill. Optional so a chain assembled before the identity layer
-    // (and the tests that pin the older halves) still constructs.
-    private readonly ensureNoteIds?: EnsureNoteIdsAction,
+    // The frontmatter cleanup. Optional so a chain assembled before the
+    // identity layer (and the tests that pin the older halves) still
+    // constructs.
+    private readonly cleanupNoteFrontmatter?: CleanupNoteFrontmatterAction,
   ) {}
 
   async execute(project: string): Promise<void> {
@@ -62,12 +63,12 @@ export class SyncProjectAction {
       return;
     }
 
-    // 0. Backfill the vault-owned uuid into every task/to-do note, before any
-    // half reads notes. Best-effort: a malformed note is skipped, and a failure
-    // here must not block the halves.
-    if (this.ensureNoteIds) {
-      await this.step('ensure ids', () =>
-        this.ensureNoteIds!.execute({ projectName: project }),
+    // 0. Strip the legacy machine-id frontmatter fields, before any half reads
+    // notes. Best-effort: a malformed note is skipped, and a failure here must
+    // not block the halves.
+    if (this.cleanupNoteFrontmatter) {
+      await this.step('cleanup frontmatter', () =>
+        this.cleanupNoteFrontmatter!.execute({ projectName: project }),
       );
     }
 
@@ -139,7 +140,7 @@ export class SyncProjectAction {
       return await this.reconcileProjectLifecycle.execute({
         projectName: project,
         notePath: note.path,
-        locationArchived: note.archived,
+        locationArchived: note.archivedAt !== null,
         syncedAt,
         ...(state === undefined ? {} : { closed: state.closed }),
       });
@@ -153,9 +154,9 @@ export class SyncProjectAction {
       // archive signal, preserving the halves' error isolation.
       return {
         todoistProjectId: null,
-        frozen: note.archived || (state?.closed ?? false),
+        frozen: note.archivedAt !== null || (state?.closed ?? false),
         notePath: note.path,
-        locationArchived: note.archived,
+        archivedAt: note.archivedAt,
       };
     }
   }
@@ -234,7 +235,7 @@ export class SyncProjectAction {
 
   private async runDeletions(project: string): Promise<void> {
     const prefix = `Projecten/${project}/`;
-    for (const record of await this.syncState.list()) {
+    for (const record of await this.syncState.listEntities(project)) {
       if (!record.notePath.startsWith(prefix)) {
         continue;
       }

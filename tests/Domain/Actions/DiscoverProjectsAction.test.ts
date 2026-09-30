@@ -11,6 +11,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // own behaviour (which notes become projects, which errors are collected) is
 // what's under test, against the real AttachProjectAction.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes: ProjectNoteData[] = [];
 
   async findProjectNotes(): Promise<ProjectNoteData[]> {
@@ -105,7 +110,7 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
   return {
     path: 'Projecten/Acme Widgets/_home.md',
     projectName: 'Acme Widgets',
-    archived: false,
+    archivedAt: null,
     pm: 'github',
     url: 'https://github.com/acme/widgets',
     board: 'https://github.com/orgs/acme/projects/1',

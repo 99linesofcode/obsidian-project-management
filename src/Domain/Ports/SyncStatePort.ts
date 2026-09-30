@@ -1,31 +1,76 @@
 import type { ArchiveBaselineData } from '../DataTransferObjects/ArchiveBaselineData.js';
-import type { Mirror } from '../DataTransferObjects/Mirror.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
-import type { TodoistProjectStateData } from '../DataTransferObjects/TodoistProjectStateData.js';
+import type { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { WatchStateData } from '../DataTransferObjects/WatchStateData.js';
 
-// One hub entity's sync state: identity, current location, and per-mirror
-// handles + bases. The registry is the join point between halves.
+// One hub entity's registry entry: its uuid and where its note lives. The
+// mirrors map LEAVES the entity in v3 — the port items ARE the mirror state
+// now, so an entity is hub-side location only.
 export interface EntityRecord {
   id: string; // uuid — the key
   notePath: string; // current location of the note
-  mirrors: Record<string, Mirror>; // provider name → { handle, base }
 }
 
-// The core's need for sync state: one registry record per hub entity (its uuid,
-// where its note lives, and each mirror's handle + last-synced base), plus
-// project-level bookkeeping. The registry replaces the two-store seam — the
-// GitHub-keyed `status.*` store and the Todoist-twin `todoistItem.*` store —
-// with one record per entity: the mirrors map records actuality (which mirrors
-// exist and their addresses), not intent. The data.json-backed implementation
-// lives in Infrastructure.
+// One mirror of a hub entity: the entity it belongs to (by reference, not
+// duplication) and the last-synced snapshot the three-way diff arbitrates
+// against. Items are children of their port, keyed by handle. The base is a
+// DIFF VIEW: its body field carries the body's digest, never the full text.
+export interface MirrorItem {
+  entityId: string;
+  base: TaskData | null;
+}
+
+// One port's per-project state. WHY these generic names: the schema never
+// names a concrete service — `provider` is the dedicated field identifying
+// the concrete service ('todoist', 'github', a future app), `lanes` is the
+// generic term for board columns/sections, and `tags` for labels/categories
+// (future). A provider name is a VALUE argument, never a namespace key.
+export interface PortState {
+  provider: string;
+  lastPoll: string | null;
+  lanes: Record<string, string>;
+  tags: Record<string, string>;
+}
+
+// The core's need for sync state: project-nested, port-grouped storage. The
+// registry replaces the two-store seam — the GitHub-keyed `status.*` store and
+// the Todoist-twin `todoistItem.*` store — with one entity per hub and one
+// item per mirror, grouped under the port that owns it. The data.json-backed
+// implementation lives in Infrastructure.
 export interface SyncStatePort {
-  get(id: string): Promise<EntityRecord | null>;
+  getEntity(id: string): Promise<EntityRecord | null>;
   findByNotePath(notePath: string): Promise<EntityRecord | null>;
-  findByMirror(provider: string, handle: string): Promise<EntityRecord | null>;
-  set(record: EntityRecord): Promise<void>;
-  remove(id: string): Promise<void>;
-  list(): Promise<EntityRecord[]>;
+  setEntity(record: EntityRecord): Promise<void>;
+  removeEntity(id: string): Promise<void>;
+  listEntities(projectName: string): Promise<EntityRecord[]>;
+
+  findMirrorItem(portId: string, handle: string): Promise<MirrorItem | null>;
+  setMirrorItem(
+    projectName: string,
+    portId: string,
+    handle: string,
+    item: MirrorItem,
+  ): Promise<void>;
+  removeMirrorItem(
+    projectName: string,
+    portId: string,
+    handle: string,
+  ): Promise<void>;
+  listMirrorItems(
+    projectName: string,
+    portId: string,
+  ): Promise<Array<{ handle: string; item: MirrorItem }>>;
+
+  getPortState(
+    projectName: string,
+    portId: string,
+  ): Promise<PortState | null>;
+  setPortState(
+    projectName: string,
+    portId: string,
+    state: PortState,
+  ): Promise<void>;
+
   setIdentity(
     projectName: string,
     identity: ProjectIdentityData,
@@ -40,11 +85,4 @@ export interface SyncStatePort {
   ): Promise<void>;
   getWatchState(projectName: string): Promise<WatchStateData>;
   setWatchState(projectName: string, state: WatchStateData): Promise<void>;
-  getTodoistProjectState(
-    projectName: string,
-  ): Promise<TodoistProjectStateData | null>;
-  setTodoistProjectState(
-    projectName: string,
-    state: TodoistProjectStateData,
-  ): Promise<void>;
 }

@@ -4,6 +4,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 
 // A vault fake backed by a path set, so the collision walk is observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Set<string>();
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {

@@ -7,10 +7,15 @@ import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData, todoistTask } from '../../helpers/records.js';
+import { entityRecord, taskData, todoistTask } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   writes: Array<{ path: string; content: string }> = [];
   renames: Array<{ oldPath: string; newPath: string }> = [];
@@ -181,20 +186,13 @@ function seedRecord(
   base: Partial<TaskData> = {},
   githubUrl: string | null = choreUrl,
 ): void {
-  syncState.records.set(
-    id,
-    entityRecord({
-      id,
-      notePath,
-      mirrors: {
-        ...(githubUrl === null ? {} : { github: mirror(githubUrl, null) }),
-        todoist: mirror(
-          handle,
-          taskData({ id, notePath, title: 'Chore 1', ...base }),
-        ),
-      },
-    }),
-  );
+  syncState.seed(entityRecord({ id, notePath }), {
+    ...(githubUrl === null ? {} : { github: { handle: githubUrl } }),
+    todoist: {
+      handle,
+      base: taskData({ id, notePath, title: 'Chore 1', ...base }),
+    },
+  });
 }
 
 function setup() {
@@ -292,8 +290,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
       { url: choreUrl, statusName: 'Building', notePath: taskPath, projectName },
     ]);
     // And the base now records the new lane
-    const record = await syncState.get('uuid-task');
-    expect(record?.mirrors.todoist?.base?.status).toBe('Building');
+    expect(syncState.baseOf('uuid-task', 'todoist')?.status).toBe('Building');
   });
 
   it('gains the slice affiliation when a task is dragged under a slice twin', async () => {
@@ -315,8 +312,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes[0]!.content).toContain(
       'affiliation: ["[[Acme Widgets]]", "[[40-slice-1]]"]',
     );
-    const record = await syncState.get('uuid-task');
-    expect(record?.mirrors.todoist?.base?.parent).toBe('uuid-slice');
+    expect(syncState.baseOf('uuid-task', 'todoist')?.parent).toBe('uuid-slice');
   });
 
   it('drops the slice affiliation when a task is dragged back to top level', async () => {
@@ -342,8 +338,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.writes[0]!.content).toContain(
       'affiliation: ["[[Acme Widgets]]"]',
     );
-    const record = await syncState.get('uuid-task');
-    expect(record?.mirrors.todoist?.base?.parent).toBeNull();
+    expect(syncState.baseOf('uuid-task', 'todoist')?.parent).toBeNull();
   });
 
   it('lets the vault win when both sides changed', async () => {
@@ -363,8 +358,9 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     expect(vault.renames).toEqual([]);
     expect(vault.writes).toEqual([]);
     // And the base is re-stamped from the remote either way
-    const record = await syncState.get('uuid-task');
-    expect(record?.mirrors.todoist?.base?.title).toBe('Chore 1 renamed');
+    expect(syncState.baseOf('uuid-task', 'todoist')?.title).toBe(
+      'Chore 1 renamed',
+    );
   });
 
   it('ignores a section change on a subtask (it inherits its parent)', async () => {
