@@ -35,9 +35,13 @@ export interface TaskManagerPort {
     id: string,
     input: { content: string; labels: string[] },
   ): Promise<void>;
+  // Places a task. A subtask is moved by parentId; a top-level task by
+  // sectionId. parentId: null is an explicit move to the TOP LEVEL (used to
+  // flatten a retiring slice twin's children, dt-23), optionally landing in a
+  // section so an unparented task keeps its lane.
   moveTask(
     id: string,
-    to: { sectionId?: string; parentId?: string },
+    to: { sectionId?: string; parentId?: string | null },
   ): Promise<void>;
   setTaskCompleted(id: string, completed: boolean): Promise<void>;
   deleteTask(id: string): Promise<void>;

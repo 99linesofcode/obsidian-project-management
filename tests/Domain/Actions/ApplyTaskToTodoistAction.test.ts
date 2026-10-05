@@ -56,7 +56,7 @@ class FakeTaskManager implements TaskManagerPort {
     [];
   moveTaskCalls: Array<{
     id: string;
-    to: { sectionId?: string; parentId?: string };
+    to: { sectionId?: string; parentId?: string | null };
   }> = [];
   completeCalls: Array<{ id: string; completed: boolean }> = [];
   ensureLabelCalls: string[] = [];
@@ -84,7 +84,7 @@ class FakeTaskManager implements TaskManagerPort {
   }
   async moveTask(
     id: string,
-    to: { sectionId?: string; parentId?: string },
+    to: { sectionId?: string; parentId?: string | null },
   ): Promise<void> {
     this.moveTaskCalls.push({ id, to });
   }
@@ -559,6 +559,100 @@ describe('ApplyTaskToTodoistAction', () => {
       expect(h.taskManager.createTaskCalls).toEqual([]);
       expect(h.taskManager.ensureLabelCalls).toEqual([]);
       expect(h.vault.writes).toEqual([]);
+    });
+
+    it('creates a top-level to-do in its lane section when it has no parent twin', async () => {
+      // Given — a to-do whose parent is a slice (no twin to nest under, dt-23)
+      const h = setup();
+      h.syncState.seed(
+        entityRecord({ id: 'todo-uuid', notePath: todoPath }),
+      );
+
+      // When — the winning to-do is rendered top-level
+      const id = await h.action.executeToDo({
+        todo: todo(),
+        current: null,
+        projectId: 'P1',
+        parentId: null,
+        sectionId: 'S2',
+        projectName,
+        notePath: todoPath,
+        syncedAt: '2026-09-18T12:00:00Z',
+      });
+
+      // Then — the `todo`-labelled task is created in the lane section, with no
+      // parent, and its base records no parent uuid
+      expect(h.taskManager.createTaskCalls[0]).toMatchObject({
+        projectId: 'P1',
+        sectionId: 'S2',
+        content: 'Step one',
+        labels: ['todo'],
+      });
+      expect(h.taskManager.createTaskCalls[0]!.parentId).toBeUndefined();
+      expect(h.syncState.baseOf('todo-uuid', 'todoist')?.parent).toBeNull();
+      expect(id).toBe('T1');
+    });
+
+    it('unparents a nested to-do into its lane section when it moves to top-level', async () => {
+      // Given — a to-do twin nested under a slice twin it can no longer follow
+      const h = setup();
+      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }), {
+        todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
+      });
+
+      // When — the to-do is rendered top-level in its lane
+      await h.action.executeToDo({
+        todo: todo(),
+        current: todoistTask({
+          id: 'T9',
+          content: 'Step one',
+          labels: ['todo'],
+          parentId: 'SLICE',
+          sectionId: 'S1',
+        }),
+        projectId: 'P1',
+        parentId: null,
+        sectionId: 'S2',
+        projectName,
+        notePath: todoPath,
+        syncedAt: '2026-09-18T12:00:00Z',
+      });
+
+      // Then — one move unparents it and lands it in the lane section
+      expect(h.taskManager.moveTaskCalls).toEqual([
+        { id: 'T9', to: { sectionId: 'S2', parentId: null } },
+      ]);
+    });
+
+    it('moves a top-level to-do to its lane section only', async () => {
+      // Given — a top-level to-do twin in the wrong section
+      const h = setup();
+      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }), {
+        todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
+      });
+
+      // When — the to-do is rendered in another lane
+      await h.action.executeToDo({
+        todo: todo(),
+        current: todoistTask({
+          id: 'T9',
+          content: 'Step one',
+          labels: ['todo'],
+          parentId: null,
+          sectionId: 'S1',
+        }),
+        projectId: 'P1',
+        parentId: null,
+        sectionId: 'S2',
+        projectName,
+        notePath: todoPath,
+        syncedAt: '2026-09-18T12:00:00Z',
+      });
+
+      // Then — only a section move happens (no spurious unparent)
+      expect(h.taskManager.moveTaskCalls).toEqual([
+        { id: 'T9', to: { sectionId: 'S2' } },
+      ]);
     });
   });
 });

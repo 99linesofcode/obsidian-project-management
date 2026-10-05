@@ -180,12 +180,25 @@ export class TodoistAdapter implements TaskManagerPort {
 
   // Moving is its own endpoint: the update endpoint silently drops section_id,
   // and the move endpoint accepts exactly one of project_id/section_id/
-  // parent_id. The port only exposes section and parent placement, so exactly
-  // one of those must be given.
+  // parent_id. The port only exposes section and parent placement. A null
+  // parent is an explicit move to the TOP LEVEL (dt-23's slice flatten): the
+  // API takes parent_id: null, and a section_id may ride along so the
+  // unparented task lands in its lane rather than the project's default.
   async moveTask(
     id: string,
-    to: { sectionId?: string; parentId?: string },
+    to: { sectionId?: string; parentId?: string | null },
   ): Promise<void> {
+    if (to.parentId === null) {
+      await this.postOk(
+        `/tasks/${id}/move`,
+        {
+          parent_id: null,
+          ...(to.sectionId === undefined ? {} : { section_id: to.sectionId }),
+        },
+        'move task',
+      );
+      return;
+    }
     if (to.sectionId !== undefined && to.parentId === undefined) {
       await this.postOk(
         `/tasks/${id}/move`,
