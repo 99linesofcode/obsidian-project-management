@@ -643,4 +643,34 @@ describe('SyncStateAdapter migration', () => {
     await first.listEntities('Acme Widgets');
     expect(migrateEntities(container(snapshot()))).toBe(false);
   });
+
+  it('seeds fullScanPending on a pre-flag container and consumes it once', async () => {
+    // Given — a v3 container written before the parent-tracking marker existed
+    const { storage, snapshot } = fakeStorage({
+      [SYNC_STATE_KEY]: { version: 3, projects: {} },
+    });
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — the marker is consumed
+    const first = await adapter.consumeFullScan();
+
+    // Then — an absent marker reads as pending and is cleared to false
+    expect(first).toBe(true);
+    expect(container(snapshot())['fullScanPending']).toBe(false);
+
+    // And — the one-shot is spent: a second consume is false
+    expect(await adapter.consumeFullScan()).toBe(false);
+  });
+
+  it('respects an existing fullScanPending false', async () => {
+    // Given — a container that already consumed its forced scan
+    const { storage, snapshot } = fakeStorage({
+      [SYNC_STATE_KEY]: { version: 3, projects: {}, fullScanPending: false },
+    });
+    const adapter = new SyncStateAdapter(storage);
+
+    // Then — the marker stays spent
+    expect(await adapter.consumeFullScan()).toBe(false);
+    expect(container(snapshot())['fullScanPending']).toBe(false);
+  });
 });

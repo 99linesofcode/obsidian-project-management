@@ -85,4 +85,10 @@ export interface SyncStatePort {
   ): Promise<void>;
   getWatchState(projectName: string): Promise<WatchStateData>;
   setWatchState(projectName: string, state: WatchStateData): Promise<void>;
+
+  // One-shot: returns whether a full scan is pending and clears it. WHY: the
+  // probe gate watches the project board's updatedAt, but issue-level relations
+  // — sub-issues — move nothing on the board, so a store that predates parent
+  // tracking needs exactly one forced fetch to discover them.
+  consumeFullScan(): Promise<boolean>;
 }

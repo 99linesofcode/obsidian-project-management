@@ -183,16 +183,13 @@ describe('ApplyTaskToVaultAction', () => {
     expect(vault.written).toEqual([{ path: notePath, content: noteFor(changed) }]);
   });
 
-  it('carries the todoist anchor through a remote rewrite', async () => {
-    // Given — a synced note whose vault-owned `todoist` anchor points at its
-    // twin, and a remote body change
+  it('rewrites a task note without introducing a todoist anchor', async () => {
+    // Given — a synced note with no anchor: the cleanup strips any legacy one,
+    // so the registry is the only twin identity
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
-    vault.notes.set(
-      notePath,
-      noteFor(task()).replace('---\n', '---\ntodoist: T9\n'),
-    );
+    vault.notes.set(notePath, noteFor(task()));
     const action = makeAction(vault, syncState);
     const changed = task({ body: 'The bug now also happens on resize.' });
 
@@ -205,10 +202,9 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the rewrite keeps the anchor, so the to-do projection can still
-    // find the task's twin
+    // Then — the rewrite carries no anchor; an absent anchor is a no-op
     expect(vault.written).toHaveLength(1);
-    expect(vault.written[0]!.content).toContain('todoist: T9');
+    expect(vault.written[0]!.content).not.toContain('todoist:');
   });
 
   it('skips the write when the note already matches', async () => {

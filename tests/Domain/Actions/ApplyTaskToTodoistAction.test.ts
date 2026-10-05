@@ -165,7 +165,7 @@ function setup() {
   const taskManager = new FakeTaskManager();
   const vault = new FakeVault();
   const syncState = new FakeSyncState();
-  const action = new ApplyTaskToTodoistAction(taskManager, vault, syncState);
+  const action = new ApplyTaskToTodoistAction(taskManager, syncState);
   return { action, taskManager, vault, syncState };
 }
 
@@ -188,13 +188,12 @@ const base = {
   parentId: null,
   labels: ['task'],
   notePath,
-  noteContent,
   syncedAt: '2026-09-18T12:00:00Z',
 };
 
 describe('ApplyTaskToTodoistAction', () => {
   describe('tasks', () => {
-    it('creates a twin and stamps the anchor and the todoist mirror when none exists', async () => {
+    it('creates a twin and records the todoist mirror when none exists', async () => {
       // Given — a tracked issue with no twin
       const h = setup();
       seedRecord(h.syncState, null);
@@ -207,10 +206,11 @@ describe('ApplyTaskToTodoistAction', () => {
         ...base,
       });
 
-      // Then — a task is created, the anchor stamped, the mirror recorded
+      // Then — a task is created and the mirror recorded; the dead `todoist`
+      // note anchor is NOT stamped (the registry is the identity source)
       expect(h.taskManager.createTaskCalls).toHaveLength(1);
       expect(h.taskManager.ensureLabelCalls).toEqual(['task']);
-      expect(h.vault.writes[0]!.content).toContain('todoist: T1');
+      expect(h.vault.writes).toEqual([]);
       expect(h.syncState.handleOf('uuid-42', 'todoist')).toBe('T1');
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.title).toBe('Fix the bug');
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.status).toBe('Building');
@@ -459,7 +459,6 @@ describe('ApplyTaskToTodoistAction', () => {
         parentId: 'T9',
         projectName,
         notePath: todoPath,
-        noteContent: '---\nid: todo-uuid\nstatus: open\n---\n',
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
@@ -500,7 +499,6 @@ describe('ApplyTaskToTodoistAction', () => {
         parentId: 'T9p',
         projectName,
         notePath: todoPath,
-        noteContent: '',
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
@@ -529,7 +527,6 @@ describe('ApplyTaskToTodoistAction', () => {
         parentId: 'T9p',
         projectName,
         notePath: todoPath,
-        noteContent: '',
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
@@ -554,7 +551,6 @@ describe('ApplyTaskToTodoistAction', () => {
         parentId: 'T9',
         projectName,
         notePath: 'note-edit-step-one',
-        noteContent: '---\nstatus: open\n---\n',
         syncedAt: '2026-09-18T12:00:00Z',
       });
 

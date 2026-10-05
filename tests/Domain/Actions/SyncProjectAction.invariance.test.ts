@@ -39,7 +39,7 @@ import type { CreateTodoistTaskData } from '../../../src/Domain/DataTransferObje
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData, todoistTask } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 const DONE_LANE = 'Shipped';
@@ -545,11 +545,7 @@ function harness(): Harness {
     new VerdictResolver(DONE_LANE),
     DONE_LANE,
   );
-  const applyToTodoist = new ApplyTaskToTodoistAction(
-    todoist,
-    vault,
-    syncState,
-  );
+  const applyToTodoist = new ApplyTaskToTodoistAction(todoist, syncState);
   const applyTodoistCompletion = new ApplyTodoistCompletionAction(
     todoist,
     vault,
@@ -1197,6 +1193,118 @@ describe('SyncProjectAction completed-twin churn', () => {
       h.todoist.mutations.filter((m) => m.startsWith('createTask:')),
     ).toEqual([]);
     expect(await h.syncState.findByNotePath(capturedPath)).toBeNull();
+    expect(h.vault.mutations).toEqual([]);
+    expect(h.github.mutations).toEqual([]);
+    expect(h.todoist.mutations).toEqual([]);
+  });
+});
+
+// The live bug this ticket fixes: a store predating parent tracking is settled
+// (notes match bases) and its board is quiet (the project's updatedAt unmoved),
+// yet GitHub-side sub-issue relations changed. The board probe cannot see them —
+// adding a sub-issue moves nothing on the board — so the one-shot fullScanPending
+// marker forces ONE parent-aware fetch. That single pass discovers the relation,
+// seeds the child's affiliation, and moves the already-adopted twin under its
+// parent's twin (the GitHub half runs before the Todoist half in the chain).
+describe('SyncProjectAction forced full scan', () => {
+  const PARENT_URL = 'https://github.com/acme/widgets/issues/40';
+  const PARENT_PATH = 'Projecten/Acme Widgets/taken/the-parent.md';
+  const PARENT_TWIN = 'T4';
+
+  it('discovers a sub-issue and moves its twin under the parent in one pass', async () => {
+    // Given — a settled project whose child twin sits top-level
+    const h = harness();
+    await h.chain.execute('Acme Widgets');
+    expect(
+      h.todoist.active.find((task) => task.id === TASK_TWIN)?.parentId,
+    ).toBeNull();
+    const settledUpdate = h.syncState.lastUpdates.get('Acme Widgets');
+
+    // And — a tracked parent appears with its note, registry record, card and
+    // top-level twin
+    h.github.detail.issues.push({
+      url: PARENT_URL,
+      remoteId: 40,
+      nodeId: 'I40',
+      title: 'The parent',
+      body: '',
+      state: 'open',
+      createdAt: '2026-09-18T09:30:00Z',
+      lastEditedAt: UPDATED_AT,
+      updatedAt: UPDATED_AT,
+      labels: ['type: task'],
+      parentUrl: null,
+    });
+    h.github.detail.cards.push({
+      itemId: 'C2',
+      type: 'ISSUE',
+      issueUrl: PARENT_URL,
+      statusOptionName: 'Building',
+      updatedAt: null,
+    });
+    h.vault.notes.set(
+      PARENT_PATH,
+      [
+        '---',
+        'type: task',
+        'status: Building',
+        'affiliation: ["[[Acme Widgets]]"]',
+        '---',
+        '',
+      ].join('\n'),
+    );
+    const parentBase = taskData({
+      id: 'uuid-parent',
+      notePath: PARENT_PATH,
+      title: 'The parent',
+      body: hash(''),
+      status: 'Building',
+      updatedAt: UPDATED_AT,
+      type: 'task',
+    });
+    h.syncState.seed(entityRecord({ id: 'uuid-parent', notePath: PARENT_PATH }), {
+      github: { handle: PARENT_URL, base: parentBase },
+      todoist: { handle: PARENT_TWIN, base: parentBase },
+    });
+    h.todoist.active.push(
+      todoistTask({
+        id: PARENT_TWIN,
+        content: 'The parent',
+        sectionId: 'S2',
+        labels: ['task'],
+      }),
+    );
+
+    // And — GitHub makes issue 42 a sub-issue of issue 40; the board stays
+    // quiet, so the probe alone would leave includeBoard false
+    h.github.detail.issues.find((issue) => issue.url === ISSUE_URL)!.parentUrl =
+      PARENT_URL;
+    expect(h.github.states.get('PVT')!.updatedAt).toBe(settledUpdate);
+
+    // And — the pre-parent-tracking store's one-shot marker is pending
+    h.syncState.fullScanPending = true;
+    h.vault.mutations = [];
+    h.github.mutations = [];
+    h.todoist.mutations = [];
+
+    // When — one chain pass runs
+    await h.chain.execute('Acme Widgets');
+
+    // Then — the forced fetch discovered the parent and seeded the affiliation
+    expect(h.vault.notes.get(NOTE_PATH)).toContain('[[the-parent]]');
+
+    // And — the child twin moved under the parent's twin in the same pass
+    expect(h.todoist.mutations).toContain(`moveTask:${TASK_TWIN}`);
+    expect(
+      h.todoist.active.find((task) => task.id === TASK_TWIN)?.parentId,
+    ).toBe(PARENT_TWIN);
+
+    // And — the one-shot marker is spent, so the next quiet pass closes the gate
+    expect(h.syncState.fullScanPending).toBe(false);
+    h.vault.mutations = [];
+    h.github.mutations = [];
+    h.todoist.mutations = [];
+    await h.chain.execute('Acme Widgets');
     expect(h.vault.mutations).toEqual([]);
     expect(h.github.mutations).toEqual([]);
     expect(h.todoist.mutations).toEqual([]);

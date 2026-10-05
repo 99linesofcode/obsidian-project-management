@@ -338,7 +338,7 @@ function composedHarness() {
   syncState.identities.set(projectName, identity);
   const projectManagement = new FakeProjectManagement();
   const taskManager = new FakeTaskManager();
-  const writer = new ApplyTaskToTodoistAction(taskManager, vault, syncState);
+  const writer = new ApplyTaskToTodoistAction(taskManager, syncState);
   const { action, events } = buildAction(
     vault,
     syncState,
@@ -390,7 +390,6 @@ describe('SyncTodoistTasksAction', () => {
 
     // Then — the projection follows the record's note path
     expect(h.writer.taskCalls[0]!.notePath).toBe(registryPath);
-    expect(h.writer.taskCalls[0]!.noteContent).toContain('status: Building');
   });
 
   it('skips the writer when the remote twin moved (per-field pull)', async () => {
@@ -642,7 +641,6 @@ describe('SyncTodoistTasksAction', () => {
     const taskManager = new FakeTaskManager();
     const todoistWriter = new ApplyTaskToTodoistAction(
       taskManager,
-      vault,
       syncState,
     );
 

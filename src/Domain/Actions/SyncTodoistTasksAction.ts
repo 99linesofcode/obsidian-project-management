@@ -329,7 +329,6 @@ export class SyncTodoistTasksAction {
       parentId: placement.parentId,
       labels: [item.type],
       notePath: item.notePath,
-      noteContent: item.noteContent,
       syncedAt: input.syncedAt,
     });
   }
@@ -441,7 +440,6 @@ export class SyncTodoistTasksAction {
       parentId,
       projectName: input.projectName,
       notePath: item.notePath,
-      noteContent: item.noteContent,
       syncedAt: input.syncedAt,
     });
   }

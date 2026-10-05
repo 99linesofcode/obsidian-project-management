@@ -2,11 +2,9 @@ import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { sameLabels } from '../Labels/sameLabels.js';
 import { projectFromNotePath } from '../Notes/projectFromNotePath.js';
 import { projectFromTodoPath } from '../Notes/projectFromTodoPath.js';
-import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
-import type { VaultPort } from '../Ports/VaultPort.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { ToDoData } from '../DataTransferObjects/ToDoData.js';
 
@@ -24,9 +22,8 @@ export interface ApplyTaskToTodoistInput {
   parentId: string | null;
   // The derived label set (dt-09).
   labels: string[];
-  // The vault note the task mirrors, for the anchor and the registry record.
+  // The vault note the task mirrors, for the registry record.
   notePath: string;
-  noteContent: string;
   syncedAt: string;
   // The registry record the caller already resolved, when it has one. Falls
   // back to a note-path lookup so the writer stays usable on its own.
@@ -46,7 +43,6 @@ export interface ApplyToDoToTodoistInput {
   parentId: string;
   projectName: string;
   notePath: string;
-  noteContent: string;
   syncedAt: string;
   record?: EntityRecord | null;
   // The todoist mirror handle the caller resolved from the registry's port
@@ -62,16 +58,14 @@ const TODO_LABEL = 'todo';
 // writing ONLY the fields that differ — the gate IS the diff. Look-up-before-
 // create is the contract: the adapter's ensureLabel is idempotent (creating a
 // duplicate errors) and the pipeline ensures the lane sections before the
-// writer runs. Every write stamps the note's `todoist` anchor on creation and
-// the registry record's todoist mirror after the write, so the next poll never
-// reads our own write as a remote change (dt-08). The base advance is owned
-// HERE, after the writes resolve: advancing it earlier would make the next pass
-// compare the remote against a base that already claims the new state (the
-// revert bug).
+// writer runs. Every write records the registry's todoist mirror after the
+// write, so the next poll never reads our own write as a remote change (dt-08).
+// The base advance is owned HERE, after the writes resolve: advancing it
+// earlier would make the next pass compare the remote against a base that
+// already claims the new state (the revert bug).
 export class ApplyTaskToTodoistAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
-    private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
   ) {}
 
@@ -112,13 +106,6 @@ export class ApplyTaskToTodoistAction {
         content: desired.content,
         labels: desired.labels,
       });
-      await stampFrontmatterField(
-        this.vault,
-        input.notePath,
-        input.noteContent,
-        'todoist',
-        created.id,
-      );
       if (desired.isCompleted) {
         await this.taskManager.setTaskCompleted(created.id, true);
       }
@@ -212,13 +199,6 @@ export class ApplyTaskToTodoistAction {
         content: desired.content,
         labels: desired.labels,
       });
-      await stampFrontmatterField(
-        this.vault,
-        input.notePath,
-        input.noteContent,
-        'todoist',
-        created.id,
-      );
       if (desired.isCompleted) {
         await this.taskManager.setTaskCompleted(created.id, true);
       }

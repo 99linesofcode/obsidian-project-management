@@ -125,8 +125,8 @@ describe('CleanupNoteFrontmatterAction', () => {
     ).toBe(false);
   });
 
-  it('leaves a todoist anchor as-is', async () => {
-    // Given — a note carrying a todoist anchor and a legacy id
+  it('strips the dead todoist anchor from a task note', async () => {
+    // Given — a note carrying the legacy twin anchor and a machine id
     const vault = new FakeVault();
     vault.notes.set(
       takenPath,
@@ -138,10 +138,34 @@ describe('CleanupNoteFrontmatterAction', () => {
     // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — the anchor survives; only the machine id is stripped
+    // Then — the anchor and the machine id are gone, the rest is preserved
     const parsed = splitFrontmatter(vault.notes.get(takenPath) ?? '');
-    expect(parsed?.fields.get('todoist')).toBe('T1');
+    expect(parsed?.fields.has('todoist')).toBe(false);
     expect(parsed?.fields.has('id')).toBe(false);
+    expect(parsed?.fields.get('status')).toBe('open');
+    expect(parsed?.body).toBe('Body text.');
+
+    // And — idempotent: a second run writes nothing more
+    const writesAfterFirst = vault.writes.length;
+    await action.execute({ projectName: 'Acme Widgets' });
+    expect(vault.writes).toHaveLength(writesAfterFirst);
+  });
+
+  it("leaves a project note's live todoist anchor untouched", async () => {
+    // Given — a project note carrying the LIVE todoist PROJECT id anchor. It
+    // lives outside taken/ and todos/, so the cleanup's walk never sees it.
+    const vault = new FakeVault();
+    const projectPath = 'Projecten/Acme Widgets/_home.md';
+    vault.notes.set(projectPath, noteWith(['pm: github', 'todoist: P1']));
+    vault.folderNotes = folderWith([]);
+    const action = makeAction(vault);
+
+    // When — the cleanup runs
+    await action.execute({ projectName: 'Acme Widgets' });
+
+    // Then — the project anchor survives and nothing is written
+    expect(vault.writes).toEqual([]);
+    expect(vault.notes.get(projectPath)).toContain('todoist: P1');
   });
 
   it('leaves a note with neither field untouched', async () => {
