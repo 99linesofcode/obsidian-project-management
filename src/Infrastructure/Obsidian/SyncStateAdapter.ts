@@ -17,6 +17,10 @@ import { toDiffViewWithBody } from '../../Domain/Reconciliation/toDiffView.js';
 export interface SyncStateStorage {
   load(): Promise<Record<string, unknown>>;
   save(data: unknown): Promise<void>;
+  // Optional best-effort snapshot of the current data file, taken before an
+  // overwrite so a crash mid-write can fall back to the previous state. Absent
+  // when the platform cannot copy the file.
+  backup?(): Promise<void>;
 }
 
 // The sync state lives under its own top-level key, so the plugin's settings
@@ -35,9 +39,15 @@ const PORTS_KEY = 'ports';
 const ITEMS_KEY = 'items';
 
 // The one-shot marker that forces the first parent-aware fetch after a store
-// predates parent tracking. Absent = pending; a fresh store's forced first
-// fetch is harmless.
+// predates parent tracking. It lives on the PROJECT node (projects.<name>.
+// fullScanPending): a single container-level flag was consumed by whichever
+// project synced first, leaving every other project blind. Absent = pending.
 const FULL_SCAN_PENDING_KEY = 'fullScanPending';
+
+// The adapter asks for a rolling backup before a registry overwrite, but at
+// most once per window: a burst of port ops during one sync pass must not copy
+// data.json on every write.
+const BACKUP_MIN_INTERVAL_MS = 60_000;
 
 const STATUS_PREFIX = 'status.';
 const TODOIST_ITEM_PREFIX = 'todoistItem.';
@@ -424,6 +434,27 @@ function ensureProjectNode(
   return projects[name] as Record<string, unknown>;
 }
 
+// Seeds the per-project one-shot forced-scan marker on a store that predates
+// parent tracking, and folds away the legacy container-level flag (which only
+// ever forced the first project's scan). Returns whether it changed anything.
+function seedFullScanMarkers(container: Record<string, unknown>): boolean {
+  let changed = false;
+  if (container[FULL_SCAN_PENDING_KEY] !== undefined) {
+    delete container[FULL_SCAN_PENDING_KEY];
+    changed = true;
+  }
+  for (const rawProject of Object.values(projectsMap(container))) {
+    if (!isRecord(rawProject)) {
+      continue;
+    }
+    if (rawProject[FULL_SCAN_PENDING_KEY] === undefined) {
+      rawProject[FULL_SCAN_PENDING_KEY] = true;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function entityMap(node: Record<string, unknown>): Record<string, unknown> {
   return isRecord(node[ENTITIES_KEY]) ? node[ENTITIES_KEY] : {};
 }
@@ -665,18 +696,44 @@ function dropEntity(
 
 // Implements the sync state port against a namespaced key/value store. Storage
 // is project-nested and port-grouped: the entity holds only hub-side location;
-// each port holds its items keyed by handle. The in-memory indexes are built
-// once from the migrated container and maintained on every write.
+// each port holds its items keyed by handle. The adapter is the single writer:
+// every port method runs through an in-process promise chain and shares one
+// cached container, so two interleaved load-modify-save operations cannot each
+// persist a stale snapshot and lose one write (REG-2). The container is read
+// once and written through, instead of re-parsed per op.
 export class SyncStateAdapter implements SyncStatePort {
   private indexes: Indexes | null = null;
+  private container: Record<string, unknown> | null = null;
+  private chain: Promise<unknown> = Promise.resolve();
+  private lastBackupAt: number | null = null;
 
   constructor(private readonly storage: SyncStateStorage) {}
 
+  // The mutex every port method funnels through. External callers always chain,
+  // so a command racing a sync pass cannot interleave a load-modify-save. No
+  // port method calls another (the one shared lookup is a private helper), so
+  // there is no nested queue call to deadlock on. A rejected op does not poison
+  // the chain.
+  private queue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.chain.then(
+      () => fn(),
+      () => fn(),
+    );
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   // The namespaced container, running the chained one-shot migration on first
-  // sight: legacy flat root -> container -> v2 entities -> v3 port-grouped.
-  // The indexes are built once from the migrated container; writes maintain
-  // them from then on.
+  // sight: legacy flat root -> container -> v2 entities -> v3 port-grouped. The
+  // migrated container and its indexes are cached; every later read and write
+  // goes through the cache, so concurrent ops share one object.
   private async loadContainer(): Promise<Record<string, unknown>> {
+    if (this.container !== null) {
+      return this.container;
+    }
     const data = await this.storage.load();
     if (migrateLegacyState(data)) {
       await this.storage.save(data);
@@ -687,38 +744,62 @@ export class SyncStateAdapter implements SyncStatePort {
     if (!isRecord(data[SYNC_STATE_KEY])) {
       data[SYNC_STATE_KEY] = container;
     }
-    if (this.indexes === null) {
-      let changed = false;
-      if (migrateEntities(container)) {
-        changed = true;
-      }
-      if (migrateV3(container)) {
-        changed = true;
-      }
-      // A store predating parent tracking carries no marker; absent = pending.
-      // Seed it once so the first parent-aware fetch discovers issue-level
-      // relations (sub-issues) the board's updatedAt cannot surface.
-      if (container[FULL_SCAN_PENDING_KEY] === undefined) {
-        container[FULL_SCAN_PENDING_KEY] = true;
-        changed = true;
-      }
-      if (changed) {
-        data[SYNC_STATE_KEY] = container;
-        await this.storage.save(data);
-      }
-      this.indexes = buildIndexes(container);
+    let changed = false;
+    if (migrateEntities(container)) {
+      changed = true;
     }
+    if (migrateV3(container)) {
+      changed = true;
+    }
+    // A store predating parent tracking carries no per-project marker; absent =
+    // pending. Seed every known project so EACH gets exactly one parent-aware
+    // fetch (PRB-3), and fold away the legacy container-level flag.
+    if (seedFullScanMarkers(container)) {
+      changed = true;
+    }
+    if (changed) {
+      await this.maybeBackup();
+      data[SYNC_STATE_KEY] = container;
+      await this.storage.save(data);
+    }
+    this.indexes = buildIndexes(container);
+    this.container = container;
     return container;
   }
 
-  // Load/mutate/save per operation, as before: proven with Obsidian storage.
-  private async persist(container: Record<string, unknown>): Promise<void> {
+  // Writes the cached container through to a FRESH data.json root, so keys
+  // owned by other writers (settings) survive. Asks for a rolling backup before
+  // the overwrite so a crash mid-write leaves the previous state on disk.
+  private async persist(): Promise<void> {
+    await this.maybeBackup();
     const data = await this.storage.load();
-    data[SYNC_STATE_KEY] = container;
+    data[SYNC_STATE_KEY] = this.container;
     await this.storage.save(data);
   }
 
+  private async maybeBackup(): Promise<void> {
+    const now = Date.now();
+    if (
+      this.lastBackupAt !== null &&
+      now - this.lastBackupAt < BACKUP_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastBackupAt = now;
+    try {
+      await this.storage.backup?.();
+    } catch {
+      // Best-effort: a failed backup must never block a registry write.
+    }
+  }
+
   async getEntity(id: string): Promise<EntityRecord | null> {
+    return this.queue(() => this.getEntityUnsafe(id));
+  }
+
+  // The shared lookup, called from within an already-queued method so the two
+  // never nest on the queue.
+  private async getEntityUnsafe(id: string): Promise<EntityRecord | null> {
     const container = await this.loadContainer();
     const project = this.indexes!.byEntityProject.get(id);
     if (project === undefined) {
@@ -733,86 +814,96 @@ export class SyncStateAdapter implements SyncStatePort {
   }
 
   async findByNotePath(notePath: string): Promise<EntityRecord | null> {
-    await this.loadContainer();
-    const id = this.indexes!.byNotePath.get(notePath);
-    return id === undefined ? null : this.getEntity(id);
+    return this.queue(async () => {
+      await this.loadContainer();
+      const id = this.indexes!.byNotePath.get(notePath);
+      return id === undefined ? null : this.getEntityUnsafe(id);
+    });
   }
 
   async setEntity(record: EntityRecord): Promise<void> {
-    const container = await this.loadContainer();
-    const indexes = this.indexes!;
-    // The project key is derived from the note path (Projecten/<name>/... and
-    // Archief/<name>/... both key <name>); WHY: the path convention IS the
-    // project partition, so no caller has to pass the name for an entity.
-    const project = projectFromNotePath(record.notePath);
-    const previousProject = indexes.byEntityProject.get(record.id);
-    const previousPath = indexes.byEntityPath.get(record.id);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const indexes = this.indexes!;
+      // The project key is derived from the note path (Projecten/<name>/... and
+      // Archief/<name>/... both key <name>); WHY: the path convention IS the
+      // project partition, so no caller has to pass the name for an entity.
+      const project = projectFromNotePath(record.notePath);
+      const previousProject = indexes.byEntityProject.get(record.id);
+      const previousPath = indexes.byEntityPath.get(record.id);
 
-    // Re-key: drop the old path index and, on a project move, the old nested
-    // entity, before writing the new location. Items stay with their ports.
-    if (
-      previousPath !== undefined &&
-      previousPath !== record.notePath &&
-      indexes.byNotePath.get(previousPath) === record.id
-    ) {
-      indexes.byNotePath.delete(previousPath);
-    }
-    if (previousProject !== undefined && previousProject !== project) {
-      const oldNode = projectNode(projectsMap(container), previousProject);
-      if (oldNode !== null) {
-        const oldEntities = entityMap(oldNode);
-        if (oldEntities[record.id] !== undefined) {
-          delete oldEntities[record.id];
+      // Re-key: drop the old path index and, on a project move, the old nested
+      // entity, before writing the new location. Items stay with their ports.
+      if (
+        previousPath !== undefined &&
+        previousPath !== record.notePath &&
+        indexes.byNotePath.get(previousPath) === record.id
+      ) {
+        indexes.byNotePath.delete(previousPath);
+      }
+      if (previousProject !== undefined && previousProject !== project) {
+        const oldNode = projectNode(projectsMap(container), previousProject);
+        if (oldNode !== null) {
+          const oldEntities = entityMap(oldNode);
+          if (oldEntities[record.id] !== undefined) {
+            delete oldEntities[record.id];
+          }
         }
       }
-    }
 
-    const node = ensureProjectNode(ensureProjects(container), project);
-    ensureEntityMap(node)[record.id] = { notePath: record.notePath };
-    indexes.byNotePath.set(record.notePath, record.id);
-    indexes.byEntityPath.set(record.id, record.notePath);
-    indexes.byEntityProject.set(record.id, project);
-    await this.persist(container);
+      const node = ensureProjectNode(ensureProjects(container), project);
+      ensureEntityMap(node)[record.id] = { notePath: record.notePath };
+      indexes.byNotePath.set(record.notePath, record.id);
+      indexes.byEntityPath.set(record.id, record.notePath);
+      indexes.byEntityProject.set(record.id, project);
+      await this.persist();
+    });
   }
 
   async removeEntity(id: string): Promise<void> {
-    const container = await this.loadContainer();
-    dropEntity(container, this.indexes!, id);
-    await this.persist(container);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      dropEntity(container, this.indexes!, id);
+      await this.persist();
+    });
   }
 
   async listEntities(projectName: string): Promise<EntityRecord[]> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    if (node === null) {
-      return [];
-    }
-    return Object.entries(entityMap(node))
-      .filter(([, raw]) => isRecord(raw))
-      .map(([id, raw]) => ({
-        id,
-        notePath: str((raw as Record<string, unknown>).notePath),
-      }));
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      if (node === null) {
+        return [];
+      }
+      return Object.entries(entityMap(node))
+        .filter(([, raw]) => isRecord(raw))
+        .map(([id, raw]) => ({
+          id,
+          notePath: str((raw as Record<string, unknown>).notePath),
+        }));
+    });
   }
 
   async findMirrorItem(
     portId: string,
     handle: string,
   ): Promise<MirrorItem | null> {
-    const container = await this.loadContainer();
-    const owner = this.indexes!.byHandle.get(portId)?.get(handle);
-    if (owner === undefined) {
-      return null;
-    }
-    const node = projectNode(projectsMap(container), owner.project);
-    if (node === null) {
-      return null;
-    }
-    const port = portNode(node, portId);
-    if (port === null) {
-      return null;
-    }
-    return mapMirrorItem(itemsMap(port)[handle]);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const owner = this.indexes!.byHandle.get(portId)?.get(handle);
+      if (owner === undefined) {
+        return null;
+      }
+      const node = projectNode(projectsMap(container), owner.project);
+      if (node === null) {
+        return null;
+      }
+      const port = portNode(node, portId);
+      if (port === null) {
+        return null;
+      }
+      return mapMirrorItem(itemsMap(port)[handle]);
+    });
   }
 
   async setMirrorItem(
@@ -821,46 +912,53 @@ export class SyncStateAdapter implements SyncStatePort {
     handle: string,
     item: MirrorItem,
   ): Promise<void> {
-    const container = await this.loadContainer();
-    const indexes = this.indexes!;
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const indexes = this.indexes!;
 
-    // A handle is a port-unique address, so a new owner evicts the previous
-    // one's whole entity — matching the v2 record dedup, so no stale anchor
-    // survives a re-capture or a twin recreation.
-    const owner = indexes.byHandle.get(portId)?.get(handle);
-    if (owner !== undefined && owner.entityId !== item.entityId) {
-      dropEntity(container, indexes, owner.entityId);
-    }
+      // A handle is a port-unique address, so a new owner evicts the previous
+      // one's whole entity — matching the v2 record dedup, so no stale anchor
+      // survives a re-capture or a twin recreation.
+      const owner = indexes.byHandle.get(portId)?.get(handle);
+      if (owner !== undefined && owner.entityId !== item.entityId) {
+        dropEntity(container, indexes, owner.entityId);
+      }
 
-    const node = ensureProjectNode(ensureProjects(container), projectName);
-    const port = ensurePortNode(node, portId);
-    // A port's provider is its concrete service; a first item stamps it when
-    // the caller has not written a port state yet.
-    if (typeof port.provider !== 'string' || port.provider === '') {
-      port.provider = portId;
-    }
-    ensureItemsMap(port)[handle] = { entityId: item.entityId, base: item.base };
+      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const port = ensurePortNode(node, portId);
+      // A port's provider is its concrete service; a first item stamps it when
+      // the caller has not written a port state yet.
+      if (typeof port.provider !== 'string' || port.provider === '') {
+        port.provider = portId;
+      }
+      ensureItemsMap(port)[handle] = { entityId: item.entityId, base: item.base };
 
-    let handles = indexes.byHandle.get(portId);
-    if (handles === undefined) {
-      handles = new Map();
-      indexes.byHandle.set(portId, handles);
-    }
-    handles.set(handle, { project: projectName, entityId: item.entityId });
+      let handles = indexes.byHandle.get(portId);
+      if (handles === undefined) {
+        handles = new Map();
+        indexes.byHandle.set(portId, handles);
+      }
+      handles.set(handle, { project: projectName, entityId: item.entityId });
 
-    const refs = indexes.itemsByEntity.get(item.entityId) ?? [];
-    if (
-      !refs.some(
-        (ref) =>
-          ref.project === projectName &&
-          ref.portId === portId &&
-          ref.handle === handle,
-      )
-    ) {
-      refs.push({ project: projectName, portId, handle, entityId: item.entityId });
-      indexes.itemsByEntity.set(item.entityId, refs);
-    }
-    await this.persist(container);
+      const refs = indexes.itemsByEntity.get(item.entityId) ?? [];
+      if (
+        !refs.some(
+          (ref) =>
+            ref.project === projectName &&
+            ref.portId === portId &&
+            ref.handle === handle,
+        )
+      ) {
+        refs.push({
+          project: projectName,
+          portId,
+          handle,
+          entityId: item.entityId,
+        });
+        indexes.itemsByEntity.set(item.entityId, refs);
+      }
+      await this.persist();
+    });
   }
 
   async removeMirrorItem(
@@ -868,74 +966,80 @@ export class SyncStateAdapter implements SyncStatePort {
     portId: string,
     handle: string,
   ): Promise<void> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    const port = node === null ? null : portNode(node, portId);
-    if (port !== null) {
-      const raw = itemsMap(port)[handle];
-      if (isRecord(raw)) {
-        const entityId = str(raw.entityId);
-        dropItem(container, this.indexes!, {
-          project: projectName,
-          portId,
-          handle,
-          entityId,
-        });
-        const refs = this.indexes!.itemsByEntity.get(entityId);
-        if (refs !== undefined) {
-          const filtered = refs.filter(
-            (ref) =>
-              !(
-                ref.project === projectName &&
-                ref.portId === portId &&
-                ref.handle === handle
-              ),
-          );
-          if (filtered.length === 0) {
-            this.indexes!.itemsByEntity.delete(entityId);
-          } else {
-            this.indexes!.itemsByEntity.set(entityId, filtered);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      const port = node === null ? null : portNode(node, portId);
+      if (port !== null) {
+        const raw = itemsMap(port)[handle];
+        if (isRecord(raw)) {
+          const entityId = str(raw.entityId);
+          dropItem(container, this.indexes!, {
+            project: projectName,
+            portId,
+            handle,
+            entityId,
+          });
+          const refs = this.indexes!.itemsByEntity.get(entityId);
+          if (refs !== undefined) {
+            const filtered = refs.filter(
+              (ref) =>
+                !(
+                  ref.project === projectName &&
+                  ref.portId === portId &&
+                  ref.handle === handle
+                ),
+            );
+            if (filtered.length === 0) {
+              this.indexes!.itemsByEntity.delete(entityId);
+            } else {
+              this.indexes!.itemsByEntity.set(entityId, filtered);
+            }
           }
         }
       }
-    }
-    await this.persist(container);
+      await this.persist();
+    });
   }
 
   async listMirrorItems(
     projectName: string,
     portId: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    if (node === null) {
-      return [];
-    }
-    const port = portNode(node, portId);
-    if (port === null) {
-      return [];
-    }
-    const result: Array<{ handle: string; item: MirrorItem }> = [];
-    for (const [handle, raw] of Object.entries(itemsMap(port))) {
-      const item = mapMirrorItem(raw);
-      if (item !== null) {
-        result.push({ handle, item });
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      if (node === null) {
+        return [];
       }
-    }
-    return result;
+      const port = portNode(node, portId);
+      if (port === null) {
+        return [];
+      }
+      const result: Array<{ handle: string; item: MirrorItem }> = [];
+      for (const [handle, raw] of Object.entries(itemsMap(port))) {
+        const item = mapMirrorItem(raw);
+        if (item !== null) {
+          result.push({ handle, item });
+        }
+      }
+      return result;
+    });
   }
 
   async getPortState(
     projectName: string,
     portId: string,
   ): Promise<PortState | null> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    if (node === null) {
-      return null;
-    }
-    const port = portNode(node, portId);
-    return port === null ? null : mapPortState(port, portId);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      if (node === null) {
+        return null;
+      }
+      const port = portNode(node, portId);
+      return port === null ? null : mapPortState(port, portId);
+    });
   }
 
   async setPortState(
@@ -943,63 +1047,78 @@ export class SyncStateAdapter implements SyncStatePort {
     portId: string,
     state: PortState,
   ): Promise<void> {
-    const container = await this.loadContainer();
-    const node = ensureProjectNode(ensureProjects(container), projectName);
-    const port = ensurePortNode(node, portId);
-    port.provider = state.provider;
-    port.lastPoll = state.lastPoll;
-    port.lanes = state.lanes;
-    port.tags = state.tags;
-    await this.persist(container);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const port = ensurePortNode(node, portId);
+      port.provider = state.provider;
+      port.lastPoll = state.lastPoll;
+      port.lanes = state.lanes;
+      port.tags = state.tags;
+      await this.persist();
+    });
   }
 
   async setIdentity(
     projectName: string,
     identity: ProjectIdentityData,
   ): Promise<void> {
-    const container = await this.loadContainer();
-    ensureProjectNode(ensureProjects(container), projectName).identity =
-      identity;
-    await this.persist(container);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      ensureProjectNode(ensureProjects(container), projectName).identity =
+        identity;
+      await this.persist();
+    });
   }
 
   async getIdentity(projectName: string): Promise<ProjectIdentityData | null> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    const raw = node === null ? undefined : node.identity;
-    return isRecord(raw) ? this.mapIdentity(raw) : null;
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      const raw = node === null ? undefined : node.identity;
+      return isRecord(raw) ? this.mapIdentity(raw) : null;
+    });
   }
 
   async getLastProjectUpdate(projectName: string): Promise<string | null> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    const raw = node === null ? undefined : node.lastProjectUpdate;
-    return typeof raw === 'string' ? raw : null;
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      const raw = node === null ? undefined : node.lastProjectUpdate;
+      return typeof raw === 'string' ? raw : null;
+    });
   }
 
   async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
-    const container = await this.loadContainer();
-    ensureProjectNode(ensureProjects(container), projectName).lastProjectUpdate =
-      iso;
-    await this.persist(container);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      ensureProjectNode(ensureProjects(container), projectName).lastProjectUpdate =
+        iso;
+      await this.persist();
+    });
   }
 
   async getArchiveBaseline(
     projectName: string,
   ): Promise<ArchiveBaselineData | null> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    const raw = node === null ? undefined : node.archive;
-    return isRecord(raw) ? this.mapArchiveBaseline(raw) : null;
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      const raw = node === null ? undefined : node.archive;
+      return isRecord(raw) ? this.mapArchiveBaseline(raw) : null;
+    });
   }
 
   async setArchiveBaseline(
     projectName: string,
     baseline: ArchiveBaselineData,
   ): Promise<void> {
-    const container = await this.loadContainer();
-    ensureProjectNode(ensureProjects(container), projectName).archive = baseline;
-    await this.persist(container);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      ensureProjectNode(ensureProjects(container), projectName).archive =
+        baseline;
+      await this.persist();
+    });
   }
 
   private mapArchiveBaseline(
@@ -1021,21 +1140,25 @@ export class SyncStateAdapter implements SyncStatePort {
   }
 
   async getWatchState(projectName: string): Promise<WatchStateData> {
-    const container = await this.loadContainer();
-    const node = projectNode(projectsMap(container), projectName);
-    const raw = node === null ? undefined : node.watch;
-    return isRecord(raw)
-      ? this.mapWatchState(raw)
-      : { etag: null, cursor: null };
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      const raw = node === null ? undefined : node.watch;
+      return isRecord(raw)
+        ? this.mapWatchState(raw)
+        : { etag: null, cursor: null };
+    });
   }
 
   async setWatchState(
     projectName: string,
     state: WatchStateData,
   ): Promise<void> {
-    const container = await this.loadContainer();
-    ensureProjectNode(ensureProjects(container), projectName).watch = state;
-    await this.persist(container);
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      ensureProjectNode(ensureProjects(container), projectName).watch = state;
+      await this.persist();
+    });
   }
 
   private mapWatchState(raw: Record<string, unknown>): WatchStateData {
@@ -1045,16 +1168,30 @@ export class SyncStateAdapter implements SyncStatePort {
     };
   }
 
-  // Reads the one-shot marker and clears it. Only a pending marker is persisted
-  // (write-then-clear): a second consume is a pure read and stays false.
-  async consumeFullScan(): Promise<boolean> {
-    const container = await this.loadContainer();
-    const pending = container[FULL_SCAN_PENDING_KEY] === true;
-    if (pending) {
-      container[FULL_SCAN_PENDING_KEY] = false;
-      await this.persist(container);
-    }
-    return pending;
+  // Reads the project's one-shot marker without clearing it. The chain peeks
+  // before the GitHub half and only consumes after that half succeeds, so a
+  // failed or interrupted fetch never spends the scan.
+  async isFullScanPending(projectName: string): Promise<boolean> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      return node !== null && node[FULL_SCAN_PENDING_KEY] === true;
+    });
+  }
+
+  // Clears the project's one-shot marker. Only a pending marker is persisted
+  // (write-then-clear): consuming an already-spent project is a pure read.
+  async consumeFullScan(projectName: string): Promise<boolean> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(projectsMap(container), projectName);
+      const pending = node !== null && node[FULL_SCAN_PENDING_KEY] === true;
+      if (pending) {
+        node![FULL_SCAN_PENDING_KEY] = false;
+        await this.persist();
+      }
+      return pending;
+    });
   }
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {

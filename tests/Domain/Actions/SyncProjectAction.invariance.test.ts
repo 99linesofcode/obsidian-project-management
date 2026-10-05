@@ -1282,7 +1282,7 @@ describe('SyncProjectAction forced full scan', () => {
     expect(h.github.states.get('PVT')!.updatedAt).toBe(settledUpdate);
 
     // And — the pre-parent-tracking store's one-shot marker is pending
-    h.syncState.fullScanPending = true;
+    h.syncState.fullScanPending.add('Acme Widgets');
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
@@ -1300,7 +1300,7 @@ describe('SyncProjectAction forced full scan', () => {
     ).toBe(PARENT_TWIN);
 
     // And — the one-shot marker is spent, so the next quiet pass closes the gate
-    expect(h.syncState.fullScanPending).toBe(false);
+    expect(h.syncState.fullScanPending.has('Acme Widgets')).toBe(false);
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];

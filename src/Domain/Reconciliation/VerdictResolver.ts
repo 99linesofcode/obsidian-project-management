@@ -106,12 +106,19 @@ export class VerdictResolver {
   }
 
   // A completion from either side beats staleness; a reopen is vetoed while the
-  // other side still shows done. When both sides agree on the done-state there
-  // is nothing to move and the vault's value stands.
+  // other side still shows done. When both sides agree on the done-state the
+  // semantic rule cannot decide, so origin authority applies: the vault's value
+  // wins and the mirror catches up. WHY not 'none': a two-sided conflict left
+  // undecided runs no writer and leaves vault and mirror permanently diverged,
+  // contradicting SYNC-3 ("no field is ever left undecided"). Both-done
+  // conflicts differ only in lane cosmetics, so the vault's lane is the right
+  // resolution.
   private doneBeatsOpen(vault: TaskData, remote: TaskData): DimensionVerdict {
     const vaultDone = isDone(vault, this.doneLane);
     const remoteDone = isDone(remote, this.doneLane);
-    if (vaultDone === remoteDone) return 'none';
+    // Both agree: the semantic rule cannot decide, so origin authority pushes
+    // the vault's lane. Disagree: the completion wins.
+    if (vaultDone === remoteDone) return 'push';
     return vaultDone ? 'push' : 'pull';
   }
 }
