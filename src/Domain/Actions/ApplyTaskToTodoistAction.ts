@@ -39,8 +39,12 @@ export interface ApplyToDoToTodoistInput {
   // The live twin, or null when none exists yet.
   current: TodoistTaskData | null;
   projectId: string;
-  // The task or parent to-do twin the to-do hangs under.
-  parentId: string;
+  // The task or parent to-do twin the to-do hangs under; null when its parent
+  // is a slice, which has no twin (dt-23), so the to-do sits top-level.
+  parentId: string | null;
+  // The lane section a top-level to-do lands in. Ignored for a nested to-do,
+  // which inherits its parent's section (dt-02).
+  sectionId?: string | null;
   projectName: string;
   notePath: string;
   syncedAt: string;
@@ -184,7 +188,12 @@ export class ApplyTaskToTodoistAction {
     const desired = {
       content: input.todo.title,
       labels: [TODO_LABEL],
+      // A to-do nests under its materialized parent twin; null when its parent
+      // is a slice (dt-23), so it sits top-level in its lane's section.
       parentId: input.parentId,
+      // A subtask inherits its parent's section (dt-02), so only a top-level
+      // to-do controls a section.
+      sectionId: input.parentId === null ? (input.sectionId ?? null) : null,
       isCompleted: input.todo.status === 'completed',
     };
     const current = input.current;
@@ -195,7 +204,8 @@ export class ApplyTaskToTodoistAction {
       await this.taskManager.ensureLabel(TODO_LABEL);
       const created = await this.taskManager.createTask({
         projectId: input.projectId,
-        parentId: input.parentId,
+        ...(desired.sectionId === null ? {} : { sectionId: desired.sectionId }),
+        ...(desired.parentId === null ? {} : { parentId: desired.parentId }),
         content: desired.content,
         labels: desired.labels,
       });
@@ -222,13 +232,15 @@ export class ApplyTaskToTodoistAction {
       current.content !== desired.content ||
       !sameLabels(current.labels, desired.labels);
     const parentDrift = current.parentId !== desired.parentId;
+    const sectionDrift =
+      desired.sectionId !== null && current.sectionId !== desired.sectionId;
     // Only a vault-side completion change moves the twin; a twin that already
     // matches the vault (a remote reopen the apply action resolved) does not.
     const completionDrift =
       desired.isCompleted !== baseCompleted &&
       current.isCompleted !== desired.isCompleted;
 
-    if (!contentDrift && !parentDrift && !completionDrift) {
+    if (!contentDrift && !parentDrift && !sectionDrift && !completionDrift) {
       return id;
     }
 
@@ -240,7 +252,22 @@ export class ApplyTaskToTodoistAction {
       });
     }
     if (parentDrift) {
-      await this.taskManager.moveTask(id, { parentId: desired.parentId });
+      if (desired.parentId === null) {
+        // Unparent to the top level; a section rides along so the to-do lands
+        // in its lane rather than the project's default. A subtask's own
+        // section is ignored by the API, so unparenting and placing is one
+        // move.
+        await this.taskManager.moveTask(
+          id,
+          desired.sectionId === null
+            ? { parentId: null }
+            : { sectionId: desired.sectionId, parentId: null },
+        );
+      } else {
+        await this.taskManager.moveTask(id, { parentId: desired.parentId });
+      }
+    } else if (sectionDrift && desired.sectionId !== null) {
+      await this.taskManager.moveTask(id, { sectionId: desired.sectionId });
     }
     if (completionDrift) {
       await this.taskManager.setTaskCompleted(id, desired.isCompleted);
@@ -323,7 +350,8 @@ export class ApplyTaskToTodoistAction {
     desired: {
       content: string;
       labels: string[];
-      parentId: string;
+      parentId: string | null;
+      sectionId: string | null;
       isCompleted: boolean;
     },
   ): Promise<void> {

@@ -122,10 +122,15 @@ class FakeTaskManager implements TaskManagerPort {
     [];
   moveTaskCalls: Array<{
     id: string;
-    to: { sectionId?: string; parentId?: string };
+    to: { sectionId?: string; parentId?: string | null };
   }> = [];
+  deleteTaskCalls: string[] = [];
   completeCalls: Array<{ id: string; completed: boolean }> = [];
   ensureLabelCalls: string[] = [];
+  // The mutation order across move/delete, so a test can pin that a slice's
+  // children are flattened BEFORE the slice twin is deleted.
+  mutations: string[] = [];
+  failMove = false;
   private nextTaskId = 1;
 
   async fetchActiveTasks(): Promise<TodoistTaskData[]> {
@@ -180,20 +185,48 @@ class FakeTaskManager implements TaskManagerPort {
   }
   async moveTask(
     id: string,
-    to: { sectionId?: string; parentId?: string },
+    to: { sectionId?: string; parentId?: string | null },
   ): Promise<void> {
     this.moveTaskCalls.push({ id, to });
+    this.mutations.push(`move:${id}`);
+    if (this.failMove) {
+      throw new Error('move failed');
+    }
     const task = this.active.find((candidate) => candidate.id === id);
     if (task) {
-      task.sectionId = to.sectionId ?? task.sectionId;
-      task.parentId = to.parentId ?? task.parentId;
+      if (to.sectionId !== undefined) {
+        task.sectionId = to.sectionId;
+      }
+      if (to.parentId !== undefined) {
+        task.parentId = to.parentId;
+      }
     }
   }
   async setTaskCompleted(id: string, completed: boolean): Promise<void> {
     this.completeCalls.push({ id, completed });
   }
-  async deleteTask(): Promise<never> {
-    throw new Error('not used in this test');
+  async deleteTask(id: string): Promise<void> {
+    this.deleteTaskCalls.push(id);
+    this.mutations.push(`delete:${id}`);
+    // Model the API's cascade: deleting a parent takes its subtasks with it,
+    // so a successful flatten (no child still parented to the twin) is what
+    // keeps the children alive.
+    const doomed = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const task of this.active) {
+        if (
+          task.parentId !== null &&
+          doomed.has(task.parentId) &&
+          !doomed.has(task.id)
+        ) {
+          doomed.add(task.id);
+          grew = true;
+        }
+      }
+    }
+    this.active = this.active.filter((task) => !doomed.has(task.id));
   }
   async ensureLabel(name: string): Promise<void> {
     this.ensureLabelCalls.push(name);
@@ -274,6 +307,20 @@ function taskNote(statusName: string, body = '', todoistId?: string): string {
   return todoistId === undefined
     ? content
     : content.replace('---\n', `---\ntodoist: ${todoistId}\n`);
+}
+
+// A task note of any type, optionally nested under a parent note stem through
+// the affiliation (the parent relation the placement walk follows).
+function typedTaskNote(
+  type: string,
+  title: string,
+  statusName: string,
+  parentLink: string | null,
+): string {
+  return TaskNoteMapper.map(
+    { type, title, body: '', createdAt: null },
+    { projectName, syncedAt, statusName, parentLink },
+  ).content;
 }
 
 function seedTask(
@@ -550,8 +597,8 @@ describe('SyncTodoistTasksAction', () => {
     });
   });
 
-  it('nests a child under its slice twin (two phases, parents first)', async () => {
-    // Given — a slice and a child affiliated to it
+  it('gives a slice no Todoist twin and places its child top-level', async () => {
+    // Given — a slice and a child affiliated to it (dt-23)
     const h = harness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
@@ -563,20 +610,11 @@ describe('SyncTodoistTasksAction', () => {
     ];
     h.vault.notes.set(
       slicePath,
-      TaskNoteMapper.map(
-        { type: 'slice', title: 'the slice', body: '', createdAt: null },
-        { projectName, syncedAt, statusName: 'Building' },
-      ).content,
+      typedTaskNote('slice', 'the slice', 'Building', null),
     );
     h.vault.notes.set(
       childPath,
-      TaskNoteMapper.map(
-        { type: 'task', title: 'the child', body: '', createdAt: null },
-        { projectName, syncedAt, statusName: 'Building' },
-      ).content.replace(
-        'affiliation: ["[[_Acme Widgets]]"]',
-        'affiliation: ["[[_Acme Widgets]]", "[[40-the-slice]]"]',
-      ),
+      typedTaskNote('task', 'the child', 'Building', '40-the-slice'),
     );
     seedTask(h.syncState, sliceUrl, slicePath, 'uuid-slice');
     seedTask(h.syncState, childUrl, childPath, 'uuid-child');
@@ -584,10 +622,273 @@ describe('SyncTodoistTasksAction', () => {
     // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the slice precedes its child and the child hangs off the slice twin
-    expect(h.writer.order).toEqual(['task:The slice', 'task:The child']);
+    // Then — the slice is never projected; its child sits top-level in its lane
+    expect(h.writer.order).toEqual(['task:The child']);
+    expect(h.writer.taskCalls[0]!.parentId).toBeNull();
+    expect(h.writer.taskCalls[0]!.sectionId).toBe('S2');
+  });
+
+  it('nests a deep chain from the first materialized ancestor', async () => {
+    // Given — slice -> task -> sub -> sub-sub: the slice does not materialize,
+    // so the task is top-level and each descendant nests under its nearest
+    // materialized ancestor
+    const h = harness();
+    const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+    const taskPath = 'Projecten/Acme Widgets/taken/41-the-task.md';
+    const subPath = 'Projecten/Acme Widgets/taken/42-the-sub.md';
+    const subSubPath = 'Projecten/Acme Widgets/taken/43-the-sub-sub.md';
+    const sliceUrl = 'https://github.com/acme/widgets/issues/40';
+    const taskUrl = 'https://github.com/acme/widgets/issues/41';
+    const subUrl = 'https://github.com/acme/widgets/issues/42';
+    const subSubUrl = 'https://github.com/acme/widgets/issues/43';
+    h.projectManagement.issues = [
+      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: taskUrl, remoteId: 41, title: 'The task' }),
+      issue({ url: subUrl, remoteId: 42, title: 'The sub' }),
+      issue({ url: subSubUrl, remoteId: 43, title: 'The sub-sub' }),
+    ];
+    h.vault.notes.set(
+      slicePath,
+      typedTaskNote('slice', 'the slice', 'Building', null),
+    );
+    h.vault.notes.set(
+      taskPath,
+      typedTaskNote('task', 'the task', 'Building', '40-the-slice'),
+    );
+    h.vault.notes.set(
+      subPath,
+      typedTaskNote('task', 'the sub', 'Building', '41-the-task'),
+    );
+    h.vault.notes.set(
+      subSubPath,
+      typedTaskNote('task', 'the sub-sub', 'Building', '42-the-sub'),
+    );
+    seedTask(h.syncState, sliceUrl, slicePath, 'uuid-slice');
+    seedTask(h.syncState, taskUrl, taskPath, 'uuid-task');
+    seedTask(h.syncState, subUrl, subPath, 'uuid-sub');
+    seedTask(h.syncState, subSubUrl, subSubPath, 'uuid-sub-sub');
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the slice is skipped; the task is top-level; each descendant nests
+    // under the twin of its nearest materialized ancestor
+    expect(h.writer.order).toEqual([
+      'task:The task',
+      'task:The sub',
+      'task:The sub-sub',
+    ]);
     expect(h.writer.taskCalls[0]!.parentId).toBeNull();
     expect(h.writer.taskCalls[1]!.parentId).toBe(h.writer.taskReturns[0]);
+    expect(h.writer.taskCalls[2]!.parentId).toBe(h.writer.taskReturns[1]);
+  });
+
+  it('retires an existing slice twin, flattening its children before the delete', async () => {
+    // Given — a slice with an existing twin and a child twin nested under it
+    const h = harness();
+    const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+    const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
+    const sliceUrl = 'https://github.com/acme/widgets/issues/40';
+    const childUrl = 'https://github.com/acme/widgets/issues/42';
+    h.projectManagement.issues = [
+      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(
+      slicePath,
+      typedTaskNote('slice', 'the slice', 'Building', null),
+    );
+    h.vault.notes.set(
+      childPath,
+      typedTaskNote('task', 'the child', 'Building', '40-the-slice'),
+    );
+    h.syncState.seed(entityRecord({ id: 'uuid-slice', notePath: slicePath }), {
+      github: { handle: sliceUrl },
+      todoist: { handle: 'T-slice' },
+    });
+    h.syncState.seed(entityRecord({ id: 'uuid-child', notePath: childPath }), {
+      github: { handle: childUrl },
+      todoist: { handle: 'T-child' },
+    });
+    h.taskManager.active = [
+      todoistTask({ id: 'T-slice', content: 'The slice', sectionId: 'S2', labels: ['slice'] }),
+      todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
+    ];
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the flatten move is recorded BEFORE the slice delete, and the
+    // child survives (unparented, so the API cascade has nothing to take)
+    expect(h.taskManager.mutations).toEqual(['move:T-child', 'delete:T-slice']);
+    expect(h.taskManager.active.map((task) => task.id)).toEqual(['T-child']);
+    expect(h.taskManager.active[0]!.parentId).toBeNull();
+    // And the stale mirror item is gone, so the slice is never re-created
+    expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).toBeNull();
+    // And the child is projected top-level in its lane
+    expect(h.writer.order).toEqual(['task:The child']);
+    expect(h.writer.taskCalls[0]!.parentId).toBeNull();
+  });
+
+  it('blocks the slice delete when a flatten move fails', async () => {
+    // Given — a slice twin with a child, and a flatten move that throws
+    const h = harness();
+    const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+    const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
+    const sliceUrl = 'https://github.com/acme/widgets/issues/40';
+    const childUrl = 'https://github.com/acme/widgets/issues/42';
+    h.projectManagement.issues = [
+      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(
+      slicePath,
+      typedTaskNote('slice', 'the slice', 'Building', null),
+    );
+    h.vault.notes.set(
+      childPath,
+      typedTaskNote('task', 'the child', 'Building', '40-the-slice'),
+    );
+    h.syncState.seed(entityRecord({ id: 'uuid-slice', notePath: slicePath }), {
+      github: { handle: sliceUrl },
+      todoist: { handle: 'T-slice' },
+    });
+    h.syncState.seed(entityRecord({ id: 'uuid-child', notePath: childPath }), {
+      github: { handle: childUrl },
+      todoist: { handle: 'T-child' },
+    });
+    h.taskManager.active = [
+      todoistTask({ id: 'T-slice', content: 'The slice', sectionId: 'S2', labels: ['slice'] }),
+      todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
+    ];
+    h.taskManager.failMove = true;
+
+    // When — the Todoist half runs (execute swallows the step failure)
+    await h.action.execute(input);
+
+    // Then — no delete ran; the twin and its mirror survive for the next tick
+    expect(h.taskManager.deleteTaskCalls).toEqual([]);
+    expect(h.taskManager.mutations).toEqual(['move:T-child']);
+    expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).not.toBeNull();
+  });
+
+  it('settles after retiring a slice twin: a second pass writes nothing', async () => {
+    // Given — a composed writer over a slice with an existing twin and a child
+    // nested under it
+    const h = composedHarness();
+    const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+    const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
+    const sliceUrl = 'https://github.com/acme/widgets/issues/40';
+    const childUrl = 'https://github.com/acme/widgets/issues/42';
+    h.projectManagement.issues = [
+      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(
+      slicePath,
+      typedTaskNote('slice', 'the slice', 'Building', null),
+    );
+    h.vault.notes.set(
+      childPath,
+      typedTaskNote('task', 'the child', 'Building', '40-the-slice'),
+    );
+    const sliceBase = toDiffViewWithBody(
+      taskData({
+        id: 'uuid-slice',
+        notePath: slicePath,
+        title: 'The slice',
+        status: 'Building',
+        type: 'slice',
+      }),
+    );
+    const childBase = toDiffViewWithBody(
+      taskData({
+        id: 'uuid-child',
+        notePath: childPath,
+        title: 'The child',
+        status: 'Building',
+        type: 'task',
+        parent: 'uuid-slice',
+      }),
+    );
+    h.syncState.seed(entityRecord({ id: 'uuid-slice', notePath: slicePath }), {
+      github: { handle: sliceUrl, base: sliceBase },
+      todoist: { handle: 'T-slice', base: sliceBase },
+    });
+    h.syncState.seed(entityRecord({ id: 'uuid-child', notePath: childPath }), {
+      github: { handle: childUrl, base: childBase },
+      todoist: { handle: 'T-child', base: childBase },
+    });
+    h.taskManager.active = [
+      todoistTask({ id: 'T-slice', content: 'The slice', sectionId: 'S2', labels: ['slice'] }),
+      todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
+    ];
+
+    // When — the first pass retires the slice and re-projects the child
+    await h.action.execute(input);
+    expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).toBeNull();
+    expect(h.taskManager.active.map((task) => task.id)).toEqual(['T-child']);
+
+    // And — a second pass runs with no external change
+    h.taskManager.createTaskCalls = [];
+    h.taskManager.updateTaskCalls = [];
+    h.taskManager.moveTaskCalls = [];
+    h.taskManager.deleteTaskCalls = [];
+    h.taskManager.completeCalls = [];
+    h.taskManager.mutations = [];
+    await h.action.execute(input);
+
+    // Then — nothing is created, moved, completed or deleted, and no slice twin
+    // is re-created
+    expect(h.taskManager.createTaskCalls).toEqual([]);
+    expect(h.taskManager.updateTaskCalls).toEqual([]);
+    expect(h.taskManager.moveTaskCalls).toEqual([]);
+    expect(h.taskManager.deleteTaskCalls).toEqual([]);
+    expect(h.taskManager.completeCalls).toEqual([]);
+    expect(h.taskManager.active.map((task) => task.content)).not.toContain(
+      'The slice',
+    );
+  });
+
+  it("places a slice's to-do top-level in the slice's lane", async () => {
+    // Given — a slice note whose checklist links a to-do note
+    const h = harness();
+    const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+    const sliceUrl = 'https://github.com/acme/widgets/issues/40';
+    const todoPath = 'Projecten/Acme Widgets/todos/step-one.md';
+    h.projectManagement.issues = [
+      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
+    ];
+    h.vault.notes.set(
+      slicePath,
+      TaskNoteMapper.map(
+        {
+          type: 'slice',
+          title: 'the slice',
+          body: `- [ ] [[${todoPath}|Step one]]`,
+          createdAt: null,
+        },
+        { projectName, syncedAt, statusName: 'Building' },
+      ).content,
+    );
+    h.vault.notes.set(
+      todoPath,
+      ToDoNoteMapper.map(
+        { title: 'Step one', projectName, taskLink: '40-the-slice' },
+        { syncedAt, statusName: 'open' },
+      ).content,
+    );
+    seedTask(h.syncState, sliceUrl, slicePath, 'uuid-slice');
+    h.vault.folders.set('Projecten/Acme Widgets/taken', [slicePath]);
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the to-do has no parent twin to hang under, so it sits top-level
+    // in the slice's lane section
+    expect(h.writer.todoCalls).toHaveLength(1);
+    expect(h.writer.todoCalls[0]!.parentId).toBeNull();
+    expect(h.writer.todoCalls[0]!.sectionId).toBe('S2');
   });
 
   it('nests a sub-issue under a non-slice parent task twin', async () => {

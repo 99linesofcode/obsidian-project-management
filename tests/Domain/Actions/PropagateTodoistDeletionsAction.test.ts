@@ -99,6 +99,8 @@ class FakeTaskManager implements TaskManagerPort {
 
 const projectName = 'Acme Widgets';
 const taskPath = 'Projecten/Acme Widgets/taken/41-task.md';
+const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
+const sliceChildPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
 const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
 const nestedTodoPath = 'Projecten/Acme Widgets/todos/and-then-test-it.md';
 const otherPath = 'Projecten/Other Project/taken/9-other.md';
@@ -179,6 +181,30 @@ describe('PropagateTodoistDeletionsAction', () => {
     await action.execute({ projectName });
 
     // Then — no twin is deleted and no record is evicted
+    expect(taskManager.deleteCalls).toEqual([]);
+    expect(syncState.removed).toEqual([]);
+  });
+
+  it('leaves a slice twin alone while its note survives (retirement is policy, not propagation)', async () => {
+    // Given — a slice with a twin and a child twin, both notes present
+    const { action, vault, taskManager, syncState } = setup();
+    record(syncState, 'uuid-slice', slicePath, 'SLICE', null);
+    record(syncState, 'uuid-child', sliceChildPath, 'CHILD', 'uuid-slice');
+    vault.notes.set(
+      slicePath,
+      '---\ntype: slice\nstatus: Building\n---\n',
+    );
+    vault.notes.set(
+      sliceChildPath,
+      '---\ntype: task\nstatus: Building\n---\n',
+    );
+
+    // When — deletions are propagated
+    await action.execute({ projectName });
+
+    // Then — nothing is deleted: dt-23's slice retirement is a projection
+    // policy (the note survives), never a note-deletion propagation, so this
+    // action never fights the twin plan
     expect(taskManager.deleteCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);
   });

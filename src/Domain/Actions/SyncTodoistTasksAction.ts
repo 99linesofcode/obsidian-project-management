@@ -40,7 +40,7 @@ export interface SyncTodoistTasksInput {
 
 // One tracked issue resolved to its vault note and registry record: the issue
 // carries the type label and the title, the note carries the lane (its status)
-// and the slice affiliation.
+// and the parent affiliation.
 interface ProjectionItem {
   issue: { url: string; title: string; labels: string[] };
   record: EntityRecord;
@@ -48,7 +48,9 @@ interface ProjectionItem {
   noteContent: string;
   type: string;
   lane: string;
-  sliceLink: string | null;
+  // The immediate parent link named by the affiliation (a slice or a parent
+  // task); null for a root. Placement walks this chain (dt-23).
+  parentLink: string | null;
   // The todoist mirror handle and base, resolved from the registry's port
   // items because the entity no longer carries them.
   handle: string | null;
@@ -64,6 +66,11 @@ interface ToDoItem {
   // The parent task's note path; its twin is resolved from the pass's task
   // projection (or the registry), never from a stale note anchor.
   taskNotePath: string;
+  // The owning task's vault-owned type: a to-do owned by a slice has no twin
+  // to nest under, so it sits top-level (dt-23).
+  taskType: string;
+  // The owning task's lane, so a top-level to-do lands in its lane's section.
+  taskLane: string;
   // The parent to-do's note stem when this to-do nests under another to-do
   // (Todoist indent level 4 — the ceiling); null for a direct task child.
   parentStem: string | null;
@@ -130,8 +137,11 @@ export class SyncTodoistTasksAction {
       // first (phase A) and returns note-path -> twin-id for the whole tree, so
       // projectToDos can hang each to-do off a parent that exists in this pass
       // (phase B) instead of a possibly-stale note anchor.
-      const taskTwinIdByNotePath = await this.projectTasks(input, active);
-      await this.projectToDos(input, active, taskTwinIdByNotePath);
+      const { twinIdByNotePath, sections } = await this.projectTasks(
+        input,
+        active,
+      );
+      await this.projectToDos(input, active, twinIdByNotePath, sections);
 
       // Deletions last (spec reconcile step 7).
       await this.propagateTodoistDeletions.execute({
@@ -142,21 +152,23 @@ export class SyncTodoistTasksAction {
     }
   }
 
-  // The vault's tracked tasks projected onto their twins in TWO PHASES. Phase A
-  // creates every top-level twin first — a slice's twin and a standalone
-  // task's twin are both top-level — so phase B can wire a child to a parent
-  // that exists in this very pass. Phase B then creates the slice-member tasks
-  // under their slice twin. The returned map (note path -> twin id) is the
-  // pass's twin plan; projectToDos hangs each to-do off it.
+  // The vault's tracked tasks projected onto their twins in TWO PHASES. A
+  // slice never materializes (dt-23), so it is skipped and any existing slice
+  // twin is retired. Phase A creates every top-level twin first — a standalone
+  // task's twin and a slice's top-level child's twin — so phase B can wire a
+  // child to the nearest MATERIALIZED ancestor that exists in this very pass.
+  // The returned map (note path -> twin id) is the pass's twin plan;
+  // projectToDos hangs each to-do off it, and the lane map places a top-level
+  // to-do whose parent is a slice.
   private async projectTasks(
     input: SyncTodoistTasksInput,
     active: TodoistTaskData[],
-  ): Promise<Map<string, string>> {
+  ): Promise<{ twinIdByNotePath: Map<string, string>; sections: Record<string, string> }> {
     const taskTwinIdByNotePath = new Map<string, string>();
     const identity = await this.syncState.getIdentity(input.projectName);
     // A project without a GitHub attach has no typed issues to project (dt-03).
     if (!identity?.repoUrl) {
-      return taskTwinIdByNotePath;
+      return { twinIdByNotePath: taskTwinIdByNotePath, sections: {} };
     }
 
     const portState = await this.syncState.getPortState(
@@ -217,7 +229,7 @@ export class SyncTodoistTasksAction {
         noteContent: note.content,
         type,
         lane: parsed.status,
-        sliceLink: taskLinkFromAffiliation(
+        parentLink: taskLinkFromAffiliation(
           parsed.affiliation,
           input.projectName,
         ),
@@ -226,22 +238,40 @@ export class SyncTodoistTasksAction {
       });
     }
 
-    const slices = items.filter((item) => item.type === 'slice');
-    // A child is any task whose affiliation names a parent — a slice or another
-    // task (a GitHub sub-issue of either). The parent's type does not matter:
-    // phase B resolves the named parent's twin and hangs the child under it, so
-    // placement generalizes from slices to any tracked parent.
-    const children = items.filter(
-      (item) => item.type !== 'slice' && item.sliceLink !== null,
-    );
-    const unaffiliated = items.filter(
-      (item) => item.type !== 'slice' && item.sliceLink === null,
+    // dt-23: a slice is a project-management artifact — it syncs to the vault
+    // and the board but never to Todoist. Retire any twin a previous model
+    // created, flattening its children first (the API cascades a parent
+    // deletion to subtasks).
+    await this.retireSliceTwins(
+      input.projectName,
+      items.filter((item) => item.type === 'slice'),
+      active,
     );
 
-    // Phase A — every top-level twin. Slices and standalone tasks both sit at
-    // the top level; creating them before any child is what lets phase B (and
-    // the to-do pass) resolve a real parent id.
-    for (const item of slices) {
+    // Placement resolves the nearest MATERIALIZED ancestor per item: the slice
+    // is where materialization stops, so a chain that reaches a slice (or a
+    // root) is top-level in its lane's section. Decomposition lives on the
+    // board; stage lives in the sections.
+    const itemByNotePath = new Map(
+      items.map((item) => [item.notePath, item] as const),
+    );
+    const placements = items
+      .filter((item) => item.type !== 'slice')
+      .map((item) => ({
+        item,
+        ...this.placementAncestor(item, itemByNotePath, input.projectName),
+      }));
+    const topLevel = placements.filter((entry) => entry.ancestor === null);
+    // Parents before children: a deeper item resolves the twin its ancestor
+    // gained earlier in this same phase.
+    const nested = placements
+      .filter((entry) => entry.ancestor !== null)
+      .sort((a, b) => a.depth - b.depth);
+
+    // Phase A — every top-level twin (a standalone task and a slice's child
+    // alike). Creating them before any child lets phase B resolve a real
+    // parent id in this pass.
+    for (const { item } of topLevel) {
       const taskId = await this.projectItem(
         item,
         { sectionId: sections[item.lane] ?? null, parentId: null },
@@ -251,28 +281,16 @@ export class SyncTodoistTasksAction {
       );
       taskTwinIdByNotePath.set(item.notePath, taskId);
     }
-    for (const item of unaffiliated) {
-      const taskId = await this.projectItem(
-        item,
-        { sectionId: sections[item.lane] ?? null, parentId: null },
-        activeById,
-        sections,
-        input,
-      );
-      taskTwinIdByNotePath.set(item.notePath, taskId);
-    }
 
-    // Phase B — affiliated tasks attach to the parent twin phase A created (or
-    // an existing one the map already carries). The parent is the affiliation
-    // link, so a sub-issue of a slice and a sub-issue of a plain task flow the
-    // same way.
-    for (const item of children) {
-      const slicePath = sliceNotePath(input.projectName, item.sliceLink!);
+    // Phase B — nested tasks attach to the nearest materialized ancestor's twin
+    // (from this pass's map, else the registry). A sub-issue of a task and a
+    // sub-sub-issue of that sub-issue both resolve here; a child whose ancestor
+    // twin cannot exist yet waits for the next tick.
+    for (const { item, ancestor } of nested) {
       const parentId =
-        taskTwinIdByNotePath.get(slicePath) ??
-        (await this.twinIdForPath(slicePath, todoistByEntity));
+        taskTwinIdByNotePath.get(ancestor!.notePath) ??
+        (await this.twinIdForPath(ancestor!.notePath, todoistByEntity));
       if (parentId === null) {
-        // The slice has no twin yet; the child waits for the next tick.
         continue;
       }
       const taskId = await this.projectItem(
@@ -285,7 +303,67 @@ export class SyncTodoistTasksAction {
       taskTwinIdByNotePath.set(item.notePath, taskId);
     }
 
-    return taskTwinIdByNotePath;
+    return { twinIdByNotePath: taskTwinIdByNotePath, sections };
+  }
+
+  // Retires every existing slice twin (dt-23). Ordering is the whole point:
+  // Todoist cascades a parent deletion to its subtasks, so every direct child
+  // is moved to the top level FIRST, awaited, and only then is the slice twin
+  // deleted. A failed flatten aborts the pass before the delete — the twin
+  // retires next tick rather than taking its children with it. The children's
+  // placement re-resolves next pass (their desired parent is now top-level), so
+  // the flatten is the durable step.
+  private async retireSliceTwins(
+    projectName: string,
+    sliceItems: ProjectionItem[],
+    active: TodoistTaskData[],
+  ): Promise<void> {
+    for (const slice of sliceItems) {
+      const twin = slice.handle;
+      if (twin === null) {
+        continue;
+      }
+      for (const child of active.filter((task) => task.parentId === twin)) {
+        await this.taskManager.moveTask(child.id, { parentId: null });
+      }
+      await this.taskManager.deleteTask(twin);
+      // Drop the stale mirror item so no later pass resolves the retired
+      // handle and the capture path can never re-anchor the deleted twin.
+      await this.syncState.removeMirrorItem(projectName, 'todoist', twin);
+    }
+  }
+
+  // The nearest ancestor that materializes in Todoist, walking the affiliation
+  // parent chain. A slice does not materialize, so the walk continues past it;
+  // a chain that reaches a slice (or a root, or an untracked ancestor) yields
+  // no ancestor — the item sits top-level. depth orders the pass so ancestors
+  // gain their twins before descendants.
+  private placementAncestor(
+    item: ProjectionItem,
+    itemByNotePath: Map<string, ProjectionItem>,
+    projectName: string,
+  ): { ancestor: ProjectionItem | null; depth: number } {
+    let link = item.parentLink;
+    let depth = 0;
+    const seen = new Set<string>();
+    while (link !== null) {
+      depth++;
+      const path = takenNotePath(projectName, link);
+      if (seen.has(path)) {
+        break;
+      }
+      seen.add(path);
+      const parent = itemByNotePath.get(path);
+      if (parent === undefined) {
+        // The named ancestor is not a tracked issue, so no twin can exist.
+        break;
+      }
+      if (parent.type !== 'slice') {
+        return { ancestor: parent, depth };
+      }
+      link = parent.parentLink;
+    }
+    return { ancestor: null, depth };
   }
 
   // Projects one task through the canonical pipeline and returns its twin id.
@@ -334,15 +412,17 @@ export class SyncTodoistTasksAction {
     });
   }
 
-  // The vault's to-dos projected onto their twins. Phase B of the pass: every
-  // task twin already exists (phase A created the top-level ones, the loop
-  // below creates the slice members first), so a root to-do always hangs off a
-  // real task twin. A to-do whose parent twin cannot exist is an orphan owned
-  // by the vault-consistency pass: it is skipped, never created top-level.
+  // The vault's to-dos projected onto their twins. Every task twin that can
+  // exist already does (the task phase ran first), so a root to-do hangs off a
+  // real task twin — unless its owning task is a slice, which has no twin
+  // (dt-23), in which case the to-do sits top-level in the slice's lane. A
+  // to-do whose parent twin cannot exist is an orphan owned by the
+  // vault-consistency pass: it is skipped, never created top-level.
   private async projectToDos(
     input: SyncTodoistTasksInput,
     active: TodoistTaskData[],
     taskTwinIdByNotePath: Map<string, string>,
+    sections: Record<string, string>,
   ): Promise<void> {
     const items = await this.collectToDos(input.projectName);
     if (items.length === 0) {
@@ -356,12 +436,13 @@ export class SyncTodoistTasksAction {
 
     const twinIdByStem = new Map<string, string>();
     for (const item of roots) {
-      const parentId = await this.parentTaskTwinId(
-        item.taskNotePath,
+      const placement = await this.rootToDoPlacement(
+        item,
         taskTwinIdByNotePath,
         todoistByEntity,
+        sections,
       );
-      if (parentId === null) {
+      if (placement === null) {
         // The parent task has no twin and none can exist this pass (it is not a
         // tracked issue and carries no stored record). The to-do is an orphan
         // the vault-consistency pass will trash; creating it top-level is the
@@ -373,7 +454,7 @@ export class SyncTodoistTasksAction {
       }
       const id = await this.projectToDoItem(
         item,
-        parentId,
+        placement,
         activeById,
         todoistByEntity,
         input,
@@ -394,12 +475,34 @@ export class SyncTodoistTasksAction {
       }
       await this.projectToDoItem(
         item,
-        parentId,
+        { parentId, sectionId: null },
         activeById,
         todoistByEntity,
         input,
       );
     }
+  }
+
+  // A root to-do's placement: under its owning task's twin, or top-level in the
+  // owning slice's lane section when the task is a slice (dt-23). Null when the
+  // owning task has no twin and none can exist this pass.
+  private async rootToDoPlacement(
+    item: ToDoItem,
+    taskTwinIdByNotePath: Map<string, string>,
+    todoistByEntity: Map<string, { handle: string; base: TaskData | null }>,
+    sections: Record<string, string>,
+  ): Promise<{ parentId: string | null; sectionId: string | null } | null> {
+    if (item.taskType === 'slice') {
+      // A slice has no twin to nest under; the to-do sits top-level in the
+      // slice's lane, where its stage is tracked.
+      return { parentId: null, sectionId: sections[item.taskLane] ?? null };
+    }
+    const parentId = await this.parentTaskTwinId(
+      item.taskNotePath,
+      taskTwinIdByNotePath,
+      todoistByEntity,
+    );
+    return parentId === null ? null : { parentId, sectionId: null };
   }
 
   // The parent task's twin id: the pass's own projection first, so a twin
@@ -420,7 +523,7 @@ export class SyncTodoistTasksAction {
 
   private async projectToDoItem(
     item: ToDoItem,
-    parentId: string,
+    placement: { parentId: string | null; sectionId: string | null },
     activeById: Map<string, TodoistTaskData>,
     todoistByEntity: Map<string, { handle: string; base: TaskData | null }>,
     input: SyncTodoistTasksInput,
@@ -438,7 +541,8 @@ export class SyncTodoistTasksAction {
       record,
       handle,
       projectId: input.projectId,
-      parentId,
+      parentId: placement.parentId,
+      sectionId: placement.sectionId,
       projectName: input.projectName,
       notePath: item.notePath,
       syncedAt: input.syncedAt,
@@ -585,6 +689,10 @@ export class SyncTodoistTasksAction {
       if (!task) {
         continue;
       }
+      // The owning task's type and lane decide a root to-do's placement: a
+      // slice has no twin, so its to-do sits top-level in the slice's lane
+      // (dt-23).
+      const taskParsed = TaskNoteParser.parse(task.content);
       const body = splitFrontmatter(task.content)?.body ?? task.content;
       for (const entry of parseChecklist(body)) {
         if (entry.linkPath === undefined) {
@@ -614,6 +722,8 @@ export class SyncTodoistTasksAction {
           noteContent: todo.content,
           title: entry.text,
           taskNotePath: taskPath,
+          taskType: taskParsed?.type ?? '',
+          taskLane: taskParsed?.status ?? '',
           parentStem: parentStemFromAffiliation(
             parsed.affiliation,
             projectName,
@@ -691,9 +801,9 @@ function typeFromLabels(labels: string[]): string | null {
   return label.slice('type:'.length).trim();
 }
 
-// A slice link is a note stem; the slice note lives in the project's taken
-// folder beside its children.
-function sliceNotePath(projectName: string, link: string): string {
+// An affiliation parent link is a note stem; the parent note lives in the
+// project's taken folder beside its children.
+function takenNotePath(projectName: string, link: string): string {
   return `Projecten/${projectName}/taken/${stemOf(link)}.md`;
 }
 

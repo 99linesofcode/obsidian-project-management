@@ -468,6 +468,32 @@ describe('TodoistAdapter', () => {
     expect(calls[0]!.body).toBe(JSON.stringify({ parent_id: 'T1' }));
   });
 
+  it('moves a task to the top level with an explicit null parent', async () => {
+    // Given — an accepted move
+    const { transport, calls } = fakeTransport([{ status: 204, json: null }]);
+    const adapter = new TodoistAdapter(transport);
+
+    // When — the adapter unparents the task (the slice flatten, dt-23)
+    await adapter.moveTask('T2', { parentId: null });
+
+    // Then — the POST carried parent_id: null
+    expect(calls[0]!.body).toBe(JSON.stringify({ parent_id: null }));
+  });
+
+  it('moves a task to the top level in a section', async () => {
+    // Given — an accepted move
+    const { transport, calls } = fakeTransport([{ status: 204, json: null }]);
+    const adapter = new TodoistAdapter(transport);
+
+    // When — the adapter unparents the task into its lane
+    await adapter.moveTask('T2', { sectionId: 'S2', parentId: null });
+
+    // Then — the POST carried both, so the unparented task keeps its lane
+    expect(calls[0]!.body).toBe(
+      JSON.stringify({ parent_id: null, section_id: 'S2' }),
+    );
+  });
+
   it('refuses a move with neither section nor parent', async () => {
     // Given — an adapter with no queued responses
     const { transport, calls } = fakeTransport([]);
