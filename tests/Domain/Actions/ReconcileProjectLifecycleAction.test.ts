@@ -29,6 +29,7 @@ class FakeVault implements VaultPort {
   notes = new Map<string, string>();
   writes: Array<{ path: string; content: string }> = [];
   moveCalls: Array<{ from: string; to: string }> = [];
+  renameCalls: Array<{ from: string; to: string }> = [];
   failMove = false;
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
@@ -40,7 +41,14 @@ class FakeVault implements VaultPort {
     this.notes.set(path, content);
   }
   async createNote(): Promise<void> {}
-  async renameNote(): Promise<void> {}
+  async renameNote(oldPath: string, newPath: string): Promise<void> {
+    this.renameCalls.push({ from: oldPath, to: newPath });
+    const content = this.notes.get(oldPath);
+    if (content !== undefined) {
+      this.notes.delete(oldPath);
+      this.notes.set(newPath, content);
+    }
+  }
   async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
     this.moveCalls.push({ from: fromPrefix, to: toPrefix });
     if (this.failMove) {
@@ -218,8 +226,8 @@ class FakeProjectManagement implements ProjectManagementPort {
 }
 
 const syncedAt = '2026-09-24T12:00:00Z';
-const activeNote = 'Projecten/Acme Widgets/_home.md';
-const archivedNote = 'Archief/Acme Widgets/_home.md';
+const activeNote = 'Projecten/Acme Widgets/_Acme Widgets.md';
+const archivedNote = 'Archief/Acme Widgets/_Acme Widgets.md';
 const taskPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const archivedTaskPath = 'Archief/Acme Widgets/taken/42-fix-the-bug.md';
 const issueUrl = 'https://github.com/acme/widgets/issues/42';
@@ -316,6 +324,16 @@ function setupArchived() {
     closed: true,
     archivedAt: '',
   });
+  return h;
+}
+
+// A harness whose discovered home note sits at a legacy path — the migration
+// tests' subject. The canonical note is removed so only the legacy file is
+// discovered.
+function setupLegacyHome(homePath: string, anchor = 'P1') {
+  const h = setup(anchor);
+  h.vault.notes.delete(activeNote);
+  h.vault.notes.set(homePath, note(anchor));
   return h;
 }
 
@@ -912,6 +930,94 @@ describe('ReconcileProjectLifecycleAction', () => {
         closed: false,
         archivedAt: null,
       });
+    });
+  });
+
+  describe('home note rename migration', () => {
+    const canonical = 'Projecten/Acme Widgets/_Acme Widgets.md';
+
+    it('renames a _home.md note to the _<project>.md convention', async () => {
+      // Given — a project home note still on the intermediate convention
+      const legacy = 'Projecten/Acme Widgets/_home.md';
+      const h = setupLegacyHome(legacy);
+
+      // When — the lifecycle reconciles
+      await h.action.execute({ ...activeInput, notePath: legacy });
+
+      // Then — the note is renamed to the convention and nothing is clobbered
+      expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
+      expect(h.vault.notes.has(legacy)).toBe(false);
+      expect(h.vault.notes.has(canonical)).toBe(true);
+    });
+
+    it('renames a legacy <name>.md note to the convention', async () => {
+      // Given — the pre-convention note named after its folder
+      const legacy = 'Projecten/Acme Widgets/Acme Widgets.md';
+      const h = setupLegacyHome(legacy);
+
+      // When — the lifecycle reconciles
+      await h.action.execute({ ...activeInput, notePath: legacy });
+
+      // Then — it is renamed to the underscore form
+      expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
+      expect(h.vault.notes.has(legacy)).toBe(false);
+    });
+
+    it('skips the rename when the target already exists, without clobbering', async () => {
+      // Given — a legacy note beside an existing canonical file
+      const legacy = 'Projecten/Acme Widgets/_home.md';
+      const h = setupLegacyHome(legacy);
+      h.vault.notes.set(canonical, note('P1'));
+
+      // When — the lifecycle reconciles
+      await h.action.execute({ ...activeInput, notePath: legacy });
+
+      // Then — neither file moves and the existing target is untouched
+      expect(h.vault.renameCalls).toEqual([]);
+      expect(h.vault.notes.has(legacy)).toBe(true);
+      expect(h.vault.notes.get(canonical)).toBe(note('P1'));
+    });
+
+    it('migrates an archived project under Archief/', async () => {
+      // Given — a frozen project still on the intermediate convention
+      const legacy = 'Archief/Acme Widgets/_home.md';
+      const target = 'Archief/Acme Widgets/_Acme Widgets.md';
+      const h = setupLegacyHome(legacy);
+
+      // When — the lifecycle reconciles the archived location
+      await h.action.execute({ ...archivedInput, notePath: legacy });
+
+      // Then — the rename lands under Archief/
+      expect(h.vault.renameCalls).toEqual([{ from: legacy, to: target }]);
+      expect(h.vault.notes.has(target)).toBe(true);
+    });
+
+    it('stamps the todoist anchor on the renamed file', async () => {
+      // Given — a legacy home note with no anchor and no matching project
+      const legacy = 'Projecten/Acme Widgets/_home.md';
+      const h = setupLegacyHome(legacy, '');
+      h.taskManager.projects = [];
+
+      // When — the lifecycle reconciles
+      await h.action.execute({ ...activeInput, notePath: legacy });
+
+      // Then — the anchor is written to the renamed path, not the old one
+      expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
+      expect(h.vault.notes.get(canonical)).toContain('todoist: P-new');
+      expect(h.vault.notes.has(legacy)).toBe(false);
+    });
+
+    it('leaves a folder-renamed note whose basename drifted alone', async () => {
+      // Given — a note whose folder was renamed but whose filename was not
+      const legacy = 'Projecten/Acme Widgets/Old Name.md';
+      const h = setupLegacyHome(legacy);
+
+      // When — the lifecycle reconciles
+      await h.action.execute({ ...activeInput, notePath: legacy });
+
+      // Then — the unrecognised basename is never renamed
+      expect(h.vault.renameCalls).toEqual([]);
+      expect(h.vault.notes.has(legacy)).toBe(true);
     });
   });
 });

@@ -1,4 +1,5 @@
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
+import { projectHomePath } from '../Notes/projectHomePath.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import type { ArchiveBaselineData } from '../DataTransferObjects/ArchiveBaselineData.js';
 import type { TodoistProjectData } from '../DataTransferObjects/TodoistProjectData.js';
@@ -79,6 +80,17 @@ export class ReconcileProjectLifecycleAction {
       };
     }
 
+    // Migrate the home note to the _<project>.md convention before any write in
+    // this pass, so the todoist-anchor stamping below lands on the renamed file
+    // and every later step works from the new path. The vault's own
+    // fileManager.renameFile updates the link graph, so existing backlinks
+    // follow; the affiliation reader accepts both forms meanwhile.
+    let notePath = await this.migrateHomeNote(
+      input.projectName,
+      input.notePath,
+      input.locationArchived,
+    );
+
     // Resolve/attach the Todoist project. The anchor is the identity: fetch it
     // directly (the list endpoint omits archived projects), so a frozen project
     // stays observed by id. A missing anchor — or one pointing at a project
@@ -86,7 +98,7 @@ export class ReconcileProjectLifecycleAction {
     // duplicate is never made.
     const project = await this.resolveTodoistProject(
       input.projectName,
-      input.notePath,
+      notePath,
       note.content,
     );
 
@@ -125,7 +137,7 @@ export class ReconcileProjectLifecycleAction {
       return {
         todoistProjectId: input.locationArchived ? null : (project?.id ?? null),
         frozen: input.locationArchived,
-        notePath: input.notePath,
+        notePath,
         archivedAt: input.locationArchived ? '' : null,
       };
     }
@@ -169,7 +181,7 @@ export class ReconcileProjectLifecycleAction {
           return {
             todoistProjectId: null,
             frozen: true,
-            notePath: this.activeNotePath(input.projectName, input.notePath),
+            notePath: this.activeNotePath(input.projectName, notePath),
             archivedAt: null,
           };
         }
@@ -177,7 +189,7 @@ export class ReconcileProjectLifecycleAction {
       return {
         todoistProjectId: archived ? null : (project?.id ?? null),
         frozen: archived,
-        notePath: input.notePath,
+        notePath,
         // A settled archive keeps the stamp it was given at the transition, so
         // a second pass never re-stamps it.
         archivedAt: archived ? baseline.archivedAt : null,
@@ -185,7 +197,6 @@ export class ReconcileProjectLifecycleAction {
     }
 
     // Apply the reconciled archive state to every side that disagrees.
-    let notePath = input.notePath;
     if (input.locationArchived !== archived) {
       notePath = await this.moveFolder(input.projectName, archived, notePath);
     }
@@ -253,6 +264,35 @@ export class ReconcileProjectLifecycleAction {
       notePath,
       archivedAt,
     };
+  }
+
+  // Renames a discovered home note to the _<project>.md convention. Guard rails:
+  // only a recognised legacy form is touched (`_home.md` or exactly
+  // `<project>.md`) — a folder-renamed note whose basename drifted is left
+  // alone — and a pre-existing file at the target is never clobbered. Archived
+  // projects migrate too, since the pass runs for frozen projects, so the note
+  // lands under Archief/. Returns the note's path after the migration
+  // (unchanged when nothing moved).
+  private async migrateHomeNote(
+    projectName: string,
+    notePath: string,
+    locationArchived: boolean,
+  ): Promise<string> {
+    const target = projectHomePath(projectName, locationArchived);
+    const basename = notePath.split('/').pop() ?? '';
+    if (basename === (target.split('/').pop() ?? '')) {
+      return notePath;
+    }
+    if (basename !== '_home.md' && basename !== `${projectName}.md`) {
+      return notePath;
+    }
+    // A pre-existing file at the target belongs to the user; leave both in
+    // place rather than clobbering it.
+    if ((await this.vault.getNoteByPath(target)) !== null) {
+      return notePath;
+    }
+    await this.vault.renameNote(notePath, target);
+    return target;
   }
 
   // The reconciled archive stamp: null while active; syncedAt on a genuine

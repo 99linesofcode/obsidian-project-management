@@ -187,7 +187,7 @@ describe('CaptureTodoistCreationsAction', () => {
     const path = 'Projecten/Acme Widgets/taken/buy-milk.md';
     const content = vault.notes.get(path)!;
     expect(content).toContain('status: Building');
-    expect(content).toContain('affiliation: ["[[Acme Widgets]]"]');
+    expect(content).toContain('affiliation: ["[[_Acme Widgets]]"]');
     expect(content).toContain('todoist: T1');
     expect(content).not.toContain('url:');
     // And the registry record carries the todoist handle and a lane base
@@ -230,7 +230,7 @@ describe('CaptureTodoistCreationsAction', () => {
     const path = 'Projecten/Acme Widgets/taken/write-the-copy.md';
     const content = vault.notes.get(path)!;
     expect(content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[40-slice-1]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[40-slice-1]]"]',
     );
     expect(content).toContain('status: Unshaped');
     expect(content).toContain('todoist: T2');
@@ -258,7 +258,7 @@ describe('CaptureTodoistCreationsAction', () => {
     const todo = vault.notes.get(todoPath)!;
     expect(todo).toContain('status: open');
     expect(todo).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[42-chore-1]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[42-chore-1]]"]',
     );
     expect(todo).toContain('todoist: T7');
     expect(bodyOf(vault.notes.get(taskPath)!)).toContain(
@@ -330,7 +330,7 @@ describe('CaptureTodoistCreationsAction', () => {
     const childPath = 'Projecten/Acme Widgets/todos/new-child.md';
     expect(vault.notes.has(parentPath)).toBe(true);
     expect(vault.notes.get(childPath)).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[new-parent]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[new-parent]]"]',
     );
     // And the child's base resolves the parent's freshly minted uuid
     const parent = await syncState.findByMirror('todoist', 'T9');

@@ -157,7 +157,7 @@ describe('VaultTaskMapper', () => {
     // Then — the note path and affiliation match the note mapper
     expect(note.path).toBe('Projecten/Acme Widgets/todos/fix-the-bug.md');
     expect(note.content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[fix-the-bug]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[fix-the-bug]]"]',
     );
   });
 });

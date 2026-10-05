@@ -1,6 +1,10 @@
 import { laneForSection } from '../Board/laneForSection.js';
 import { fillFrontmatterFields } from '../Notes/fillFrontmatterFields.js';
 import { parseAffiliation } from '../Notes/parseAffiliation.js';
+import {
+  isProjectAffiliationEntry,
+  projectAffiliationLink,
+} from '../Notes/projectAffiliation.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { stripLink } from '../Notes/stripLink.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
@@ -383,13 +387,13 @@ export class ApplyTodoistRemoteChangesAction {
       splitFrontmatter(note.content)?.fields.get('affiliation'),
     )
       .map(stripLink)
-      .filter((target) => target !== context.projectName);
+      .filter((target) => !isProjectAffiliationEntry(target, context.projectName));
     const currentParent = currentLinks[0] ?? null;
     if (currentParent === parentLink) {
       return;
     }
 
-    const links = [`[[${context.projectName}]]`];
+    const links = [projectAffiliationLink(context.projectName)];
     if (parentLink !== null) {
       links.push(`[[${parentLink}]]`);
     }
@@ -453,7 +457,7 @@ function parentUuidFromAffiliation(
 ): string | null | undefined {
   const targets = affiliation
     .map(stripLink)
-    .filter((target) => target !== context.projectName);
+    .filter((target) => !isProjectAffiliationEntry(target, context.projectName));
   const parentLink = isTask ? targets[0] : (targets[1] ?? targets[0]);
   if (parentLink === undefined) {
     return null;

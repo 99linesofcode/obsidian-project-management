@@ -574,8 +574,8 @@ describe('SyncTodoistTasksAction', () => {
         { type: 'task', title: 'the child', body: '', createdAt: null },
         { projectName, syncedAt, statusName: 'Building' },
       ).content.replace(
-        'affiliation: ["[[Acme Widgets]]"]',
-        'affiliation: ["[[Acme Widgets]]", "[[40-the-slice]]"]',
+        'affiliation: ["[[_Acme Widgets]]"]',
+        'affiliation: ["[[_Acme Widgets]]", "[[40-the-slice]]"]',
       ),
     );
     seedTask(h.syncState, sliceUrl, slicePath, 'uuid-slice');
@@ -615,8 +615,8 @@ describe('SyncTodoistTasksAction', () => {
         { type: 'task', title: 'the child', body: '', createdAt: null },
         { projectName, syncedAt, statusName: 'Building' },
       ).content.replace(
-        'affiliation: ["[[Acme Widgets]]"]',
-        'affiliation: ["[[Acme Widgets]]", "[[40-the-parent]]"]',
+        'affiliation: ["[[_Acme Widgets]]"]',
+        'affiliation: ["[[_Acme Widgets]]", "[[40-the-parent]]"]',
       ),
     );
     seedTask(h.syncState, parentUrl, parentPath, 'uuid-parent');
@@ -754,7 +754,7 @@ describe('SyncTodoistTasksAction', () => {
     await githubAction.execute({ projectName, syncedAt, includeBoard: true });
 
     expect(vault.notes.get(childPath)).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[the-parent]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[the-parent]]"]',
     );
 
     // Pass 2 — the Todoist projection moves the existing top-level twin under

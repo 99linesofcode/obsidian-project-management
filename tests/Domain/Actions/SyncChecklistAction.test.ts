@@ -109,7 +109,7 @@ describe('SyncChecklistAction', () => {
     expect(ToDoNoteParser.parse(vault.notes.get(todoPath)!)).toEqual({
       status: 'open',
       completed: null,
-      affiliation: ['[[Acme Widgets]]', '[[42-fix-the-bug]]'],
+      affiliation: ['[[_Acme Widgets]]', '[[42-fix-the-bug]]'],
     });
 
     // And the task note's line now carries the link
