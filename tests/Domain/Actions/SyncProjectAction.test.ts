@@ -434,4 +434,27 @@ describe('SyncProjectAction', () => {
     // Then — the sweep is told to fetch the board
     expect(h.sweep.calls[0]!.includeBoard).toBe(true);
   });
+
+  it('forces one full scan while the marker is pending, then closes the gate', async () => {
+    // Given — a quiet probe (the stored update matches) and a store that
+    // predates parent tracking, whose one-shot marker is pending
+    const h = harness({ state: openState });
+    h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
+    h.syncState.fullScanPending = true;
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the board fetch is forced exactly once, so issue-level relations
+    // (sub-issues) the board's updatedAt cannot surface are discovered
+    expect(h.sweep.calls[0]!.includeBoard).toBe(true);
+    expect(h.syncState.fullScanConsumes).toEqual([true]);
+    expect(h.syncState.fullScanPending).toBe(false);
+
+    // And — the next quiet pass closes the gate again: the marker is spent
+    h.sweep.calls = [];
+    await h.action.execute('Acme Widgets');
+    expect(h.sweep.calls[0]!.includeBoard).toBe(false);
+    expect(h.syncState.fullScanConsumes).toEqual([true, false]);
+  });
 });

@@ -174,7 +174,12 @@ export class SyncProjectAction {
     }
 
     const lastUpdate = await this.syncState.getLastProjectUpdate(project);
-    const includeBoard = state.updatedAt !== lastUpdate;
+    // The board's updatedAt is the probe gate, but a sub-issue relation moves
+    // nothing on the board. A store predating parent tracking carries a one-shot
+    // marker that forces exactly one parent-aware fetch here, so the relation is
+    // discovered and the marker is spent in the same pass.
+    const fullScan = await this.syncState.consumeFullScan();
+    const includeBoard = state.updatedAt !== lastUpdate || fullScan;
     try {
       await this.syncGithubTasks.execute({
         projectName: project,

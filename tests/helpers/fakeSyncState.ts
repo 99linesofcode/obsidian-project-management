@@ -56,6 +56,10 @@ export class FakeSyncState implements SyncStatePort {
     state: PortState;
   }> = [];
   lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
+  // The one-shot forced-scan marker. A test seeds `true` to model a store that
+  // predates parent tracking; consume reads and clears it.
+  fullScanPending = false;
+  fullScanConsumes: boolean[] = [];
 
   // Seeds an entity plus its port items in one call, so a test names the
   // mirrors it cares about without hand-building the port nesting.
@@ -304,5 +308,12 @@ export class FakeSyncState implements SyncStatePort {
   ): Promise<void> {
     this.watches.set(projectName, state);
     this.watchSets.push({ projectName, state });
+  }
+
+  async consumeFullScan(): Promise<boolean> {
+    const pending = this.fullScanPending;
+    this.fullScanPending = false;
+    this.fullScanConsumes.push(pending);
+    return pending;
   }
 }

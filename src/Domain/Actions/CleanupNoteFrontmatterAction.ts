@@ -5,11 +5,13 @@ export interface CleanupNoteFrontmatterInput {
 }
 
 // Strips the legacy machine-id frontmatter fields from every task and to-do
-// note: `id:` (the vault-owned uuid that moved into the registry, dt-20) and
-// `url:` (the old mirror address the registry now owns). A `todoist:` anchor is
-// left as-is — it is not a machine id and the project note still uses one.
-// Idempotent: a note carrying neither field is left untouched. Runs at chain
-// start, per project, before any half reads notes.
+// note: `id:` (the vault-owned uuid that moved into the registry, dt-20),
+// `url:` (the old mirror address the registry now owns) and `todoist:` (the
+// old twin anchor the registry now owns — the registry is the identity source).
+// A project note carries a LIVE `todoist:` anchor (the Todoist project id), but
+// project notes live outside taken/ and todos/, so this walk never touches one.
+// Idempotent: a note carrying none of the fields is left untouched. Runs at
+// chain start, per project, before any half reads notes.
 export class CleanupNoteFrontmatterAction {
   constructor(private readonly vault: VaultPort) {}
 
@@ -45,7 +47,9 @@ export class CleanupNoteFrontmatterAction {
     const cleaned = block.filter(
       (line, index) =>
         index === 0 ||
-        (!line.startsWith('id:') && !line.startsWith('url:')),
+        (!line.startsWith('id:') &&
+          !line.startsWith('url:') &&
+          !line.startsWith('todoist:')),
     );
     if (cleaned.length === block.length) {
       return;

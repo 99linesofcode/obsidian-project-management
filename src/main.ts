@@ -221,7 +221,6 @@ export default class ProjectManagementPlugin extends Plugin {
     // that differ. The pipeline resolves the desired shape and placement.
     const applyTaskToTodoist = new ApplyTaskToTodoistAction(
       todoist,
-      vault,
       syncState,
     );
     const applyTodoistCompletion = new ApplyTodoistCompletionAction(

@@ -34,6 +34,11 @@ const PROJECTS_KEY = 'projects';
 const PORTS_KEY = 'ports';
 const ITEMS_KEY = 'items';
 
+// The one-shot marker that forces the first parent-aware fetch after a store
+// predates parent tracking. Absent = pending; a fresh store's forced first
+// fetch is harmless.
+const FULL_SCAN_PENDING_KEY = 'fullScanPending';
+
 const STATUS_PREFIX = 'status.';
 const TODOIST_ITEM_PREFIX = 'todoistItem.';
 
@@ -690,6 +695,13 @@ export class SyncStateAdapter implements SyncStatePort {
       if (migrateV3(container)) {
         changed = true;
       }
+      // A store predating parent tracking carries no marker; absent = pending.
+      // Seed it once so the first parent-aware fetch discovers issue-level
+      // relations (sub-issues) the board's updatedAt cannot surface.
+      if (container[FULL_SCAN_PENDING_KEY] === undefined) {
+        container[FULL_SCAN_PENDING_KEY] = true;
+        changed = true;
+      }
       if (changed) {
         data[SYNC_STATE_KEY] = container;
         await this.storage.save(data);
@@ -1031,6 +1043,18 @@ export class SyncStateAdapter implements SyncStatePort {
       etag: typeof raw.etag === 'string' ? raw.etag : null,
       cursor: typeof raw.cursor === 'string' ? raw.cursor : null,
     };
+  }
+
+  // Reads the one-shot marker and clears it. Only a pending marker is persisted
+  // (write-then-clear): a second consume is a pure read and stays false.
+  async consumeFullScan(): Promise<boolean> {
+    const container = await this.loadContainer();
+    const pending = container[FULL_SCAN_PENDING_KEY] === true;
+    if (pending) {
+      container[FULL_SCAN_PENDING_KEY] = false;
+      await this.persist(container);
+    }
+    return pending;
   }
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {
