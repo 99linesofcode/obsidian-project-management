@@ -116,6 +116,20 @@ export class FakeSyncState implements SyncStatePort {
     handles.set(handle, item);
   }
 
+  // Removes a record and sweeps every mirror item it owned, the same sweep the
+  // adapter's dropEntity performs. Shared by removeEntity (recorded) and the
+  // notePath eviction in setEntity (not an explicit removal).
+  private dropRecord(id: string): void {
+    this.records.delete(id);
+    for (const handles of this.items.values()) {
+      for (const [handle, item] of handles) {
+        if (item.entityId === id) {
+          handles.delete(handle);
+        }
+      }
+    }
+  }
+
   async getEntity(id: string): Promise<EntityRecord | null> {
     return this.records.get(id) ?? null;
   }
@@ -150,11 +164,12 @@ export class FakeSyncState implements SyncStatePort {
   }
 
   async setEntity(record: EntityRecord): Promise<void> {
-    // A note path is a hub-side address: evict any other entity claiming it,
-    // matching the adapter's path re-key.
+    // A notePath resolves to exactly one entity: claiming an occupied path
+    // evicts the previous owner — its record AND its items — so the path can
+    // never hold two owners (the adapter's setEntity does the same).
     for (const [id, other] of this.records) {
       if (id !== record.id && other.notePath === record.notePath) {
-        this.records.delete(id);
+        this.dropRecord(id);
       }
     }
     this.records.set(record.id, record);
@@ -162,14 +177,7 @@ export class FakeSyncState implements SyncStatePort {
   }
 
   async removeEntity(id: string): Promise<void> {
-    this.records.delete(id);
-    for (const handles of this.items.values()) {
-      for (const [handle, item] of handles) {
-        if (item.entityId === id) {
-          handles.delete(handle);
-        }
-      }
-    }
+    this.dropRecord(id);
     this.removed.push(id);
   }
 
@@ -192,10 +200,10 @@ export class FakeSyncState implements SyncStatePort {
     handle: string,
     item: MirrorItem,
   ): Promise<void> {
-    const owner = this.items.get(portId)?.get(handle);
-    if (owner !== undefined && owner.entityId !== item.entityId) {
-      this.records.delete(owner.entityId);
-    }
+    // Re-point, never destroy: the previous owner keeps its record and every
+    // OTHER mirror. Only this (portId, handle) address changes hands, so a
+    // collision never evicts an entity. Supersession is explicit (removeEntity),
+    // matching the adapter's setMirrorItem (REG-6).
     this.put(portId, handle, item);
   }
 

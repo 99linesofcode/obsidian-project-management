@@ -9,6 +9,10 @@ import {
 } from '../../../src/Infrastructure/Obsidian/SyncStateAdapter.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import { entityRecord, taskData } from '../../helpers/records.js';
+import {
+  runSyncStateConformance,
+  type SyncStateConformanceHarness,
+} from '../../helpers/syncStateConformance.js';
 
 // A fake storage at the boundary: an in-memory map behind load/save, so the
 // adapter's keying, migration and index maintenance is what's under test. The
@@ -210,8 +214,8 @@ describe('SyncStateAdapter', () => {
     ).toBe('entity-1');
   });
 
-  it('evicts the older entity when two claim the same handle', async () => {
-    // Given — two entities claiming one github url
+  it('re-points a claimed handle without evicting the older entity', async () => {
+    // Given — an entity holding a github and a todoist mirror
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(
@@ -221,8 +225,12 @@ describe('SyncStateAdapter', () => {
       entityId: 'older',
       base: null,
     });
+    await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T-older', {
+      entityId: 'older',
+      base: null,
+    });
 
-    // When — a second entity claims the same handle
+    // When — a second entity claims the same github handle
     await adapter.setEntity(
       entityRecord({ id: 'newer', notePath: 'Projecten/Acme Widgets/taken/newer.md' }),
     );
@@ -231,10 +239,14 @@ describe('SyncStateAdapter', () => {
       base: null,
     });
 
-    // Then — the older loses the handle and is evicted
-    expect(await adapter.getEntity('older')).toBeNull();
+    // Then — the older loses the handle but survives, and its OTHER mirror is
+    // untouched (promise 2: no change is ever lost).
     expect((await adapter.findMirrorItem('github', url))?.entityId).toBe(
       'newer',
+    );
+    expect(await adapter.getEntity('older')).not.toBeNull();
+    expect((await adapter.findMirrorItem('todoist', 'T-older'))?.entityId).toBe(
+      'older',
     );
   });
 
@@ -746,3 +758,37 @@ describe('SyncStateAdapter write serialisation', () => {
     expect(backups()).toBe(1);
   });
 });
+
+// The shared port + migration contract, run against the REAL adapter. The exact
+// same suite runs against FakeSyncState (tests/helpers/fakeSyncState.test.ts),
+// so the fake and the adapter can never drift apart again.
+const conformanceHarness: SyncStateConformanceHarness = {
+  create(options) {
+    const raw: Record<string, unknown> = {};
+    if (options?.pendingProjects?.length) {
+      // A current store whose projects carry no marker: absent = pending, which
+      // the adapter seeds on load (the fake models it with its pending set).
+      const projects: Record<string, unknown> = {};
+      for (const name of options.pendingProjects) {
+        projects[name] = {};
+      }
+      raw[SYNC_STATE_KEY] = { version: 3, projects };
+    }
+    const { storage } = fakeStorage(raw);
+    return new SyncStateAdapter(storage);
+  },
+  migration: {
+    createFromRoot(raw) {
+      const { storage, snapshot } = fakeStorage(raw);
+      const port = new SyncStateAdapter(storage);
+      return {
+        port,
+        root: () => snapshot(),
+        container: () =>
+          snapshot()[SYNC_STATE_KEY] as Record<string, unknown>,
+      };
+    },
+  },
+};
+
+runSyncStateConformance('SyncStateAdapter', conformanceHarness);

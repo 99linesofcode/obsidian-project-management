@@ -408,6 +408,42 @@ describe('ApplyTaskToGithubAction', () => {
     expect(base?.body).toHaveLength(16);
   });
 
+  it('leaves the base untouched on an equal-state pass with no API write', async () => {
+    // Given — a settled issue whose stored base already carries the winning
+    // task's canonical diff view
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    const settled = taskData({
+      id: 'uuid-42',
+      notePath,
+      title: 'Fix the bug',
+      body: hash(toIssueBody('The bug happens on resize.')),
+      status: 'Building',
+      type: 'task',
+    });
+    seedRecord(syncState, settled);
+    const before = syncState.baseOf('uuid-42', 'github');
+    const port = new FakeProjectManagement();
+    const action = makeAction(syncState, port);
+
+    // When — the identical task is rendered
+    await action.execute({
+      task: task(),
+      current: task(),
+      hasCard: true,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — no API write happens AND the base is not rewritten: the same
+    // no-op-skip contract ApplyTaskToTodoistAction enforces.
+    expect(port.updateCalls).toEqual([]);
+    expect(port.stateCalls).toEqual([]);
+    expect(port.boardStatusCalls).toEqual([]);
+    expect(port.addBoardItemCalls).toEqual([]);
+    expect(syncState.baseOf('uuid-42', 'github')).toBe(before);
+  });
+
   it('does not advance the base when the write fails', async () => {
     // Given — a tracked issue whose write will fail
     const syncState = new FakeSyncState();
