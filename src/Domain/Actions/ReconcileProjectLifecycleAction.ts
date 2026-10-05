@@ -305,11 +305,13 @@ export class ReconcileProjectLifecycleAction {
     projectName: string,
     syncedAt: string,
   ): Promise<void> {
-    const state = await this.syncState.getTodoistProjectState(projectName);
+    const state = await this.syncState.getPortState(projectName, 'todoist');
     if (!state) {
-      await this.syncState.setTodoistProjectState(projectName, {
-        sections: {},
-        lastCompletedPoll: syncedAt,
+      await this.syncState.setPortState(projectName, 'todoist', {
+        provider: 'todoist',
+        lastPoll: syncedAt,
+        lanes: {},
+        tags: {},
       });
     }
   }
@@ -326,7 +328,7 @@ export class ReconcileProjectLifecycleAction {
       : `Archief/${projectName}`;
     const to = archived ? `Archief/${projectName}` : `Projecten/${projectName}`;
     await this.vault.moveFolder(from, to);
-    await this.relocateStatuses(`${from}/`, `${to}/`);
+    await this.relocateStatuses(`${from}/`, `${to}/`, projectName);
     return notePath.startsWith(`${from}/`)
       ? `${to}/${notePath.slice(from.length + 1)}`
       : notePath;
@@ -343,10 +345,11 @@ export class ReconcileProjectLifecycleAction {
   private async relocateStatuses(
     fromPrefix: string,
     toPrefix: string,
+    projectName: string,
   ): Promise<void> {
-    for (const record of await this.syncState.list()) {
+    for (const record of await this.syncState.listEntities(projectName)) {
       if (record.notePath.startsWith(fromPrefix)) {
-        await this.syncState.set({
+        await this.syncState.setEntity({
           ...record,
           notePath: `${toPrefix}${record.notePath.slice(fromPrefix.length)}`,
         });
@@ -354,21 +357,31 @@ export class ReconcileProjectLifecycleAction {
     }
   }
 
-  // Every tracked issue in the project is a registry record with a github
-  // mirror; the lane it sits in is the github base's status (the last-synced
-  // lane). A record with no github mirror is a Todoist-only to-do with no issue
-  // to lock. The lane is read from the base because the EntityRecord itself
-  // carries no content.
+  // Every tracked issue in the project is a registry entity with a github
+  // mirror item; the lane it sits in is that item's base status (the last-synced
+  // lane). An entity with no github item is a Todoist-only to-do with no issue
+  // to lock. The lane is read from the base because the entity itself carries
+  // no content.
   private async lockUnshippedIssues(projectName: string): Promise<void> {
+    const githubByEntity = new Map<
+      string,
+      { handle: string; base: { status: string } | null }
+    >();
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectName,
+      'github',
+    )) {
+      githubByEntity.set(item.entityId, { handle, base: item.base });
+    }
     for (const record of await this.trackedIssues(projectName)) {
-      const handle = record.mirrors.github?.handle;
+      const github = githubByEntity.get(record.id);
       if (
-        handle === undefined ||
-        (record.mirrors.github?.base?.status ?? '') === this.doneOptionName
+        github === undefined ||
+        (github.base?.status ?? '') === this.doneOptionName
       ) {
         continue;
       }
-      const task = await this.projectManagement.fetchTask(handle);
+      const task = await this.projectManagement.fetchTask(github.handle);
       await this.projectManagement.lockIssue(task.nodeId);
     }
   }
@@ -376,7 +389,7 @@ export class ReconcileProjectLifecycleAction {
   private async trackedIssues(projectName: string): Promise<EntityRecord[]> {
     // Either prefix: the relocation may or may not have run for a record yet.
     const prefixes = [`Projecten/${projectName}/`, `Archief/${projectName}/`];
-    return (await this.syncState.list()).filter((record) =>
+    return (await this.syncState.listEntities(projectName)).filter((record) =>
       prefixes.some((prefix) => record.notePath.startsWith(prefix)),
     );
   }

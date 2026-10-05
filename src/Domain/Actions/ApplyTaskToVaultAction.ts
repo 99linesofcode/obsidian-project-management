@@ -1,4 +1,3 @@
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { withChecklistLinks } from '../Notes/Checklist.js';
 import { fillFrontmatterFields } from '../Notes/fillFrontmatterFields.js';
@@ -61,7 +60,7 @@ export class ApplyTaskToVaultAction {
     // issue is left untouched.
     if (input.current === null) {
       await this.createTaskNote.execute({
-        url: this.issueUrl(input, record),
+        url: await this.issueUrl(input, record),
         title: input.task.title,
         body: input.task.body,
         type: input.task.type,
@@ -101,7 +100,6 @@ export class ApplyTaskToVaultAction {
     const rendered = TaskNoteMapper.render(
       template,
       {
-        id,
         type: input.task.type || input.current.type,
         title: input.task.title,
         body: linkedBody,
@@ -145,13 +143,33 @@ export class ApplyTaskToVaultAction {
 
   // The winning task's issue url: the registry's github handle when the entity
   // is tracked, otherwise the live-view handle the remote mapper carried.
-  private issueUrl(
+  private async issueUrl(
     input: ApplyTaskToVaultInput,
     record: EntityRecord | null,
-  ): string {
-    return (
-      record?.mirrors.github?.handle ?? input.task.mirrors.github ?? ''
-    );
+  ): Promise<string> {
+    if (input.task.mirrors.github !== undefined) {
+      return input.task.mirrors.github;
+    }
+    return record === null
+      ? ''
+      : ((await this.githubHandle(record.id, input.projectName)) ?? '');
+  }
+
+  // The github handle an entity holds, read from the port-grouped registry
+  // because the handle no longer lives on the entity.
+  private async githubHandle(
+    entityId: string,
+    projectName: string,
+  ): Promise<string | null> {
+    for (const entry of await this.syncState.listMirrorItems(
+      projectName,
+      'github',
+    )) {
+      if (entry.item.entityId === entityId) {
+        return entry.handle;
+      }
+    }
+    return null;
   }
 
   // The record CreateTaskNoteAction just wrote, so the create path can advance
@@ -161,9 +179,10 @@ export class ApplyTaskToVaultAction {
     input: ApplyTaskToVaultInput,
     record: EntityRecord | null,
   ): Promise<EntityRecord | null> {
-    const url = this.issueUrl(input, record);
+    const url = await this.issueUrl(input, record);
     if (url !== '') {
-      return await this.syncState.findByMirror('github', url);
+      const item = await this.syncState.findMirrorItem('github', url);
+      return item === null ? null : this.syncState.getEntity(item.entityId);
     }
     return await this.syncState.findByNotePath(this.mappedPath(input));
   }
@@ -197,7 +216,6 @@ export class ApplyTaskToVaultAction {
   private mappedPath(input: ApplyTaskToVaultInput): string {
     return TaskNoteMapper.map(
       {
-        id: '',
         type: '',
         title: input.task.title,
         body: '',
@@ -279,7 +297,7 @@ export class ApplyTaskToVaultAction {
     if (ref === null || ref === '') {
       return null;
     }
-    if ((await this.syncState.get(ref)) !== null) {
+    if ((await this.syncState.getEntity(ref)) !== null) {
       return ref;
     }
     for (const candidate of [
@@ -327,8 +345,8 @@ export class ApplyTaskToVaultAction {
     return bySlug;
   }
 
-  // Updates the registry record: the note's location, and — only on a pull —
-  // the github mirror's base.
+  // Updates the registry: the note's location, and — only on a pull — the
+  // github mirror item's base.
   private async refreshRecord(
     input: ApplyTaskToVaultInput,
     record: EntityRecord | null,
@@ -338,19 +356,21 @@ export class ApplyTaskToVaultAction {
     if (id === '') {
       return;
     }
-    const mirrors = { ...(record?.mirrors ?? {}) };
+    await this.syncState.setEntity({ id, notePath: applied.notePath });
     if (input.origin === 'pull') {
-      const handle = this.issueUrl(input, record);
+      const handle = await this.issueUrl(input, record);
       if (handle !== '') {
         // WHY the base advances only here, after the durable write: a base
         // advanced before the write lands makes the next pass compare the
         // remote against a base that already claims the new state, so the
         // remote's still-stale value reads as a fresh change and reverts the
         // vault (the revert bug).
-        mirrors.github = new Mirror(handle, toDiffViewWithBody(applied));
+        await this.syncState.setMirrorItem(input.projectName, 'github', handle, {
+          entityId: id,
+          base: toDiffViewWithBody(applied),
+        });
       }
     }
-    await this.syncState.set({ id, notePath: applied.notePath, mirrors });
   }
 }
 

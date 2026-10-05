@@ -23,11 +23,16 @@ import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/To
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData, todoistTask } from '../../helpers/records.js';
+import { entityRecord, taskData, todoistTask } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 import { toDiffViewWithBody } from '../../../src/Domain/Reconciliation/toDiffView.js';
 
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
 
@@ -253,12 +258,12 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
 
 function taskNote(statusName: string, body = '', todoistId?: string): string {
   const content = TaskNoteMapper.map(
-    { id: 'uuid-42', type: 'task', title: 'fix the bug', body, createdAt: null },
+    { type: 'task', title: 'fix the bug', body, createdAt: null },
     { projectName, syncedAt, statusName },
   ).content;
   return todoistId === undefined
     ? content
-    : content.replace('id:', `todoist: ${todoistId}\nid:`);
+    : content.replace('---\n', `---\ntodoist: ${todoistId}\n`);
 }
 
 function seedTask(
@@ -267,14 +272,9 @@ function seedTask(
   notePath: string,
   id: string,
 ): void {
-  syncState.records.set(
-    id,
-    entityRecord({
-      id,
-      notePath,
-      mirrors: { github: mirror(url, null) },
-    }),
-  );
+  syncState.seed(entityRecord({ id, notePath }), {
+    github: { handle: url },
+  });
 }
 
 function buildAction(
@@ -388,28 +388,21 @@ describe('SyncTodoistTasksAction', () => {
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
-    h.syncState.records.set(
-      'uuid-42',
-      entityRecord({
-        id: 'uuid-42',
-        notePath: taskPath,
-        mirrors: {
-          github: mirror(taskUrl, null),
-          todoist: mirror(
-            'T9',
-            // base lane Building; the twin sits in Unshaped
-            toDiffViewWithBody(
-              taskData({
-                id: 'uuid-42',
-                notePath: taskPath,
-                title: 'Fix the bug',
-                status: 'Building',
-              }),
-            ),
-          ),
-        },
-      }),
-    );
+    h.syncState.seed(entityRecord({ id: 'uuid-42', notePath: taskPath }), {
+      github: { handle: taskUrl },
+      todoist: {
+        handle: 'T9',
+        // base lane Building; the twin sits in Unshaped
+        base: toDiffViewWithBody(
+          taskData({
+            id: 'uuid-42',
+            notePath: taskPath,
+            title: 'Fix the bug',
+            status: 'Building',
+          }),
+        ),
+      },
+    });
     h.taskManager.active = [
       todoistTask({ id: 'T9', content: 'Fix the bug', sectionId: 'S1' }),
     ];
@@ -426,27 +419,20 @@ describe('SyncTodoistTasksAction', () => {
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
-    h.syncState.records.set(
-      'uuid-42',
-      entityRecord({
-        id: 'uuid-42',
-        notePath: taskPath,
-        mirrors: {
-          github: mirror(taskUrl, null),
-          todoist: mirror(
-            'T9',
-            toDiffViewWithBody(
-              taskData({
-                id: 'uuid-42',
-                notePath: taskPath,
-                title: 'Fix the bug',
-                status: 'Building',
-              }),
-            ),
-          ),
-        },
-      }),
-    );
+    h.syncState.seed(entityRecord({ id: 'uuid-42', notePath: taskPath }), {
+      github: { handle: taskUrl },
+      todoist: {
+        handle: 'T9',
+        base: toDiffViewWithBody(
+          taskData({
+            id: 'uuid-42',
+            notePath: taskPath,
+            title: 'Fix the bug',
+            status: 'Building',
+          }),
+        ),
+      },
+    });
     h.taskManager.active = [
       todoistTask({
         id: 'T9',
@@ -461,6 +447,81 @@ describe('SyncTodoistTasksAction', () => {
 
     // Then — the title field alone drives the pull, and the writer is skipped
     expect(h.writer.taskCalls).toEqual([]);
+  });
+
+  it('pulls a status conflict when the twin update postdates the vault mtime', async () => {
+    // Given — both sides changed the lane and the twin's own update is newer
+    // than the note's mtime
+    const h = harness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(taskPath, taskNote('Unshaped'));
+    h.syncState.seed(entityRecord({ id: 'uuid-42', notePath: taskPath }), {
+      github: { handle: taskUrl },
+      todoist: {
+        handle: 'T9',
+        base: toDiffViewWithBody(
+          taskData({
+            id: 'uuid-42',
+            notePath: taskPath,
+            title: 'Fix the bug',
+            status: 'Shipped',
+          }),
+        ),
+      },
+    });
+    h.vault.modifiedTimes.set(taskPath, '2026-09-19T00:00:00Z');
+    h.taskManager.active = [
+      todoistTask({
+        id: 'T9',
+        content: 'Fix the bug',
+        sectionId: 'S2',
+        updatedAt: '2026-09-20T00:00:00Z',
+      }),
+    ];
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the remote lane wins on the decisive timestamp, so no push runs
+    expect(h.writer.taskCalls).toEqual([]);
+  });
+
+  it('pushes the vault lane when the twin update predates the vault mtime', async () => {
+    // Given — both sides changed the lane and the twin's update is older
+    const h = harness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(taskPath, taskNote('Unshaped'));
+    h.syncState.seed(entityRecord({ id: 'uuid-42', notePath: taskPath }), {
+      github: { handle: taskUrl },
+      todoist: {
+        handle: 'T9',
+        base: toDiffViewWithBody(
+          taskData({
+            id: 'uuid-42',
+            notePath: taskPath,
+            title: 'Fix the bug',
+            status: 'Shipped',
+          }),
+        ),
+      },
+    });
+    h.vault.modifiedTimes.set(taskPath, '2026-09-19T00:00:00Z');
+    h.taskManager.active = [
+      todoistTask({
+        id: 'T9',
+        content: 'Fix the bug',
+        sectionId: 'S2',
+        updatedAt: '2026-09-18T00:00:00Z',
+      }),
+    ];
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the timestamp is not decisive; origin authority moves the twin to
+    // the vault's lane
+    expect(h.writer.taskCalls).toHaveLength(1);
+    expect(h.writer.taskCalls[0]!.sectionId).toBe('S1');
   });
 
   it('records the lane map when the sections moved', async () => {
@@ -494,14 +555,14 @@ describe('SyncTodoistTasksAction', () => {
     h.vault.notes.set(
       slicePath,
       TaskNoteMapper.map(
-        { id: 'uuid-slice', type: 'slice', title: 'the slice', body: '', createdAt: null },
+        { type: 'slice', title: 'the slice', body: '', createdAt: null },
         { projectName, syncedAt, statusName: 'Building' },
       ).content,
     );
     h.vault.notes.set(
       childPath,
       TaskNoteMapper.map(
-        { id: 'uuid-child', type: 'task', title: 'the child', body: '', createdAt: null },
+        { type: 'task', title: 'the child', body: '', createdAt: null },
         { projectName, syncedAt, statusName: 'Building' },
       ).content.replace(
         'affiliation: ["[[Acme Widgets]]"]',

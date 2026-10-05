@@ -8,11 +8,10 @@ import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects
 import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import type { EntityRecord } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the vault holds note content and actually moves folders,
@@ -22,6 +21,11 @@ import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 // serves the latest-issue probe. The lifecycle's merge decisions are what's
 // under test; the fakes' real mutation is what makes idempotency observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   writes: Array<{ path: string; content: string }> = [];
   moveCalls: Array<{ from: string; to: string }> = [];
@@ -236,10 +240,11 @@ function project(
 
 // A tracked issue: the registry record carries the github handle and the
 // last-synced base whose status is the lane the lock sweep reads.
-function record(
+function seedRecord(
+  syncState: FakeSyncState,
   notePath: string,
   overrides: Partial<TaskData> = {},
-): EntityRecord {
+): void {
   const base = taskData({
     id: 'entity-42',
     notePath,
@@ -249,10 +254,8 @@ function record(
     updatedAt: '2026-09-18T11:00:00Z',
     ...overrides,
   });
-  return entityRecord({
-    id: 'entity-42',
-    notePath,
-    mirrors: { github: mirror(issueUrl, base) },
+  syncState.seed(entityRecord({ id: 'entity-42', notePath }), {
+    github: { handle: issueUrl, base },
   });
 }
 
@@ -270,7 +273,7 @@ function setup(anchor = 'P1') {
     statusFieldId: 'PVTF_456',
     statusOptions: [],
   });
-  syncState.records.set('entity-42', record(taskPath));
+  seedRecord(syncState, taskPath);
   const port = new FakeProjectManagement();
   const action = new ReconcileProjectLifecycleAction(
     port,
@@ -306,7 +309,7 @@ function setupArchived() {
   h.vault.notes.set(archivedNote, note('P1'));
   h.taskManager.projects = [project({ isArchived: true })];
   h.syncState.records.clear();
-  h.syncState.records.set('entity-42', record(archivedTaskPath));
+  seedRecord(h.syncState, archivedTaskPath);
   h.syncState.baselines.set('Acme Widgets', {
     locationArchived: true,
     closed: true,
@@ -478,7 +481,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       const h = setup();
       h.vault.notes.set(archivedNote, note('P1'));
       h.syncState.records.clear();
-      h.syncState.records.set('entity-42', record(archivedTaskPath));
+      seedRecord(h.syncState, archivedTaskPath);
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
@@ -667,7 +670,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       const h = setup();
       h.vault.notes.set(archivedNote, note('P1'));
       h.syncState.records.clear();
-      h.syncState.records.set('entity-42', record(archivedTaskPath));
+      seedRecord(h.syncState, archivedTaskPath);
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
@@ -861,10 +864,7 @@ describe('ReconcileProjectLifecycleAction', () => {
       // Given — a project whose only record is in the done lane
       const h = setup();
       h.syncState.records.clear();
-      h.syncState.records.set(
-        'entity-42',
-        record(taskPath, { status: 'Shipped' }),
-      );
+      seedRecord(h.syncState, taskPath, { status: 'Shipped' });
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,

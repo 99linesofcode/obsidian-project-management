@@ -1,4 +1,4 @@
-import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
+import { stemOf } from '../Notes/stemOf.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 
@@ -8,16 +8,19 @@ export interface DetectNoteRenamesInput {
 }
 
 // UC: detect hand-renamed notes from snapshot drift, replacing the old
-// `renamed` trigger kind. Identity is the vault-owned uuid in a note's
-// frontmatter, so a rename is a FIELD UPDATE on the registry record — the
-// note's location moved, its id and its mirrors did not. For every record
-// whose note is no longer at its recorded path, the action looks for the
-// current note carrying the same id and moves the record's notePath to it. No
-// re-key, no handle churn, no two-store bookkeeping.
+// `renamed` trigger kind. A rename is a FIELD UPDATE on the registry record —
+// the note's location moved, its uuid and its mirrors did not.
 //
-// A record whose note is gone and has no id-matching current note is left
-// alone: the deletion sweep owns a genuine deletion, and a note that lost its
-// id is re-registered by the id backfill on the next chain start.
+// WHY the stem pairs a rename: the frontmatter id is gone by decision (dt-20),
+// so the note no longer carries a machine anchor that survives a hand-rename.
+// The filename stem is the offline-rename recovery key: a record whose note
+// vanished from its recorded path is paired with an untracked note of the same
+// stem, and the record's notePath moves to it. A LIVE rename still flows
+// through the vault rename event (RelocateTaskStatusAction / RelinkRenamedTodo),
+// so this pass only recovers a rename the plugin did not observe.
+//
+// A record whose note is gone and has no same-stem current note is left alone:
+// the deletion sweep owns a genuine deletion.
 export class DetectNoteRenamesAction {
   constructor(
     private readonly vault: VaultPort,
@@ -34,34 +37,45 @@ export class DetectNoteRenamesAction {
     }
     const currentSet = new Set(currentPaths);
 
-    // The id → current path index: the durable anchor survives a rename, so a
-    // note found at a new path still resolves to its record.
-    const pathById = new Map<string, string>();
-    for (const path of currentPaths) {
-      const note = await this.vault.getNoteByPath(path);
-      if (note === null) {
+    const records = (await this.syncState.listEntities(input.projectName)).filter(
+      (record) =>
+        record.notePath.startsWith(`Projecten/${input.projectName}/`),
+    );
+    const trackedPaths = new Set(records.map((record) => record.notePath));
+
+    // Untracked current notes, grouped by recovery stem. Sorted so the pairing
+    // is deterministic when two notes share a stem.
+    const untrackedByStem = new Map<string, string[]>();
+    for (const path of [...currentPaths].sort()) {
+      if (trackedPaths.has(path)) {
         continue;
       }
-      const id = splitFrontmatter(note.content)?.fields.get('id') ?? '';
-      if (id !== '' && !pathById.has(id)) {
-        pathById.set(id, path);
-      }
+      const stem = recoveryStem(path);
+      const list = untrackedByStem.get(stem) ?? [];
+      list.push(path);
+      untrackedByStem.set(stem, list);
     }
 
-    const prefix = `Projecten/${input.projectName}/`;
-    for (const record of await this.syncState.list()) {
-      if (!record.notePath.startsWith(prefix)) {
-        continue;
-      }
+    for (const record of records) {
       if (currentSet.has(record.notePath)) {
         continue;
       }
-      const newPath = pathById.get(record.id);
+      // The same-stem untracked note, consumed so one note cannot absorb two
+      // records.
+      const newPath = untrackedByStem.get(recoveryStem(record.notePath))?.shift();
       if (newPath === undefined) {
         continue;
       }
-      // The id and the mirrors are untouched; only the location moves.
-      await this.syncState.set({ ...record, notePath: newPath });
+      // The uuid and the mirrors are untouched; only the location moves.
+      await this.syncState.setEntity({ ...record, notePath: newPath });
     }
   }
+}
+
+// The offline-rename recovery stem: the filename stem with a legacy leading
+// ordinal prefix stripped and lowercased. A hand-rename may drop the
+// `<remoteId>-` prefix (filenames carry zero identity weight), so the prefix is
+// presentation, not identity.
+function recoveryStem(path: string): string {
+  return stemOf(path).replace(/^\d+-/, '').toLowerCase();
 }

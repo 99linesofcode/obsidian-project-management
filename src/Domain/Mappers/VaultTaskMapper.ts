@@ -54,7 +54,9 @@ export const VaultTaskMapper = {
     const done = context.doneLane !== '' && parsed.status === context.doneLane;
     const completedField = fields?.get('completed') ?? '';
     return new TaskData(
-      parsed.id,
+      // WHY '': the note carries no machine id (dt-20); the action layer
+      // composes the uuid from the registry record that resolved this path.
+      '',
       notePath,
       {}, // the vault live view knows no mirror handles; the registry owns them
       titleFromNotePath(notePath, remoteId),
@@ -86,7 +88,9 @@ export const VaultTaskMapper = {
     }
     const fields = splitFrontmatter(content)?.fields;
     return new ToDoData(
-      fields?.get('id') ?? '',
+      // WHY '': the note carries no machine id (dt-20); the action layer
+      // composes the uuid from the registry record.
+      '',
       notePath,
       {}, // the vault live view knows no mirror handles; the registry owns them
       titleFromNotePath(notePath, 0),
@@ -109,7 +113,6 @@ export const VaultTaskMapper = {
   renderTask(task: TaskData, context: VaultTaskRenderContext): TaskNote {
     return TaskNoteMapper.map(
       {
-        id: task.id,
         type: task.type,
         title: task.title,
         body: task.body,

@@ -14,12 +14,17 @@ import type { ProjectDetailData } from '../../../src/Domain/DataTransferObjects/
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the pipeline is exercised end-to-end through the real
 // writers, so the fetch → map → diff → apply orchestration is what's under test.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
   written: Array<{ path: string; content: string }> = [];
@@ -181,6 +186,7 @@ function card(overrides: Partial<BoardItemData> = {}): BoardItemData {
     type: 'ISSUE',
     issueUrl: url,
     statusOptionName: defaultLane,
+    updatedAt: null,
     ...overrides,
   };
 }
@@ -195,7 +201,6 @@ function noteFor(opts: {
 }): string {
   return TaskNoteMapper.map(
     {
-      id: opts.id ?? 'uuid-42',
       type: opts.type ?? 'task',
       title: 'fix the bug',
       body: opts.body ?? baseBody,
@@ -228,14 +233,9 @@ function seed(vault: FakeVault, syncState: FakeSyncState, opts: Seed): void {
     completedAt: opts.baseCompletedAt ?? null,
     type: opts.baseType ?? 'task',
   });
-  syncState.records.set(
-    'uuid-42',
-    entityRecord({
-      id: 'uuid-42',
-      notePath: path,
-      mirrors: { github: mirror(url, base) },
-    }),
-  );
+  syncState.seed(entityRecord({ id: 'uuid-42', notePath: path }), {
+    github: { handle: url, base },
+  });
   vault.notes.set(
     path,
     noteFor({
@@ -291,15 +291,14 @@ describe('SyncGithubTasksAction', () => {
     await action.execute(input);
 
     // Then — the note is created at the slug path, the card is added, and the
-    // registry record's uuid matches the note's frontmatter id
+    // registry entity anchors it (no machine id in the note, dt-20)
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toBe(slugNotePath);
     const record = await syncState.findByMirror('github', url);
     expect(record).not.toBeNull();
     expect(record?.notePath).toBe(slugNotePath);
-    expect(record?.mirrors.github?.base).not.toBeNull();
-    const stamped = vault.created[0]!.content.match(/^id: (.+)$/m)?.[1];
-    expect(stamped).toBe(record?.id);
+    expect(syncState.baseOf(record!.id, 'github')).not.toBeNull();
+    expect(vault.created[0]!.content).not.toMatch(/^id: /m);
     expect(vault.created[0]!.content).toContain('type: task');
     expect(projectManagement.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
@@ -361,8 +360,7 @@ describe('SyncGithubTasksAction', () => {
     expect(vault.written).toHaveLength(1);
     expect(vault.written[0]!.path).toBe(notePath);
     expect(vault.written[0]!.content).toContain(changedBody);
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.body).toBe(hash(changedBody));
+    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(hash(changedBody));
   });
 
   it('pushes a vault body change onto the issue and advances the base', async () => {
@@ -386,8 +384,7 @@ describe('SyncGithubTasksAction', () => {
     expect(projectManagement.updateCalls).toEqual([
       { url, title: issueA.title, body: 'Vault edit.' },
     ]);
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.body).toBe(
+    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(
       hash(toIssueBody('Vault edit.')),
     );
   });
@@ -504,7 +501,7 @@ describe('SyncGithubTasksAction', () => {
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = {
       issues: [issueA],
-      cards: [{ itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url }],
+      cards: [{ itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url, updatedAt: null }],
     };
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -601,6 +598,128 @@ describe('SyncGithubTasksAction', () => {
     ]);
   });
 
+  it('pulls a body conflict when the remote edit postdates the vault mtime', async () => {
+    // Given — both sides changed the body, and the remote edit provably came
+    // after the note's last modification
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      baseBody: 'base body',
+      noteBody: 'vault body',
+    });
+    vault.modifiedTimes.set(notePath, '2026-09-19T00:00:00Z');
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [
+        issue({ body: 'remote body', lastEditedAt: '2026-09-20T00:00:00Z' }),
+      ],
+      cards: [card()],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the remote wins the decisive timestamp and the note follows it
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.content).toContain('remote body');
+    expect(projectManagement.updateCalls).toEqual([]);
+  });
+
+  it('pushes a body conflict when the remote edit predates the vault mtime', async () => {
+    // Given — both sides changed the body, and the remote edit is older
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+      baseBody: 'base body',
+      noteBody: 'vault body',
+    });
+    vault.modifiedTimes.set(notePath, '2026-09-19T00:00:00Z');
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [
+        issue({ body: 'remote body', lastEditedAt: '2026-09-18T00:00:00Z' }),
+      ],
+      cards: [card()],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the timestamp is not decisive and origin authority pushes
+    expect(projectManagement.updateCalls).toEqual([
+      { url, title: issueA.title, body: 'vault body' },
+    ]);
+  });
+
+  it('pulls a status conflict when the card update postdates the vault mtime', async () => {
+    // Given — both sides changed the lane and the card's own update is newer
+    // than the note's mtime
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: doneLane,
+      noteStatus: defaultLane,
+    });
+    vault.modifiedTimes.set(notePath, '2026-09-19T00:00:00Z');
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issueA],
+      cards: [
+        card({
+          statusOptionName: 'Building',
+          updatedAt: '2026-09-20T00:00:00Z',
+        }),
+      ],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the remote lane wins on the decisive card timestamp
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.content).toContain('status: Building');
+  });
+
+  it('falls through to done-beats-open when the card update predates the vault mtime', async () => {
+    // Given — the vault completed while the card moved to an open lane, and the
+    // card's update is older than the note's mtime
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: 'Building',
+      noteStatus: doneLane,
+    });
+    vault.modifiedTimes.set(notePath, '2026-09-19T00:00:00Z');
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issueA],
+      cards: [
+        card({
+          statusOptionName: defaultLane,
+          updatedAt: '2026-09-18T00:00:00Z',
+        }),
+      ],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the card time is not decisive; the vault completion wins
+    expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
+  });
+
   it('backfills the vault-owned type from the issue label', async () => {
     // Given — a tracked note and record that predate the type promotion
     const vault = new FakeVault();
@@ -622,8 +741,7 @@ describe('SyncGithubTasksAction', () => {
     // Then — the note's frontmatter and the record's base both carry the type
     const note = vault.notes.get(notePath) ?? '';
     expect(note).toContain('type: task');
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.type).toBe('task');
+    expect(syncState.baseOf('uuid-42', 'github')?.type).toBe('task');
   });
 
   it('skips the fetch when the remote is unmoved and the vault is settled', async () => {
@@ -749,6 +867,29 @@ describe('SyncGithubTasksAction', () => {
     expect(projectManagement.boardStatusCalls).toEqual([]);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(projectManagement.updateCalls).toEqual([]);
+    expect(await syncState.list()).toEqual([]);
+  });
+
+  it('does not materialise an untracked open issue without a type label', async () => {
+    // Given — an open issue carrying no `type:*` label, with no record
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = {
+      issues: [issue({ labels: ['bug'] })],
+      cards: [],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the untyped issue is ignored: no note, no card, no record
+    expect(vault.created).toEqual([]);
+    expect(vault.written).toEqual([]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
+    expect(projectManagement.stateCalls).toEqual([]);
     expect(await syncState.list()).toEqual([]);
   });
 

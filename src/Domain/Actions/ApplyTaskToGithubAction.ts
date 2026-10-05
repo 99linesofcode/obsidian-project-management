@@ -1,4 +1,3 @@
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import { boardOptionIDByName } from '../Board/boardOptionIDByName.js';
@@ -85,7 +84,7 @@ export class ApplyTaskToGithubAction {
       }
     }
 
-    await this.advanceBase(url, task, current);
+    await this.advanceBase(input.projectName, url, task, current);
   }
 
   private async setBoardStatus(
@@ -110,11 +109,16 @@ export class ApplyTaskToGithubAction {
   // The base is a DIFF VIEW, so its body is the digest of the comparable
   // (vault-link-free) issue body — the same form the next diff reads.
   private async advanceBase(
+    projectName: string,
     url: string,
     task: TaskData,
     current: TaskData,
   ): Promise<void> {
-    const record = await this.syncState.findByMirror('github', url);
+    const item = await this.syncState.findMirrorItem('github', url);
+    if (item === null) {
+      return;
+    }
+    const record = await this.syncState.getEntity(item.entityId);
     if (record === null) {
       return;
     }
@@ -137,10 +141,9 @@ export class ApplyTaskToGithubAction {
       task.createdAt,
       task.updatedAt,
     );
-    const mirrors = {
-      ...record.mirrors,
-      github: new Mirror(url, toDiffViewWithBody(pushed)),
-    };
-    await this.syncState.set({ ...record, mirrors });
+    await this.syncState.setMirrorItem(projectName, 'github', url, {
+      entityId: record.id,
+      base: toDiffViewWithBody(pushed),
+    });
   }
 }

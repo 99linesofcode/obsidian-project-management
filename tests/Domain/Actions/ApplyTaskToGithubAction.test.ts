@@ -6,7 +6,7 @@ import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/Git
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: record the writes the writer asks for, so its field-level
@@ -133,14 +133,9 @@ function makeAction(syncState: FakeSyncState, port: FakeProjectManagement) {
 }
 
 function seedRecord(syncState: FakeSyncState, base: TaskData | null = null) {
-  syncState.records.set(
-    'uuid-42',
-    entityRecord({
-      id: 'uuid-42',
-      notePath,
-      mirrors: { github: mirror(url, base) },
-    }),
-  );
+  syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+    github: { handle: url, base },
+  });
 }
 
 describe('ApplyTaskToGithubAction', () => {
@@ -377,13 +372,40 @@ describe('ApplyTaskToGithubAction', () => {
     });
 
     // Then — the base is the diff view of the pushed content
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.body).toBe(
-      hash(toIssueBody('A vault-side edit.')),
-    );
-    expect(record?.mirrors.github?.base?.status).toBe('Building');
+    const base = syncState.baseOf('uuid-42', 'github');
+    expect(base?.body).toBe(hash(toIssueBody('A vault-side edit.')));
+    expect(base?.status).toBe('Building');
     // And it is a diff view, not the raw body
-    expect(record?.mirrors.github?.base?.body).not.toBe('A vault-side edit.');
+    expect(base?.body).not.toBe('A vault-side edit.');
+  });
+
+  it('repairs an old-format base digest without an API write when content matches', async () => {
+    // Given — a record whose base carries a pre-widening 8-char digest while
+    // the live issue and note bodies already agree
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    seedRecord(
+      syncState,
+      taskData({ id: 'uuid-42', notePath, body: 'a1b2c3d4' }),
+    );
+    const port = new FakeProjectManagement();
+    const action = makeAction(syncState, port);
+
+    // When — the identical task is rendered
+    await action.execute({
+      task: task({ body: 'The bug happens on resize.' }),
+      current: task({ body: 'The bug happens on resize.' }),
+      hasCard: true,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    // Then — no API write happens, but the base advances to the new digest
+    expect(port.updateCalls).toEqual([]);
+    expect(port.stateCalls).toEqual([]);
+    const base = syncState.baseOf('uuid-42', 'github');
+    expect(base?.body).toBe(hash(toIssueBody('The bug happens on resize.')));
+    expect(base?.body).toHaveLength(16);
   });
 
   it('does not advance the base when the write fails', async () => {
@@ -412,7 +434,6 @@ describe('ApplyTaskToGithubAction', () => {
     ).rejects.toThrow('boom');
 
     // Then — the base is untouched: it advances only after a durable write
-    const record = await syncState.get('uuid-42');
-    expect(record?.mirrors.github?.base?.body).toBe(hash('old body'));
+    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(hash('old body'));
   });
 });

@@ -23,6 +23,11 @@ import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
 // A fake vault that exposes the three subscription callbacks and a canned
 // discovery result, so the scheduler's trigger wiring is observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   noteChangedCb: ((path: string) => void) | null = null;
   noteDeletedCb: ((path: string) => void) | null = null;
   noteRenamedCb: ((oldPath: string, newPath: string) => void) | null = null;

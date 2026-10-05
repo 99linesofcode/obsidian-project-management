@@ -82,6 +82,11 @@ class FakePort implements ProjectManagementPort {
 }
 
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   created: Array<{ path: string; content: string }> = [];
 
   async getNoteByPath(): Promise<{ content: string } | null> {

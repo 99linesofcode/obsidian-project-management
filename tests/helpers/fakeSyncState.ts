@@ -1,36 +1,138 @@
 import type { ArchiveBaselineData } from '../../src/Domain/DataTransferObjects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { TodoistProjectStateData } from '../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
+import type { TaskData } from '../../src/Domain/DataTransferObjects/TaskData.js';
 import type { WatchStateData } from '../../src/Domain/DataTransferObjects/WatchStateData.js';
+import { projectFromNotePath } from '../../src/Domain/Notes/projectFromNotePath.js';
 import type {
   EntityRecord,
+  MirrorItem,
+  PortState,
   SyncStatePort,
 } from '../../src/Domain/Ports/SyncStatePort.js';
 
-// An in-memory SyncStatePort: the uuid-keyed registry plus the project-level
-// namespaces. It mirrors the adapter's indexes (findByNotePath/findByMirror)
-// and its handle dedup, so an action under test sees the same lookups it would
-// against the real store.
+// A port item seed: the handle plus its last-synced base.
+interface SeededMirror {
+  handle: string;
+  base?: TaskData | null;
+}
+
+function portKey(projectName: string, portId: string): string {
+  return `${projectName}\u0000${portId}`;
+}
+
+// An in-memory SyncStatePort: the project-nested, port-grouped registry. It
+// mirrors the adapter's indexes (findByNotePath/findMirrorItem) and its handle
+// dedup, so an action under test sees the same lookups it would against the
+// real store. `seed` and the baseOf/handleOf readers are test conveniences for
+// the port-grouped shape.
 export class FakeSyncState implements SyncStatePort {
   records = new Map<string, EntityRecord>();
+  // portId -> handle -> item, global like the adapter's handle index.
+  items = new Map<string, Map<string, MirrorItem>>();
+  // `${project}\u0000${portId}` -> state.
+  portStates = new Map<string, PortState>();
+  // Test-only todoist view of the port state, in the pre-v3 shape many suites
+  // still seed and read. Kept in sync with portStates by the port methods.
+  todoistProjects = new Map<
+    string,
+    { sections: Record<string, string>; lastCompletedPoll: string }
+  >();
+  todoistSets: Array<{
+    projectName: string;
+    state: { sections: Record<string, string>; lastCompletedPoll: string };
+  }> = [];
   identities = new Map<string, ProjectIdentityData>();
   lastUpdates = new Map<string, string>();
   baselines = new Map<string, ArchiveBaselineData>();
   watches = new Map<string, WatchStateData>();
-  todoistProjects = new Map<string, TodoistProjectStateData>();
   setCalls: EntityRecord[] = [];
   removed: string[] = [];
   baselineSets: Array<{ projectName: string; baseline: ArchiveBaselineData }> =
     [];
   watchSets: Array<{ projectName: string; state: WatchStateData }> = [];
-  todoistSets: Array<{
+  portStateSets: Array<{
     projectName: string;
-    state: TodoistProjectStateData;
+    portId: string;
+    state: PortState;
   }> = [];
   lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
 
-  async get(id: string): Promise<EntityRecord | null> {
+  // Seeds an entity plus its port items in one call, so a test names the
+  // mirrors it cares about without hand-building the port nesting.
+  seed(
+    record: EntityRecord,
+    mirrors: Record<string, SeededMirror> = {},
+  ): void {
+    this.records.set(record.id, record);
+    for (const [portId, mirror] of Object.entries(mirrors)) {
+      this.put(portId, mirror.handle, {
+        entityId: record.id,
+        base: mirror.base ?? null,
+      });
+    }
+  }
+
+  // The handle an entity holds in a port, or null when it has no item there.
+  handleOf(entityId: string, portId: string): string | null {
+    for (const [handle, item] of this.items.get(portId) ?? []) {
+      if (item.entityId === entityId) {
+        return handle;
+      }
+    }
+    return null;
+  }
+
+  // The last-synced base an entity holds in a port, or null.
+  baseOf(entityId: string, portId: string): TaskData | null {
+    const handle = this.handleOf(entityId, portId);
+    return handle === null ? null : (this.items.get(portId)?.get(handle)?.base ?? null);
+  }
+
+  // The port ids an entity has items in.
+  mirrorsOf(entityId: string): string[] {
+    const result: string[] = [];
+    for (const [portId, handles] of this.items) {
+      for (const item of handles.values()) {
+        if (item.entityId === entityId) {
+          result.push(portId);
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  private put(portId: string, handle: string, item: MirrorItem): void {
+    let handles = this.items.get(portId);
+    if (handles === undefined) {
+      handles = new Map();
+      this.items.set(portId, handles);
+    }
+    handles.set(handle, item);
+  }
+
+  async getEntity(id: string): Promise<EntityRecord | null> {
     return this.records.get(id) ?? null;
+  }
+
+  // Test-only aliases for the pre-v3 reads many suites still use; the port
+  // itself exposes only the getEntity/listEntities/findMirrorItem family.
+  async get(id: string): Promise<EntityRecord | null> {
+    return this.getEntity(id);
+  }
+
+  async list(): Promise<EntityRecord[]> {
+    return [...this.records.values()];
+  }
+
+  async findByMirror(
+    provider: string,
+    handle: string,
+  ): Promise<EntityRecord | null> {
+    const item = this.items.get(provider)?.get(handle);
+    return item === undefined
+      ? null
+      : (this.records.get(item.entityId) ?? null);
   }
 
   async findByNotePath(notePath: string): Promise<EntityRecord | null> {
@@ -42,42 +144,120 @@ export class FakeSyncState implements SyncStatePort {
     return null;
   }
 
-  async findByMirror(
-    provider: string,
-    handle: string,
-  ): Promise<EntityRecord | null> {
-    for (const record of this.records.values()) {
-      if (record.mirrors[provider]?.handle === handle) {
-        return record;
-      }
-    }
-    return null;
-  }
-
-  async set(record: EntityRecord): Promise<void> {
-    // A mirror is anchored by its handle: evict any other record claiming one
-    // of this record's handles, matching the adapter's dedup.
+  async setEntity(record: EntityRecord): Promise<void> {
+    // A note path is a hub-side address: evict any other entity claiming it,
+    // matching the adapter's path re-key.
     for (const [id, other] of this.records) {
-      if (id === record.id) {
-        continue;
-      }
-      for (const [provider, mirror] of Object.entries(record.mirrors)) {
-        if (other.mirrors[provider]?.handle === mirror.handle) {
-          this.records.delete(id);
-        }
+      if (id !== record.id && other.notePath === record.notePath) {
+        this.records.delete(id);
       }
     }
     this.records.set(record.id, record);
     this.setCalls.push(record);
   }
 
-  async remove(id: string): Promise<void> {
+  async removeEntity(id: string): Promise<void> {
     this.records.delete(id);
+    for (const handles of this.items.values()) {
+      for (const [handle, item] of handles) {
+        if (item.entityId === id) {
+          handles.delete(handle);
+        }
+      }
+    }
     this.removed.push(id);
   }
 
-  async list(): Promise<EntityRecord[]> {
-    return [...this.records.values()];
+  async listEntities(projectName: string): Promise<EntityRecord[]> {
+    return [...this.records.values()].filter(
+      (record) => projectFromNotePath(record.notePath) === projectName,
+    );
+  }
+
+  async findMirrorItem(
+    portId: string,
+    handle: string,
+  ): Promise<MirrorItem | null> {
+    return this.items.get(portId)?.get(handle) ?? null;
+  }
+
+  async setMirrorItem(
+    _projectName: string,
+    portId: string,
+    handle: string,
+    item: MirrorItem,
+  ): Promise<void> {
+    const owner = this.items.get(portId)?.get(handle);
+    if (owner !== undefined && owner.entityId !== item.entityId) {
+      this.records.delete(owner.entityId);
+    }
+    this.put(portId, handle, item);
+  }
+
+  async removeMirrorItem(
+    _projectName: string,
+    portId: string,
+    handle: string,
+  ): Promise<void> {
+    this.items.get(portId)?.delete(handle);
+  }
+
+  async listMirrorItems(
+    projectName: string,
+    portId: string,
+  ): Promise<Array<{ handle: string; item: MirrorItem }>> {
+    const result: Array<{ handle: string; item: MirrorItem }> = [];
+    for (const [handle, item] of this.items.get(portId) ?? []) {
+      const record = this.records.get(item.entityId);
+      // A missing record is included (the test seeded only the item); a record
+      // in another project is excluded, matching the adapter's nesting.
+      if (
+        record === undefined ||
+        projectFromNotePath(record.notePath) === projectName
+      ) {
+        result.push({ handle, item });
+      }
+    }
+    return result;
+  }
+
+  async getPortState(
+    projectName: string,
+    portId: string,
+  ): Promise<PortState | null> {
+    const state = this.portStates.get(portKey(projectName, portId));
+    if (state !== undefined) {
+      return state;
+    }
+    if (portId !== 'todoist') {
+      return null;
+    }
+    const legacy = this.todoistProjects.get(projectName);
+    return legacy === undefined
+      ? null
+      : {
+          provider: 'todoist',
+          lastPoll: legacy.lastCompletedPoll,
+          lanes: legacy.sections,
+          tags: {},
+        };
+  }
+
+  async setPortState(
+    projectName: string,
+    portId: string,
+    state: PortState,
+  ): Promise<void> {
+    this.portStates.set(portKey(projectName, portId), state);
+    if (portId === 'todoist') {
+      const legacy = {
+        sections: state.lanes,
+        lastCompletedPoll: state.lastPoll ?? '',
+      };
+      this.todoistProjects.set(projectName, legacy);
+      this.todoistSets.push({ projectName, state: legacy });
+    }
+    this.portStateSets.push({ projectName, portId, state });
   }
 
   async setIdentity(
@@ -124,19 +304,5 @@ export class FakeSyncState implements SyncStatePort {
   ): Promise<void> {
     this.watches.set(projectName, state);
     this.watchSets.push({ projectName, state });
-  }
-
-  async getTodoistProjectState(
-    projectName: string,
-  ): Promise<TodoistProjectStateData | null> {
-    return this.todoistProjects.get(projectName) ?? null;
-  }
-
-  async setTodoistProjectState(
-    projectName: string,
-    state: TodoistProjectStateData,
-  ): Promise<void> {
-    this.todoistProjects.set(projectName, state);
-    this.todoistSets.push({ projectName, state });
   }
 }

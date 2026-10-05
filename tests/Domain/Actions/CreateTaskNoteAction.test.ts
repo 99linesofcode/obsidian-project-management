@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror } from '../../helpers/records.js';
+import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // A fake vault at the port: a path→content map plus the create log, so the
 // action's naming and rendering decisions are what's under test.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
 
@@ -85,18 +90,18 @@ describe('CreateTaskNoteAction', () => {
     expect(vault.created).toHaveLength(1);
     const { path, content } = vault.created[0]!;
     expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
-    // And — the frontmatter carries the vault-owned uuid, type and status
+    // And — the frontmatter carries type and status, no machine id or url
     const fields = splitFrontmatter(content)?.fields;
-    expect(fields?.get('id')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fields?.get('id')).toBeUndefined();
     expect(fields?.get('type')).toBe('task');
     expect(fields?.get('status')).toBe('Building');
     expect(content).not.toContain('url:');
-    // And — the registry record anchors the note by id with the github handle
+    // And — the registry entity anchors the note with the github mirror item
     expect(syncState.setCalls).toHaveLength(1);
     const record = syncState.setCalls[0]!;
-    expect(record.id).toBe(fields?.get('id'));
+    expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(record.notePath).toBe(path);
-    expect(record.mirrors.github?.handle).toBe(url);
+    expect(syncState.handleOf(record.id, 'github')).toBe(url);
   });
 
   it('renders the note from the vault template', async () => {
@@ -136,13 +141,12 @@ describe('CreateTaskNoteAction', () => {
     // Given — a registry that already tracks the issue
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    syncState.records.set(
-      'existing-uuid',
+    syncState.seed(
       entityRecord({
         id: 'existing-uuid',
         notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-        mirrors: { github: mirror(url, null) },
       }),
+      { github: { handle: url } },
     );
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 

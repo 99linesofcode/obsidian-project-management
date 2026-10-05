@@ -13,7 +13,6 @@ describe('VaultTaskMapper', () => {
     // Given — a task note produced by the note mapper
     const { content } = TaskNoteMapper.map(
       {
-        id: 'uuid-42',
         type: 'task',
         title: 'Fix the bug',
         body: 'The bug happens on resize.',
@@ -29,8 +28,8 @@ describe('VaultTaskMapper', () => {
     // When — the note is parsed
     const task = VaultTaskMapper.parseTask(content, notePath, context);
 
-    // Then — the vault-owned identity and content are carried
-    expect(task?.id).toBe('uuid-42');
+    // Then — the content is carried; identity waits for the registry record
+    expect(task?.id).toBe('');
     expect(task?.type).toBe('task');
     expect(task?.notePath).toBe(notePath);
     expect(task?.mirrors).toEqual({});
@@ -49,7 +48,6 @@ describe('VaultTaskMapper', () => {
     // Given — a task note in the done lane
     const { content } = TaskNoteMapper.map(
       {
-        id: 'uuid-42',
         type: 'task',
         title: 'Fix the bug',
         body: '',
@@ -128,9 +126,9 @@ describe('VaultTaskMapper', () => {
 
     // Then — the note path and managed fields match the note mapper
     expect(note.path).toBe(notePath);
-    expect(note.content).toContain('id: uuid-42');
     expect(note.content).toContain('type: task');
     expect(note.content).toContain('status: Building');
+    expect(note.content).not.toContain('id:');
     expect(note.content).not.toContain('url:');
   });
 

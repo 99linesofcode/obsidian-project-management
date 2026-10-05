@@ -3,12 +3,17 @@ import { RelinkRenamedTodoAction } from '../../../src/Domain/Actions/RelinkRenam
 import { splitFrontmatter } from '../../../src/Domain/Notes/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
 // relink's single decision (rewrite the line or not) is observable.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   written: Array<{ path: string; content: string }> = [];
 
@@ -109,25 +114,21 @@ describe('RelinkRenamedTodoAction', () => {
     vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
     const syncState = new FakeSyncState();
-    syncState.records.set(
-      'uuid-todo',
-      entityRecord({
-        id: 'uuid-todo',
-        notePath: oldPath,
-        mirrors: {
-          todoist: mirror('T9', taskData({ id: 'uuid-todo', status: 'open' })),
-        },
-      }),
-    );
+    syncState.seed(entityRecord({ id: 'uuid-todo', notePath: oldPath }), {
+      todoist: {
+        handle: 'T9',
+        base: taskData({ id: 'uuid-todo', status: 'open' }),
+      },
+    });
     const action = new RelinkRenamedTodoAction(vault, syncState);
 
     // When — the rename is followed
     await action.execute({ oldPath, newPath, syncedAt });
 
-    // Then — the record is re-pointed at the new path, handles intact
+    // Then — the record is re-pointed at the new path, its item intact
     const record = await syncState.get('uuid-todo');
     expect(record?.notePath).toBe(newPath);
-    expect(record?.mirrors.todoist?.handle).toBe('T9');
+    expect(syncState.handleOf('uuid-todo', 'todoist')).toBe('T9');
     expect(await syncState.findByNotePath(oldPath)).toBeNull();
     expect(await syncState.findByNotePath(newPath)).toBe(record);
   });

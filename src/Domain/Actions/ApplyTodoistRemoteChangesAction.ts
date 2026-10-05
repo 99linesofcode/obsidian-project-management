@@ -1,13 +1,11 @@
 import { laneForSection } from '../Board/laneForSection.js';
 import { fillFrontmatterFields } from '../Notes/fillFrontmatterFields.js';
-import { isMirroredPath } from '../Notes/isMirroredPath.js';
 import { parseAffiliation } from '../Notes/parseAffiliation.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { stripLink } from '../Notes/stripLink.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { withStatus } from '../Notes/TaskNoteParser.js';
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
@@ -45,6 +43,9 @@ interface VerdictContext {
   // A twin id's entity uuid, so structural comparisons speak the canonical
   // parent representation the base stores.
   uuidByTwinId: Map<string, string>;
+  // An entity's github handle, so a lane pull can propagate the move onto
+  // GitHub. The handle no longer lives on the entity.
+  githubHandleByEntity: Map<string, string>;
 }
 
 // UC: apply Todoist -> vault verdicts for anchored items (t5). An anchored item
@@ -81,11 +82,12 @@ export class ApplyTodoistRemoteChangesAction {
   ) {}
 
   async execute(input: ApplyTodoistRemoteChangesInput): Promise<void> {
-    const projectState = await this.syncState.getTodoistProjectState(
+    const portState = await this.syncState.getPortState(
       input.projectName,
+      'todoist',
     );
-    const sections = projectState?.sections ?? {};
-    const since = projectState?.lastCompletedPoll || input.syncedAt;
+    const sections = portState?.lanes ?? {};
+    const since = portState?.lastPoll || input.syncedAt;
 
     // Both fetches must succeed before any vault write.
     const completed = await this.taskManager.fetchCompletedTasks(
@@ -106,20 +108,21 @@ export class ApplyTodoistRemoteChangesAction {
     const hasLanes = (identity?.statusOptions.length ?? 0) > 0;
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 
-    const records = (await this.syncState.list()).filter(
-      (record) =>
-        isMirroredPath(record.notePath, input.projectName) &&
-        record.mirrors.todoist !== undefined,
-    );
+    const records = await this.todoistEntries(input.projectName);
     const stemByTwinId = new Map<string, string>();
     const uuidByTwinId = new Map<string, string>();
-    for (const record of records) {
-      const handle = record.mirrors.todoist?.handle ?? '';
-      if (handle === '') {
-        continue;
-      }
-      stemByTwinId.set(handle, stemOf(record.notePath));
-      uuidByTwinId.set(handle, record.id);
+    for (const entry of records) {
+      stemByTwinId.set(entry.handle, stemOf(entry.record.notePath));
+      uuidByTwinId.set(entry.handle, entry.record.id);
+    }
+    // The github handle an entity holds, so a remote lane drag can mirror onto
+    // GitHub. The handle is a port item now, not an entity field.
+    const githubHandleByEntity = new Map<string, string>();
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      input.projectName,
+      'github',
+    )) {
+      githubHandleByEntity.set(item.entityId, handle);
     }
 
     const context: VerdictContext = {
@@ -131,18 +134,18 @@ export class ApplyTodoistRemoteChangesAction {
       hasLanes,
       stemByTwinId,
       uuidByTwinId,
+      githubHandleByEntity,
     };
 
-    for (const record of records) {
-      const handle = record.mirrors.todoist?.handle ?? '';
-      const twin = twinById.get(handle);
+    for (const entry of records) {
+      const twin = twinById.get(entry.handle);
       if (!twin) {
         // Absent from both the active set and the completed-since window. A
         // completed twin naturally ages out of that window and is never in the
         // active set, so a completed base says it is a persisted completed
         // twin, not a deletion. Evicting it would re-create the twin every
         // tick — the dt-17 churn — so a completed record is left untouched.
-        if (baseDone(record)) {
+        if (baseDone(entry.base)) {
           continue;
         }
         // A missing note is a vault deletion (PropagateTodoistDeletionsAction
@@ -150,22 +153,52 @@ export class ApplyTodoistRemoteChangesAction {
         // was deleted on the Todoist side: the vault wins, so the record is
         // evicted and the projection re-creates the twin later in this same
         // tick — the self-heal.
-        if (await this.vault.getNoteByPath(record.notePath)) {
-          await this.syncState.remove(record.id);
+        if (await this.vault.getNoteByPath(entry.record.notePath)) {
+          await this.syncState.removeEntity(entry.record.id);
         }
         continue;
       }
       // Completion and reopen are the completion action's (t4): a completed
       // twin, or an active twin whose base says completed, is skipped here.
-      if (twin.isCompleted || baseDone(record)) {
+      if (twin.isCompleted || baseDone(entry.base)) {
         continue;
       }
-      await this.applyVerdict(record, twin, context);
+      await this.applyVerdict(
+        entry.record,
+        entry.handle,
+        entry.base,
+        twin,
+        context,
+      );
     }
+  }
+
+  // The project's todoist items joined to their hub entities, so the verdict
+  // pass can key on the twin handle and read the base.
+  private async todoistEntries(projectName: string): Promise<
+    Array<{ handle: string; record: EntityRecord; base: TaskData | null }>
+  > {
+    const result: Array<{
+      handle: string;
+      record: EntityRecord;
+      base: TaskData | null;
+    }> = [];
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectName,
+      'todoist',
+    )) {
+      const record = await this.syncState.getEntity(item.entityId);
+      if (record !== null) {
+        result.push({ handle, record, base: item.base });
+      }
+    }
+    return result;
   }
 
   private async applyVerdict(
     record: EntityRecord,
+    handle: string,
+    base: TaskData | null,
     twin: TodoistTaskData,
     context: VerdictContext,
   ): Promise<void> {
@@ -178,7 +211,6 @@ export class ApplyTodoistRemoteChangesAction {
       return;
     }
 
-    const base = record.mirrors.todoist?.base ?? null;
     const isTask = isTaskPath(record.notePath, context.projectName);
     // A top-level task's lane is its section; a subtask inherits its parent's
     // section (dt-02), so its lane is not a controlled field.
@@ -225,7 +257,15 @@ export class ApplyTodoistRemoteChangesAction {
       // The vault wins: leave the note alone and re-stamp from the remote, so
       // the next poll reads it as settled. The projection re-pushes the vault
       // state later in this same tick.
-      await this.stamp(record, twin, remoteLane, remoteParent);
+      await this.stamp(
+        record,
+        handle,
+        base,
+        twin,
+        remoteLane,
+        remoteParent,
+        context.projectName,
+      );
       return;
     }
 
@@ -240,7 +280,15 @@ export class ApplyTodoistRemoteChangesAction {
       if (parentChanged) {
         await this.applyParent(notePath, twin.parentId, context, isTask);
       }
-      await this.stamp(record, twin, remoteLane, remoteParent);
+      await this.stamp(
+        record,
+        handle,
+        base,
+        twin,
+        remoteLane,
+        remoteParent,
+        context.projectName,
+      );
     }
   }
 
@@ -289,7 +337,7 @@ export class ApplyTodoistRemoteChangesAction {
     }
     await this.vault.writeNote(notePath, withStatus(note.content, lane));
 
-    const url = record.mirrors.github?.handle ?? '';
+    const url = context.githubHandleByEntity.get(record.id) ?? '';
     if (url !== '') {
       await this.propagateStatus.execute({
         url,
@@ -349,15 +397,17 @@ export class ApplyTodoistRemoteChangesAction {
     await this.vault.writeNote(notePath, withAffiliation(note.content, value));
   }
 
-  // Writes the todoist mirror's base as a diff view. The base is what the next
-  // poll compares against, so stamping it here settles the item.
+  // Writes the todoist mirror item's base as a diff view. The base is what the
+  // next poll compares against, so stamping it here settles the item.
   private async stamp(
     record: EntityRecord,
+    handle: string,
+    previous: TaskData | null,
     twin: TodoistTaskData,
     remoteLane: string | null,
     remoteParent: string | null,
+    projectName: string,
   ): Promise<void> {
-    const previous = record.mirrors.todoist?.base ?? null;
     const view = toDiffViewWithBody(
       new TaskData(
         record.id,
@@ -375,14 +425,9 @@ export class ApplyTodoistRemoteChangesAction {
         twin.updatedAt || null,
       ),
     );
-    const mirrors = {
-      ...record.mirrors,
-      todoist: new Mirror(record.mirrors.todoist?.handle ?? '', view),
-    };
-    await this.syncState.set({
-      id: record.id,
-      notePath: record.notePath,
-      mirrors,
+    await this.syncState.setMirrorItem(projectName, 'todoist', handle, {
+      entityId: record.id,
+      base: view,
     });
   }
 }
@@ -476,8 +521,7 @@ function isTaskPath(path: string, projectName: string): boolean {
   return path.startsWith(`Projecten/${projectName}/taken/`);
 }
 
-// Whether the record's todoist base already records the item as completed.
-function baseDone(record: EntityRecord): boolean {
-  const base = record.mirrors.todoist?.base ?? null;
+// Whether the stored todoist base already records the item as completed.
+function baseDone(base: TaskData | null): boolean {
   return base !== null && base.completedAt !== null;
 }

@@ -25,6 +25,7 @@ const card: BoardItemData = {
   type: 'ISSUE',
   issueUrl: issue.url,
   statusOptionName: 'Building',
+  updatedAt: null,
 };
 
 describe('GithubTaskMapper', () => {

@@ -38,8 +38,8 @@ export class BoardStatusAction {
     // option, the card is already in step. An absent base (a pre-first-sync
     // record) or a lane the board no longer carries has no option to compare,
     // so the write proceeds.
-    const record = await this.syncState.findByMirror('github', input.url);
-    const currentStatus = record?.mirrors.github?.base?.status ?? '';
+    const item = await this.syncState.findMirrorItem('github', input.url);
+    const currentStatus = item?.base?.status ?? '';
     const current = identity.statusOptions.find(
       (option) => option.name === currentStatus,
     );

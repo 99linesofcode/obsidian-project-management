@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
 import type { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
-import type { EnsureNoteIdsAction } from '../../../src/Domain/Actions/EnsureNoteIdsAction.js';
+import type { CleanupNoteFrontmatterAction } from '../../../src/Domain/Actions/CleanupNoteFrontmatterAction.js';
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
@@ -17,13 +17,18 @@ import type { ProjectNoteData } from '../../../src/Domain/DataTransferObjects/Pr
 import type { ProjectStateData } from '../../../src/Domain/DataTransferObjects/ProjectStateData.js';
 import type { EntityRecord } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports and at every composed step, recording into one shared
 // events array so the chain's step order and its error isolation are what's
 // under test.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   projectNotes: ProjectNoteData[] = [];
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
@@ -129,21 +134,10 @@ function projectNote(
   };
 }
 
-const issueUrl = 'https://github.com/acme/widgets/issues/42';
-
-// A tracked issue's registry record; the deletion sweep reads only its note
+// A tracked issue's registry entity; the deletion sweep reads only its note
 // path, so the base content is immaterial here.
 function status(notePath: string): EntityRecord {
-  return entityRecord({
-    id: 'entity-42',
-    notePath,
-    mirrors: {
-      github: mirror(
-        issueUrl,
-        taskData({ notePath, title: 'Fix the bug', status: 'Building' }),
-      ),
-    },
-  });
+  return entityRecord({ id: 'entity-42', notePath });
 }
 
 interface HarnessOptions {
@@ -176,11 +170,11 @@ function harness(options: HarnessOptions = {}) {
   lifecycle.frozen =
     (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
     (options.state?.closed ?? false);
-  const ensureIds = {
+  const cleanup = {
     execute: async () => {
-      events.push('ensureIds');
+      events.push('cleanup');
     },
-  } as unknown as EnsureNoteIdsAction;
+  } as unknown as CleanupNoteFrontmatterAction;
   const renames = {
     execute: async () => {
       events.push('renames');
@@ -225,7 +219,7 @@ function harness(options: HarnessOptions = {}) {
     mirrorStatus,
     todoist,
     handleDeleted,
-    ensureIds,
+    cleanup,
   );
 
   return { action, events, vault, syncState, probe, sweep, lifecycle };
@@ -238,7 +232,7 @@ const openState: ProjectStateData = {
 };
 
 describe('SyncProjectAction', () => {
-  it('runs EnsureNoteIds first, then the steps in order', async () => {
+  it('runs the frontmatter cleanup first, then the steps in order', async () => {
     // Given — an active project with one task note and one to-do note
     const h = harness({
       state: openState,
@@ -249,10 +243,10 @@ describe('SyncProjectAction', () => {
     // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the id backfill runs before any half reads notes, and the steps
-    // run in the chain's order, vault consistency after the sweep, Todoist last
+    // Then — the cleanup runs before any half reads notes, and the steps run in
+    // the chain's order, vault consistency after the sweep, Todoist last
     expect(h.events).toEqual([
-      'ensureIds',
+      'cleanup',
       'lifecycle',
       'renames',
       'sweep',
@@ -296,7 +290,7 @@ describe('SyncProjectAction', () => {
     await h.action.execute('Acme Widgets');
 
     // Then — the GitHub side is skipped but the Todoist half still runs
-    expect(h.events).toEqual(['ensureIds', 'lifecycle', 'renames', 'todoist']);
+    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'todoist']);
   });
 
   it('does not block the GitHub half when the lifecycle fails', async () => {
@@ -308,7 +302,7 @@ describe('SyncProjectAction', () => {
     await h.action.execute('Acme Widgets');
 
     // Then — the GitHub half still runs; the Todoist half is skipped
-    expect(h.events).toEqual(['ensureIds', 'lifecycle', 'renames', 'sweep']);
+    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'sweep']);
   });
 
   it('advances the stored update only after a successful sweep', async () => {
@@ -335,7 +329,7 @@ describe('SyncProjectAction', () => {
     await h.action.execute('Acme Widgets');
 
     // Then — the lifecycle reconciles, both task halves are skipped
-    expect(h.events).toEqual(['ensureIds', 'lifecycle', 'renames']);
+    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
   });
 
   it('freezes a closed-board project: no sweep and no Todoist task writes', async () => {
@@ -346,7 +340,7 @@ describe('SyncProjectAction', () => {
     await h.action.execute('Acme Widgets');
 
     // Then — the lifecycle reconciles to frozen, both task halves are skipped
-    expect(h.events).toEqual(['ensureIds', 'lifecycle', 'renames']);
+    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
   });
 
   it('skips the GitHub side but still mirrors Todoist when there is no probed state', async () => {
@@ -357,7 +351,7 @@ describe('SyncProjectAction', () => {
     await h.action.execute('Acme Widgets');
 
     // Then — no sweep; the Todoist half still runs
-    expect(h.events).toEqual(['ensureIds', 'lifecycle', 'renames', 'todoist']);
+    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'todoist']);
   });
 
   it('runs the deletion sweep last, after the Todoist half', async () => {
@@ -372,7 +366,7 @@ describe('SyncProjectAction', () => {
 
     // Then — the deletion runs after the Todoist half
     expect(h.events).toEqual([
-      'ensureIds',
+      'cleanup',
       'lifecycle',
       'renames',
       'sweep',

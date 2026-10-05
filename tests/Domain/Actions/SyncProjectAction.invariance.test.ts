@@ -10,7 +10,7 @@ import { CaptureTodoistCreationsAction } from '../../../src/Domain/Actions/Captu
 import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
 import { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
-import { EnsureNoteIdsAction } from '../../../src/Domain/Actions/EnsureNoteIdsAction.js';
+import { CleanupNoteFrontmatterAction } from '../../../src/Domain/Actions/CleanupNoteFrontmatterAction.js';
 import { EnsureTodoistSectionsAction } from '../../../src/Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
@@ -39,7 +39,7 @@ import type { CreateTodoistTaskData } from '../../../src/Domain/DataTransferObje
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, taskData } from '../../helpers/records.js';
+import { entityRecord, taskData } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 const DONE_LANE = 'Shipped';
@@ -47,6 +47,11 @@ const DONE_LANE = 'Shipped';
 // A vault fake that records every mutator, so a second pass's writes are
 // observable. Notes are path-keyed; the project notes are the discovery surface.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   projectNotes: ProjectNoteData[] = [];
   mutations: string[] = [];
@@ -185,6 +190,7 @@ class FakeProjectManagement implements ProjectManagementPort {
       itemId: `C${this.nextCardId++}`,
       type: 'ISSUE',
       issueUrl,
+      updatedAt: null,
     });
   }
   async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
@@ -414,11 +420,9 @@ function githubBase(overrides: Partial<TaskData> = {}): TaskData {
 
 // Seeds (or replaces) the tracked issue's registry record.
 function seedRecord(syncState: FakeSyncState, base: TaskData): void {
-  syncState.records.set(ENTITY_ID, entityRecord({
-    id: ENTITY_ID,
-    notePath: base.notePath,
-    mirrors: { github: mirror(ISSUE_URL, base) },
-  }));
+  syncState.seed(entityRecord({ id: ENTITY_ID, notePath: base.notePath }), {
+    github: { handle: ISSUE_URL, base },
+  });
 }
 
 interface Harness {
@@ -487,6 +491,7 @@ function harness(): Harness {
         type: 'ISSUE',
         issueUrl: ISSUE_URL,
         statusOptionName: 'Building',
+        updatedAt: null,
       },
     ],
   };
@@ -602,7 +607,7 @@ function harness(): Harness {
     github,
     DONE_LANE,
   );
-  const ensureNoteIds = new EnsureNoteIdsAction(vault, syncState);
+  const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
   const chain = new SyncProjectAction(
     vault,
     syncState,
@@ -615,7 +620,7 @@ function harness(): Harness {
     mirrorTodoStatus,
     syncTodoistTasks,
     handleDeletedNote,
-    ensureNoteIds,
+    cleanupNoteFrontmatter,
   );
 
   return { chain, vault, syncState, github, todoist };
@@ -1133,24 +1138,20 @@ describe('SyncProjectAction completed-twin churn', () => {
         '- [ ] Captured draft',
       ].join('\n'),
     );
-    h.syncState.records.set(
-      'uuid-captured',
-      entityRecord({
-        id: 'uuid-captured',
-        notePath: capturedPath,
-        mirrors: {
-          todoist: mirror(
-            capturedTwin,
-            taskData({
-              id: 'uuid-captured',
-              notePath: capturedPath,
-              title: 'Captured draft',
-              status: 'Unshaped',
-              completedAt: '',
-            }),
-          ),
+    h.syncState.seed(
+      entityRecord({ id: 'uuid-captured', notePath: capturedPath }),
+      {
+        todoist: {
+          handle: capturedTwin,
+          base: taskData({
+            id: 'uuid-captured',
+            notePath: capturedPath,
+            title: 'Captured draft',
+            status: 'Unshaped',
+            completedAt: '',
+          }),
         },
-      }),
+      },
     );
     h.todoist.completed.push({
       id: capturedTwin,

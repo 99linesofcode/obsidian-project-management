@@ -1,10 +1,8 @@
 import { laneForSection } from '../Board/laneForSection.js';
-import { Mirror } from '../DataTransferObjects/Mirror.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { CapturedTaskNoteMapper } from '../Notes/CapturedTaskNoteMapper.js';
 import { parseChecklist, renderChecklist } from '../Notes/Checklist.js';
 import { freePath } from '../Notes/freePath.js';
-import { isMirroredPath } from '../Notes/isMirroredPath.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
@@ -14,7 +12,7 @@ import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { withBody } from '../Notes/withBody.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
-import type { SyncStatePort } from '../Ports/SyncStatePort.js';
+import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 
@@ -58,11 +56,12 @@ export class CaptureTodoistCreationsAction {
   ) {}
 
   async execute(input: CaptureTodoistCreationsInput): Promise<void> {
-    const projectState = await this.syncState.getTodoistProjectState(
+    const portState = await this.syncState.getPortState(
       input.projectName,
+      'todoist',
     );
-    const sections = projectState?.sections ?? {};
-    const since = projectState?.lastCompletedPoll || input.syncedAt;
+    const sections = portState?.lanes ?? {};
+    const since = portState?.lastPoll || input.syncedAt;
 
     const completed = await this.taskManager.fetchCompletedTasks(
       input.projectId,
@@ -75,19 +74,13 @@ export class CaptureTodoistCreationsAction {
       return;
     }
 
-    const records = (await this.syncState.list()).filter(
-      (record) =>
-        isMirroredPath(record.notePath, input.projectName) &&
-        record.mirrors.todoist !== undefined,
-    );
-    const anchored = new Set(
-      records.map((record) => record.mirrors.todoist?.handle ?? ''),
-    );
+    // The project's anchored todoist items: their handles are the twins already
+    // in the registry, so a fetched item matching one is not a creation. The
+    // item's entityId resolves the note path through the hub entity.
+    const entries = await this.todoistEntries(input.projectName);
+    const anchored = new Set(entries.map((entry) => entry.handle));
     const notePathById = new Map(
-      records.map(
-        (record) =>
-          [record.mirrors.todoist?.handle ?? '', record.notePath] as const,
-      ),
+      entries.map((entry) => [entry.handle, entry.record.notePath] as const),
     );
 
     const identity = await this.syncState.getIdentity(input.projectName);
@@ -148,6 +141,25 @@ export class CaptureTodoistCreationsAction {
     }
   }
 
+  // The project's anchored todoist items joined to their hub entities: the
+  // handle is the twin already in the registry, and the entity resolves the
+  // note path.
+  private async todoistEntries(projectName: string): Promise<
+    Array<{ handle: string; record: EntityRecord }>
+  > {
+    const result: Array<{ handle: string; record: EntityRecord }> = [];
+    for (const { handle, item } of await this.syncState.listMirrorItems(
+      projectName,
+      'todoist',
+    )) {
+      const record = await this.syncState.getEntity(item.entityId);
+      if (record !== null) {
+        result.push({ handle, record });
+      }
+    }
+    return result;
+  }
+
   // A captured draft task note: affiliated to the project, or to the slice it
   // was created under. The status is the lane its section maps to.
   private async createCapturedTask(
@@ -173,7 +185,7 @@ export class CaptureTodoistCreationsAction {
     // The lane is controlled only for a top-level task (a subtask inherits its
     // parent's section, dt-02).
     const lane = hasLanes && item.parentId === null ? statusName : null;
-    await this.stampCreation(path, item, lane, input.syncedAt);
+    await this.stampCreation(path, item, lane, input.syncedAt, input.projectName);
     return path;
   }
 
@@ -237,7 +249,7 @@ export class CaptureTodoistCreationsAction {
       path,
     );
     // A to-do is a subtask: its lane is inherited, so it is never controlled.
-    await this.stampCreation(path, item, null, input.syncedAt);
+    await this.stampCreation(path, item, null, input.syncedAt, input.projectName);
     return path;
   }
 
@@ -276,8 +288,9 @@ export class CaptureTodoistCreationsAction {
     item: TodoistTaskData,
     lane: string | null,
     syncedAt: string,
+    projectName: string,
   ): Promise<void> {
-    const id = await this.ensureId(notePath);
+    const id = await this.ensureEntity(notePath);
     if (id === '') {
       return;
     }
@@ -297,27 +310,24 @@ export class CaptureTodoistCreationsAction {
         item.updatedAt || null,
       ),
     );
-    await this.syncState.set({
-      id,
-      notePath,
-      mirrors: { todoist: new Mirror(item.id, base) },
+    await this.syncState.setEntity({ id, notePath });
+    await this.syncState.setMirrorItem(projectName, 'todoist', item.id, {
+      entityId: id,
+      base,
     });
   }
 
-  // The note's vault-owned uuid, minted and stamped when absent. WHY: the
-  // registry is uuid-keyed, and a captured note is created after the chain's
-  // id backfill has run, so it has no id yet.
-  private async ensureId(notePath: string): Promise<string> {
-    const note = await this.vault.getNoteByPath(notePath);
-    if (!note) {
-      return '';
-    }
-    const existing = splitFrontmatter(note.content)?.fields.get('id') ?? '';
-    if (existing !== '') {
-      return existing;
+  // The note's vault-owned uuid, minted at record creation when absent. WHY:
+  // the registry is uuid-keyed and the registry is the id's home now (dt-20) —
+  // a captured note is created after the chain's cleanup has run, so it has no
+  // id in frontmatter and the entity is minted here.
+  private async ensureEntity(notePath: string): Promise<string> {
+    const existing = await this.syncState.findByNotePath(notePath);
+    if (existing !== null) {
+      return existing.id;
     }
     const id = crypto.randomUUID();
-    await stampFrontmatterField(this.vault, notePath, note.content, 'id', id);
+    await this.syncState.setEntity({ id, notePath });
     return id;
   }
 
@@ -327,7 +337,10 @@ export class CaptureTodoistCreationsAction {
     if (parentId === null) {
       return null;
     }
-    return (await this.syncState.findByMirror('todoist', parentId))?.id ?? null;
+    return (
+      (await this.syncState.findMirrorItem('todoist', parentId))?.entityId ??
+      null
+    );
   }
 
   // The lane a new item's status starts in: its section's lane; a completed

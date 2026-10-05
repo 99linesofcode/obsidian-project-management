@@ -7,7 +7,7 @@ import type { TodoistSectionData } from '../../../src/Domain/DataTransferObjects
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
-import { entityRecord, mirror, todoistTask } from '../../helpers/records.js';
+import { entityRecord, todoistTask } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the vault holds note content and records creations and
@@ -16,6 +16,11 @@ import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 // entity records and the lane map. The kind classification and the captured
 // note shape are what's under test.
 class FakeVault implements VaultPort {
+  modifiedTimes = new Map<string, string>();
+
+  async modifiedTime(path: string): Promise<string | null> {
+    return this.modifiedTimes.get(path) ?? null;
+  }
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
   writes: Array<{ path: string; content: string }> = [];
@@ -137,10 +142,9 @@ function anchored(
   notePath: string,
   handle: string,
 ): void {
-  syncState.records.set(
-    id,
-    entityRecord({ id, notePath, mirrors: { todoist: mirror(handle, null) } }),
-  );
+  syncState.seed(entityRecord({ id, notePath }), {
+    todoist: { handle },
+  });
 }
 
 function bodyOf(content: string): string {
@@ -190,8 +194,8 @@ describe('CaptureTodoistCreationsAction', () => {
     const record = await syncState.findByMirror('todoist', 'T1');
     expect(record).not.toBeNull();
     expect(record?.notePath).toBe(path);
-    expect(record?.mirrors.todoist?.base?.status).toBe('Building');
-    expect(record?.mirrors.github).toBeUndefined();
+    expect(syncState.baseOf(record!.id, 'todoist')?.status).toBe('Building');
+    expect(syncState.handleOf(record!.id, 'github')).toBeNull();
   });
 
   it('captures a section-less task in the default lane', async () => {
@@ -232,7 +236,7 @@ describe('CaptureTodoistCreationsAction', () => {
     expect(content).toContain('todoist: T2');
     // And its base records the slice's uuid as the parent
     const record = await syncState.findByMirror('todoist', 'T2');
-    expect(record?.mirrors.todoist?.base?.parent).toBe('slice-uuid');
+    expect(syncState.baseOf(record!.id, 'todoist')?.parent).toBe('slice-uuid');
   });
 
   it("captures a subtask under a task's twin as a linked to-do", async () => {
@@ -262,7 +266,7 @@ describe('CaptureTodoistCreationsAction', () => {
     );
     // And the to-do's record carries the task twin's uuid as its parent
     const record = await syncState.findByMirror('todoist', 'T7');
-    expect(record?.mirrors.todoist?.base?.parent).toBe('task-uuid');
+    expect(syncState.baseOf(record!.id, 'todoist')?.parent).toBe('task-uuid');
   });
 
   it('captures an already-completed item as a done note', async () => {
@@ -290,7 +294,7 @@ describe('CaptureTodoistCreationsAction', () => {
     expect(doneTodo).toContain('status: completed');
     expect(doneTodo).toContain(`completed: ${syncedAt}`);
     const record = await syncState.findByMirror('todoist', 'T2');
-    expect(record?.mirrors.todoist?.base?.completedAt).toBe(syncedAt);
+    expect(syncState.baseOf(record!.id, 'todoist')?.completedAt).toBe(syncedAt);
   });
 
   it('does not re-capture an already-anchored item', async () => {
@@ -331,7 +335,7 @@ describe('CaptureTodoistCreationsAction', () => {
     // And the child's base resolves the parent's freshly minted uuid
     const parent = await syncState.findByMirror('todoist', 'T9');
     const child = await syncState.findByMirror('todoist', 'T2');
-    expect(child?.mirrors.todoist?.base?.parent).toBe(parent?.id);
+    expect(syncState.baseOf(child!.id, 'todoist')?.parent).toBe(parent?.id);
   });
 
   it('waits for a child whose parent is not in the fetched set', async () => {
