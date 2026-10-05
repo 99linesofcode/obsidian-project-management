@@ -175,11 +175,12 @@ export class SyncProjectAction {
 
     const lastUpdate = await this.syncState.getLastProjectUpdate(project);
     // The board's updatedAt is the probe gate, but a sub-issue relation moves
-    // nothing on the board. A store predating parent tracking carries a one-shot
-    // marker that forces exactly one parent-aware fetch here, so the relation is
-    // discovered and the marker is spent in the same pass.
-    const fullScan = await this.syncState.consumeFullScan();
-    const includeBoard = state.updatedAt !== lastUpdate || fullScan;
+    // nothing on the board. A project carrying a one-shot marker forces exactly
+    // one parent-aware fetch. The marker is PEEKED here and CONSUMED only after
+    // the fetch succeeds, so a failed or interrupted half does not spend the
+    // scan and the next tick retries it.
+    const fullScanPending = await this.syncState.isFullScanPending(project);
+    const includeBoard = state.updatedAt !== lastUpdate || fullScanPending;
     try {
       await this.syncGithubTasks.execute({
         projectName: project,
@@ -187,6 +188,9 @@ export class SyncProjectAction {
         includeBoard,
       });
       await this.syncState.setLastProjectUpdate(project, state.updatedAt);
+      if (fullScanPending) {
+        await this.syncState.consumeFullScan(project);
+      }
     } catch (error) {
       // A failed half must not advance the stored update, so the next tick
       // sees the same updatedAt and retries the fetch.

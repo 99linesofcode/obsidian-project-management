@@ -86,9 +86,16 @@ export interface SyncStatePort {
   getWatchState(projectName: string): Promise<WatchStateData>;
   setWatchState(projectName: string, state: WatchStateData): Promise<void>;
 
-  // One-shot: returns whether a full scan is pending and clears it. WHY: the
-  // probe gate watches the project board's updatedAt, but issue-level relations
-  // — sub-issues — move nothing on the board, so a store that predates parent
-  // tracking needs exactly one forced fetch to discover them.
-  consumeFullScan(): Promise<boolean>;
+  // The one-shot forced-scan marker is PER PROJECT (projects.<name>.
+  // fullScanPending). WHY: a single container-level flag was consumed by
+  // whichever project synced first, so only that project got the parent-aware
+  // fetch and every other project stayed blind to issue-level relations
+  // (sub-issues) the board's updatedAt cannot surface (PRB-3).
+  //
+  // isFullScanPending is a read-only peek. The chain peeks before the GitHub
+  // half and calls consumeFullScan only after that half succeeds, so a failed
+  // or interrupted fetch never spends the scan.
+  isFullScanPending(projectName: string): Promise<boolean>;
+  // Clears the project's marker. Returns whether it was pending.
+  consumeFullScan(projectName: string): Promise<boolean>;
 }

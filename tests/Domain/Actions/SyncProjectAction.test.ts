@@ -440,7 +440,7 @@ describe('SyncProjectAction', () => {
     // predates parent tracking, whose one-shot marker is pending
     const h = harness({ state: openState });
     h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
-    h.syncState.fullScanPending = true;
+    h.syncState.fullScanPending.add('Acme Widgets');
 
     // When — the project is synced
     await h.action.execute('Acme Widgets');
@@ -448,13 +448,69 @@ describe('SyncProjectAction', () => {
     // Then — the board fetch is forced exactly once, so issue-level relations
     // (sub-issues) the board's updatedAt cannot surface are discovered
     expect(h.sweep.calls[0]!.includeBoard).toBe(true);
-    expect(h.syncState.fullScanConsumes).toEqual([true]);
-    expect(h.syncState.fullScanPending).toBe(false);
+    expect(h.syncState.fullScanConsumes).toEqual([
+      { project: 'Acme Widgets', pending: true },
+    ]);
+    expect(h.syncState.fullScanPending.has('Acme Widgets')).toBe(false);
 
     // And — the next quiet pass closes the gate again: the marker is spent
     h.sweep.calls = [];
     await h.action.execute('Acme Widgets');
     expect(h.sweep.calls[0]!.includeBoard).toBe(false);
-    expect(h.syncState.fullScanConsumes).toEqual([true, false]);
+    expect(h.syncState.fullScanConsumes).toEqual([
+      { project: 'Acme Widgets', pending: true },
+    ]);
+  });
+
+  it('leaves the forced scan pending when the GitHub half fails', async () => {
+    // Given — a quiet project whose one-shot marker is pending and whose
+    // GitHub half throws
+    const h = harness({ state: openState });
+    h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
+    h.syncState.fullScanPending.add('Acme Widgets');
+    h.sweep.fail = true;
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the scan was not spent: the marker is still pending and the
+    // update cursor did not advance
+    expect(h.syncState.fullScanPending.has('Acme Widgets')).toBe(true);
+    expect(h.syncState.fullScanConsumes).toEqual([]);
+    expect(h.syncState.lastUpdateSets).toEqual([]);
+  });
+
+  it('gives each project its own forced scan', async () => {
+    // Given — two quiet projects whose markers are both pending
+    const h = harness({
+      projectNotes: [
+        projectNote('Acme Widgets', null),
+        projectNote('Other', null),
+      ],
+      state: openState,
+    });
+    h.probe.states.set('Other', {
+      ...openState,
+      projectId: 'PVT_456',
+    });
+    h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
+    h.syncState.lastUpdates.set('Other', openState.updatedAt);
+    h.syncState.fullScanPending.add('Acme Widgets');
+    h.syncState.fullScanPending.add('Other');
+
+    // When — each project is synced in turn
+    await h.action.execute('Acme Widgets');
+    await h.action.execute('Other');
+
+    // Then — the first project's consume does not spend the second's scan
+    expect(h.sweep.calls.map((call) => call.includeBoard)).toEqual([
+      true,
+      true,
+    ]);
+    expect(h.syncState.fullScanConsumes).toEqual([
+      { project: 'Acme Widgets', pending: true },
+      { project: 'Other', pending: true },
+    ]);
+    expect(h.syncState.fullScanPending.size).toBe(0);
   });
 });

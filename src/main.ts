@@ -1,9 +1,10 @@
 import { Notice, Plugin, requestUrl } from 'obsidian';
 import {
-  DEFAULT_SETTINGS,
-  ProjectManagementSettingTab,
+  mergeSettingsIntoData,
+  settingsFromData,
   type ProjectManagementSettings,
-} from './App/Settings/PluginSettingTab.js';
+} from './App/Settings/settings.js';
+import { ProjectManagementSettingTab } from './App/Settings/PluginSettingTab.js';
 import { SyncScheduler } from './App/Scheduling/SyncScheduler.js';
 import { SyncQueue } from './App/Scheduling/SyncQueue.js';
 import { AttachProjectAction } from './Domain/Actions/AttachProjectAction.js';
@@ -44,6 +45,7 @@ import {
   SyncStateAdapter,
   migrateLegacyState,
 } from './Infrastructure/Obsidian/SyncStateAdapter.js';
+import { loadDataSafely } from './Infrastructure/Obsidian/loadDataSafely.js';
 import {
   TodoistAdapter,
   createTodoistTransport,
@@ -128,19 +130,34 @@ export default class ProjectManagementPlugin extends Plugin {
   private projectNames: string[] = [];
 
   override async onload(): Promise<void> {
-    // Migrate the legacy flat sync-state keys under their own top-level key
-    // before the settings merge, so the plugin's settings never absorb a
-    // `status.*`/`todoistItem.*` record (the pre-t5 shared-root wrinkle).
-    const raw = (await this.loadData()) ?? {};
+    // Read the root through the safe loader: a corrupt data.json is quarantined
+    // rather than silently reset (REG-4). The legacy flat sync-state keys are
+    // then migrated under their own top-level key before the settings merge, so
+    // the plugin's settings never absorb a `status.*`/`todoistItem.*` record
+    // (the pre-t5 shared-root wrinkle).
+    const raw = await loadDataSafely(
+      () => this.loadData(),
+      () => this.quarantineDataFile(),
+      () => this.dataFileExists(),
+    );
     if (migrateLegacyState(raw)) {
       await this.saveData(raw);
     }
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
+    // The registry container is stripped out of the settings merge: a stale
+    // registry snapshot in settings would be written back over every registry
+    // write made since onload (REG-3).
+    this.settings = settingsFromData(raw);
 
     const transport = createTransport(this.settings.githubToken);
     const syncState = new SyncStateAdapter({
-      load: () => this.loadData() as Promise<Record<string, unknown>>,
+      load: () =>
+        loadDataSafely(
+          () => this.loadData(),
+          () => this.quarantineDataFile(),
+          () => this.dataFileExists(),
+        ),
       save: (data) => this.saveData(data),
+      backup: () => this.backupDataFile(),
     });
     const vault = new VaultAdapter(this.app, (eventRef) =>
       this.registerEvent(eventRef),
@@ -373,6 +390,51 @@ export default class ProjectManagementPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    // Merge into a FRESH read of data.json so registry writes made after onload
+    // survive a settings save (REG-2/REG-3).
+    const data = (await this.loadData()) ?? {};
+    await this.saveData(mergeSettingsIntoData(data, this.settings));
+  }
+
+  // Obsidian's saveData is a whole-file write, so a crash mid-write can
+  // truncate data.json. Before a registry overwrite the adapter asks for a
+  // rolling backup of the current file (throttled to at most once a minute), so
+  // the next start can fall back to the previous state (REG-4). Best-effort: a
+  // failed copy must never block a registry write.
+  private async backupDataFile(): Promise<void> {
+    const path = this.dataFilePath();
+    if (path === null) {
+      return;
+    }
+    const adapter = this.app.vault.adapter;
+    if (!(await adapter.exists(path))) {
+      return;
+    }
+    await adapter.copy(path, `${path}.bak`);
+  }
+
+  // A data.json that exists but cannot be parsed must never be silently reset:
+  // its bytes may still be recoverable by hand. Move it aside so the next load
+  // starts clean and the plugin keeps running, rather than overwriting the
+  // corrupt file with an empty registry.
+  private async quarantineDataFile(): Promise<void> {
+    const path = this.dataFilePath();
+    if (path === null || !(await this.dataFileExists())) {
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await this.app.vault.adapter.rename(path, `${path}.corrupt-${stamp}`);
+  }
+
+  private async dataFileExists(): Promise<boolean> {
+    const path = this.dataFilePath();
+    return path !== null && (await this.app.vault.adapter.exists(path));
+  }
+
+  // The plugin's own data.json path, or null before Obsidian has assigned a
+  // manifest directory.
+  private dataFilePath(): string | null {
+    const dir = this.manifest.dir;
+    return dir === undefined ? null : `${dir}/data.json`;
   }
 }

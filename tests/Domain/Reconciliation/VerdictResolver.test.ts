@@ -114,7 +114,7 @@ describe('VerdictResolver.resolveConflicts', () => {
       expect(ladder(vault, remote, base).status).toBe('pull');
     });
 
-    it('keeps the vault value when both sides are done', () => {
+    it('pushes the vault value when both sides are done', () => {
       // Given — both sides completed under different lane names
       const base = taskData({ status: 'Building' });
       const vault = taskData({
@@ -128,11 +128,12 @@ describe('VerdictResolver.resolveConflicts', () => {
 
       // When — the ladder arbitrates
 
-      // Then — there is nothing to move
-      expect(ladder(vault, remote, base).status).toBe('none');
+      // Then — origin authority applies: the vault's lane wins and the mirror
+      // catches up, so the divergence is never left undecided
+      expect(ladder(vault, remote, base).status).toBe('push');
     });
 
-    it('keeps the vault value when both sides are open', () => {
+    it('pushes the vault value when both sides are open', () => {
       // Given — both sides moved to different open lanes
       const base = taskData({ status: 'Building' });
       const vault = taskData({ status: 'Backlog' });
@@ -140,8 +141,9 @@ describe('VerdictResolver.resolveConflicts', () => {
 
       // When — the ladder arbitrates
 
-      // Then — there is nothing to move
-      expect(ladder(vault, remote, base).status).toBe('none');
+      // Then — origin authority applies: the vault's lane wins and the mirror
+      // catches up, so the divergence is never left undecided
+      expect(ladder(vault, remote, base).status).toBe('push');
     });
   });
 

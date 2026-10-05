@@ -11,9 +11,11 @@ import { hash } from '../../../src/Domain/Notes/hash.js';
 import { entityRecord, taskData } from '../../helpers/records.js';
 
 // A fake storage at the boundary: an in-memory map behind load/save, so the
-// adapter's keying, migration and index maintenance is what's under test.
+// adapter's keying, migration and index maintenance is what's under test. The
+// backup counter records the rolling-backup requests.
 function fakeStorage(initial: Record<string, unknown> = {}) {
   let data: Record<string, unknown> = initial;
+  let backups = 0;
   const storage: SyncStateStorage = {
     async load() {
       return data;
@@ -21,8 +23,11 @@ function fakeStorage(initial: Record<string, unknown> = {}) {
     async save(next: unknown) {
       data = next as Record<string, unknown>;
     },
+    async backup() {
+      backups += 1;
+    },
   };
-  return { storage, snapshot: () => data };
+  return { storage, snapshot: () => data, backups: () => backups };
 }
 
 // The container under the top-level key, as the adapter persists it.
@@ -644,33 +649,102 @@ describe('SyncStateAdapter migration', () => {
     expect(migrateEntities(container(snapshot()))).toBe(false);
   });
 
-  it('seeds fullScanPending on a pre-flag container and consumes it once', async () => {
+  it('seeds a fullScanPending marker per project and consumes it once', async () => {
     // Given — a v3 container written before the parent-tracking marker existed
     const { storage, snapshot } = fakeStorage({
-      [SYNC_STATE_KEY]: { version: 3, projects: {} },
+      [SYNC_STATE_KEY]: {
+        version: 3,
+        projects: { 'Acme Widgets': {}, Other: {} },
+      },
     });
     const adapter = new SyncStateAdapter(storage);
 
-    // When — the marker is consumed
-    const first = await adapter.consumeFullScan();
+    // Then — an absent marker reads as pending for every known project
+    expect(await adapter.isFullScanPending('Acme Widgets')).toBe(true);
+    expect(await adapter.isFullScanPending('Other')).toBe(true);
 
-    // Then — an absent marker reads as pending and is cleared to false
-    expect(first).toBe(true);
-    expect(container(snapshot())['fullScanPending']).toBe(false);
+    // When — one project's marker is consumed
+    expect(await adapter.consumeFullScan('Acme Widgets')).toBe(true);
 
-    // And — the one-shot is spent: a second consume is false
-    expect(await adapter.consumeFullScan()).toBe(false);
+    // Then — only that project's marker is spent
+    expect(await adapter.isFullScanPending('Acme Widgets')).toBe(false);
+    expect(await adapter.isFullScanPending('Other')).toBe(true);
+    expect(project(snapshot(), 'Acme Widgets')['fullScanPending']).toBe(false);
+    expect(project(snapshot(), 'Other')['fullScanPending']).toBe(true);
+
+    // And — a second consume of the spent project is false
+    expect(await adapter.consumeFullScan('Acme Widgets')).toBe(false);
   });
 
-  it('respects an existing fullScanPending false', async () => {
-    // Given — a container that already consumed its forced scan
+  it('respects an existing per-project fullScanPending false', async () => {
+    // Given — a project that already consumed its forced scan
     const { storage, snapshot } = fakeStorage({
-      [SYNC_STATE_KEY]: { version: 3, projects: {}, fullScanPending: false },
+      [SYNC_STATE_KEY]: {
+        version: 3,
+        projects: { 'Acme Widgets': { fullScanPending: false } },
+      },
     });
     const adapter = new SyncStateAdapter(storage);
 
     // Then — the marker stays spent
-    expect(await adapter.consumeFullScan()).toBe(false);
-    expect(container(snapshot())['fullScanPending']).toBe(false);
+    expect(await adapter.isFullScanPending('Acme Widgets')).toBe(false);
+    expect(await adapter.consumeFullScan('Acme Widgets')).toBe(false);
+    expect(project(snapshot(), 'Acme Widgets')['fullScanPending']).toBe(false);
+  });
+
+  it('reports no pending scan for an unknown project', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    expect(await adapter.isFullScanPending('Missing')).toBe(false);
+    expect(await adapter.consumeFullScan('Missing')).toBe(false);
+  });
+});
+
+describe('SyncStateAdapter write serialisation', () => {
+  it('serialises interleaved writers so no update is lost', async () => {
+    // Given — a storage that re-parses on every load (like Obsidian's
+    // loadData) and yields on save, widening the interleave window
+    let disk: Record<string, unknown> = {};
+    const storage: SyncStateStorage = {
+      async load() {
+        return JSON.parse(JSON.stringify(disk)) as Record<string, unknown>;
+      },
+      async save(next: unknown) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        disk = JSON.parse(JSON.stringify(next)) as Record<string, unknown>;
+      },
+    };
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — two entity writes race
+    await Promise.all([
+      adapter.setEntity(
+        entityRecord({ id: 'e1', notePath: 'Projecten/A/taken/1.md' }),
+      ),
+      adapter.setEntity(
+        entityRecord({ id: 'e2', notePath: 'Projecten/A/taken/2.md' }),
+      ),
+    ]);
+
+    // Then — both land; the second did not overwrite the first
+    const ids = (await adapter.listEntities('A')).map((r) => r.id).sort();
+    expect(ids).toEqual(['e1', 'e2']);
+  });
+
+  it('asks for a rolling backup before overwriting, throttled', async () => {
+    // Given — an adapter over a storage that counts backup requests
+    const { storage, backups } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — two registry writes land back to back
+    await adapter.setEntity(
+      entityRecord({ id: 'e1', notePath: 'Projecten/A/taken/1.md' }),
+    );
+    await adapter.setEntity(
+      entityRecord({ id: 'e2', notePath: 'Projecten/A/taken/2.md' }),
+    );
+
+    // Then — the rolling backup runs at most once per window
+    expect(backups()).toBe(1);
   });
 });

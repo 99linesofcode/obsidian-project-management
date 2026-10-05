@@ -1,26 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
 
-export interface ProjectManagementSettings {
-  githubToken: string;
-  todoistToken: string;
-  pollIntervalMinutes: number;
-  doneOptionName: string;
-  debounceSeconds: number;
-  taskTemplatePath: string;
-  todoTemplatePath: string;
-}
-
-export const DEFAULT_SETTINGS: ProjectManagementSettings = {
-  githubToken: '',
-  todoistToken: '',
-  pollIntervalMinutes: 5,
-  doneOptionName: 'Shipped',
-  debounceSeconds: 5,
-  taskTemplatePath: 'Templates/Task.md',
-  todoTemplatePath: 'Templates/ToDo.md',
-};
-
 export class ProjectManagementSettingTab extends PluginSettingTab {
   plugin: ProjectManagementPlugin;
 
