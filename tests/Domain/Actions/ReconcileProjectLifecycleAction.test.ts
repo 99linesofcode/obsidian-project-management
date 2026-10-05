@@ -193,7 +193,6 @@ class FakeProjectManagement implements ProjectManagementPort {
     const number = Number(url.split('/').pop());
     return {
       url,
-      remoteId: number,
       nodeId: `I_kwDOAAAA${number}`,
       title: 'Fix the bug',
       body: '',

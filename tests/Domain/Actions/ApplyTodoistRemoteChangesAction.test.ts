@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApplyTodoistRemoteChangesAction } from '../../../src/Domain/Actions/ApplyTodoistRemoteChangesAction.js';
+import type { ApplyTodoistRemoteChangesInput } from '../../../src/Domain/Actions/ApplyTodoistRemoteChangesAction.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
@@ -142,7 +143,6 @@ class FakeRelinkRenamedTodo {
 }
 
 const projectName = 'Acme Widgets';
-const projectId = 'P1';
 const syncedAt = '2026-09-24T12:00:00Z';
 const doneOptionName = 'Shipped';
 const choreUrl = 'https://github.com/acme/widgets/issues/42';
@@ -208,7 +208,6 @@ function setup() {
   const relocateTaskStatus = new FakeRelocateTaskStatus();
   const relinkRenamedTodo = new FakeRelinkRenamedTodo();
   const action = new ApplyTodoistRemoteChangesAction(
-    taskManager,
     vault,
     syncState,
     propagateStatus as never,
@@ -216,8 +215,21 @@ function setup() {
     relinkRenamedTodo as never,
     doneOptionName,
   );
+  const run = (
+    overrides: Partial<ApplyTodoistRemoteChangesInput> = {},
+  ): Promise<void> =>
+    action.execute({
+      projectName,
+      syncedAt,
+      snapshot: {
+        active: taskManager.active,
+        completed: taskManager.completed,
+      },
+      ...overrides,
+    });
   return {
     action,
+    run,
     vault,
     taskManager,
     syncState,
@@ -227,12 +239,10 @@ function setup() {
   };
 }
 
-const input = { projectName, projectId, syncedAt };
-
 describe('ApplyTodoistRemoteChangesAction', () => {
   it('renames a to-do note when Todoist renamed the twin, relinking the checklist', async () => {
     // Given — a to-do note whose twin was renamed in Todoist
-    const { action, vault, taskManager, syncState, relinkRenamedTodo } = setup();
+    const { run, vault, taskManager, syncState, relinkRenamedTodo } = setup();
     const todoPath = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
     vault.notes.set(
       todoPath,
@@ -245,7 +255,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     taskManager.active = [todoistTask({ id: 'T2', content: 'Fix the widget', parentId: 'T1' })];
 
     // When — the remote rename is applied
-    await action.execute(input);
+    await run();
 
     // Then — the note is renamed to the content's slug
     const newPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
@@ -257,14 +267,14 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('renames a task note keeping its issue-id prefix', async () => {
     // Given — an issue-backed task note whose twin was renamed in Todoist
-    const { action, vault, taskManager, syncState, relocateTaskStatus } = setup();
+    const { run, vault, taskManager, syncState, relocateTaskStatus } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
     taskManager.active = [todoistTask({ id: 'T1', content: 'Chore 1 renamed' })];
 
     // When — the remote rename is applied
-    await action.execute(input);
+    await run();
 
     // Then — the rename keeps the numeric prefix and relocates the record
     const newPath = 'Projecten/Acme Widgets/taken/42-chore-1-renamed.md';
@@ -274,14 +284,14 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('moves the note and the board card when Todoist dragged a top-level task to a lane', async () => {
     // Given — an issue-backed task in Unshaped whose twin sits in Building
-    const { action, vault, taskManager, syncState, propagateStatus } = setup();
+    const { run, vault, taskManager, syncState, propagateStatus } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
     taskManager.active = [todoistTask({ id: 'T1', content: 'Chore 1', sectionId: 'S2' })];
 
     // When — the remote lane drag is applied
-    await action.execute(input);
+    await run();
 
     // Then — the note's status follows the lane and the github handle drives the
     // propagation
@@ -295,7 +305,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('gains the slice affiliation when a task is dragged under a slice twin', async () => {
     // Given — a top-level task whose twin was dragged under slice T1
-    const { action, vault, taskManager, syncState } = setup();
+    const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     const slicePath = 'Projecten/Acme Widgets/taken/40-slice-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
@@ -306,7 +316,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     ];
 
     // When — the parent change is applied
-    await action.execute(input);
+    await run();
 
     // Then — the affiliation gains the slice link and the base records its uuid
     expect(vault.writes[0]!.content).toContain(
@@ -317,7 +327,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('drops the slice affiliation when a task is dragged back to top level', async () => {
     // Given — a slice-affiliated task whose twin is top-level again
-    const { action, vault, taskManager, syncState } = setup();
+    const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     const slicePath = 'Projecten/Acme Widgets/taken/40-slice-1.md';
     vault.notes.set(
@@ -332,7 +342,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     taskManager.active = [todoistTask({ id: 'T9', content: 'Chore 1' })];
 
     // When — the parent change is applied
-    await action.execute(input);
+    await run();
 
     // Then — the slice link is dropped
     expect(vault.writes[0]!.content).toContain(
@@ -343,7 +353,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('lets the vault win when both sides changed', async () => {
     // Given — the note moved lane (vault) and the twin was renamed (remote)
-    const { action, vault, taskManager, syncState } = setup();
+    const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Building', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
@@ -352,7 +362,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     ];
 
     // When — the verdict runs
-    await action.execute(input);
+    await run();
 
     // Then — neither the rename nor the lane is applied (the vault wins)
     expect(vault.renames).toEqual([]);
@@ -365,7 +375,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('ignores a section change on a subtask (it inherits its parent)', async () => {
     // Given — a slice child whose twin shows its parent's section
-    const { action, vault, taskManager, syncState } = setup();
+    const { run, vault, taskManager, syncState } = setup();
     const childPath = 'Projecten/Acme Widgets/taken/41-chore-1.md';
     const slicePath = 'Projecten/Acme Widgets/taken/40-slice-1.md';
     vault.notes.set(
@@ -381,7 +391,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     ];
 
     // When — the verdict runs
-    await action.execute(input);
+    await run();
 
     // Then — no lane is applied
     expect(vault.writes).toEqual([]);
@@ -389,16 +399,16 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('is idempotent: a settled item is not touched on a second pass', async () => {
     // Given — a lane drag applied once
-    const { action, vault, taskManager, syncState } = setup();
+    const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
     taskManager.active = [todoistTask({ id: 'T1', content: 'Chore 1', sectionId: 'S2' })];
-    await action.execute(input);
+    await run();
     vault.writes = [];
 
     // When — the same remote state is seen again
-    await action.execute(input);
+    await run();
 
     // Then — no vault write
     expect(vault.writes).toEqual([]);
@@ -406,7 +416,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('skips a completed twin: completion is the completion action’s', async () => {
     // Given — a twin completed in Todoist
-    const { action, vault, taskManager, syncState } = setup();
+    const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
@@ -415,7 +425,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     ];
 
     // When — the verdict runs
-    await action.execute(input);
+    await run();
 
     // Then — the lane is not applied here
     expect(vault.writes).toEqual([]);
@@ -423,13 +433,13 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('evicts the record of a twin deleted in Todoist so the projection re-creates it', async () => {
     // Given — a note that survives whose twin is in neither fetched set
-    const { action, vault, syncState } = setup();
+    const { run, vault, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1');
 
     // When — the verdict runs
-    await action.execute(input);
+    await run();
 
     // Then — the record is evicted (not deleted in the vault, not applied), so
     // the projection re-creates the twin later in this same tick (vault wins)
@@ -439,7 +449,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('keeps a completed record whose twin aged out of the completed window', async () => {
     // Given — a completed base whose twin is absent from both sets
-    const { action, vault, syncState } = setup();
+    const { run, vault, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Shipped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', {
@@ -448,7 +458,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
     });
 
     // When — the verdict runs
-    await action.execute(input);
+    await run();
 
     // Then — completed is not deleted: the record survives untouched
     expect(syncState.removed).toEqual([]);
@@ -457,12 +467,12 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
   it('leaves a missing note to the deletion action', async () => {
     // Given — a deleted note whose twin is gone too
-    const { action, syncState } = setup();
+    const { run, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     seedRecord(syncState, 'uuid-task', taskPath, 'T1');
 
     // When — the verdict runs
-    await action.execute(input);
+    await run();
 
     // Then — nothing is evicted here; PropagateTodoistDeletionsAction owns it
     expect(syncState.removed).toEqual([]);

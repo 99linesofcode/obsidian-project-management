@@ -100,7 +100,6 @@ const identity: ProjectIdentityData = {
 function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   return {
     url,
-    remoteId: 42,
     nodeId: 'I_kwDOAAAA42',
     title: 'Fix the bug',
     body: 'The bug happens on resize.',

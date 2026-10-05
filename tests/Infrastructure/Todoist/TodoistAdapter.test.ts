@@ -300,7 +300,6 @@ describe('TodoistAdapter', () => {
         content: 'Fix the widget',
         labels: ['task'],
         isCompleted: false,
-        url: 'https://app.todoist.com/app/task/T1',
         addedAt: '2026-09-18T09:00:00Z',
         updatedAt: '2026-09-18T10:00:00Z',
         completedAt: null,
@@ -313,7 +312,6 @@ describe('TodoistAdapter', () => {
         content: 'A to-do',
         labels: ['todo'],
         isCompleted: false,
-        url: 'https://app.todoist.com/app/task/T2',
         addedAt: '2026-09-18T09:00:00Z',
         updatedAt: '2026-09-18T10:00:00Z',
         completedAt: null,
@@ -363,7 +361,6 @@ describe('TodoistAdapter', () => {
         content: 'Fix the widget',
         labels: ['task'],
         isCompleted: true,
-        url: 'https://app.todoist.com/app/task/T1',
         addedAt: '',
         updatedAt: '',
         completedAt: '2026-09-24T11:00:00Z',
@@ -386,7 +383,6 @@ describe('TodoistAdapter', () => {
       sectionId: 'S1',
       content: 'New',
       labels: ['task'],
-      description: 'https://github.com/acme/widgets/issues/42',
     };
 
     // When — the adapter creates the task
@@ -403,7 +399,6 @@ describe('TodoistAdapter', () => {
         project_id: 'P1',
         section_id: 'S1',
         labels: ['task'],
-        description: 'https://github.com/acme/widgets/issues/42',
       }),
     });
   });

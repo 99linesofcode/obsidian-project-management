@@ -386,7 +386,6 @@ export class GitHubAdapter implements ProjectManagementPort {
 
     return {
       url: typeof node.url === 'string' ? node.url : '',
-      remoteId: typeof node.number === 'number' ? node.number : 0,
       nodeId: typeof node.id === 'string' ? node.id : '',
       title: typeof node.title === 'string' ? node.title : '',
       body: typeof node.body === 'string' ? node.body : '',
@@ -789,7 +788,6 @@ export class GitHubAdapter implements ProjectManagementPort {
 
     return {
       url: typeof issue.html_url === 'string' ? issue.html_url : '',
-      remoteId: typeof issue.number === 'number' ? issue.number : 0,
       nodeId: typeof issue.node_id === 'string' ? issue.node_id : '',
       title: typeof issue.title === 'string' ? issue.title : '',
       body: typeof issue.body === 'string' ? issue.body : '',

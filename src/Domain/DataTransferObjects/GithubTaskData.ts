@@ -3,7 +3,6 @@
 // it (with its board card) onto the canonical TaskData at the boundary.
 export interface GithubTaskData {
   url: string;
-  remoteId: number;
   nodeId: string;
   title: string;
   body: string;

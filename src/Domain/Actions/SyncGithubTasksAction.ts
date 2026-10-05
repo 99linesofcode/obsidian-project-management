@@ -4,10 +4,8 @@ import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
 import { statusNameFromState } from '../Board/statusNameFromState.js';
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
-import {
-  GithubTaskMapper,
-  typeFromLabels,
-} from '../Mappers/GithubTaskMapper.js';
+import { typeFromLabels } from '../Labels/typeFromLabels.js';
+import { GithubTaskMapper } from '../Mappers/GithubTaskMapper.js';
 import { VaultTaskMapper } from '../Mappers/VaultTaskMapper.js';
 import { toIssueBody } from '../Notes/Checklist.js';
 import { hash } from '../Notes/hash.js';

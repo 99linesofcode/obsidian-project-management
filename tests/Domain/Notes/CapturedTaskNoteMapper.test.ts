@@ -9,17 +9,18 @@ describe('CapturedTaskNoteMapper', () => {
     // Given — a Todoist-created top-level task
     // When — it is mapped to a captured note
     const note = CapturedTaskNoteMapper.map(
-      { title: 'Buy Milk!', projectName, sliceLink: null, todoistId: 'T1' },
+      { title: 'Buy Milk!', projectName, sliceLink: null },
       { syncedAt, statusName: 'Unshaped' },
     );
 
-    // Then — the note is a draft: no url, the todoist anchor is the identity
+    // Then — the note is a draft: no url, no machine anchor; the registry is
+    // its identity
     expect(note.path).toBe('Projecten/Acme Widgets/taken/buy-milk.md');
     expect(note.content).toContain('categories: [taken]');
     expect(note.content).toContain('status: Unshaped');
     expect(note.content).toContain('affiliation: ["[[_Acme Widgets]]"]');
     expect(note.content).toContain(`synced: ${syncedAt}`);
-    expect(note.content).toContain('todoist: T1');
+    expect(note.content).not.toContain('todoist:');
     expect(note.content).not.toContain('url');
   });
 
@@ -31,7 +32,6 @@ describe('CapturedTaskNoteMapper', () => {
         title: 'Write the copy',
         projectName,
         sliceLink: '40-slice-1',
-        todoistId: 'T2',
       },
       { syncedAt, statusName: 'Building' },
     );

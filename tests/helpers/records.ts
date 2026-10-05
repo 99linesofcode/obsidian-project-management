@@ -51,7 +51,6 @@ export function portState(overrides: Partial<PortState> = {}): PortState {
     provider: overrides.provider ?? 'todoist',
     lastPoll: overrides.lastPoll ?? null,
     lanes: overrides.lanes ?? {},
-    tags: overrides.tags ?? {},
   };
 }
 
@@ -69,7 +68,6 @@ export function todoistTask(
     content: overrides.content ?? 'Fix the bug',
     labels: overrides.labels ?? [],
     isCompleted: overrides.isCompleted ?? false,
-    url: overrides.url ?? `https://app.todoist.com/app/task/${id}`,
     addedAt: overrides.addedAt ?? '',
     updatedAt: overrides.updatedAt ?? '',
     completedAt: overrides.completedAt ?? null,

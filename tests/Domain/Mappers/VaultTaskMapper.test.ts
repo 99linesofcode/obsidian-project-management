@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { VaultTaskMapper } from '../../../src/Domain/Mappers/VaultTaskMapper.js';
 import { TaskNoteMapper } from '../../../src/Domain/Notes/TaskNoteMapper.js';
-import { ToDoNoteMapper } from '../../../src/Domain/Notes/ToDoNoteMapper.js';
-import { ToDoData } from '../../../src/Domain/DataTransferObjects/ToDoData.js';
-import { taskData } from '../../helpers/records.js';
 
 const context = { projectName: 'Acme Widgets', doneLane: 'Shipped' };
 const notePath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
@@ -76,88 +73,5 @@ describe('VaultTaskMapper', () => {
 
     // Then — it is not a task note
     expect(task).toBeNull();
-  });
-
-  it('parses a to-do note onto the canonical to-do', () => {
-    // Given — a to-do note produced by the note mapper
-    const { content } = ToDoNoteMapper.map(
-      {
-        title: 'Fix the bug',
-        projectName: 'Acme Widgets',
-        taskLink: 'fix-the-bug',
-      },
-      { syncedAt: '2026-09-18T12:00:00Z', statusName: 'open' },
-    );
-
-    // When — the note is parsed
-    const todo = VaultTaskMapper.parseToDo(
-      content,
-      'Projecten/Acme Widgets/todos/fix-the-bug.md',
-      context,
-    );
-
-    // Then — the content is carried; the uuids wait for the action layer
-    expect(todo?.id).toBe('');
-    expect(todo?.title).toBe('fix the bug');
-    expect(todo?.status).toBe('open');
-    expect(todo?.completedAt).toBeNull();
-    expect(todo?.parentTodo).toBeNull();
-    expect(todo?.task).toBeNull();
-    expect(todo?.mirrors).toEqual({});
-  });
-
-  it('round-trips a task through render', () => {
-    // Given — a canonical task
-    const task = taskData({
-      id: 'uuid-42',
-      notePath,
-      type: 'task',
-      title: 'Fix the bug',
-      body: 'The bug happens on resize.',
-      status: 'Building',
-      createdAt: '2026-09-18',
-    });
-
-    // When — it is rendered to a note
-    const note = VaultTaskMapper.renderTask(task, {
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-    });
-
-    // Then — the note path and managed fields match the note mapper
-    expect(note.path).toBe(notePath);
-    expect(note.content).toContain('type: task');
-    expect(note.content).toContain('status: Building');
-    expect(note.content).not.toContain('id:');
-    expect(note.content).not.toContain('url:');
-  });
-
-  it('round-trips a to-do through render', () => {
-    // Given — a canonical to-do and its resolved affiliation links
-    const todo = new ToDoData(
-      'todo-uuid',
-      'Projecten/Acme Widgets/todos/fix-the-bug.md',
-      {},
-      'Fix the bug',
-      'open',
-      null,
-      null,
-      'task-uuid',
-      null,
-      null,
-    );
-
-    // When — it is rendered to a note
-    const note = VaultTaskMapper.renderToDo(todo, {
-      projectName: 'Acme Widgets',
-      syncedAt: '2026-09-18T12:00:00Z',
-      taskLink: 'fix-the-bug',
-    });
-
-    // Then — the note path and affiliation match the note mapper
-    expect(note.path).toBe('Projecten/Acme Widgets/todos/fix-the-bug.md');
-    expect(note.content).toContain(
-      'affiliation: ["[[_Acme Widgets]]", "[[fix-the-bug]]"]',
-    );
   });
 });

@@ -51,7 +51,6 @@ describe('TodoistTaskData', () => {
       content: 'Fix the widget',
       labels: ['task'],
       isCompleted: false,
-      url: 'https://app.todoist.com/app/task/T1',
       addedAt: '2026-09-18T09:00:00Z',
       updatedAt: '2026-09-18T10:00:00Z',
       completedAt: null,

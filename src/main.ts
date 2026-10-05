@@ -241,7 +241,6 @@ export default class ProjectManagementPlugin extends Plugin {
       syncState,
     );
     const applyTodoistCompletion = new ApplyTodoistCompletionAction(
-      todoist,
       vault,
       syncState,
       applyTaskToVault,
@@ -270,7 +269,6 @@ export default class ProjectManagementPlugin extends Plugin {
     // Todoist-created items per the dt-06 table. Both reuse the rename and
     // status machinery the vault-driven paths use.
     const applyTodoistRemoteChanges = new ApplyTodoistRemoteChangesAction(
-      todoist,
       vault,
       syncState,
       propagateStatus,
@@ -279,7 +277,6 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.doneOptionName,
     );
     const captureTodoistCreations = new CaptureTodoistCreationsAction(
-      todoist,
       vault,
       syncState,
       this.settings.todoTemplatePath,

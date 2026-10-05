@@ -316,10 +316,14 @@ describe('GitHubAdapter', () => {
     );
 
     // Then — every typed issue is surfaced, mapped onto GithubTaskData
-    expect(result.map((task) => task.remoteId)).toEqual([42, 43, 44, 45]);
+    expect(result.map((task) => task.url)).toEqual([
+      'https://github.com/acme/widgets/issues/42',
+      'https://github.com/acme/widgets/issues/43',
+      'https://github.com/acme/widgets/issues/44',
+      'https://github.com/acme/widgets/issues/45',
+    ]);
     expect(result[0]).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
-      remoteId: 42,
       nodeId: 'I_kwDOAAAA42',
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
@@ -331,7 +335,9 @@ describe('GitHubAdapter', () => {
       parentUrl: null,
     });
     // And the untyped issue is filtered out
-    expect(result.some((task) => task.remoteId === 46)).toBe(false);
+    expect(
+      result.some((task) => task.url.endsWith('/issues/46')),
+    ).toBe(false);
     // And the REST path targeted the bound repo's first page
     expect(paths[0]).toBe(
       '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
@@ -365,7 +371,9 @@ describe('GitHubAdapter', () => {
     );
 
     // Then — the issue is surfaced, since any type: label marks it tracked
-    expect(result.map((task) => task.remoteId)).toEqual([42]);
+    expect(result.map((task) => task.url)).toEqual([
+      'https://github.com/acme/widgets/issues/42',
+    ]);
   });
 
   it('concatenates every page of tracked issues', async () => {
@@ -386,7 +394,7 @@ describe('GitHubAdapter', () => {
     );
 
     // Then — both pages are concatenated in order
-    expect(result.map((task) => task.remoteId)).toEqual(
+    expect(result.map((task) => Number(task.url.split('/').pop()))).toEqual(
       Array.from({ length: 102 }, (_, index) => index + 1),
     );
     // And the adapter walked the pages until the short one
@@ -553,7 +561,6 @@ describe('GitHubAdapter', () => {
     // Then — the issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
-      remoteId: 42,
       nodeId: 'I_kwDOAAAA42',
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
@@ -598,7 +605,6 @@ describe('GitHubAdapter', () => {
     // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
-      remoteId: 42,
       nodeId: 'I_kwDOAAAA42',
       title: 'fix the widget',
       body: 'The bug now also happens on resize.',
@@ -646,7 +652,6 @@ describe('GitHubAdapter', () => {
     // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
-      remoteId: 42,
       nodeId: 'I_kwDOAAAA42',
       title: 'Fix the Bug!',
       body: 'The bug happens when the widget is resized.',
@@ -840,7 +845,6 @@ describe('GitHubAdapter', () => {
     expect(result.issues).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/42',
-        remoteId: 42,
         nodeId: 'I_kwDOAAAA42',
         title: 'Fix the Bug!',
         body: 'The bug happens when the widget is resized.',
@@ -945,7 +949,6 @@ describe('GitHubAdapter', () => {
     // is fetched in full and mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/50',
-      remoteId: 50,
       nodeId: 'I_kwDOAAAA50',
       title: 'An idea',
       body: 'The draft body.',
@@ -1182,7 +1185,6 @@ describe('GitHubAdapter', () => {
     expect(result).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/46',
-        remoteId: 46,
         nodeId: 'I_kwDOAAAA46',
         title: 'An idea',
         body: 'No labels yet.',

@@ -281,7 +281,6 @@ class FakeTaskManager implements TaskManagerPort {
       content: input.content,
       labels: [...(input.labels ?? [])],
       isCompleted: false,
-      url: '',
       addedAt: UPDATED_AT,
       updatedAt: UPDATED_AT,
       completedAt: null,
@@ -474,7 +473,6 @@ function harness(): Harness {
     issues: [
       {
         url: ISSUE_URL,
-        remoteId: 42,
         nodeId: 'I',
         title: 'Fix the bug',
         body: '- [ ] Fix the bug',
@@ -547,7 +545,6 @@ function harness(): Harness {
   );
   const applyToTodoist = new ApplyTaskToTodoistAction(todoist, syncState);
   const applyTodoistCompletion = new ApplyTodoistCompletionAction(
-    todoist,
     vault,
     syncState,
     applyToVault,
@@ -561,7 +558,6 @@ function harness(): Harness {
   const relinkRenamedTodo = new RelinkRenamedTodoAction(vault, syncState);
   const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
   const applyTodoistRemoteChanges = new ApplyTodoistRemoteChangesAction(
-    todoist,
     vault,
     syncState,
     propagateStatus,
@@ -570,7 +566,6 @@ function harness(): Harness {
     DONE_LANE,
   );
   const captureTodoistCreations = new CaptureTodoistCreationsAction(
-    todoist,
     vault,
     syncState,
     '',
@@ -1158,7 +1153,6 @@ describe('SyncProjectAction completed-twin churn', () => {
       content: 'Captured draft',
       labels: ['task'],
       isCompleted: true,
-      url: '',
       addedAt: UPDATED_AT,
       updatedAt: UPDATED_AT,
       completedAt: UPDATED_AT,
@@ -1224,7 +1218,6 @@ describe('SyncProjectAction forced full scan', () => {
     // top-level twin
     h.github.detail.issues.push({
       url: PARENT_URL,
-      remoteId: 40,
       nodeId: 'I40',
       title: 'The parent',
       body: '',

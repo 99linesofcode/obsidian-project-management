@@ -1,17 +1,19 @@
 import { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { TodoistTaskSnapshotData } from '../DataTransferObjects/TodoistTaskSnapshotData.js';
 import { ToDoNoteParser, withToDoStatus } from '../Notes/ToDoNoteParser.js';
 import { VaultTaskMapper } from '../Mappers/VaultTaskMapper.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
-import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { ApplyTaskToVaultAction } from './ApplyTaskToVaultAction.js';
 
 export interface ApplyTodoistCompletionInput {
   projectName: string;
-  projectId: string;
   syncedAt: string;
+  // The pass's shared Todoist snapshot. The half fetched the active and
+  // completed sets once; this absorber never lists the project itself.
+  snapshot: TodoistTaskSnapshotData;
 }
 
 // UC: pull remote completion changes into the vault (t4). A completion is
@@ -32,11 +34,10 @@ export interface ApplyTodoistCompletionInput {
 // observed the change — a full ISO datetime, never date-only. Every applied
 // change (and every echo we skip) stamps the mirror's base so the next poll
 // does not read our own write as a remote change. The cursor advances only
-// after a successful pass: if either fetch throws, the window is retried next
-// tick rather than skipped.
+// after a successful pass; the pass's snapshot was fetched upstream, so a
+// failed fetch means this action never runs and the window retries next tick.
 export class ApplyTodoistCompletionAction {
   constructor(
-    private readonly taskManager: TaskManagerPort,
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
     private readonly applyToVault: ApplyTaskToVaultAction,
@@ -48,14 +49,10 @@ export class ApplyTodoistCompletionAction {
       input.projectName,
       'todoist',
     );
-    const since = portState?.lastPoll || input.syncedAt;
 
-    // Both fetches must succeed before any vault write or cursor move.
-    const completed = await this.taskManager.fetchCompletedTasks(
-      input.projectId,
-      since,
-    );
-    const active = await this.taskManager.fetchActiveTasks(input.projectId);
+    // The pass's snapshot was fetched upstream, before any vault write or
+    // cursor move.
+    const { completed, active } = input.snapshot;
     const activeById = new Map(active.map((task) => [task.id, task]));
 
     // The project's todoist items, joined to their hub entities: an item's
@@ -106,7 +103,6 @@ export class ApplyTodoistCompletionAction {
       provider: 'todoist',
       lastPoll: input.syncedAt,
       lanes: portState?.lanes ?? {},
-      tags: portState?.tags ?? {},
     });
   }
 

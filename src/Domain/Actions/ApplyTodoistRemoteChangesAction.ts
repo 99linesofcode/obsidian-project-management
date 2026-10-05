@@ -11,10 +11,10 @@ import { slugify } from '../Notes/TaskNoteMapper.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { withStatus } from '../Notes/TaskNoteParser.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { TodoistTaskSnapshotData } from '../DataTransferObjects/TodoistTaskSnapshotData.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
-import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 import type { PropagateStatusAction } from './PropagateStatusAction.js';
 import type { RelinkRenamedTodoAction } from './RelinkRenamedTodoAction.js';
@@ -22,8 +22,10 @@ import type { RelocateTaskStatusAction } from './RelocateTaskStatusAction.js';
 
 export interface ApplyTodoistRemoteChangesInput {
   projectName: string;
-  projectId: string;
   syncedAt: string;
+  // The pass's shared Todoist snapshot. The half fetched the active and
+  // completed sets once; this absorber never lists the project itself.
+  snapshot: TodoistTaskSnapshotData;
 }
 
 // The vault-owned fields the verdict reads off a mirrored note: its lane (the
@@ -76,7 +78,6 @@ interface VerdictContext {
 // (vault wins); a missing note is left to PropagateTodoistDeletionsAction.
 export class ApplyTodoistRemoteChangesAction {
   constructor(
-    private readonly taskManager: TaskManagerPort,
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
     private readonly propagateStatus: PropagateStatusAction,
@@ -91,14 +92,9 @@ export class ApplyTodoistRemoteChangesAction {
       'todoist',
     );
     const sections = portState?.lanes ?? {};
-    const since = portState?.lastPoll || input.syncedAt;
 
-    // Both fetches must succeed before any vault write.
-    const completed = await this.taskManager.fetchCompletedTasks(
-      input.projectId,
-      since,
-    );
-    const active = await this.taskManager.fetchActiveTasks(input.projectId);
+    // The pass's snapshot was fetched upstream, before any vault write.
+    const { completed, active } = input.snapshot;
     const twinById = new Map<string, TodoistTaskData>();
     // Completed first, then active, so a reopened twin reads as active.
     for (const twin of completed) {
