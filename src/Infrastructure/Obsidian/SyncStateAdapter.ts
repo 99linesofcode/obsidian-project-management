@@ -86,6 +86,26 @@ function stringOrNull(value: unknown): string | null {
   return value === null || typeof value === 'string' ? value : null;
 }
 
+// The canonical archive node a migration writes. The legacy store carried only
+// {locationArchived, closed} and predates the stamp. locationArchived survives
+// because the lifecycle merge still reads it; archivedAt follows the migrated
+// convention ('' for an already-archived project whose transition time is
+// unknown, null while active), matching mapArchiveBaseline's fallback.
+function normalizeArchive(raw: unknown): Record<string, unknown> {
+  const record = isRecord(raw) ? raw : {};
+  const locationArchived = record.locationArchived === true;
+  return {
+    locationArchived,
+    closed: record.closed === true,
+    archivedAt:
+      typeof record.archivedAt === 'string'
+        ? record.archivedAt
+        : locationArchived
+          ? ''
+          : null,
+  };
+}
+
 // Moves any legacy flat sync-state key under the `syncState` container. Returns
 // whether it changed the data. The legacy records keep their value; the
 // canonical mapping is lazy, so an old provider-shaped record still loads (and
@@ -116,6 +136,12 @@ export function migrateLegacyState(data: Record<string, unknown>): boolean {
 // no-op. Never drops data: a record that cannot be parsed is left in place
 // rather than discarded.
 export function migrateEntities(container: Record<string, unknown>): boolean {
+  // v1 -> v2 only. An already-current (or NEWER) container is never re-migrated:
+  // running this on a v3 container with a stray legacy key would strand a v2
+  // `entities` map that the version-gated v3 fold will not pick up.
+  if (typeof container.version === 'number' && container.version >= VERSION) {
+    return false;
+  }
   const statusKeys = Object.keys(container).filter((key) =>
     key.startsWith(STATUS_PREFIX),
   );
@@ -206,7 +232,11 @@ export function migrateEntities(container: Record<string, unknown>): boolean {
 // entity whose path names no project lands in the unnamed ('') bucket rather
 // than being discarded.
 export function migrateV3(container: Record<string, unknown>): boolean {
-  if (container.version === VERSION) {
+  // Version-dispatched and one-way: an already-current container is untouched,
+  // and a NEWER container is never re-migrated (its schema is not ours to
+  // rewrite — leave it byte-for-byte). Only an unversioned or older container
+  // migrates.
+  if (typeof container.version === 'number' && container.version >= VERSION) {
     return false;
   }
 
@@ -250,7 +280,16 @@ export function migrateV3(container: Record<string, unknown>): boolean {
         continue;
       }
       const name = key.slice(prefix.length);
-      ensureProjectNode(projects, name)[field] = container[key];
+      const node = ensureProjectNode(projects, name);
+      // WHY normalize the archive: the legacy node carried only
+      // {locationArchived, closed} and predates the stamp, so without this the
+      // persisted shape lags the schema until the next setArchiveBaseline write.
+      // locationArchived is KEPT: ReconcileProjectLifecycleAction still reads it
+      // as the vault-location arm of the three-way merge, so dropping it from
+      // the persisted node would silently reopen every archived project. The
+      // canonical persisted node therefore carries all three fields.
+      node[field] =
+        field === 'archive' ? normalizeArchive(container[key]) : container[key];
       delete container[key];
     }
   }
@@ -693,6 +732,121 @@ function dropEntity(
   indexes.itemsByEntity.delete(id);
 }
 
+// Deletes one port item node without touching the indexes (the caller owns the
+// index bookkeeping). Used when an address changes hands or moves project.
+function removeItemNode(
+  container: Record<string, unknown>,
+  project: string,
+  portId: string,
+  handle: string,
+): void {
+  const node = projectNode(projectsMap(container), project);
+  if (node === null) {
+    return;
+  }
+  const port = portNode(node, portId);
+  if (port === null) {
+    return;
+  }
+  const items = itemsMap(port);
+  if (items[handle] !== undefined) {
+    delete items[handle];
+  }
+}
+
+// Drops one entity's reverse-index ref to a (portId, handle) address. A handle
+// is port-unique, so matching on portId+handle is enough. Keeps a re-pointed
+// item from later being swept as if it were still the old owner's.
+function removeItemRef(
+  indexes: Indexes,
+  entityId: string,
+  portId: string,
+  handle: string,
+): void {
+  const refs = indexes.itemsByEntity.get(entityId);
+  if (refs === undefined) {
+    return;
+  }
+  const filtered = refs.filter(
+    (ref) => !(ref.portId === portId && ref.handle === handle),
+  );
+  if (filtered.length === 0) {
+    indexes.itemsByEntity.delete(entityId);
+  } else {
+    indexes.itemsByEntity.set(entityId, filtered);
+  }
+}
+
+// Tracks one entity's ref to an address when it is not already present, so
+// setMirrorItem never double-counts a (portId, handle).
+function addItemRef(
+  indexes: Indexes,
+  entityId: string,
+  project: string,
+  portId: string,
+  handle: string,
+): void {
+  const refs = indexes.itemsByEntity.get(entityId) ?? [];
+  if (
+    !refs.some(
+      (ref) =>
+        ref.project === project &&
+        ref.portId === portId &&
+        ref.handle === handle,
+    )
+  ) {
+    refs.push({ project, portId, handle, entityId });
+    indexes.itemsByEntity.set(entityId, refs);
+  }
+}
+
+// Moves an entity's port item nodes from one project to another, so an
+// entity's items always live under the same project as the entity. The handle
+// owners and the reverse index are updated in step; the caller removes the old
+// entity node afterwards. Only refs still recorded under the old project move
+// (a ref already re-pointed by setMirrorItem is left alone).
+function relocateItems(
+  container: Record<string, unknown>,
+  indexes: Indexes,
+  entityId: string,
+  fromProject: string,
+  toProject: string,
+): void {
+  const fromNode = projectNode(projectsMap(container), fromProject);
+  for (const ref of indexes.itemsByEntity.get(entityId) ?? []) {
+    if (ref.project !== fromProject) {
+      continue;
+    }
+    let raw: unknown;
+    if (fromNode !== null) {
+      const port = portNode(fromNode, ref.portId);
+      if (port !== null) {
+        const items = itemsMap(port);
+        raw = items[ref.handle];
+        if (raw !== undefined) {
+          delete items[ref.handle];
+        }
+      }
+    }
+    if (raw === undefined) {
+      continue;
+    }
+    const toNode = ensureProjectNode(ensureProjects(container), toProject);
+    const toPort = ensurePortNode(toNode, ref.portId);
+    // A relocated item stamps the destination port's provider the same way a
+    // fresh item does.
+    if (typeof toPort.provider !== 'string' || toPort.provider === '') {
+      toPort.provider = ref.portId;
+    }
+    ensureItemsMap(toPort)[ref.handle] = raw;
+    ref.project = toProject;
+    indexes.byHandle.get(ref.portId)?.set(ref.handle, {
+      project: toProject,
+      entityId,
+    });
+  }
+}
+
 // Implements the sync state port against a namespaced key/value store. Storage
 // is project-nested and port-grouped: the entity holds only hub-side location;
 // each port holds its items keyed by handle. The adapter is the single writer:
@@ -744,17 +898,31 @@ export class SyncStateAdapter implements SyncStatePort {
       data[SYNC_STATE_KEY] = container;
     }
     let changed = false;
-    if (migrateEntities(container)) {
-      changed = true;
-    }
-    if (migrateV3(container)) {
-      changed = true;
-    }
-    // A store predating parent tracking carries no per-project marker; absent =
-    // pending. Seed every known project so EACH gets exactly one parent-aware
-    // fetch (PRB-3), and fold away the legacy container-level flag.
-    if (seedFullScanMarkers(container)) {
-      changed = true;
+    const version = container.version;
+    if (typeof version === 'number' && version > VERSION) {
+      // A NEWER container is never re-migrated: its schema is not ours to
+      // rewrite, and a downgrade would corrupt it. Leave it byte-for-byte and
+      // note it (the reads below still serve whatever the newer layout holds).
+      console.warn(
+        `SyncStateAdapter: registry version ${version} is newer than supported ${VERSION}; leaving it untouched`,
+      );
+    } else {
+      // Version-dispatched: v1 -> v2 -> v3 only for an unversioned or older
+      // container. Both functions also refuse a current/newer container, so a
+      // stray legacy key on a current store cannot strand a v2 entities map.
+      if (migrateEntities(container)) {
+        changed = true;
+      }
+      if (migrateV3(container)) {
+        changed = true;
+      }
+      // A store predating parent tracking carries no per-project marker;
+      // absent = pending. Seed every known project so EACH gets exactly one
+      // parent-aware fetch (PRB-3), and fold away the legacy container-level
+      // flag.
+      if (seedFullScanMarkers(container)) {
+        changed = true;
+      }
     }
     if (changed) {
       await this.maybeBackup();
@@ -831,8 +999,15 @@ export class SyncStateAdapter implements SyncStatePort {
       const previousProject = indexes.byEntityProject.get(record.id);
       const previousPath = indexes.byEntityPath.get(record.id);
 
-      // Re-key: drop the old path index and, on a project move, the old nested
-      // entity, before writing the new location. Items stay with their ports.
+      // A notePath resolves to exactly one entity: claiming an occupied path
+      // evicts the previous owner — its record AND its mirror items — so the
+      // path index can never hold two owners.
+      const occupant = indexes.byNotePath.get(record.notePath);
+      if (occupant !== undefined && occupant !== record.id) {
+        dropEntity(container, indexes, occupant);
+      }
+
+      // Re-key: drop the old path index before writing the new location.
       if (
         previousPath !== undefined &&
         previousPath !== record.notePath &&
@@ -840,7 +1015,11 @@ export class SyncStateAdapter implements SyncStatePort {
       ) {
         indexes.byNotePath.delete(previousPath);
       }
+      // A project move relocates the entity's item nodes to the new project's
+      // ports and updates the handle/reverse indexes, so an entity's items never
+      // strand under the old project and the handle index never desyncs.
       if (previousProject !== undefined && previousProject !== project) {
+        relocateItems(container, indexes, record.id, previousProject, project);
         const oldNode = projectNode(projectsMap(container), previousProject);
         if (oldNode !== null) {
           const oldEntities = entityMap(oldNode);
@@ -915,12 +1094,21 @@ export class SyncStateAdapter implements SyncStatePort {
       const container = await this.loadContainer();
       const indexes = this.indexes!;
 
-      // A handle is a port-unique address, so a new owner evicts the previous
-      // one's whole entity — matching the v2 record dedup, so no stale anchor
-      // survives a re-capture or a twin recreation.
+      // A (portId, handle) address has exactly one owner. Re-pointing it does
+      // NOT destroy the previous owner: promise 2 — no change is ever lost. The
+      // previous entity keeps its record and every OTHER mirror; only this
+      // address changes hands. Supersession is deliberate and explicit, via
+      // removeEntity — never a side effect of an address write (REG-6).
       const owner = indexes.byHandle.get(portId)?.get(handle);
-      if (owner !== undefined && owner.entityId !== item.entityId) {
-        dropEntity(container, indexes, owner.entityId);
+      if (owner !== undefined) {
+        if (owner.project !== projectName) {
+          // The same address now lives under another project: drop the stale
+          // node and its reverse ref before writing the new one.
+          removeItemNode(container, owner.project, portId, handle);
+          removeItemRef(indexes, owner.entityId, portId, handle);
+        } else if (owner.entityId !== item.entityId) {
+          removeItemRef(indexes, owner.entityId, portId, handle);
+        }
       }
 
       const node = ensureProjectNode(ensureProjects(container), projectName);
@@ -939,23 +1127,7 @@ export class SyncStateAdapter implements SyncStatePort {
       }
       handles.set(handle, { project: projectName, entityId: item.entityId });
 
-      const refs = indexes.itemsByEntity.get(item.entityId) ?? [];
-      if (
-        !refs.some(
-          (ref) =>
-            ref.project === projectName &&
-            ref.portId === portId &&
-            ref.handle === handle,
-        )
-      ) {
-        refs.push({
-          project: projectName,
-          portId,
-          handle,
-          entityId: item.entityId,
-        });
-        indexes.itemsByEntity.set(item.entityId, refs);
-      }
+      addItemRef(indexes, item.entityId, projectName, portId, handle);
       await this.persist();
     });
   }
@@ -979,22 +1151,7 @@ export class SyncStateAdapter implements SyncStatePort {
             handle,
             entityId,
           });
-          const refs = this.indexes!.itemsByEntity.get(entityId);
-          if (refs !== undefined) {
-            const filtered = refs.filter(
-              (ref) =>
-                !(
-                  ref.project === projectName &&
-                  ref.portId === portId &&
-                  ref.handle === handle
-                ),
-            );
-            if (filtered.length === 0) {
-              this.indexes!.itemsByEntity.delete(entityId);
-            } else {
-              this.indexes!.itemsByEntity.set(entityId, filtered);
-            }
-          }
+          removeItemRef(this.indexes!, entityId, portId, handle);
         }
       }
       await this.persist();

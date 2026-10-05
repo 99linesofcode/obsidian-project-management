@@ -276,6 +276,38 @@ describe('ApplyTaskToTodoistAction', () => {
       expect(storedBase?.body).toHaveLength(16);
     });
 
+    it('leaves the base untouched on an equal-state pass with no remote write', async () => {
+      // Given — a settled twin whose stored base already carries the desired
+      // diff view (settled by one pass)
+      const h = setup();
+      seedRecord(h.syncState, 'T9', null);
+      const current = todoistTask({
+        id: 'T9',
+        sectionId: 'S1',
+        content: 'Fix the bug',
+        labels: ['task'],
+      });
+      await h.action.executeTask({ task: task(), current, ...base });
+      h.taskManager.createTaskCalls = [];
+      h.taskManager.updateTaskCalls = [];
+      h.taskManager.moveTaskCalls = [];
+      h.taskManager.completeCalls = [];
+      h.taskManager.ensureLabelCalls = [];
+      const before = h.syncState.baseOf('uuid-42', 'todoist');
+
+      // When — the identical task is rendered again
+      await h.action.executeTask({ task: task(), current, ...base });
+
+      // Then — no remote mutation and the base is not rewritten: the same
+      // no-op-skip contract ApplyTaskToGithubAction enforces.
+      expect(h.taskManager.createTaskCalls).toEqual([]);
+      expect(h.taskManager.updateTaskCalls).toEqual([]);
+      expect(h.taskManager.moveTaskCalls).toEqual([]);
+      expect(h.taskManager.completeCalls).toEqual([]);
+      expect(h.taskManager.ensureLabelCalls).toEqual([]);
+      expect(h.syncState.baseOf('uuid-42', 'todoist')).toBe(before);
+    });
+
     it('updates content and labels only when they differ', async () => {
       // Given — a twin whose content and labels drifted
       const h = setup();
@@ -385,7 +417,7 @@ describe('ApplyTaskToTodoistAction', () => {
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.completedAt).toBeNull();
     });
 
-    it('evicts a stale record claiming the same todoist handle (the handle index)', async () => {
+    it('re-points a stale record’s todoist handle to the real record (the handle index)', async () => {
       // Given — a stale record elsewhere claiming the twin handle the real
       // record is about to mint
       const h = setup();
@@ -402,11 +434,11 @@ describe('ApplyTaskToTodoistAction', () => {
       // When — the real record creates and claims the twin
       await h.action.executeTask({ task: task(), current: null, ...base });
 
-      // Then — the handle index resolves to the real record and the stale one
-      // is evicted
+      // Then — the handle index resolves to the real record; the stale record
+      // loses the handle but survives (a collision re-points, never destroys)
       const owner = await h.syncState.findByMirror('todoist', 'T1');
       expect(owner?.id).toBe('uuid-42');
-      expect(await h.syncState.get('stale-uuid')).toBeNull();
+      expect(await h.syncState.get('stale-uuid')).not.toBeNull();
     });
 
     it('leaves an already-completed absent twin settled (no re-complete, no base rewrite)', async () => {

@@ -146,9 +146,18 @@ export class ApplyTaskToGithubAction {
       task.createdAt,
       task.updatedAt,
     );
+    const base = toDiffViewWithBody(pushed);
+    // The no-op skip path advances the base only when it must: a base that
+    // already carries this canonical diff view is left alone, so a quiet pass
+    // performs no registry write (SYNC-8). A stale digest still differs here and
+    // is repaired without an API write, matching ApplyTaskToTodoistAction's
+    // writeBase guard so both writers behave identically.
+    if (item.base !== null && item.base.canonical() === base.canonical()) {
+      return;
+    }
     await this.syncState.setMirrorItem(projectName, 'github', url, {
       entityId: record.id,
-      base: toDiffViewWithBody(pushed),
+      base,
     });
   }
 }
