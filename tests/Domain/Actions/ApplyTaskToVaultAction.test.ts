@@ -414,8 +414,8 @@ describe('ApplyTaskToVaultAction', () => {
     );
     seedRecord(syncState);
     const content = noteFor(task()).replace(
-      'affiliation: ["[[Acme Widgets]]"]',
-      'affiliation: ["[[Acme Widgets]]", "[[the-slice]]"]',
+      'affiliation: ["[[_Acme Widgets]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[the-slice]]"]',
     );
     vault.notes.set(notePath, content);
     const action = makeAction(vault, syncState);
@@ -458,7 +458,7 @@ describe('ApplyTaskToVaultAction', () => {
     // uuid
     expect(vault.written).toHaveLength(1);
     expect(vault.written[0]!.content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[the-slice]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[the-slice]]"]',
     );
     expect(syncState.baseOf('uuid-42', 'github')?.parent).toBe('slice-uuid');
   });

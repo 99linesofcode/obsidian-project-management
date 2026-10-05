@@ -338,7 +338,7 @@ describe('SyncGithubTasksAction', () => {
     // carries the parent uuid
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[the-slice]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[the-slice]]"]',
     );
     const record = await syncState.findByMirror('github', childUrl);
     expect(syncState.baseOf(record!.id, 'github')?.parent).toBe('uuid-parent');
@@ -370,7 +370,7 @@ describe('SyncGithubTasksAction', () => {
     // Then — no parent resolves, so the note stays top-level
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.content).toContain(
-      'affiliation: ["[[Acme Widgets]]"]',
+      'affiliation: ["[[_Acme Widgets]]"]',
     );
     const record = await syncState.findByMirror('github', childUrl);
     expect(syncState.baseOf(record!.id, 'github')?.parent).toBeNull();

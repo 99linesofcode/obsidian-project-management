@@ -310,7 +310,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
     // Then — the affiliation gains the slice link and the base records its uuid
     expect(vault.writes[0]!.content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[40-slice-1]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[40-slice-1]]"]',
     );
     expect(syncState.baseOf('uuid-task', 'todoist')?.parent).toBe('uuid-slice');
   });
@@ -336,7 +336,7 @@ describe('ApplyTodoistRemoteChangesAction', () => {
 
     // Then — the slice link is dropped
     expect(vault.writes[0]!.content).toContain(
-      'affiliation: ["[[Acme Widgets]]"]',
+      'affiliation: ["[[_Acme Widgets]]"]',
     );
     expect(syncState.baseOf('uuid-task', 'todoist')?.parent).toBeNull();
   });

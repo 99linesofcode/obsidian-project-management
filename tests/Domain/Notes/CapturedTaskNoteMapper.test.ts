@@ -17,7 +17,7 @@ describe('CapturedTaskNoteMapper', () => {
     expect(note.path).toBe('Projecten/Acme Widgets/taken/buy-milk.md');
     expect(note.content).toContain('categories: [taken]');
     expect(note.content).toContain('status: Unshaped');
-    expect(note.content).toContain('affiliation: ["[[Acme Widgets]]"]');
+    expect(note.content).toContain('affiliation: ["[[_Acme Widgets]]"]');
     expect(note.content).toContain(`synced: ${syncedAt}`);
     expect(note.content).toContain('todoist: T1');
     expect(note.content).not.toContain('url');
@@ -38,7 +38,7 @@ describe('CapturedTaskNoteMapper', () => {
 
     // Then — the affiliation carries the project then the slice
     expect(note.content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[40-slice-1]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[40-slice-1]]"]',
     );
   });
 });

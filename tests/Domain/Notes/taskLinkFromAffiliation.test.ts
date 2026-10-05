@@ -37,4 +37,31 @@ describe('taskLinkFromAffiliation', () => {
     // Then — there is no task link
     expect(link).toBeNull();
   });
+
+  it('does not mistake the renamed project entry for a parent link', () => {
+    // Given — an affiliation whose project entry was rewritten by the rename
+    // migration to the underscore form
+
+    // When — the task link is read
+    const link = taskLinkFromAffiliation(
+      ['[[_Acme Widgets]]', '[[42-fix-the-bug]]'],
+      'Acme Widgets',
+    );
+
+    // Then — the underscore project entry is filtered out, not returned
+    expect(link).toBe('42-fix-the-bug');
+  });
+
+  it('returns null when only the renamed project entry is affiliated', () => {
+    // Given — an affiliation carrying only the underscore project form
+
+    // When — the task link is read
+    const link = taskLinkFromAffiliation(
+      ['[[_Acme Widgets]]'],
+      'Acme Widgets',
+    );
+
+    // Then — there is no task link
+    expect(link).toBeNull();
+  });
 });

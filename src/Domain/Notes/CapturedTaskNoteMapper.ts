@@ -1,3 +1,4 @@
+import { projectAffiliationLink } from './projectAffiliation.js';
 import { slugify } from './TaskNoteMapper.js';
 
 export interface CapturedTaskNoteInput {
@@ -53,7 +54,7 @@ function capturedTaskNotePath(input: CapturedTaskNoteInput): string {
 
 // The affiliation list: the project first, then the slice when nested.
 function affiliationValue(input: CapturedTaskNoteInput): string {
-  const links = [`[[${input.projectName}]]`];
+  const links = [projectAffiliationLink(input.projectName)];
   if (input.sliceLink !== null) {
     links.push(`[[${input.sliceLink}]]`);
   }

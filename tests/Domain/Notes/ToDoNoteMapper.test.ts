@@ -42,7 +42,7 @@ describe('ToDoNoteMapper', () => {
       [
         '---',
         'categories: ["[[Todos.base|Todos]]"]',
-        'affiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]"]',
+        'affiliation: ["[[_Acme Widgets]]", "[[42-fix-the-bug]]"]',
         'status: open',
         'completed:',
         '---',
@@ -70,7 +70,7 @@ describe('ToDoNoteMapper', () => {
 
     // Then — the affiliation lists project, task, then parent to-do
     expect(content).toContain(
-      'affiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]", "[[9-parent]]"]',
+      'affiliation: ["[[_Acme Widgets]]", "[[42-fix-the-bug]]", "[[9-parent]]"]',
     );
   });
 
@@ -124,7 +124,7 @@ describe('ToDoNoteMapper.render', () => {
     expect(content).toBe(
       [
         '---',
-        'affiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]"]',
+        'affiliation: ["[[_Acme Widgets]]", "[[42-fix-the-bug]]"]',
         'status: open',
         'completed:',
         'created: 2026-09-18',
@@ -158,7 +158,7 @@ describe('ToDoNoteMapper.render', () => {
       [
         '---',
         'status: open',
-        'affiliation: ["[[Acme Widgets]]", "[[42-fix-the-bug]]"]',
+        'affiliation: ["[[_Acme Widgets]]", "[[42-fix-the-bug]]"]',
         'completed:',
         '---',
         '',
@@ -214,7 +214,7 @@ describe('ToDoNoteParser', () => {
     expect(parsed).toEqual({
       status: 'open',
       completed: null,
-      affiliation: ['[[Acme Widgets]]', '[[42-fix-the-bug]]'],
+      affiliation: ['[[_Acme Widgets]]', '[[42-fix-the-bug]]'],
     });
   });
 
@@ -244,7 +244,7 @@ describe('ToDoNoteParser', () => {
 
     // Then — all three affiliation links are preserved verbatim
     expect(parsed?.affiliation).toEqual([
-      '[[Acme Widgets]]',
+      '[[_Acme Widgets]]',
       '[[42-fix-the-bug]]',
       '[[9-parent]]',
     ]);

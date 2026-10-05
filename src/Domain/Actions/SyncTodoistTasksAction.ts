@@ -5,6 +5,7 @@ import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
 import { TodoistTaskMapper } from '../Mappers/TodoistTaskMapper.js';
 import { parseChecklist } from '../Notes/Checklist.js';
 import { hash } from '../Notes/hash.js';
+import { isProjectAffiliationEntry } from '../Notes/projectAffiliation.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { stripLink } from '../Notes/stripLink.js';
@@ -705,7 +706,7 @@ function parentStemFromAffiliation(
 ): string | null {
   const targets = affiliation
     .map(stripLink)
-    .filter((target) => target !== projectName);
+    .filter((target) => !isProjectAffiliationEntry(target, projectName));
   return targets[1] ?? null;
 }
 

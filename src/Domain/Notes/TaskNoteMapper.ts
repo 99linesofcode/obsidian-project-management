@@ -1,4 +1,5 @@
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
+import { projectAffiliationLink } from './projectAffiliation.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
 
 // The task fields a note is rendered from. Structural, so the canonical
@@ -99,7 +100,7 @@ function taskNotePath(task: TaskNoteSource, context: TaskNoteContext): string {
 // The parent is a bare stem link (the affiliation reader strips the wikilink and
 // resolves the stem through the registry), matching the to-do affiliation shape.
 function affiliationValue(context: TaskNoteContext): string {
-  const links = [`[[${context.projectName}]]`];
+  const links = [projectAffiliationLink(context.projectName)];
   if (context.parentLink !== undefined && context.parentLink !== null) {
     links.push(`[[${context.parentLink}]]`);
   }

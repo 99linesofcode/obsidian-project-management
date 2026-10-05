@@ -39,7 +39,7 @@ describe('TaskNoteMapper', () => {
         'categories: [taken]',
         'type: task',
         'status: Building',
-        'affiliation: ["[[Acme Widgets]]"]',
+        'affiliation: ["[[_Acme Widgets]]"]',
         'created: 2026-09-18',
         'synced: 2026-09-18T12:00:00Z',
         '---',
@@ -111,7 +111,7 @@ describe('TaskNoteMapper.render', () => {
     expect(content).toBe(
       [
         '---',
-        'affiliation: ["[[Acme Widgets]]"]',
+        'affiliation: ["[[_Acme Widgets]]"]',
         'type: task',
         'status: Building',
         'synced: 2026-09-18T12:00:00Z',
@@ -150,7 +150,7 @@ describe('TaskNoteMapper.render', () => {
         'status: Building',
         'created: 2026-09-18',
         'type: task',
-        'affiliation: ["[[Acme Widgets]]"]',
+        'affiliation: ["[[_Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',
         '---',
         'The bug happens when the widget is resized.',

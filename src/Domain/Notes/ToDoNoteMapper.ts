@@ -1,5 +1,6 @@
 import { slugify } from './TaskNoteMapper.js';
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
+import { projectAffiliationLink } from './projectAffiliation.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
 
 export interface ToDoNoteInput {
@@ -65,7 +66,7 @@ function toDoNotePath(input: ToDoNoteInput): string {
 // The affiliation list: the project first, then the parent task, then the
 // parent to-do when nested — each as a quoted wikilink.
 function affiliationValue(input: ToDoNoteInput): string {
-  const links = [`[[${input.projectName}]]`, `[[${input.taskLink}]]`];
+  const links = [projectAffiliationLink(input.projectName), `[[${input.taskLink}]]`];
   if (input.parentTodoLink !== undefined) {
     links.push(`[[${input.parentTodoLink}]]`);
   }

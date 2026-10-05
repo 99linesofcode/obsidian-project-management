@@ -33,13 +33,14 @@ export function projectNoteFromCache(
   };
 }
 
-// Projecten/<project>/_home.md or Archief/<project>/_home.md -> <project>.
-// A pm-marked note DIRECTLY inside a project folder is that project's home
-// note. The new convention names it _home.md; the legacy <name>.md (the note
-// named after its folder) is accepted alongside it, so no user file is renamed
-// unbidden. The project name is ALWAYS the folder segment, never the note's
-// basename — a folder rename needs no note rename, and a note deeper in the
-// tree (taken/, todos/, a subfolder) is not a project home.
+// Projecten/<project>/_<project>.md or Archief/<project>/_<project>.md ->
+// <project>. A pm-marked note DIRECTLY inside a project folder is that
+// project's home note. The convention names it _<project>.md; the legacy
+// `_home.md` and `<name>.md` forms are accepted alongside it, so discovery is
+// name-agnostic and the reconcile pass migrates the file. The project name is
+// ALWAYS the folder segment, never the note's basename — a folder rename needs
+// no note rename, and a note deeper in the tree (taken/, todos/, a subfolder)
+// is not a project home.
 function projectNameFromPath(path: string): string | null {
   const segments = path.split('/');
   if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {

@@ -28,7 +28,7 @@ describe('TaskNoteParser', () => {
       type: 'task',
       status: 'Building',
       body: task.body,
-      affiliation: ['[[Acme Widgets]]'],
+      affiliation: ['[[_Acme Widgets]]'],
     });
   });
 

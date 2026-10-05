@@ -394,7 +394,7 @@ function projectNote(
   archivedAt: string | null,
 ): ProjectNoteData {
   return {
-    path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_${projectName}.md`,
     projectName,
     archivedAt,
     pm: 'github',
@@ -446,11 +446,11 @@ function harness(): Harness {
     projectNote('Old Project', ''),
   ];
   vault.notes.set(
-    'Projecten/Acme Widgets/_home.md',
+    'Projecten/Acme Widgets/_Acme Widgets.md',
     '---\npm: github\ntodoist: P1\n---\n',
   );
   vault.notes.set(
-    'Archief/Old Project/_home.md',
+    'Archief/Old Project/_Old Project.md',
     '---\npm: github\ntodoist: P2\n---\n',
   );
   vault.notes.set(NOTE_PATH, taskNote());
