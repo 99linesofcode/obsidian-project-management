@@ -2,6 +2,7 @@ import { laneForSection } from '../Board/laneForSection.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
 import { ToDoData } from '../DataTransferObjects/ToDoData.js';
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
+import { typeFromLabels } from '../Labels/typeFromLabels.js';
 import { TodoistTaskMapper } from '../Mappers/TodoistTaskMapper.js';
 import { parseChecklist } from '../Notes/Checklist.js';
 import { hash } from '../Notes/hash.js';
@@ -111,28 +112,47 @@ export class SyncTodoistTasksAction {
 
   async execute(input: SyncTodoistTasksInput): Promise<void> {
     try {
+      // The pass's ONE Todoist snapshot: the completed-since window plus the
+      // active set, fetched once and shared by every absorber and the
+      // projection. The window is bounded by the cursor stored before this
+      // pass; only the completion absorber advances it, at the end. A fetch
+      // failure aborts the half before any absorber runs, so the cursor and the
+      // vault are left untouched and the window retries next tick.
+      const portState = await this.syncState.getPortState(
+        input.projectName,
+        'todoist',
+      );
+      const since = portState?.lastPoll || input.syncedAt;
+      const snapshot = {
+        completed: await this.taskManager.fetchCompletedTasks(
+          input.projectId,
+          since,
+        ),
+        active: await this.taskManager.fetchActiveTasks(input.projectId),
+      };
+
       // Remote -> vault first: a remote change is never clobbered by a
       // vault-side push. Both absorbers are retained (see the class comment).
       // Capture runs before the completion pass: it reads the completed-since
       // window from the stored cursor, which ApplyTodoistCompletion advances.
       await this.applyTodoistRemoteChanges.execute({
         projectName: input.projectName,
-        projectId: input.projectId,
         syncedAt: input.syncedAt,
+        snapshot,
       });
       await this.captureTodoistCreations.execute({
         projectName: input.projectName,
-        projectId: input.projectId,
         syncedAt: input.syncedAt,
+        snapshot,
       });
       await this.applyTodoistCompletion.execute({
         projectName: input.projectName,
-        projectId: input.projectId,
         syncedAt: input.syncedAt,
+        snapshot,
       });
 
-      // The probe: one active-task fetch serves both projections.
-      const active = await this.taskManager.fetchActiveTasks(input.projectId);
+      // The projection reads the pass's snapshot; no second fetch.
+      const active = snapshot.active;
       // The pass-level twin plan: projectTasks creates every top-level twin
       // first (phase A) and returns note-path -> twin-id for the whole tree, so
       // projectToDos can hang each to-do off a parent that exists in this pass
@@ -188,7 +208,6 @@ export class SyncTodoistTasksAction {
         provider: 'todoist',
         lastPoll: portState?.lastPoll ?? input.syncedAt,
         lanes: sections,
-        tags: portState?.tags ?? {},
       });
     }
 
@@ -218,7 +237,7 @@ export class SyncTodoistTasksAction {
         continue;
       }
       const type = typeFromLabels(issue.labels);
-      if (type === null) {
+      if (type === '') {
         continue;
       }
       const todoist = todoistByEntity.get(record.id);
@@ -790,15 +809,6 @@ export class SyncTodoistTasksAction {
       (await this.syncState.findMirrorItem('todoist', twinId))?.entityId ?? null
     );
   }
-}
-
-// The type a tracked issue carries: the `type: ` prefix is stripped (dt-09).
-function typeFromLabels(labels: string[]): string | null {
-  const label = labels.find((candidate) => candidate.startsWith('type:'));
-  if (label === undefined) {
-    return null;
-  }
-  return label.slice('type:'.length).trim();
 }
 
 // An affiliation parent link is a note stem; the parent note lives in the

@@ -289,7 +289,6 @@ describe('SyncStateAdapter', () => {
       provider: 'todoist',
       lastPoll: '2026-09-18T10:00:00Z',
       lanes: { Unshaped: 'S1' },
-      tags: {},
     };
 
     await adapter.setPortState('Acme Widgets', 'todoist', state);
@@ -533,7 +532,6 @@ describe('SyncStateAdapter migration', () => {
       provider: 'todoist',
       lastPoll: '2026-09-18T10:00:00Z',
       lanes: { Unshaped: 'S1' },
-      tags: {},
     });
     expect(
       container(snapshot())['todoistProject.Acme Widgets'],

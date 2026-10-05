@@ -351,7 +351,6 @@ export class ReconcileProjectLifecycleAction {
         provider: 'todoist',
         lastPoll: syncedAt,
         lanes: {},
-        tags: {},
       });
     }
   }

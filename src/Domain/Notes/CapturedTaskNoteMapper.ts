@@ -7,7 +7,6 @@ export interface CapturedTaskNoteInput {
   // The slice note's link target when the capture is nested under a slice;
   // null for a top-level capture.
   sliceLink: string | null;
-  todoistId: string;
 }
 
 export interface CapturedTaskNoteContext {
@@ -23,10 +22,10 @@ export interface CapturedTaskNote {
 
 // Maps a Todoist-created item onto a captured draft task note (dt-06). It is a
 // task note without a GitHub issue: no `url` frontmatter and no Status record —
-// the `todoist` anchor is its identity and the TodoistState record is its
-// bookkeeping. The body stays empty; a draft is a placeholder the user promotes
-// through the existing UC21 flow. Deliberately not template-rendered: the task
-// template carries a `url` field, and a captured draft must not advertise one.
+// the registry's todoist mirror is its identity and bookkeeping. The body stays
+// empty; a draft is a placeholder the user promotes through the existing UC21
+// flow. Deliberately not template-rendered: the task template carries a `url`
+// field, and a captured draft must not advertise one.
 export const CapturedTaskNoteMapper = {
   map(
     input: CapturedTaskNoteInput,
@@ -38,7 +37,6 @@ export const CapturedTaskNoteMapper = {
       `status: ${context.statusName}`,
       `affiliation: ${affiliationValue(input)}`,
       `synced: ${context.syncedAt}`,
-      `todoist: ${input.todoistId}`,
       '---',
       '',
     ].join('\n');

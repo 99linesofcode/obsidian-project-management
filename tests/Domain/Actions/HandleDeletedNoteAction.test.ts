@@ -23,7 +23,6 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return {
       url,
-      remoteId: 42,
       nodeId: 'I_kwDOAAAA42',
       title: 'Fix the Bug!',
       body: '',

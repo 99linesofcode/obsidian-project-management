@@ -165,7 +165,6 @@ const baseBody = 'The bug happens when the widget is resized.';
 function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   return {
     url,
-    remoteId: 42,
     nodeId: 'I_kwDOAAAA42',
     title: 'Fix the Bug!',
     body: baseBody,
@@ -322,7 +321,6 @@ describe('SyncGithubTasksAction', () => {
       issues: [
         issue({
           url: childUrl,
-          remoteId: 61,
           title: 'The child',
           parentUrl,
         }),
@@ -355,7 +353,6 @@ describe('SyncGithubTasksAction', () => {
       issues: [
         issue({
           url: childUrl,
-          remoteId: 61,
           title: 'The child',
           parentUrl: 'https://github.com/acme/widgets/issues/40',
         }),

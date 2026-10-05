@@ -543,7 +543,6 @@ function mapPortState(
     provider: typeof raw.provider === 'string' ? raw.provider : portId,
     lastPoll: stringOrNull(raw.lastPoll),
     lanes: stringMap(raw.lanes),
-    tags: stringMap(raw.tags),
   };
 }
 
@@ -1054,7 +1053,6 @@ export class SyncStateAdapter implements SyncStatePort {
       port.provider = state.provider;
       port.lastPoll = state.lastPoll;
       port.lanes = state.lanes;
-      port.tags = state.tags;
       await this.persist();
     });
   }

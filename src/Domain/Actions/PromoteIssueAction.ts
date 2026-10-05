@@ -2,6 +2,7 @@ import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
+import { typeFromLabels } from '../Labels/typeFromLabels.js';
 
 export interface PromoteIssueInput {
   url: string;
@@ -31,9 +32,7 @@ export class PromoteIssueAction {
       title: task.title,
       body: task.body,
       // The promoted label IS the vault-owned type (e.g. `type: task`).
-      type: input.label.startsWith('type:')
-        ? input.label.slice('type:'.length).trim()
-        : '',
+      type: typeFromLabels([input.label]),
       projectName: input.projectName,
       syncedAt: new Date().toISOString(),
       statusName: defaultStatusName(identity?.statusOptions ?? []),

@@ -2,6 +2,7 @@ import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
+import { typeFromLabels } from '../Labels/typeFromLabels.js';
 
 export interface PromoteCardInput {
   itemId: string;
@@ -32,15 +33,4 @@ export class PromoteCardAction {
       statusName: defaultStatusName(identity?.statusOptions ?? []),
     });
   }
-}
-
-// The vault-owned content type carried by the task's `type:` label, or '' when
-// the issue carries none (the GitHub half backfills it later).
-function typeFromLabels(labels: string[]): string {
-  for (const label of labels) {
-    if (label.startsWith('type:')) {
-      return label.slice('type:'.length).trim();
-    }
-  }
-  return '';
 }

@@ -22,14 +22,13 @@ export interface MirrorItem {
 
 // One port's per-project state. WHY these generic names: the schema never
 // names a concrete service — `provider` is the dedicated field identifying
-// the concrete service ('todoist', 'github', a future app), `lanes` is the
-// generic term for board columns/sections, and `tags` for labels/categories
-// (future). A provider name is a VALUE argument, never a namespace key.
+// the concrete service ('todoist', 'github', a future app), and `lanes` is the
+// generic term for board columns/sections. A provider name is a VALUE
+// argument, never a namespace key.
 export interface PortState {
   provider: string;
   lastPoll: string | null;
   lanes: Record<string, string>;
-  tags: Record<string, string>;
 }
 
 // The core's need for sync state: project-nested, port-grouped storage. The

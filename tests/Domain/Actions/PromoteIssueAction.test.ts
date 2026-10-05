@@ -17,7 +17,6 @@ class FakePort implements ProjectManagementPort {
   addedLabels: Array<{ url: string; label: string }> = [];
   task: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/42',
-    remoteId: 42,
     nodeId: 'I_kwDOAAAA42',
     title: 'Fix the Bug!',
     body: 'The bug happens when the widget is resized.',

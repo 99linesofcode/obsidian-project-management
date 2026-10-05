@@ -17,7 +17,6 @@ export interface TodoistTaskData {
   content: string;
   labels: string[];
   isCompleted: boolean;
-  url: string;
   addedAt: string;
   updatedAt: string;
   completedAt: string | null;

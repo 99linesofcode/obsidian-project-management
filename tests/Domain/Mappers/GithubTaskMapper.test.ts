@@ -7,7 +7,6 @@ const DONE_LANE = 'Shipped';
 
 const issue: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
-  remoteId: 42,
   nodeId: 'I_kwDOAAAA42',
   title: 'Fix the bug',
   body: 'The bug happens on resize.',
@@ -98,44 +97,5 @@ describe('GithubTaskMapper', () => {
 
     // Then — the type is stripped and trimmed
     expect(task.type).toBe('bug');
-  });
-
-  it('round-trips the issue fields and lane through render', () => {
-    // Given — a canonical task parsed from an issue and card
-    const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
-
-    // When — it is rendered back
-    const rendered = GithubTaskMapper.render(task);
-
-    // Then — the issue fields and lane are recovered
-    expect(rendered).toEqual({
-      title: 'Fix the bug',
-      body: 'The bug happens on resize.',
-      state: 'open',
-      status: 'Building',
-    });
-  });
-
-  it('renders a completed task as a closed issue', () => {
-    // Given — a completed canonical task
-    const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
-    task.completedAt = '';
-
-    // When — it is rendered
-    const rendered = GithubTaskMapper.render(task);
-
-    // Then — the issue state is closed
-    expect(rendered.state).toBe('closed');
-  });
-
-  it('renders an empty lane as no status', () => {
-    // Given — a canonical task with no lane
-    const task = GithubTaskMapper.parse(issue, null, DONE_LANE);
-
-    // When — it is rendered
-    const rendered = GithubTaskMapper.render(task);
-
-    // Then — the status is null
-    expect(rendered.status).toBeNull();
   });
 });

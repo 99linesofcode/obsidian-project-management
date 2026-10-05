@@ -244,7 +244,6 @@ export class FakeSyncState implements SyncStatePort {
           provider: 'todoist',
           lastPoll: legacy.lastCompletedPoll,
           lanes: legacy.sections,
-          tags: {},
         };
   }
 

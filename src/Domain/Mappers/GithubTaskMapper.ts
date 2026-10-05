@@ -1,19 +1,13 @@
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
 import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
+import { typeFromLabels } from '../Labels/typeFromLabels.js';
 
 // The GitHub side of the canonical task: an issue plus its board card. The
 // issue carries the content (title, body, state, labels); the card carries the
-// lane (its Status option name). A card-less issue has no lane. Two-way: parse
-// maps the provider pair onto TaskData, render maps TaskData back onto the
-// issue fields and the lane.
-export interface GithubTaskRender {
-  title: string;
-  body: string;
-  state: 'open' | 'closed';
-  status: string | null;
-}
-
+// lane (its Status option name). A card-less issue has no lane. One-way: parse
+// maps the provider pair onto TaskData; the writers build their payloads
+// inline, so there is no render half.
 export const GithubTaskMapper = {
   // The remote live view. Identity (id, notePath) is left empty: the GitHub
   // half composes it from the registry record, never from the fetch. The done
@@ -47,22 +41,4 @@ export const GithubTaskMapper = {
       issue.lastEditedAt,
     );
   },
-
-  render(task: TaskData): GithubTaskRender {
-    return {
-      title: task.title,
-      body: task.body,
-      // The completion invariant makes the stamp and the done lane equivalent.
-      state: task.completedAt !== null ? 'closed' : 'open',
-      status: task.status === '' ? null : task.status,
-    };
-  },
 };
-
-// The vault-owned content type carried by an issue's `type:*` label, or '' when
-// it carries none. The prefix is stripped and the remainder trimmed, so both
-// the spaced (`type: task`) and legacy (`type:task`) conventions resolve.
-export function typeFromLabels(labels: string[]): string {
-  const label = labels.find((candidate) => candidate.startsWith('type:'));
-  return label === undefined ? '' : label.slice('type:'.length).trim();
-}

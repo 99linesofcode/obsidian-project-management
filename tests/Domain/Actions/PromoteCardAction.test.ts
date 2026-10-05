@@ -17,7 +17,6 @@ class FakePort implements ProjectManagementPort {
   promoted: Array<{ itemId: string; repoNodeId: string }> = [];
   task: GithubTaskData = {
     url: 'https://github.com/acme/widgets/issues/50',
-    remoteId: 50,
     nodeId: 'I_kwDOAAAA50',
     title: 'An idea',
     body: 'The draft body.',

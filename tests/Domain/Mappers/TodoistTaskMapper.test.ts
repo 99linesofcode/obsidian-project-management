@@ -7,7 +7,7 @@ const task = todoistTask({
   id: 'T1',
   sectionId: 'S1',
   content: 'Fix the bug',
-  labels: ['task'],
+  labels: ['type: task'],
   addedAt: '2026-09-18T09:00:00Z',
   updatedAt: '2026-09-18T10:00:00Z',
 });
@@ -78,56 +78,5 @@ describe('TodoistTaskMapper', () => {
 
     // Then — the parent twin id is carried for the action to resolve to a uuid
     expect(parsed.parent).toBe('T0');
-  });
-
-  it('parses a to-do with its completion status and mirror handle', () => {
-    // Given — a completed to-do twin
-
-    // When — it is parsed
-    const todo = TodoistTaskMapper.parseToDo(
-      { ...task, isCompleted: true, completedAt: '2026-09-24T11:00:00Z' },
-      null,
-    );
-
-    // Then — the canonical to-do is completed and its identity is composed by
-    // the half
-    expect(todo.mirrors).toEqual({ todoist: 'T1' });
-    expect(todo.title).toBe('Fix the bug');
-    expect(todo.status).toBe('completed');
-    expect(todo.completedAt).toBe('2026-09-24T11:00:00Z');
-    expect(todo.task).toBeNull();
-    expect(todo.parentTodo).toBeNull();
-  });
-
-  it('round-trips a task through render', () => {
-    // Given — a canonical task parsed from a Todoist task
-    const parsed = TodoistTaskMapper.parseTask(task, section, null);
-
-    // When — it is rendered back
-    const rendered = TodoistTaskMapper.renderTask(parsed, 'P1', 'S1');
-
-    // Then — the create payload recovers content, type label and placement
-    expect(rendered).toEqual({
-      projectId: 'P1',
-      content: 'Fix the bug',
-      labels: ['task'],
-      sectionId: 'S1',
-    });
-  });
-
-  it('round-trips a to-do through render', () => {
-    // Given — a canonical to-do
-    const todo = TodoistTaskMapper.parseToDo(task, null);
-
-    // When — it is rendered back
-    const rendered = TodoistTaskMapper.renderToDo(todo, 'P1', 'T0');
-
-    // Then — the create payload is a todo-labeled subtask
-    expect(rendered).toEqual({
-      projectId: 'P1',
-      parentId: 'T0',
-      content: 'Fix the bug',
-      labels: ['todo'],
-    });
   });
 });

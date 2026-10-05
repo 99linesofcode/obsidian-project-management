@@ -164,9 +164,6 @@ export class TodoistAdapter implements TaskManagerPort {
     if (input.labels !== undefined) {
       body.labels = input.labels;
     }
-    if (input.description !== undefined) {
-      body.description = input.description;
-    }
     const response = await this.transport.post('/tasks', JSON.stringify(body));
     return this.mapTask(this.requireRecord(response, 'create task'), false);
   }
@@ -290,10 +287,6 @@ export class TodoistAdapter implements TaskManagerPort {
       content: this.stringField(raw, 'content'),
       labels: this.stringList(raw.labels),
       isCompleted: completed || raw.checked === true,
-      url:
-        typeof raw.url === 'string'
-          ? raw.url
-          : `https://app.todoist.com/app/task/${id}`,
       // The provider clocks the conflict ladder may use. A missing clock is ''
       // rather than null so the transport shape stays uniform.
       addedAt: this.stringOrEmpty(raw.added_at),

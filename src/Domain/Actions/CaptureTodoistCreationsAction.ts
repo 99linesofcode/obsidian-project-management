@@ -1,11 +1,11 @@
 import { laneForSection } from '../Board/laneForSection.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
+import type { TodoistTaskSnapshotData } from '../DataTransferObjects/TodoistTaskSnapshotData.js';
 import { CapturedTaskNoteMapper } from '../Notes/CapturedTaskNoteMapper.js';
 import { parseChecklist, renderChecklist } from '../Notes/Checklist.js';
 import { freePath } from '../Notes/freePath.js';
 import { stemOf } from '../Notes/stemOf.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
-import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { ToDoNoteMapper } from '../Notes/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
@@ -13,13 +13,14 @@ import { withBody } from '../Notes/withBody.js';
 import { toDiffViewWithBody } from '../Reconciliation/toDiffView.js';
 import type { TodoistTaskData } from '../DataTransferObjects/TodoistTaskData.js';
 import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
-import type { TaskManagerPort } from '../Ports/TaskManagerPort.js';
 import type { VaultPort } from '../Ports/VaultPort.js';
 
 export interface CaptureTodoistCreationsInput {
   projectName: string;
-  projectId: string;
   syncedAt: string;
+  // The pass's shared Todoist snapshot. The half fetched the active and
+  // completed sets once; this absorber never lists the project itself.
+  snapshot: TodoistTaskSnapshotData;
 }
 
 // The label the task projection puts on a slice twin (dt-09), used to tell a
@@ -48,7 +49,6 @@ const SLICE_LABEL = 'slice';
 // section is created from the Todoist side.
 export class CaptureTodoistCreationsAction {
   constructor(
-    private readonly taskManager: TaskManagerPort,
     private readonly vault: VaultPort,
     private readonly syncState: SyncStatePort,
     private readonly todoTemplatePath: string,
@@ -61,15 +61,13 @@ export class CaptureTodoistCreationsAction {
       'todoist',
     );
     const sections = portState?.lanes ?? {};
-    const since = portState?.lastPoll || input.syncedAt;
 
-    const completed = await this.taskManager.fetchCompletedTasks(
-      input.projectId,
-      since,
-    );
-    const active = await this.taskManager.fetchActiveTasks(input.projectId);
-    // Active last, so a reopened item reads as active.
-    const items = dedupeById([...completed, ...active]);
+    // The pass's snapshot was fetched upstream, active last so a reopened item
+    // reads as active.
+    const items = dedupeById([
+      ...input.snapshot.completed,
+      ...input.snapshot.active,
+    ]);
     if (items.length === 0) {
       return;
     }
@@ -176,7 +174,6 @@ export class CaptureTodoistCreationsAction {
         title: item.content,
         projectName: input.projectName,
         sliceLink,
-        todoistId: item.id,
       },
       { syncedAt: input.syncedAt, statusName },
     );
@@ -236,13 +233,6 @@ export class CaptureTodoistCreationsAction {
     );
     const path = await freePath(this.vault, rendered.path);
     await this.vault.createNote(path, rendered.content);
-    await stampFrontmatterField(
-      this.vault,
-      path,
-      rendered.content,
-      'todoist',
-      item.id,
-    );
     await this.addChecklistItem(
       `Projecten/${input.projectName}/taken/${taskLink}.md`,
       item,

@@ -131,9 +131,14 @@ class FakeTaskManager implements TaskManagerPort {
   // children are flattened BEFORE the slice twin is deleted.
   mutations: string[] = [];
   failMove = false;
+  // Counters so a test can pin the one-snapshot-per-pass contract.
+  activeFetches = 0;
+  completedFetches = 0;
+  failCompleted = false;
   private nextTaskId = 1;
 
   async fetchActiveTasks(): Promise<TodoistTaskData[]> {
+    this.activeFetches++;
     return this.active;
   }
   async fetchProjects(): Promise<TodoistProjectData[]> {
@@ -161,6 +166,10 @@ class FakeTaskManager implements TaskManagerPort {
     throw new Error('not used in this test');
   }
   async fetchCompletedTasks(): Promise<TodoistTaskData[]> {
+    this.completedFetches++;
+    if (this.failCompleted) {
+      throw new Error('completed-since fetch failed');
+    }
     return [];
   }
   async createTask(input: CreateTodoistTaskData): Promise<TodoistTaskData> {
@@ -285,7 +294,6 @@ const sections = { Unshaped: 'S1', Building: 'S2', Shipped: 'S3' };
 function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   return {
     url: taskUrl,
-    remoteId: 42,
     nodeId: 'I',
     title: 'Fix the bug',
     body: '',
@@ -605,8 +613,8 @@ describe('SyncTodoistTasksAction', () => {
     const sliceUrl = 'https://github.com/acme/widgets/issues/40';
     const childUrl = 'https://github.com/acme/widgets/issues/42';
     h.projectManagement.issues = [
-      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
-      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+      issue({ url: sliceUrl, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, title: 'The child' }),
     ];
     h.vault.notes.set(
       slicePath,
@@ -642,10 +650,10 @@ describe('SyncTodoistTasksAction', () => {
     const subUrl = 'https://github.com/acme/widgets/issues/42';
     const subSubUrl = 'https://github.com/acme/widgets/issues/43';
     h.projectManagement.issues = [
-      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
-      issue({ url: taskUrl, remoteId: 41, title: 'The task' }),
-      issue({ url: subUrl, remoteId: 42, title: 'The sub' }),
-      issue({ url: subSubUrl, remoteId: 43, title: 'The sub-sub' }),
+      issue({ url: sliceUrl, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: taskUrl, title: 'The task' }),
+      issue({ url: subUrl, title: 'The sub' }),
+      issue({ url: subSubUrl, title: 'The sub-sub' }),
     ];
     h.vault.notes.set(
       slicePath,
@@ -691,8 +699,8 @@ describe('SyncTodoistTasksAction', () => {
     const sliceUrl = 'https://github.com/acme/widgets/issues/40';
     const childUrl = 'https://github.com/acme/widgets/issues/42';
     h.projectManagement.issues = [
-      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
-      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+      issue({ url: sliceUrl, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, title: 'The child' }),
     ];
     h.vault.notes.set(
       slicePath,
@@ -738,8 +746,8 @@ describe('SyncTodoistTasksAction', () => {
     const sliceUrl = 'https://github.com/acme/widgets/issues/40';
     const childUrl = 'https://github.com/acme/widgets/issues/42';
     h.projectManagement.issues = [
-      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
-      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+      issue({ url: sliceUrl, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, title: 'The child' }),
     ];
     h.vault.notes.set(
       slicePath,
@@ -781,8 +789,8 @@ describe('SyncTodoistTasksAction', () => {
     const sliceUrl = 'https://github.com/acme/widgets/issues/40';
     const childUrl = 'https://github.com/acme/widgets/issues/42';
     h.projectManagement.issues = [
-      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
-      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+      issue({ url: sliceUrl, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: childUrl, title: 'The child' }),
     ];
     h.vault.notes.set(
       slicePath,
@@ -857,7 +865,7 @@ describe('SyncTodoistTasksAction', () => {
     const sliceUrl = 'https://github.com/acme/widgets/issues/40';
     const todoPath = 'Projecten/Acme Widgets/todos/step-one.md';
     h.projectManagement.issues = [
-      issue({ url: sliceUrl, remoteId: 40, title: 'The slice', labels: ['type: slice'] }),
+      issue({ url: sliceUrl, title: 'The slice', labels: ['type: slice'] }),
     ];
     h.vault.notes.set(
       slicePath,
@@ -900,8 +908,8 @@ describe('SyncTodoistTasksAction', () => {
     const parentUrl = 'https://github.com/acme/widgets/issues/40';
     const childUrl = 'https://github.com/acme/widgets/issues/42';
     h.projectManagement.issues = [
-      issue({ url: parentUrl, remoteId: 40, title: 'The parent' }),
-      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+      issue({ url: parentUrl, title: 'The parent' }),
+      issue({ url: childUrl, title: 'The child' }),
     ];
     h.vault.notes.set(
       parentPath,
@@ -1007,12 +1015,10 @@ describe('SyncTodoistTasksAction', () => {
 
     const parentIssue = issue({
       url: parentUrl,
-      remoteId: 40,
       title: 'The parent',
     });
     const childIssue = issue({
       url: childUrl,
-      remoteId: 42,
       title: 'The child',
       parentUrl,
     });
@@ -1124,6 +1130,37 @@ describe('SyncTodoistTasksAction', () => {
     expect(h.taskManager.updateTaskCalls).toEqual([]);
     expect(h.taskManager.moveTaskCalls).toEqual([]);
     expect(h.taskManager.completeCalls).toEqual([]);
+  });
+
+  it('fetches the pass snapshot once and hands it to every consumer', async () => {
+    // Given — a tracked issue with a task note
+    const h = harness();
+    h.projectManagement.issues = [issue()];
+    h.vault.notes.set(taskPath, taskNote('Building'));
+    seedTask(h.syncState, taskUrl, taskPath, 'uuid-42');
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the project's active and completed sets were listed exactly once
+    // each, however many absorbers and projections consumed them
+    expect(h.taskManager.completedFetches).toBe(1);
+    expect(h.taskManager.activeFetches).toBe(1);
+  });
+
+  it('aborts the half before any absorber when the snapshot fetch fails', async () => {
+    // Given — a failing completed-since fetch
+    const h = harness();
+    h.taskManager.failCompleted = true;
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — no absorber or projection ran and no bookkeeping advanced, so the
+    // window retries next tick
+    expect(h.events).toEqual([]);
+    expect(h.writer.taskCalls).toEqual([]);
+    expect(h.syncState.portStateSets).toEqual([]);
   });
 
   it('swallows a step failure so the GitHub half is never affected', async () => {
