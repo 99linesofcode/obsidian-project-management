@@ -59,6 +59,8 @@ export class ApplyTaskToVaultAction {
     // idempotent (registry look-up before create), so an already-registered
     // issue is left untouched.
     if (input.current === null) {
+      const parent = await this.resolveParent(input);
+      const parentLink = await this.parentLink(parent);
       await this.createTaskNote.execute({
         url: await this.issueUrl(input, record),
         title: input.task.title,
@@ -67,18 +69,14 @@ export class ApplyTaskToVaultAction {
         projectName: input.projectName,
         syncedAt: input.syncedAt,
         statusName: input.task.status,
+        ...(parentLink === null ? {} : { parentLink }),
       });
       const created = await this.createdRecord(input, record);
       const path = created?.notePath ?? this.mappedPath(input);
       await this.refreshRecord(
         input,
         created,
-        this.appliedTask(
-          input,
-          created?.id ?? input.task.id,
-          path,
-          await this.resolveParent(input),
-        ),
+        this.appliedTask(input, created?.id ?? input.task.id, path, parent),
       );
       await this.completeTaskCascade.execute({
         notePath: path,
@@ -90,6 +88,10 @@ export class ApplyTaskToVaultAction {
 
     const id = record?.id ?? input.current.id ?? input.task.id;
     const parent = await this.resolveParent(input);
+    // The affiliation link for the resolved parent, so a pull on the parent
+    // dimension rewrites the note's affiliation to the new parent (and a pull
+    // on any other field preserves it). The link is the parent note's stem.
+    const parentLink = await this.parentLink(parent);
     // The note body is the remote body with vault links re-attached, so a
     // remote-driven rewrite keeps the checklist items linked to their to-dos.
     const linkedBody = await this.linkedBody(
@@ -109,6 +111,7 @@ export class ApplyTaskToVaultAction {
         projectName: input.projectName,
         syncedAt: input.syncedAt,
         statusName: input.task.status,
+        ...(parentLink === null ? {} : { parentLink }),
       },
     );
 
@@ -311,6 +314,18 @@ export class ApplyTaskToVaultAction {
       }
     }
     return null;
+  }
+
+  // The affiliation link for a parent uuid: the parent note's stem. WHY a stem
+  // and not the uuid: the note format is path-based presentation, so the uuid is
+  // resolved to its current location at render time. A parent the registry no
+  // longer knows renders no affiliation link; the next pass retries.
+  private async parentLink(parentUuid: string | null): Promise<string | null> {
+    if (parentUuid === null) {
+      return null;
+    }
+    const record = await this.syncState.getEntity(parentUuid);
+    return record === null ? null : stemOf(record.notePath);
   }
 
   // Re-attaches vault links to the remote body's checklist items. A to-do's

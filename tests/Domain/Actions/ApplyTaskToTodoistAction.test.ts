@@ -319,6 +319,27 @@ describe('ApplyTaskToTodoistAction', () => {
       ]);
     });
 
+    it('moves an existing twin when its parent changes', async () => {
+      // Given — a settled top-level twin that the vault now nests under a
+      // parent twin (the sub-issue repair path)
+      const h = setup();
+      seedRecord(h.syncState, 'T9', taskData({ status: 'Building' }));
+
+      // When — the task is rendered with a parent
+      await h.action.executeTask({
+        task: task(),
+        current: todoistTask({ id: 'T9', sectionId: 'S1' }),
+        ...base,
+        sectionId: null,
+        parentId: 'T-parent',
+      });
+
+      // Then — the twin is moved under the parent
+      expect(h.taskManager.moveTaskCalls).toEqual([
+        { id: 'T9', to: { parentId: 'T-parent' } },
+      ]);
+    });
+
     it('completes the twin and advances the base when the vault completed the task', async () => {
       // Given — an active twin the vault marked done
       const h = setup();

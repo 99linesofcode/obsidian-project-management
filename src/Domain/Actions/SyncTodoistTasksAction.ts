@@ -226,6 +226,10 @@ export class SyncTodoistTasksAction {
     }
 
     const slices = items.filter((item) => item.type === 'slice');
+    // A child is any task whose affiliation names a parent — a slice or another
+    // task (a GitHub sub-issue of either). The parent's type does not matter:
+    // phase B resolves the named parent's twin and hangs the child under it, so
+    // placement generalizes from slices to any tracked parent.
     const children = items.filter(
       (item) => item.type !== 'slice' && item.sliceLink !== null,
     );
@@ -257,8 +261,10 @@ export class SyncTodoistTasksAction {
       taskTwinIdByNotePath.set(item.notePath, taskId);
     }
 
-    // Phase B — slice-member tasks attach to the slice twin phase A created (or
-    // an existing one the map already carries).
+    // Phase B — affiliated tasks attach to the parent twin phase A created (or
+    // an existing one the map already carries). The parent is the affiliation
+    // link, so a sub-issue of a slice and a sub-issue of a plain task flow the
+    // same way.
     for (const item of children) {
       const slicePath = sliceNotePath(input.projectName, item.sliceLink!);
       const parentId =

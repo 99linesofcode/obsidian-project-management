@@ -483,6 +483,7 @@ function harness(): Harness {
         lastEditedAt: UPDATED_AT,
         updatedAt: UPDATED_AT,
         labels: ['type: task'],
+        parentUrl: null,
       },
     ],
     cards: [

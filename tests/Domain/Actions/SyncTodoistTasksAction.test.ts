@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { SyncTodoistTasksAction } from '../../../src/Domain/Actions/SyncTodoistTasksAction.js';
 import { ApplyTaskToTodoistAction } from '../../../src/Domain/Actions/ApplyTaskToTodoistAction.js';
+import { SyncGithubTasksAction } from '../../../src/Domain/Actions/SyncGithubTasksAction.js';
+import { ApplyTaskToGithubAction } from '../../../src/Domain/Actions/ApplyTaskToGithubAction.js';
+import { ApplyTaskToVaultAction } from '../../../src/Domain/Actions/ApplyTaskToVaultAction.js';
+import { CompleteTaskCascadeAction } from '../../../src/Domain/Actions/CompleteTaskCascadeAction.js';
+import { CreateTaskNoteAction } from '../../../src/Domain/Actions/CreateTaskNoteAction.js';
+import { VerdictResolver } from '../../../src/Domain/Reconciliation/VerdictResolver.js';
+import type { BoardItemData } from '../../../src/Domain/DataTransferObjects/BoardItemData.js';
+import type { ProjectDetailData } from '../../../src/Domain/DataTransferObjects/ProjectDetailData.js';
 import type {
   ApplyTaskToTodoistInput,
   ApplyToDoToTodoistInput,
@@ -62,6 +70,7 @@ class FakeVault implements VaultPort {
 
 class FakeProjectManagement implements ProjectManagementPort {
   issues: GithubTaskData[] = [];
+  detail: ProjectDetailData = { issues: [], cards: [] };
 
   async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return this.issues;
@@ -69,8 +78,8 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchProjectDetail(): Promise<never> {
-    throw new Error('not used in this test');
+  async fetchProjectDetail(): Promise<ProjectDetailData> {
+    return this.detail;
   }
   async fetchProjectStates(): Promise<Map<string, ProjectStateData>> {
     return new Map();
@@ -252,6 +261,7 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
     lastEditedAt: '2026-09-18T11:00:00Z',
     updatedAt: '2026-09-18T11:00:00Z',
     labels: ['type: task'],
+    parentUrl: null,
     ...overrides,
   };
 }
@@ -579,6 +589,191 @@ describe('SyncTodoistTasksAction', () => {
     expect(h.writer.order).toEqual(['task:The slice', 'task:The child']);
     expect(h.writer.taskCalls[0]!.parentId).toBeNull();
     expect(h.writer.taskCalls[1]!.parentId).toBe(h.writer.taskReturns[0]);
+  });
+
+  it('nests a sub-issue under a non-slice parent task twin', async () => {
+    // Given — a plain parent task and a child affiliated to it (a GitHub
+    // sub-issue of a non-slice task)
+    const h = harness();
+    const parentPath = 'Projecten/Acme Widgets/taken/40-the-parent.md';
+    const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
+    const parentUrl = 'https://github.com/acme/widgets/issues/40';
+    const childUrl = 'https://github.com/acme/widgets/issues/42';
+    h.projectManagement.issues = [
+      issue({ url: parentUrl, remoteId: 40, title: 'The parent' }),
+      issue({ url: childUrl, remoteId: 42, title: 'The child' }),
+    ];
+    h.vault.notes.set(
+      parentPath,
+      TaskNoteMapper.map(
+        { type: 'task', title: 'the parent', body: '', createdAt: null },
+        { projectName, syncedAt, statusName: 'Building' },
+      ).content,
+    );
+    h.vault.notes.set(
+      childPath,
+      TaskNoteMapper.map(
+        { type: 'task', title: 'the child', body: '', createdAt: null },
+        { projectName, syncedAt, statusName: 'Building' },
+      ).content.replace(
+        'affiliation: ["[[Acme Widgets]]"]',
+        'affiliation: ["[[Acme Widgets]]", "[[40-the-parent]]"]',
+      ),
+    );
+    seedTask(h.syncState, parentUrl, parentPath, 'uuid-parent');
+    seedTask(h.syncState, childUrl, childPath, 'uuid-child');
+
+    // When — the Todoist half runs
+    await h.action.execute(input);
+
+    // Then — the parent is created top-level and the child hangs under it
+    expect(h.writer.order).toEqual(['task:The parent', 'task:The child']);
+    expect(h.writer.taskCalls[0]!.parentId).toBeNull();
+    expect(h.writer.taskCalls[1]!.parentId).toBe(h.writer.taskReturns[0]);
+  });
+
+  it('converges an already-adopted sub-issue onto its parent twin in two passes', async () => {
+    // Given — a tracked parent and an already-adopted sub-issue whose note has
+    // no affiliation yet and whose twin still sits top-level
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    const taskManager = new FakeTaskManager();
+    const todoistWriter = new ApplyTaskToTodoistAction(
+      taskManager,
+      vault,
+      syncState,
+    );
+
+    const parentUrl = 'https://github.com/acme/widgets/issues/40';
+    const childUrl = 'https://github.com/acme/widgets/issues/42';
+    const parentPath = 'Projecten/Acme Widgets/taken/the-parent.md';
+    const childPath = 'Projecten/Acme Widgets/taken/the-child.md';
+    vault.notes.set(
+      parentPath,
+      TaskNoteMapper.map(
+        { type: 'task', title: 'the parent', body: '', createdAt: null },
+        { projectName, syncedAt, statusName: 'Building' },
+      ).content,
+    );
+    vault.notes.set(
+      childPath,
+      TaskNoteMapper.map(
+        { type: 'task', title: 'the child', body: '', createdAt: null },
+        { projectName, syncedAt, statusName: 'Building' },
+      ).content,
+    );
+
+    const parentBase = toDiffViewWithBody(
+      taskData({
+        id: 'uuid-parent',
+        notePath: parentPath,
+        title: 'The parent',
+        status: 'Building',
+        type: 'task',
+      }),
+    );
+    const childBase = toDiffViewWithBody(
+      taskData({
+        id: 'uuid-child',
+        notePath: childPath,
+        title: 'The child',
+        status: 'Building',
+        type: 'task',
+      }),
+    );
+    syncState.seed(entityRecord({ id: 'uuid-parent', notePath: parentPath }), {
+      github: { handle: parentUrl, base: parentBase },
+      todoist: { handle: 'T-parent', base: parentBase },
+    });
+    syncState.seed(entityRecord({ id: 'uuid-child', notePath: childPath }), {
+      github: { handle: childUrl, base: childBase },
+      todoist: { handle: 'T-child', base: childBase },
+    });
+    taskManager.active = [
+      todoistTask({
+        id: 'T-parent',
+        content: 'The parent',
+        sectionId: 'S2',
+        labels: ['task'],
+      }),
+      todoistTask({
+        id: 'T-child',
+        content: 'The child',
+        sectionId: 'S2',
+        labels: ['task'],
+      }),
+    ];
+
+    const parentIssue = issue({
+      url: parentUrl,
+      remoteId: 40,
+      title: 'The parent',
+    });
+    const childIssue = issue({
+      url: childUrl,
+      remoteId: 42,
+      title: 'The child',
+      parentUrl,
+    });
+    projectManagement.issues = [parentIssue, childIssue];
+    const cards: BoardItemData[] = [
+      {
+        itemId: 'C1',
+        type: 'ISSUE',
+        issueUrl: parentUrl,
+        statusOptionName: 'Building',
+        updatedAt: null,
+      },
+      {
+        itemId: 'C2',
+        type: 'ISSUE',
+        issueUrl: childUrl,
+        statusOptionName: 'Building',
+        updatedAt: null,
+      },
+    ];
+    projectManagement.detail = { issues: [parentIssue, childIssue], cards };
+
+    // Pass 1 — the GitHub half sees the parent relation and pulls it into the
+    // child's affiliation
+    const githubAction = new SyncGithubTasksAction(
+      projectManagement,
+      syncState,
+      vault,
+      new ApplyTaskToGithubAction(projectManagement, syncState),
+      new ApplyTaskToVaultAction(
+        vault,
+        syncState,
+        new CreateTaskNoteAction(vault, syncState, ''),
+        '',
+        new CompleteTaskCascadeAction(vault, 'Shipped'),
+      ),
+      new VerdictResolver('Shipped'),
+      'Shipped',
+    );
+    await githubAction.execute({ projectName, syncedAt, includeBoard: true });
+
+    expect(vault.notes.get(childPath)).toContain(
+      'affiliation: ["[[Acme Widgets]]", "[[the-parent]]"]',
+    );
+
+    // Pass 2 — the Todoist projection moves the existing top-level twin under
+    // the parent's twin
+    const { action: todoistAction } = buildAction(
+      vault,
+      syncState,
+      projectManagement,
+      taskManager,
+      todoistWriter,
+    );
+    await todoistAction.execute(input);
+
+    expect(taskManager.moveTaskCalls).toContainEqual({
+      id: 'T-child',
+      to: { parentId: 'T-parent' },
+    });
   });
 
   it('projects a to-do linked from a task checklist', async () => {

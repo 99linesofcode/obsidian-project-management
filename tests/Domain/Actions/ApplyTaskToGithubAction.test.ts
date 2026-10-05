@@ -109,6 +109,7 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
     lastEditedAt: '2026-09-18T10:00:00Z',
     updatedAt: '2026-09-18T10:00:00Z',
     labels: ['type: task'],
+    parentUrl: null,
     ...overrides,
   };
 }

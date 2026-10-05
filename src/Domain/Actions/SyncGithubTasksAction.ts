@@ -135,7 +135,7 @@ export class SyncGithubTasksAction {
     if (issue.state === 'closed') {
       return;
     }
-    const { remote, raw } = this.remoteViews(
+    const { remote, raw } = await this.remoteViews(
       issue,
       null,
       null,
@@ -187,7 +187,7 @@ export class SyncGithubTasksAction {
     // identity source, so compose it here.
     vault.id = record.id;
 
-    const { remote, raw } = this.remoteViews(
+    const { remote, raw } = await this.remoteViews(
       issue,
       record,
       base,
@@ -295,14 +295,18 @@ export class SyncGithubTasksAction {
   // card with no lane) or the lane its state implies (a card-less issue).
   // `raw` is the issue as fetched: its completion stamp is the issue's own
   // open/closed state, so the writer can tell a stale lane from a real reopen.
-  private remoteViews(
+  //
+  // The parent is the resolved sub-issue relation: a parentUrl that the registry
+  // knows becomes the parent entity's uuid, so GitHub-side placement is visible
+  // to the parent diff. A top-level issue (or an untracked parent) stays null.
+  private async remoteViews(
     issue: GithubTaskData,
     record: EntityRecord | null,
     base: TaskData | null,
     card: BoardItemData | null,
     doneLane: string,
     defaultLane: string,
-  ): { remote: TaskData; raw: TaskData } {
+  ): Promise<{ remote: TaskData; raw: TaskData }> {
     const parsed = GithubTaskMapper.parse(issue, card, doneLane);
     const lane = effectiveLane(card, issue, base, doneLane, defaultLane);
     const laneDone = doneLane !== '' && lane === doneLane;
@@ -311,6 +315,7 @@ export class SyncGithubTasksAction {
     const id = record?.id ?? '';
     const notePath = record?.notePath ?? '';
     const mirrors = { github: parsed.mirrors.github ?? '' };
+    const parent = await this.parentUuidFromIssue(issue);
 
     const remote = new TaskData(
       id,
@@ -321,7 +326,7 @@ export class SyncGithubTasksAction {
       lane,
       laneDone ? '' : null,
       parsed.type,
-      parsed.parent,
+      parent,
       parsed.createdAt,
       parsed.updatedAt,
     );
@@ -334,11 +339,29 @@ export class SyncGithubTasksAction {
       cardLane,
       stateDone ? '' : null,
       parsed.type,
-      parsed.parent,
+      parent,
       parsed.createdAt,
       parsed.updatedAt,
     );
     return { remote, raw };
+  }
+
+  // The uuid of the issue's parent relation, resolved through the registry: the
+  // parentUrl is the parent's github mirror handle. WHY the registry and not the
+  // transport: identity is hub-side, so the pure mapper leaves parent null and
+  // the half composes it here. An untracked parent resolves to null, which keeps
+  // the child top-level until the parent materializes.
+  private async parentUuidFromIssue(
+    issue: GithubTaskData,
+  ): Promise<string | null> {
+    if (issue.parentUrl === null || issue.parentUrl === '') {
+      return null;
+    }
+    const item = await this.syncState.findMirrorItem('github', issue.parentUrl);
+    if (item === null) {
+      return null;
+    }
+    return (await this.syncState.getEntity(item.entityId))?.id ?? null;
   }
 
   // The timing evidence the conflict ladder may use: the note's real mtime and
@@ -361,11 +384,11 @@ export class SyncGithubTasksAction {
 
   // The comparable shape the diff reads: the title is slug-compared (the vault
   // derives it from the filename, the remote from the issue title), the body is
-  // the caller's digest, and parent/type are constants — neither is a
-  // GitHub-synced field. Parent is a uuid reference resolved through the
-  // registry; type travels on GitHub only as a `type:*` label the writer does
-  // not manage (the label is the mirror's representation of the vault-owned
-  // type), so it must never drive a pull that would overwrite the note's type.
+  // the caller's digest, and parent is preserved so GitHub sub-issue placement
+  // participates in the diff. Type is a constant: it travels on GitHub only as a
+  // `type:*` label the writer does not manage (the label is the mirror's
+  // representation of the vault-owned type), so it must never drive a pull that
+  // would overwrite the note's type.
   private diffView(task: TaskData, bodyDigest: string): TaskData {
     return new TaskData(
       task.id,
@@ -376,7 +399,7 @@ export class SyncGithubTasksAction {
       task.status,
       task.completedAt,
       '',
-      null,
+      task.parent,
       task.createdAt,
       task.updatedAt,
     );
@@ -583,8 +606,11 @@ function isDone(task: TaskData, doneLane: string): boolean {
 }
 
 // Whether the note's live view still matches its mirror's base. The title is
-// slug-compared (the vault derives it from the filename); parent and type are
-// excluded (neither is a GitHub-synced field).
+// slug-compared (the vault derives it from the filename). Parent and type are
+// excluded: the parsed vault view leaves parent unresolved (the action layer
+// resolves the affiliation, and GitHub placement changes only from GitHub), and
+// type is vault-owned — neither can be a GitHub write this gate must re-open
+// for.
 function matchesBase(vault: TaskData, base: TaskData): boolean {
   return (
     hash(toIssueBody(vault.body)) === base.body &&

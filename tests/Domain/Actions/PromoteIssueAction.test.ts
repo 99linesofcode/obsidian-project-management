@@ -26,6 +26,7 @@ class FakePort implements ProjectManagementPort {
     lastEditedAt: null,
     updatedAt: '2026-09-18T10:00:00Z',
     labels: [],
+    parentUrl: null,
   };
 
   async addLabel(url: string, label: string): Promise<void> {

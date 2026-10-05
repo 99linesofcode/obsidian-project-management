@@ -84,6 +84,11 @@ export class ApplyTaskToGithubAction {
       }
     }
 
+    // The parent dimension is deliberately NOT written to GitHub: sub-issue
+    // move mutations are out of scope for now, so GitHub placement changes only
+    // from GitHub. The asymmetry is absorbed by advanceBase below, which stores
+    // the winning task's parent as the base — so a vault-side affiliation change
+    // does not re-read as a fresh remote change on the next pass.
     await this.advanceBase(input.projectName, url, task, current);
   }
 

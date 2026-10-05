@@ -21,4 +21,10 @@ export interface GithubTaskData {
   // clock.
   updatedAt: string;
   labels: string[];
+  // The issue's parent relation (GitHub sub-issues), as the parent issue's url,
+  // or null when the issue has none. WHY a url and not a uuid: the transport is
+  // provider-shaped, and the url is the github mirror handle the registry can
+  // resolve. Placement is a diffed dimension now, so a sub-issue's parent must
+  // survive the fetch.
+  parentUrl: string | null;
 }

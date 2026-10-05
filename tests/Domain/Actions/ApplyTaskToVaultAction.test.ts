@@ -438,6 +438,35 @@ describe('ApplyTaskToVaultAction', () => {
     expect(syncState.baseOf('uuid-42', 'github')?.parent).toBe('slice-uuid');
   });
 
+  it('updates the note affiliation when a pull changes the parent', async () => {
+    // Given — a tracked note with no parent affiliation and a registry-known
+    // parent, and a winning remote task that names that parent
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    const parentPath = 'Projecten/Acme Widgets/taken/the-slice.md';
+    syncState.seed(entityRecord({ id: 'slice-uuid', notePath: parentPath }));
+    seedRecord(syncState);
+    vault.notes.set(notePath, noteFor(task()));
+    const action = makeAction(vault, syncState);
+
+    // When — the remote won the parent dimension (a pull)
+    await action.execute({
+      task: task({ parent: 'slice-uuid' }),
+      current: task(),
+      projectName,
+      syncedAt,
+      origin: 'pull',
+    });
+
+    // Then — the note's affiliation names the parent and the base carries its
+    // uuid
+    expect(vault.written).toHaveLength(1);
+    expect(vault.written[0]!.content).toContain(
+      'affiliation: ["[[Acme Widgets]]", "[[the-slice]]"]',
+    );
+    expect(syncState.baseOf('uuid-42', 'github')?.parent).toBe('slice-uuid');
+  });
+
   it('advances mirrors.github.base only on a pull', async () => {
     // Given — a tracked note with a github base at the previous state
     const vault = new FakeVault();

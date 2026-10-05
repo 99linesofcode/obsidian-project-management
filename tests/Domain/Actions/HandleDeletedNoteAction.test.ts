@@ -32,6 +32,7 @@ class FakeProjectManagement implements ProjectManagementPort {
       lastEditedAt: null,
       updatedAt: '2026-09-18T12:30:00Z',
       labels: ['type: task'],
+      parentUrl: null,
     };
   }
   async fetchProjectIdentity(): Promise<null> {

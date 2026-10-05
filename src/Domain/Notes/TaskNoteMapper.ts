@@ -18,6 +18,10 @@ export interface TaskNoteContext {
   syncedAt: string;
   // The project's Status option name the task sits in — written verbatim.
   statusName: string;
+  // The parent note's stem when the task is nested (a slice or parent task);
+  // null/absent for a top-level task. The affiliation is rendered project-first,
+  // then this link — the vault's presentation of the parent relation.
+  parentLink?: string | null;
 }
 
 export interface TaskNote {
@@ -57,7 +61,7 @@ export const TaskNoteMapper = {
       'categories: [taken]',
       `type: ${task.type}`,
       `status: ${context.statusName}`,
-      `affiliation: ["[[${context.projectName}]]"]`,
+      `affiliation: ${affiliationValue(context)}`,
       `created: ${createdValue(task, context)}`,
       `synced: ${context.syncedAt}`,
       '---',
@@ -91,6 +95,17 @@ function taskNotePath(task: TaskNoteSource, context: TaskNoteContext): string {
   return `Projecten/${context.projectName}/taken/${slugify(task.title)}.md`;
 }
 
+// The affiliation list: the project first, then the parent note when nested.
+// The parent is a bare stem link (the affiliation reader strips the wikilink and
+// resolves the stem through the registry), matching the to-do affiliation shape.
+function affiliationValue(context: TaskNoteContext): string {
+  const links = [`[[${context.projectName}]]`];
+  if (context.parentLink !== undefined && context.parentLink !== null) {
+    links.push(`[[${context.parentLink}]]`);
+  }
+  return `[${links.map((link) => `"${link}"`).join(', ')}]`;
+}
+
 // The `created` value: the vault's own stamp when the note has one, otherwise
 // the sync date — never a bare empty field on a new note.
 function createdValue(
@@ -114,7 +129,7 @@ function managedValues(
   return new Map([
     ['type', task.type],
     ['status', context.statusName],
-    ['affiliation', `["[[${context.projectName}]]"]`],
+    ['affiliation', affiliationValue(context)],
     ['synced', context.syncedAt],
   ]);
 }
