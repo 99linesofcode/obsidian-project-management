@@ -174,6 +174,7 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
     lastEditedAt: '2026-09-18T10:00:00Z',
     updatedAt: '2026-09-18T10:00:00Z',
     labels: ['type: task'],
+    parentUrl: null,
     ...overrides,
   };
 }
@@ -303,6 +304,76 @@ describe('SyncGithubTasksAction', () => {
     expect(projectManagement.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
     ]);
+  });
+
+  it('seeds a materialised sub-issue affiliation from its tracked parent', async () => {
+    // Given — a typed sub-issue with no record whose parent issue is tracked
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const parentUrl = 'https://github.com/acme/widgets/issues/40';
+    const parentPath = 'Projecten/Acme Widgets/taken/the-slice.md';
+    syncState.seed(entityRecord({ id: 'uuid-parent', notePath: parentPath }), {
+      github: { handle: parentUrl },
+    });
+    const projectManagement = new FakeProjectManagement();
+    const childUrl = 'https://github.com/acme/widgets/issues/61';
+    projectManagement.detail = {
+      issues: [
+        issue({
+          url: childUrl,
+          remoteId: 61,
+          title: 'The child',
+          parentUrl,
+        }),
+      ],
+      cards: [],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the created note's affiliation names the parent, and the base
+    // carries the parent uuid
+    expect(vault.created).toHaveLength(1);
+    expect(vault.created[0]!.content).toContain(
+      'affiliation: ["[[Acme Widgets]]", "[[the-slice]]"]',
+    );
+    const record = await syncState.findByMirror('github', childUrl);
+    expect(syncState.baseOf(record!.id, 'github')?.parent).toBe('uuid-parent');
+  });
+
+  it('materialises a sub-issue top-level when its parent is untracked', async () => {
+    // Given — a typed sub-issue whose parent issue has no record
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    const childUrl = 'https://github.com/acme/widgets/issues/61';
+    projectManagement.detail = {
+      issues: [
+        issue({
+          url: childUrl,
+          remoteId: 61,
+          title: 'The child',
+          parentUrl: 'https://github.com/acme/widgets/issues/40',
+        }),
+      ],
+      cards: [],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — no parent resolves, so the note stays top-level
+    expect(vault.created).toHaveLength(1);
+    expect(vault.created[0]!.content).toContain(
+      'affiliation: ["[[Acme Widgets]]"]',
+    );
+    const record = await syncState.findByMirror('github', childUrl);
+    expect(syncState.baseOf(record!.id, 'github')?.parent).toBeNull();
   });
 
   it('resolves a tracked issue by its github handle, not its note path', async () => {

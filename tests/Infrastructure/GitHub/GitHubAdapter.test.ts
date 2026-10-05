@@ -328,6 +328,7 @@ describe('GitHubAdapter', () => {
       lastEditedAt: null,
       updatedAt: '2026-09-18T10:00:00Z',
       labels: ['type: task', 'bug'],
+      parentUrl: null,
     });
     // And the untyped issue is filtered out
     expect(result.some((task) => task.remoteId === 46)).toBe(false);
@@ -561,6 +562,7 @@ describe('GitHubAdapter', () => {
       lastEditedAt: null,
       updatedAt: '2026-09-18T10:00:00Z',
       labels: ['type: task'],
+      parentUrl: null,
     });
     // And the REST path targeted the bound repo and issue number
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
@@ -605,6 +607,7 @@ describe('GitHubAdapter', () => {
       lastEditedAt: null,
       updatedAt: '2026-09-18T12:30:00Z',
       labels: ['type: task'],
+      parentUrl: null,
     });
     // And the PATCH targeted the bound repo and issue number with the input
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
@@ -652,6 +655,7 @@ describe('GitHubAdapter', () => {
       lastEditedAt: null,
       updatedAt: '2026-09-18T12:30:00Z',
       labels: ['type: task'],
+      parentUrl: null,
     });
     // And the PATCH targeted the bound repo and issue number with the state
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
@@ -780,6 +784,9 @@ describe('GitHubAdapter', () => {
                   lastEditedAt: '2026-09-18T10:00:00Z',
                   updatedAt: '2026-09-18T11:30:00Z',
                   labels: { nodes: [{ name: 'type: task' }] },
+                  parent: {
+                    url: 'https://github.com/acme/widgets/issues/40',
+                  },
                 },
                 {
                   url: 'https://github.com/acme/widgets/issues/43',
@@ -827,6 +834,8 @@ describe('GitHubAdapter', () => {
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('ProjectDetail');
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
+    // And the query asks for the sub-issue parent relation
+    expect(bodies[0]).toContain('parent { url }');
     // And the typed issue is mapped, the untyped one filtered out
     expect(result.issues).toEqual([
       {
@@ -840,6 +849,7 @@ describe('GitHubAdapter', () => {
         lastEditedAt: '2026-09-18T10:00:00Z',
         updatedAt: '2026-09-18T11:30:00Z',
         labels: ['type: task'],
+        parentUrl: 'https://github.com/acme/widgets/issues/40',
       },
     ]);
     // And the board card comes along with its lane
@@ -944,6 +954,7 @@ describe('GitHubAdapter', () => {
       lastEditedAt: null,
       updatedAt: '2026-09-19T10:00:00Z',
       labels: [],
+      parentUrl: null,
     });
     expect(bodies[0]).toContain('ConvertDraftIssue');
     expect(bodies[0]).toContain('"itemId":"PVTI_2"');
@@ -1180,6 +1191,7 @@ describe('GitHubAdapter', () => {
         lastEditedAt: null,
         updatedAt: '2026-09-18T14:00:00Z',
         labels: [],
+        parentUrl: null,
       },
     ]);
     // And the REST path targeted the bound repo with open issues

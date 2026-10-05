@@ -26,6 +26,7 @@ class FakePort implements ProjectManagementPort {
     lastEditedAt: null,
     updatedAt: '2026-09-19T10:00:00Z',
     labels: [],
+    parentUrl: null,
   };
 
   async promoteCard(

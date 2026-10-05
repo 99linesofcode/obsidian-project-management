@@ -18,6 +18,7 @@ const issue: GithubTaskData = {
   lastEditedAt: '2026-09-18T10:00:00Z',
   updatedAt: '2026-09-18T11:30:00Z',
   labels: ['type: task'],
+  parentUrl: null,
 };
 
 const card: BoardItemData = {

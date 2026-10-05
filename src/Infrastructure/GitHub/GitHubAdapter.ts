@@ -149,6 +149,7 @@ const PROJECT_DETAIL_QUERY = `
           labels(first: 20) {
             nodes { name }
           }
+          parent { url }
         }
       }
     }
@@ -397,6 +398,12 @@ export class GitHubAdapter implements ProjectManagementPort {
         typeof node.lastEditedAt === 'string' ? node.lastEditedAt : null,
       updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : '',
       labels,
+      // A sub-issue exposes its parent issue's url; a top-level issue answers
+      // null. The url is the parent's github mirror handle.
+      parentUrl:
+        isRecord(node.parent) && typeof node.parent.url === 'string'
+          ? node.parent.url
+          : null,
     };
   }
 
@@ -794,6 +801,9 @@ export class GitHubAdapter implements ProjectManagementPort {
       lastEditedAt: null,
       updatedAt: typeof issue.updated_at === 'string' ? issue.updated_at : '',
       labels,
+      // The REST issue shape carries no parent relation (sub-issues are a
+      // GraphQL-only field), so a REST-mapped issue is top-level.
+      parentUrl: null,
     };
   }
 

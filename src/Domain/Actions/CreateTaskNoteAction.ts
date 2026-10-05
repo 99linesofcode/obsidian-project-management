@@ -15,6 +15,10 @@ export interface CreateTaskNoteInput {
   syncedAt: string;
   // The project's Status option name the task starts in.
   statusName: string;
+  // The parent note's stem when the issue is a sub-issue of a tracked parent;
+  // null/absent for a top-level issue. Seeds the note's affiliation so the
+  // parent relation has a vault home from creation.
+  parentLink?: string | null;
 }
 
 // UC2: materialise a task note. Idempotent — an issue already registered keeps
@@ -52,6 +56,9 @@ export class CreateTaskNoteAction {
         projectName: input.projectName,
         syncedAt: input.syncedAt,
         statusName: input.statusName,
+        ...(input.parentLink === undefined || input.parentLink === null
+          ? {}
+          : { parentLink: input.parentLink }),
       },
     );
     // A title slug can collide with another task; freePath appends the ordinal
