@@ -39,16 +39,35 @@ filenames and frontmatter carry no machine id.
 
 ### The cast
 
+The core talks to infrastructure through four provider-neutral ports, all owned
+by the shared kernel (`src/shared/`) and implemented by an adapter registered
+from the adapter's own module:
+
+- **ProjectManagementPort** — the code host: identity resolution, project
+  detail (issues + board cards in one fetch), viewer boards, issue creation,
+  board status/membership, project open/close.
+- **TaskManagerPort** — the task manager: projects, sections, tasks, completion,
+  labels.
+- **VaultPort** — the Obsidian vault: notes, folders, events.
+- **SyncStatePort** — the registry: entities, mirror items, port state,
+  identities, watch state and the project-capture cursors.
+
+The actions and infrastructure:
+
 - **SyncScheduler** — delivery mechanics only. A poll interval and vault
   change/delete/rename events enqueue project names; renames bypass the
-  debounce. It makes no business decisions.
+  debounce. Before each tick it runs the remote-project capture, so a project
+  born on a remote is captured before the per-project chain reads it. It makes
+  no business decisions.
 - **SyncQueue** — one serialized promise chain for the whole plugin. Runs one
   project at a time, coalesces duplicates, swallows a failed run so the queue
   never poisons.
 - **SyncProjectAction** — the chain. One work item (a project folder name) and
   one entry point; composes the halves and isolates each step.
-- **SyncGithubTasksAction** — the GitHub half. Probe gate, one whole-project
-  fetch, per-issue three-way diff, verdict application.
+- **SyncGithubTasksAction** — the GitHub half. Probe gate (including the outward
+  drift gate), one whole-project fetch, per-issue three-way diff, verdict
+  application, interrupted-creation healing, and outward materialization
+  (registry-first).
 - **SyncTodoistTasksAction** — the Todoist half. Absorbers first, then the
   two-phase twin projection, then deletion propagation.
 - **ApplyTaskToVaultAction** — the vault writer. Renders a winning task onto
@@ -64,6 +83,16 @@ filenames and frontmatter carry no machine id.
   reopens into the vault; owns the completed-since cursor.
 - **CaptureTodoistCreationsAction** — absorber. Captures hand-made Todoist
   items into the vault as notes.
+- **CaptureRemoteProjectsAction** — captures remote-born PROJECTS into the
+  vault (PRJ-2 task manager, PRJ-3 code host), guarded by a per-surface
+  creation-clock cursor.
+- **EnsureProjectBoardAction** — creates (or adopts) the code-host board for a
+  vault-born project (PRJ-1).
+- **ReconcileProjectLifecycleAction** — one freeze verdict across folder,
+  board and Todoist project; the archive stamp and the reactivation watch.
+- **ProjectMapper** — the pure boundary mapping of provider project payloads
+  onto canonical `ProjectData`; `RemoteProjectData` is the neutral task-manager
+  project DTO.
 - **CompleteTaskCascadeAction** — the dt-13 cascade. A done task checks its
   checklist lines, completes its open to-dos, and mirrors its line in a parent
   slice; reopen is asymmetric.
@@ -72,10 +101,11 @@ filenames and frontmatter carry no machine id.
 - **toDiffView** — the comparable form of a task: body replaced by its digest.
   All diffing and base storage operate on diff views.
 - **SyncStateAdapter** — the registry. Project-nested, port-grouped storage
-  with in-memory indexes, a serialization mutex, a migration chain and a
-  rolling backup.
+  with in-memory indexes, a serialization mutex shared with the settings save,
+  a migration chain, a rolling backup and a read-only guard for a container
+  written by a newer plugin version.
 - **GitHubAdapter / TodoistAdapter / VaultAdapter** — the infrastructure
-  implementations of the three ports.
+  implementations of `ProjectManagementPort`, `TaskManagerPort` and `VaultPort`.
 - **CleanupNoteFrontmatterAction** — strips legacy `id:`/`url:`/`todoist:`
   frontmatter from task and to-do notes at chain start.
 - **DetectNoteRenamesAction** — recovers a rename the plugin did not observe
@@ -84,8 +114,6 @@ filenames and frontmatter carry no machine id.
   close the issue, evict the record.
 - **PropagateTodoistDeletionsAction** — a deleted note's Todoist side: delete
   the twin (and its subtree) and evict the records.
-- **ReconcileProjectLifecycleAction** — one freeze verdict across folder,
-  board and Todoist project; the archive stamp and the reactivation watch.
 - **ProbeProjectsAction** — one cheap query for every project's `updatedAt`
   and `closed`, so the expensive fetch can be gated.
 - **EnsureTodoistSectionsAction** — one Todoist section per board lane,
@@ -113,26 +141,35 @@ one-paragraph summary and the scenario IDs precede each.
 
 ### 2.1 The pass
 
-`SyncScheduler.tick` enumerates the vault's project notes and enqueues each
-project name; `SyncQueue` runs them one at a time. `SyncProjectAction.execute`
-re-resolves the project (a stale work item no-ops), strips legacy frontmatter,
-probes the project's remote state, reconciles the lifecycle into one freeze
-verdict, recovers renames, runs the GitHub half (gated by the probe and the
-`fullScanPending` marker), runs the vault-consistency step, runs the Todoist
-half (gated by the freeze verdict and a resolved Todoist project id), and
-finally sweeps deletions. Every step is wrapped in `step()`, so one failure
-logs and skips that step without blocking the others. Implements DISC-1,
-DISC-3, PRB-1, PRB-2, PRB-3, SYNC-8.
+`SyncScheduler.tick` first runs `CaptureRemoteProjectsAction` (remote-born
+projects into the vault, PRJ-2/PRJ-3), then enumerates the vault's project
+notes and enqueues each project name; `SyncQueue` runs them one at a time.
+`SyncProjectAction.execute` re-resolves the project (a stale work item no-ops),
+strips legacy frontmatter, ensures the code-host board exists for an active
+project (PRJ-1), probes the project's remote state, reconciles the lifecycle
+into one freeze verdict, recovers renames, runs the GitHub half (gated by the
+probe, the `fullScanPending` marker and the outward drift gate), runs the
+vault-consistency step, runs the Todoist half (gated by the freeze verdict and
+a resolved Todoist project id), and finally sweeps deletions. Every step is
+wrapped in `step()`, so one failure logs and skips that step without blocking
+the others. Implements DISC-1, DISC-3, PRJ-1, PRJ-2, PRJ-3, PRB-1, PRB-2,
+PRB-3, SYNC-8.
 
-#### 2.1a The tick and the resolve
+#### 2.1a The capture pre-tick and the resolve
 
 ```mermaid
 sequenceDiagram
   participant Sched as SyncScheduler
+  participant Cap as CaptureRemoteProjectsAction
   participant V as VaultPort
+  participant SS as SyncStatePort
   participant Q as SyncQueue
   participant SP as SyncProjectAction
 
+  Sched->>Cap: execute(syncedAt)
+  Cap->>V: findProjectNotes() for the vault-links dedup
+  Cap->>SS: getProjectCursor then setProjectCursor per surface
+  Note over Cap: only projects after the cursor; a skip stops the watermark
   Sched->>V: findProjectNotes()
   Sched->>Q: enqueue(projectName) per note
   Q->>SP: execute(project)
@@ -148,11 +185,15 @@ sequenceDiagram
 sequenceDiagram
   participant SP as SyncProjectAction
   participant Clean as CleanupNoteFrontmatterAction
+  participant Ens as EnsureProjectBoardAction
   participant Probe as ProbeProjectsAction
   participant Life as ReconcileProjectLifecycleAction
   participant Ren as DetectNoteRenamesAction
 
   SP->>Clean: execute(project)
+  alt active (not archived)
+    SP->>Ens: execute(project, notePath), create or adopt a board
+  end
   SP->>Probe: execute([project])
   Probe-->>SP: ProjectStateData or undefined
   SP->>Life: execute(note, state)
@@ -195,8 +236,9 @@ sequenceDiagram
 ### 2.2 The GitHub half, per issue
 
 `SyncGithubTasksAction.execute` resolves the project identity, applies the
-probe gate (skip when the board is unmoved **and** the vault has no drift),
-fetches the whole project in one GraphQL query, and iterates the typed issues.
+probe gate (skip when the board is unmoved **and** the vault has no drift
+**and** there is no outward drift), fetches the whole project in one GraphQL
+query, heals any interrupted outward creation, and iterates the typed issues.
 An issue with no registry record is adopted (materialized) unless it is
 closed. A tracked issue is diffed: the vault live view, the remote live view
 and the mirror's base are composed, `VerdictResolver.diff` attributes each
@@ -204,8 +246,9 @@ field, `resolveConflicts` arbitrates, and the collapsed verdict drives the
 writers. A push renders the vault onto GitHub; a pull renders the remote onto
 the vault, unless the reopen veto fires (a done note whose issue is closed but
 whose card lane is stale). The base advances inside the writer, after the
-durable writes. Implements MAT-3, SYNC-1, SYNC-2, SYNC-3, SYNC-5, SYNC-6,
-SYNC-7, SUB-1, SUB-5, OFF-1, OFF-2, OFF-3.
+durable writes. Finally, the outward phase materializes every typed vault-born
+task note that has no issue (see 2.4). Implements MAT-1, MAT-3, SYNC-1, SYNC-2,
+SYNC-3, SYNC-5, SYNC-6, SYNC-7, SUB-1, SUB-5, OFF-1, OFF-2, OFF-3.
 
 #### 2.2a Gate, fetch and record resolution
 
@@ -218,11 +261,12 @@ sequenceDiagram
   participant VR as VerdictResolver
 
   GH->>SS: getIdentity(project)
-  alt not includeBoard and no vault drift
+  alt not includeBoard and no vault drift and no outward drift
     GH-->>GH: return, probe gate
   end
   GH->>PM: fetchProjectDetail(repoUrl, projectNodeId)
   PM-->>GH: typed issues plus cards
+  GH->>GH: adoptPendingIssues, heal interrupted creations
   loop each typed issue
     GH->>SS: findMirrorItem('github', issue.url)
     alt no record
@@ -234,6 +278,7 @@ sequenceDiagram
       GH->>VR: diff and resolveConflicts
     end
   end
+  GH->>GH: materializeOutward, see 2.4
 ```
 
 #### 2.2b Verdict application
@@ -352,18 +397,66 @@ sequenceDiagram
   TD->>PD: execute(projectName)
 ```
 
-### 2.4 Materialization from the vault
+### 2.4 Outward materialization (vault → GitHub)
 
-The brief describes a new vault note gaining a GitHub issue and card and then
-a Todoist task. **The code does not create GitHub issues from vault notes**:
-`ProjectManagementPort` has no `createIssue`, and both halves iterate the
-GitHub issue set, not the vault's notes. The only note-creation path is
-`CreateTaskNoteAction`, and it is driven from the GitHub side (adoption) and
-from promotion, never from a bare vault note. What the code does do from the
-vault is project an already-tracked note outward to Todoist. This diagram
-shows the real note-creation path; the discrepancy is recorded in
-[Code-vs-brief discrepancies](#5-code-vs-brief-discrepancies). Implements
-MAT-5 (uuid, slug plus ordinal, no machine id fields).
+A new task note (type `task`, `chore`, `bug` or `slice`) under `taken/` is born
+in the vault and materialized OUTWARD: the GitHub half creates an issue, adds a
+board card in the note's lane, and links all three in the registry. The ordering
+is registry-first, and that is the safety property: the entity and a
+placeholder mirror item are written BEFORE the remote call, so a crash can never
+orphan an issue that the next pass would materialize as a second note and a
+second issue (promise 5, promise 2).
+
+The probe gate opens for outward drift: a typed `taken/` note with no REAL
+github mirror re-opens the fetch even when the board is quiet (`hasOutwardDrift`,
+and the gate's quiet-tick guarantee, SYNC-8). The half then runs the per-issue
+loop first (existing mirrors settle), heals any interrupted creation
+(`adoptPendingIssues`), and finally creates the issue for each remaining typed
+note (`materializeOutward`). The note's lane is validated against the board's
+options BEFORE the issue is created, so an unmappable lane is logged and skipped
+rather than creating an issue whose card can never be placed.
+
+The phase is idempotent across passes:
+
+- placeholder and the issue exists → the issue's handle is adopted (no duplicate
+  issue, no duplicate note);
+- placeholder and the issue is absent → the creation is retried (the placeholder
+  prevents the duplicate-note path);
+- a real mirror exists → the note is left to the per-issue loop.
+
+The placeholder handle is the entity-unique marker `pendingCreation:<uuid>`; it
+can never collide with an issue url and several interrupted creations coexist.
+Implements MAT-1, MAT-2, SYNC-8, promise 5.
+
+#### 2.4a Registry-first outward creation and the reconcile
+
+```mermaid
+sequenceDiagram
+  participant GH as SyncGithubTasksAction
+  participant SS as SyncStatePort
+  participant V as VaultPort
+  participant PM as ProjectManagementPort
+
+  GH->>V: listNotesInFolder(taken)
+  GH->>SS: findByNotePath, hasRealGithubMirror
+  alt placeholder and an untracked issue matches title and type
+    GH->>SS: setMirrorItem(issue.url, base), remove placeholder
+    Note over GH: adopt, no duplicate note or issue
+  else no real mirror
+    GH->>SS: setEntity(record), setMirrorItem(placeholder)
+    GH->>PM: createIssue(title, body, type)
+    PM-->>GH: handle url
+    GH->>SS: setMirrorItem(handle, base), remove placeholder
+    GH->>PM: addBoardItem, setBoardStatus(validated lane)
+  end
+```
+
+#### 2.4b Note creation from adoption or promotion
+
+The other note-creation path is `CreateTaskNoteAction`, driven from the GitHub
+side (adoption, see 2.5) and from promotion (see 2.13), never from a bare vault
+note. It mints the uuid, renders the template through `TaskNoteMapper`, resolves
+a free path (slug plus ordinal), writes the note and the registry record.
 
 ```mermaid
 sequenceDiagram
@@ -535,13 +628,13 @@ sequenceDiagram
   HD->>SS: removeEntity(id), drops remaining mirror items
 ```
 
-The reverse case in the code is **not** "twin deleted by hand removes the
-note and issue". `ApplyTodoistRemoteChangesAction` treats a twin that is
-absent from both the active set and the completed window, while its note
-survives, as a hand deletion of the twin: it evicts the record so the
-projection recreates the twin in the same tick (vault wins). This contradicts
-scenario DEL-2; see
-[Code-vs-brief discrepancies](#5-code-vs-brief-discrepancies).
+The reverse case is scenario DEL-2, and the code matches it: a twin deleted by
+hand does **not** remove the note or the issue. `ApplyTodoistRemoteChangesAction`
+treats a twin that is absent from both the active set and the completed window,
+while its note survives, as a hand deletion of the twin: it evicts the record so
+the projection recreates the twin in the same tick (the vault wins). Deletion
+starts in the vault; a remote deletion is never honored as a deletion of record
+(promise 3).
 
 ```mermaid
 sequenceDiagram
@@ -561,7 +654,7 @@ sequenceDiagram
   TD->>W: executeTask(handle null) creates the twin
 ```
 
-### 2.9 Archive freeze
+### 2.9 Project lifecycle: archive freeze and capture
 
 `ReconcileProjectLifecycleAction` is the one freeze verdict. It migrates the
 home note to `_<project>.md`, resolves or creates the Todoist project and
@@ -571,6 +664,12 @@ so the vault wins a multi-sided move. A genuine active-to-archived transition
 locks every unshipped issue and stamps `archivedAt`; a frozen project is still
 watched through a conditional newest-issue read, and a newer issue reactivates
 it. Implements ARC-1, ARC-2, ARC-3, ARC-4, ARC-5, DISC-2, ATT-3.
+
+The other direction — a project born on a remote — is captured into the vault by
+`CaptureRemoteProjectsAction` (PRJ-2 task manager, PRJ-3 code host), documented
+in 2.9c. Capture runs before the per-project chain (the scheduler's pre-tick and
+once after discovery), so a captured project's folder exists before its chain
+pass runs.
 
 #### 2.9a Resolve the project and the verdict
 
@@ -626,6 +725,58 @@ sequenceDiagram
   end
 ```
 
+#### 2.9c Project capture (PRJ-2 / PRJ-3)
+
+`CaptureRemoteProjectsAction` captures projects born on either remote into the
+vault. Each surface keeps its own cursor: the newest provider creation clock
+seen at the last poll. A project at or before the cursor is pre-existing and is
+never adopted; a first sight (no cursor) adopts the current newest clock and
+captures nothing, so installing the plugin against an account full of unrelated
+projects adopts none of them. The capture materializes a `Projecten/<name>/`
+folder with a `_<name>.md` home note carrying the birth surface's anchor, plus a
+registry identity; the normal lifecycle then materializes the other surfaces.
+
+The cursor is a watermark over handled projects, walked in creation order: it
+advances only over projects actually processed. A post-cursor project that
+could not be captured (a board whose identity cannot be resolved, a home note
+the discovery scan did not see) stops the watermark, so the next pass retries
+it; a project already linked to a vault home is handled and the watermark may
+pass it. A skipped project is never reported as captured. A cursor that does not
+move is not written (the adapter and the call site both guard), so a quiet tick
+performs zero registry writes (SYNC-8). Implements PRJ-2, PRJ-3.
+
+```mermaid
+sequenceDiagram
+  participant Sched as SyncScheduler
+  participant Cap as CaptureRemoteProjectsAction
+  participant PM as ProjectManagementPort
+  participant TM as TaskManagerPort
+  participant V as VaultPort
+  participant SS as SyncStatePort
+
+  Sched->>Cap: execute(syncedAt)
+  Cap->>TM: fetchProjects()
+  Cap->>PM: fetchViewerProjects()
+  Cap->>V: findProjectNotes(), vault-links dedup
+  Cap->>SS: getProjectCursor(surface)
+  alt first sight
+    Cap->>SS: setProjectCursor(newest), capture nothing
+  else cursor exists
+    loop projects after cursor, oldest first
+      alt already linked to a vault home
+        Note over Cap: handled, watermark may pass
+      else capturable
+        Cap->>PM: fetchProjectIdentity(board) for PRJ-3
+        Cap->>V: createNote(folder plus home note)
+        Cap->>SS: setIdentity
+      else skipped (unresolvable board, unseen home note)
+        Note over Cap: stop the watermark, retry next pass
+      end
+    end
+    Cap->>SS: setProjectCursor(last handled), only if it moved
+  end
+```
+
 ### 2.10 Rename survival
 
 A live rename event bypasses the debounce and enqueues the project
@@ -675,13 +826,20 @@ promise-chain mutex, so a command racing a sync pass cannot interleave a
 load-modify-save. The first load runs the one-shot migration chain (legacy
 flat root into the `syncState` container, then the v2 entity registry, then
 the v3 project-nested port-grouped layout, then the per-project full-scan
-seed), builds the in-memory indexes, and caches the container. Every write
-persists through a fresh read of the data.json root (so settings keys survive)
-after asking for a throttled rolling backup. A corrupt data.json is
-quarantined by `loadDataSafely` before the adapter ever sees it. Implements
-REG-1, REG-2, REG-4, REG-5, REG-6, PRB-3.
+seed), builds the in-memory indexes, and caches the container. The container
+also carries the per-surface project-capture cursors (`projectCursors`, keyed
+by `todoist`/`github`) beside the projects; setting a cursor to its current
+value is a no-op, so a quiet tick writes nothing (SYNC-8). Every write persists
+through a fresh read of the data.json root (so settings keys survive) after
+asking for a throttled rolling backup. A container whose version is NEWER than
+this plugin's is loaded read-only: reads serve it, but every mutating port
+method throws ("registry written by a newer plugin version — refusing to
+mutate"), so a downgrade can never rewrite the newer schema in the old shape.
+A corrupt data.json is quarantined by `loadDataSafely` before the adapter ever
+sees it. The settings save shares this one chain through `mutateRoot` (see
+2.12). Implements REG-1, REG-2, REG-4, REG-5, REG-6, SYNC-8, PRB-3.
 
-#### 2.11a Load and the migration chain
+#### 2.11a Load, the version guard and the migration chain
 
 ```mermaid
 sequenceDiagram
@@ -694,9 +852,13 @@ sequenceDiagram
     A->>L: load()
     L-->>A: data, or quarantine on corrupt
     A->>A: migrateLegacyState then save
-    A->>A: migrateEntities, v2
-    A->>A: migrateV3, port-grouped
-    A->>A: seedFullScanMarkers
+    alt container version newer than VERSION
+      A->>A: readOnly = true, no migration, no save
+    else
+      A->>A: migrateEntities, v2
+      A->>A: migrateV3, port-grouped
+      A->>A: seedFullScanMarkers
+    end
     A->>A: buildIndexes
   end
 ```
@@ -722,23 +884,28 @@ sequenceDiagram
 Settings and the registry share `data.json` but are split so a settings save
 can never revert the registry. At onload, `settingsFromData` copies the root
 and deletes the `syncState` key, so the in-memory settings never carry a
-registry snapshot. `saveSettings` reads a fresh root, merges the settings into
-it (skipping `syncState`), and writes it back, so registry writes made since
-onload survive. Implements REG-2, REG-3.
+registry snapshot. `saveSettings` calls `SyncStateAdapter.mutateRoot`, which
+runs on the SAME promise chain as every registry write: it reads a fresh root,
+merges the settings into it (skipping `syncState`), and persists. A concurrent
+settings save and registry persist can therefore neither interleave nor lose a
+write (REG-2/REG-3). Implements REG-2, REG-3.
 
 ```mermaid
 sequenceDiagram
   participant Tab as PluginSettingTab
   participant P as ProjectManagementPlugin
+  participant A as SyncStateAdapter
   participant S as settings.ts
   participant D as data.json
 
   Tab->>P: saveSettings()
-  P->>D: loadData() fresh root
-  P->>S: mergeSettingsIntoData(data, settings)
+  P->>A: mutateRoot(merge)
+  Note over A: runs on the registry's one promise chain
+  A->>D: load() fresh root
+  A->>S: mergeSettingsIntoData(root, settings)
   Note over S: skips SYNC_STATE_KEY, registry comes from the fresh read
-  S-->>P: merged
-  P->>D: saveData(merged)
+  S-->>A: merged
+  A->>D: save(merged)
   Note over P: settingsFromData deleted SYNC_STATE_KEY at onload
 ```
 
@@ -806,19 +973,24 @@ sequenceDiagram
   end
 ```
 
-### 2.15 Discovery and attach (added flow)
+### 2.15 Discovery, attach and capture (added flow)
 
 At `onLayoutReady`, `DiscoverProjectsAction` enumerates the vault's project
 notes and attaches each GitHub one through `AttachProjectAction`, which
 resolves the repository node id, the board node id, the Status field and its
 options. The identities are persisted so later board operations can resolve
 them. A note that fails to attach is collected as an error, not fatal.
-Implements DISC-1, DISC-3, DISC-4, ATT-1, ATT-2.
+
+Capture runs AFTER discovery, on the same startup path: a just-created vault
+project is not re-attached as if it were remote-born, and a remote-born project
+captured at startup is picked up by the scheduler's next tick. Implements
+DISC-1, DISC-3, DISC-4, ATT-1, ATT-2, PRJ-2, PRJ-3.
 
 ```mermaid
 sequenceDiagram
   participant P as ProjectManagementPlugin
   participant D as DiscoverProjectsAction
+  participant Cap as CaptureRemoteProjectsAction
   participant V as VaultPort
   participant A as AttachProjectAction
   participant PM as ProjectManagementPort
@@ -834,6 +1006,51 @@ sequenceDiagram
     D->>SS: setIdentity(projectName, identity)
   end
   D-->>P: projects and errors
+  P->>Cap: execute(syncedAt), capture after discovery
+  Cap->>SS: get/setProjectCursor per surface
+  Cap->>V: createNote for each remote-born project
+```
+
+### 2.16 Project propagation (PRJ-1/2/3/4)
+
+A project exists on all three surfaces with the vault as the splice. Every
+project payload entering the core is canonical `ProjectData` mapped at the
+boundary (PRJ-4): a code-host board via `ProjectMapper.fromCodeHostBoard`, a
+task-manager project via `ProjectMapper.fromRemoteProject` (whose neutral input
+is `RemoteProjectData`). The raw provider project shape never crosses a port.
+
+- **PRJ-1 (vault → code host).** `EnsureProjectBoardAction` creates a board for
+  an active vault project whose identity has none, or ADOPTS a same-name viewer
+  board (so an interrupted creation is healed, never duplicated); repo
+  attachment follows the separate ATT-1 act.
+- **PRJ-2 (task manager → vault).** `CaptureRemoteProjectsAction` captures a
+  project created after the todoist cursor, writes the folder + home note with
+  the `todoist:` anchor, and the lifecycle then materializes the board.
+- **PRJ-3 (code host → vault).** The same capture, after the github cursor,
+  writes the `board:` anchor and stores the resolved identity; the lifecycle
+  then creates the task-manager project.
+
+The cursor guards are per surface and walked in creation order (2.9c): a
+pre-existing project is never adopted, a first sight captures nothing, and a
+project that could not be captured stops the watermark so the next pass retries
+it. Implements PRJ-1, PRJ-2, PRJ-3, PRJ-4.
+
+```mermaid
+sequenceDiagram
+  participant Ens as EnsureProjectBoardAction
+  participant Cap as CaptureRemoteProjectsAction
+  participant Life as ReconcileProjectLifecycleAction
+  participant PM as ProjectManagementPort
+  participant TM as TaskManagerPort
+  participant V as VaultPort
+
+  Note over Cap: PRJ-2/PRJ-3, pre-tick, cursor-guarded
+  Cap->>V: folder plus home note plus anchor
+  Cap->>PM: fetchProjectIdentity(board) for PRJ-3
+  Ens->>PM: fetchViewerProjects, adopt or createProject
+  Note over Life: PRJ-1's other leg, materialize the missing surface
+  Life->>TM: createProject or link by anchor
+  Life->>PM: board closed and archive merge
 ```
 
 ---
@@ -912,8 +1129,11 @@ completion; the writer re-reconciles the mirror to the base instead.
 - **The probe gate is two gates.** `SyncProjectAction` computes
   `includeBoard` from the board's `updatedAt` and the per-project
   `fullScanPending` marker; `SyncGithubTasksAction` additionally re-opens the
-  fetch when the vault has drifted. A project with no github-mirrored records
-  counts as drift, so a newly tracked issue is never starved.
+  fetch when the vault has drifted (a mirrored note that no longer matches its
+  base) or when there is OUTWARD drift (a typed `taken/` note with no real
+  github mirror). A project with no github-mirrored records counts as drift, so
+  a newly tracked issue is never starved; a malformed note is logged and does
+  not count as drift, so it cannot hold the gate open forever.
 - **The full-scan marker is peeked, then consumed.** `isFullScanPending` is a
   read; `consumeFullScan` runs only after the GitHub half succeeds, so a
   failed or interrupted fetch does not spend the one-shot scan.
@@ -922,58 +1142,67 @@ completion; the writer re-reconciles the mirror to the base instead.
 
 ## 5. Code-vs-brief discrepancies
 
-These are places where the code contradicts the brief's flow description. The
-code is documented above; the brief's version is recorded here.
+These are places where the code still contradicts the brief's flow description.
+The code is documented above; the brief's version is recorded here. Discrepancies
+that this wave resolved are listed at the end.
 
 1. **The pass order.** The brief lists "frontmatter cleanup → lifecycle
    reconcile → GitHub half → vault consistency → Todoist half → deletion
-   sweep". The code inserts the probe between cleanup and lifecycle, and
-   `DetectNoteRenamesAction` between lifecycle and the GitHub half. Actual
-   order: resolve, cleanup, probe, lifecycle, renames, GitHub half, vault
-   consistency, Todoist half, deletions.
+   sweep". The code runs the remote-project capture before the tick, then per
+   project: resolve, cleanup, ensure board (PRJ-1), probe, lifecycle, renames,
+   GitHub half, vault consistency, Todoist half, deletions.
 2. **Todoist absorber order.** The brief says "remote changes → completion →
    capture". The code runs remote changes, then **capture**, then completion.
    The class comment explains why: capture reads the completed-since window
    from the stored cursor, which `ApplyTodoistCompletionAction` advances, so
    capture must run first.
-3. **Materialization from the vault.** The brief describes a new vault note
-   gaining a GitHub issue and card and then a Todoist task. The code has no
-   `createIssue` on `ProjectManagementPort` and never creates an issue from a
-   vault note. `CreateTaskNoteAction` is driven only from GitHub adoption and
-   promotion. MAT-1's "a new task note gains an issue on GitHub" is not
-   implemented. The only outward materialization from the vault is the
-   projection of an already-tracked note to Todoist.
-4. **Deletion order.** The brief says "children first → issue close/card
+3. **Deletion order.** The brief says "children first → issue close/card
    remove → twin delete → record eviction". The code deletes the Todoist twin
    first (in the Todoist half, step 6), then removes the card and closes the
    issue and evicts the record (in the deletion sweep, step 7). It does not
    delete children first; it relies on Todoist's parent-deletion cascade.
-5. **The reverse deletion.** The brief says "twin deleted by hand → note +
-   issue removed". The code does the opposite: a hand-deleted twin whose note
-   survives causes the record to be evicted and the twin to be recreated
-   (vault wins). This also contradicts scenario DEL-2.
-6. **Rename survival.** The brief says "live rename event → record path
+4. **Rename survival.** The brief says "live rename event → record path
    update; offline rename → stem pairing recovery". The code routes both
    through `DetectNoteRenamesAction`'s stem pairing; the live event only
    bypasses the debounce. `RelocateTaskStatusAction` and
    `RelinkRenamedTodoAction` are called only from
    `ApplyTodoistRemoteChangesAction.renameNote`, for a remote-driven rename.
-7. **The no-op-skip-advances-base branch in the GitHub half.** The brief asks
-   for this branch in the GitHub half. `ApplyTaskToGithubAction` has no skip
-   path: it always advances the base at the end of `execute`, after its
-   writes. The explicit "settled twin still advances the base" skip lives in
-   `ApplyTaskToTodoistAction.executeTask` (the `matches()` path). The GitHub
-   half's no-op case (`overall === 'none'`) runs no writer at all unless there
-   is a card membership or lane gap, so no base advance happens there.
+
+### Resolved since the previous revision
+
+- **Outward materialization (was #3).** No longer a discrepancy: the GitHub half
+  materializes vault-born task notes outward, registry-first, with the
+  reconcile-on-next-pass path (§2.4). The brief was right; the earlier revision
+  described code that has since been implemented.
+- **The reverse deletion (was #5).** The earlier framing was wrong, not the
+  code: a hand-deleted twin whose note survives has its record evicted and the
+  twin re-materialized in the same tick (the vault wins). That is exactly
+  scenario DEL-2 and promise 3 — deletion starts in the vault, and a remote
+  deletion is never honored as a deletion of record.
+- **The no-op base advance in the GitHub half (was #7).** No longer a
+  discrepancy: `ApplyTaskToGithubAction.advanceBase` no-ops when the base
+  already carries the canonical view, so a settled mirror performs no registry
+  write (SYNC-8). The "settled twin still advances the base" skip also lives in
+  `ApplyTaskToTodoistAction.executeTask`'s `matches()` path.
 
 ---
 
 ## 6. Where to start reading
 
-- The wiring and construction order: `src/main.ts` (`onload`).
-- The chain: `src/Domain/Actions/SyncProjectAction.ts`.
-- The two halves: `SyncGithubTasksAction.ts`, `SyncTodoistTasksAction.ts`.
-- The decision ladder: `src/Domain/Reconciliation/VerdictResolver.ts` and
-  `toDiffView.ts`.
-- The registry: `src/Infrastructure/Obsidian/SyncStateAdapter.ts`.
-- The ports: `src/Domain/Ports/`.
+The tree is module-first; each module owns one surface of the system.
+
+- The wiring and construction order: `src/main.ts` (`onload`, `composePlugin`).
+- The chain and the halves: `src/sync/` (`SyncProjectAction`, `SyncHalves`,
+  `ProbeProjectsAction`).
+- The registry: `src/registry/` (`SyncStateAdapter`, `SyncStateSchema`,
+  `SyncStateMigrations`, `loadDataSafely`).
+- The code host: `src/github/` (`SyncGithubTasksAction`, `GitHubAdapter`,
+  `GithubTaskMapper`, `ApplyTaskToGithubAction`).
+- The task manager: `src/todoist/` (`SyncTodoistTasksAction`, `TodoistAdapter`,
+  `TodoistTaskMapper`, `ApplyTaskToTodoistAction`).
+- The shared kernel: `src/shared/` (the four ports, `TaskData`, `ProjectData`,
+  `RemoteProjectData`, `VerdictResolver`, `Reconciliation`, `toDiffView`).
+- The projects module: `src/projects/` (`CaptureRemoteProjectsAction`,
+  `EnsureProjectBoardAction`, `ReconcileProjectLifecycleAction`,
+  `ProjectMapper`).
+- The vault: `src/vault/` (`VaultAdapter`, the note mappers, `Checklist`).

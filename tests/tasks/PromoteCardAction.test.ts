@@ -3,7 +3,7 @@ import { PromoteCardAction } from '../../src/tasks/PromoteCardAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { slugify } from '../../src/vault/TaskNoteMapper.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';

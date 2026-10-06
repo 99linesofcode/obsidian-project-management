@@ -1,5 +1,5 @@
 import type { AttachProjectAction } from './AttachProjectAction.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 
 // A project discovered in the vault: its name (from the note path) and the

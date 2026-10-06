@@ -1,5 +1,6 @@
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { ProjectBoardData } from '../shared/ProjectBoardData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
@@ -21,6 +22,11 @@ export interface EnsureProjectBoardInput {
 // project whose identity has no repo url — which is correct until the user
 // attaches one.
 //
+// Creation is guarded by a same-name lookup: a crash between `createProject`
+// and the identity write would otherwise orphan a board that the next pass
+// duplicates. A board of the same name is ADOPTED (its addressing re-resolved
+// through fetchProjectIdentity); only an absent board is created.
+//
 // The action is a no-op once the identity carries a board node id, so a
 // settled project never re-creates one (PRJ-1 idempotency). It is a separate
 // step rather than lifecycle-inline because the lifecycle's archive merge is
@@ -40,7 +46,17 @@ export class EnsureProjectBoardAction {
       return;
     }
 
-    const board = await this.projectManagement.createProject(input.projectName);
+    const board = await this.resolveBoard(input.projectName);
+    if (board === null) {
+      // A same-name board exists but its addressing could not be resolved.
+      // Creating a second board would duplicate it, so leave it for the next
+      // pass rather than guessing.
+      console.error(
+        `EnsureProjectBoardAction: a board named "${input.projectName}" exists but its identity could not be resolved; not creating a duplicate`,
+      );
+      return;
+    }
+
     const merged: ProjectIdentityData = {
       repoUrl: identity?.repoUrl ?? '',
       repoNodeId: identity?.repoNodeId ?? '',
@@ -62,5 +78,36 @@ export class EnsureProjectBoardAction {
         board.boardUrl,
       );
     }
+  }
+
+  // Adopts a same-name viewer board when one exists, otherwise creates a fresh
+  // board. WHY the lookup first: an interrupted creation (the board exists, the
+  // identity write did not) must heal by adopting the orphan, never by creating
+  // a duplicate. A same-name board whose addressing cannot be resolved yields
+  // null so the caller creates nothing.
+  private async resolveBoard(name: string): Promise<ProjectBoardData | null> {
+    const boards = await this.projectManagement.fetchViewerProjects();
+    const existing = boards.find((board) => board.name === name);
+    if (existing === undefined) {
+      return this.projectManagement.createProject(name);
+    }
+    const boardUrl = existing.mirrors.github ?? '';
+    if (boardUrl === '') {
+      return null;
+    }
+    const resolved = await this.projectManagement.fetchProjectIdentity({
+      pm: 'github',
+      repoUrl: '',
+      boardUrl,
+    });
+    if (resolved === null) {
+      return null;
+    }
+    return {
+      projectNodeId: resolved.projectNodeId,
+      boardUrl,
+      statusFieldId: resolved.statusFieldId,
+      statusOptions: resolved.statusOptions,
+    };
   }
 }

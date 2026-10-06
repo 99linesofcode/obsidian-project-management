@@ -14,8 +14,8 @@ import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
-import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
-import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
+import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
+import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';

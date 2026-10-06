@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApplyTodoistRemoteChangesAction } from '../../src/todoist/ApplyTodoistRemoteChangesAction.js';
 import type { ApplyTodoistRemoteChangesInput } from '../../src/todoist/ApplyTodoistRemoteChangesAction.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';

@@ -1,7 +1,7 @@
-import type { ArchiveBaselineData } from '../projects/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
+import type { ArchiveBaselineData } from './ArchiveBaselineData.js';
+import type { ProjectIdentityData } from './ProjectIdentityData.js';
 import type { TaskData } from './TaskData.js';
-import type { WatchStateData } from '../projects/WatchStateData.js';
+import type { WatchStateData } from './WatchStateData.js';
 
 // One hub entity's registry entry: its uuid and where its note lives. The
 // mirrors map LEAVES the entity in v3 — the port items ARE the mirror state

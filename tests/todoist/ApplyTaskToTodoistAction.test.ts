@@ -3,7 +3,7 @@ import { ApplyTaskToTodoistAction } from '../../src/todoist/ApplyTaskToTodoistAc
 import { ToDoData } from '../../src/shared/ToDoData.js';
 import { hash } from '../../src/shared/hash.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
-import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
+import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';

@@ -1,5 +1,5 @@
-import type { AttachProjectData } from './AttachProjectData.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { AttachProjectData } from '../shared/AttachProjectData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 

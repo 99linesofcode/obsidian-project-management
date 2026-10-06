@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BoardStatusAction } from '../../src/projects/BoardStatusAction.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';

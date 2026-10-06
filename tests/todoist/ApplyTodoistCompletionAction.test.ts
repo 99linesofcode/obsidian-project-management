@@ -6,7 +6,7 @@ import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAc
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';

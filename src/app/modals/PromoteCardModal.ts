@@ -1,6 +1,6 @@
 import { App, FuzzySuggestModal } from 'obsidian';
 import type { PromoteCardAction } from '../../tasks/PromoteCardAction.js';
-import type { BoardItemData } from '../../github/BoardItemData.js';
+import type { BoardItemData } from '../../shared/BoardItemData.js';
 import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../shared/SyncStatePort.js';
 

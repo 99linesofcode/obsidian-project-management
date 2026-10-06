@@ -2,7 +2,7 @@ import { ProjectMapper } from './ProjectMapper.js';
 import { projectHomePath } from '../shared/projectHomePath.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import type { ProjectData } from '../shared/ProjectData.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
@@ -37,6 +37,13 @@ interface VaultLinks {
 // an account full of unrelated projects adopts none of them. A provider record
 // with no creation clock is treated as not-new (skipped) rather than guessed.
 //
+// The cursor is a WATERMARK over the processed range, not over the listing: it
+// advances only over projects that were actually handled, in creation order. A
+// post-cursor project that could not be captured (an unresolvable board
+// identity, a home note the discovery scan did not see) stops the watermark so
+// the next pass retries it — a failed capture is never skipped past. A project
+// already linked to a vault home is handled and the watermark may pass it.
+//
 // The action is idempotent: a captured project's home note is linked by name
 // and anchor, so a second pass skips it even before the cursor has advanced.
 export class CaptureRemoteProjectsAction {
@@ -70,12 +77,13 @@ export class CaptureRemoteProjectsAction {
 
     if (cursor === null) {
       // First sight: adopt the current newest clock and capture nothing.
-      await this.syncState.setProjectCursor('todoist', newest ?? syncedAt);
+      await this.advanceCursor('todoist', newest ?? syncedAt, null);
       return [];
     }
 
     const captured: string[] = [];
-    for (const payload of projects) {
+    let nextCursor = cursor;
+    for (const payload of sortedByCreatedAt(projects)) {
       const project = ProjectMapper.fromRemoteProject(payload, {
         path: '',
         doneLane: this.doneOptionName,
@@ -89,16 +97,24 @@ export class CaptureRemoteProjectsAction {
         links.todoistIds.has(payload.id) ||
         links.names.has(project.name)
       ) {
+        // Already linked to a vault home: handled, so the watermark may pass it.
+        nextCursor = project.createdAt ?? nextCursor;
         continue;
       }
-      await this.materializeVaultProject(project.name, {
+      const created = await this.materializeVaultProject(project.name, {
         todoistId: payload.id,
         boardUrl: '',
         identity: emptyIdentity(),
       });
+      if (!created) {
+        // A home note the discovery scan did not see. Leave the watermark here
+        // so the next pass retries it; a later project is retried too.
+        break;
+      }
       captured.push(project.name);
+      nextCursor = project.createdAt ?? nextCursor;
     }
-    await this.syncState.setProjectCursor('todoist', newest ?? cursor);
+    await this.advanceCursor('todoist', nextCursor, cursor);
     return captured;
   }
 
@@ -115,12 +131,13 @@ export class CaptureRemoteProjectsAction {
     const newest = newestCreatedAt(boards.map((board) => board.createdAt));
 
     if (cursor === null) {
-      await this.syncState.setProjectCursor('github', newest ?? syncedAt);
+      await this.advanceCursor('github', newest ?? syncedAt, null);
       return [];
     }
 
     const captured: string[] = [];
-    for (const board of boards) {
+    let nextCursor = cursor;
+    for (const board of sortedByCreatedAt(boards)) {
       if (!createdAfter(board.createdAt, cursor)) {
         continue;
       }
@@ -130,6 +147,8 @@ export class CaptureRemoteProjectsAction {
         links.boardUrls.has(boardUrl) ||
         links.names.has(board.name)
       ) {
+        // Nothing to capture (no anchor) or already linked: handled.
+        nextCursor = board.createdAt ?? nextCursor;
         continue;
       }
       const identity = await this.projectManagement.fetchProjectIdentity({
@@ -138,23 +157,31 @@ export class CaptureRemoteProjectsAction {
         boardUrl,
       });
       if (identity === null) {
-        continue;
+        // The board could not be resolved to an identity. Leave the watermark
+        // here so the next pass retries it rather than skipping the board.
+        break;
       }
-      await this.materializeVaultProject(board.name, {
+      const created = await this.materializeVaultProject(board.name, {
         todoistId: '',
         boardUrl,
         identity,
       });
+      if (!created) {
+        break;
+      }
       captured.push(board.name);
+      nextCursor = board.createdAt ?? nextCursor;
     }
-    await this.syncState.setProjectCursor('github', newest ?? cursor);
+    await this.advanceCursor('github', nextCursor, cursor);
     return captured;
   }
 
   // The vault project the capture materializes: a folder + home note (the
   // splice), plus the registry identity. The home note is never overwritten —
   // an existing project of the same name wins, and the remote project is left
-  // unadopted (the lifecycle links it by name on the next pass).
+  // unadopted (the lifecycle links it by name on the next pass). Returns whether
+  // the project was actually created: false means the home note already existed,
+  // so the caller must not count it as captured nor advance past it.
   private async materializeVaultProject(
     name: string,
     options: {
@@ -162,22 +189,23 @@ export class CaptureRemoteProjectsAction {
       boardUrl: string;
       identity: ProjectIdentityData;
     },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const homePath = projectHomePath(name, false);
     if ((await this.vault.getNoteByPath(homePath)) !== null) {
-      return;
+      return false;
     }
     await this.vault.createNote(
       homePath,
       this.homeNoteContent(name, options.todoistId, options.boardUrl),
     );
     await this.syncState.setIdentity(name, options.identity);
+    return true;
   }
 
   // The home note's content: the pm provider (the code host owns the board)
   // plus the anchor(s) the birth surface supplied. A task-manager-born project
   // carries the todoist anchor and no board yet; a board-born project carries
-  // the board url and no todoist anchor yet. The lifecycle fills the missing
+  // the board URL and no todoist anchor yet. The lifecycle fills the missing
   // anchor.
   private homeNoteContent(
     name: string,
@@ -193,6 +221,20 @@ export class CaptureRemoteProjectsAction {
     }
     lines.push('---', '', `# ${name}`, '');
     return lines.join('\n');
+  }
+
+  // Advances a surface cursor only when it actually moved. WHY the guard at the
+  // call site in addition to the adapter's: the capture runs every tick, and a
+  // quiet tick must perform zero registry writes (SYNC-8). A first sight
+  // (previous null) always writes.
+  private async advanceCursor(
+    portId: string,
+    next: string,
+    previous: string | null,
+  ): Promise<void> {
+    if (previous === null || next !== previous) {
+      await this.syncState.setProjectCursor(portId, next);
+    }
   }
 
   // The already-linked vault projects, read from the discovered home notes'
@@ -247,6 +289,23 @@ function newestCreatedAt(clocks: Array<string | null | undefined>): string | nul
     }
   }
   return newest;
+}
+
+// Creation order, oldest first, records with no clock last. The capture walks
+// this order so the cursor watermark stops at the first project it could not
+// handle.
+function sortedByCreatedAt<T extends { createdAt?: string | null }>(
+  items: T[],
+): T[] {
+  return [...items].sort((a, b) => {
+    if (a.createdAt === null || a.createdAt === undefined) {
+      return 1;
+    }
+    if (b.createdAt === null || b.createdAt === undefined) {
+      return -1;
+    }
+    return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+  });
 }
 
 // Whether a project was created strictly after the cursor. A null clock is

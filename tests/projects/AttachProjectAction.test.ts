@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AttachProjectAction } from '../../src/projects/AttachProjectAction.js';
-import type { AttachProjectData } from '../../src/projects/AttachProjectData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { AttachProjectData } from '../../src/shared/AttachProjectData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 
 // A fake port at the boundary: records what the action asked for and returns

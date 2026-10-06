@@ -7,8 +7,8 @@ import { ApplyTaskToVaultAction } from '../../src/tasks/ApplyTaskToVaultAction.j
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
-import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
+import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type {
   ApplyTaskToTodoistInput,
   ApplyToDoToTodoistInput,
@@ -22,9 +22,9 @@ import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
-import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
+import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
+import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';

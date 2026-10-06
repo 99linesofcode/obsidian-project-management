@@ -1,5 +1,5 @@
 import { ProjectData } from '../shared/ProjectData.js';
-import type { ProjectStatusOption } from './ProjectIdentityData.js';
+import type { ProjectStatusOption } from '../shared/ProjectIdentityData.js';
 import type { RemoteProjectData } from '../shared/RemoteProjectData.js';
 
 // The provider payloads a project read maps onto the canonical ProjectData.

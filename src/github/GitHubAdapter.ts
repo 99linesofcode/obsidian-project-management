@@ -1,16 +1,16 @@
 import { isRecord } from '../shared/isRecord.js';
-import type { AttachProjectData } from '../projects/AttachProjectData.js';
-import type { BoardItemData } from './BoardItemData.js';
-import type { CreateIssueData } from './CreateIssueData.js';
-import type { IssueHandleData } from './IssueHandleData.js';
-import type { ProjectBoardData } from '../projects/ProjectBoardData.js';
+import type { AttachProjectData } from '../shared/AttachProjectData.js';
+import type { BoardItemData } from '../shared/BoardItemData.js';
+import type { CreateIssueData } from '../shared/CreateIssueData.js';
+import type { IssueHandleData } from '../shared/IssueHandleData.js';
+import type { ProjectBoardData } from '../shared/ProjectBoardData.js';
 import type { ProjectData } from '../shared/ProjectData.js';
 import type {
   ProjectIdentityData,
   ProjectStatusOption,
-} from '../projects/ProjectIdentityData.js';
-import type { ProjectStateData } from '../projects/ProjectStateData.js';
-import type { ProjectDetailData } from './ProjectDetailData.js';
+} from '../shared/ProjectIdentityData.js';
+import type { ProjectStateData } from '../shared/ProjectStateData.js';
+import type { ProjectDetailData } from '../shared/ProjectDetailData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
 import { ProjectMapper } from '../projects/ProjectMapper.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';

@@ -1,8 +1,7 @@
-import type { BoardItemData } from './BoardItemData.js';
+import type { BoardItemData } from '../shared/BoardItemData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
-import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { TaskData } from '../shared/TaskData.js';
-import { boardOptionIDByName } from '../projects/boardOptionIDByName.js';
 import { defaultStatusName } from '../projects/defaultStatusName.js';
 import { hasTypeLabel } from '../shared/hasTypeLabel.js';
 import { typeFromLabels } from '../shared/typeFromLabels.js';
@@ -14,7 +13,7 @@ import { parseAffiliation } from '../shared/parseAffiliation.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
 import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
-import { toDiffView } from '../shared/toDiffView.js';
+import { toDiffView, toDiffViewWithBody } from '../shared/toDiffView.js';
 import type { ConflictHints } from '../shared/VerdictResolver.js';
 import { VerdictResolver } from '../shared/VerdictResolver.js';
 import {
@@ -31,6 +30,22 @@ import type { VaultPort } from '../shared/VaultPort.js';
 import type { ApplyTaskToGithubAction } from './ApplyTaskToGithubAction.js';
 import type { ApplyTaskToVaultAction } from '../tasks/ApplyTaskToVaultAction.js';
 import type { CodeHostSyncHalf } from '../sync/SyncHalves.js';
+
+// The registry-first outward creation marker. Before the remote call, the
+// entity and a github mirror item are written so an interruption can never
+// orphan an issue; the item's handle is this synthetic, ENTITY-UNIQUE marker
+// (it can never collide with an issue url, and several interrupted creations
+// can coexist). Once the issue exists, the item is re-pointed to the issue's
+// url and the marker is removed.
+const PENDING_CREATION_PREFIX = 'pendingCreation:';
+
+function pendingCreationHandle(entityId: string): string {
+  return `${PENDING_CREATION_PREFIX}${entityId}`;
+}
+
+function isPendingCreationHandle(handle: string): boolean {
+  return handle.startsWith(PENDING_CREATION_PREFIX);
+}
 
 export interface SyncGithubTasksInput {
   projectName: string;
@@ -107,6 +122,18 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     const doneLane = this.doneOptionName;
     const defaultLane = defaultStatusName(identity.statusOptions);
 
+    // Heal interrupted outward creations BEFORE the per-issue loop: a
+    // placeholder entity whose issue already exists (the remote call landed,
+    // the mirror write did not) adopts the issue's handle here, so the loop
+    // treats it as tracked and never materializes a duplicate note.
+    await this.adoptPendingIssues(
+      issues,
+      cardByUrl,
+      input,
+      doneLane,
+      defaultLane,
+    );
+
     for (const issue of issues) {
       const card = cardByUrl.get(issue.url) ?? null;
       const item = await this.syncState.findMirrorItem('github', issue.url);
@@ -134,9 +161,9 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     }
 
     // Outward materialization runs AFTER the per-issue loop so existing mirrors
-    // settle first. A vault-born task note with no github mirror gains an issue
-    // and a card; a creation failure leaves the entity unmirrored and the next
-    // pass retries.
+    // settle first. A vault-born task note with no real github mirror gains an
+    // issue and a card; a creation failure leaves the entity and its placeholder
+    // in place, and the next pass retries or adopts (see createOutward).
     await this.materializeOutward(input, identity, doneLane, defaultLane);
   }
 
@@ -518,7 +545,13 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
         doneLane: this.doneOptionName,
       });
       if (parsed === null) {
-        return true;
+        // A malformed note must not hold the probe gate open forever: log it
+        // and treat it as settled. It cannot sync until repaired, but it is not
+        // a change the fetch would resolve.
+        console.warn(
+          `SyncGithubTasksAction: unparseable note ${record.notePath}; not counting it as drift`,
+        );
+        continue;
       }
       if (!matchesBase(parsed, base)) {
         return true;
@@ -539,7 +572,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       const record = await this.syncState.findByNotePath(notePath);
       if (
         record !== null &&
-        (await this.hasGithubMirror(record.id))
+        (await this.hasRealGithubMirror(record.id))
       ) {
         continue;
       }
@@ -584,11 +617,23 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
         continue;
       }
       const existing = await this.syncState.findByNotePath(notePath);
-      if (
-        existing !== null &&
-        (await this.hasGithubMirror(existing.id))
-      ) {
+      if (existing !== null && (await this.hasRealGithubMirror(existing.id))) {
         // Already mirrored: the per-issue loop owns it; leave it untouched.
+        continue;
+      }
+      // Validate the lane maps to a board option BEFORE creating the issue. An
+      // unmappable lane would otherwise create an issue whose card status can
+      // never be written, and the next pass would retry the same broken write
+      // forever.
+      const lane = vault.status !== '' ? vault.status : defaultLane;
+      const laneOption =
+        lane === ''
+          ? undefined
+          : identity.statusOptions.find((option) => option.name === lane);
+      if (lane !== '' && laneOption === undefined) {
+        console.warn(
+          `SyncGithubTasksAction: note ${notePath} carries lane "${lane}" which is not a board option; skipping outward creation`,
+        );
         continue;
       }
       try {
@@ -598,12 +643,13 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
           notePath,
           input,
           identity,
-          defaultLane,
+          laneOption?.id,
         );
       } catch (error) {
-        // A failed creation leaves the entity unmirrored (no partial mirror
-        // state); the next pass sees the same outward drift and retries. One
-        // note's failure must not starve the others.
+        // Registry-first: a failed creation leaves the entity and its
+        // placeholder in place, so the next pass retries instead of
+        // materializing a second note. One note's failure must not starve the
+        // others.
         console.error(
           `SyncGithubTasksAction: outward creation failed for ${notePath}`,
           error,
@@ -613,32 +659,36 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
   }
 
   // Creates the issue for one vault-born task and links it. Ordering is the
-  // safety property: the issue is created first, so a failure throws before any
-  // registry write and the entity is left untouched (retried next pass). The
-  // mirror item is set immediately after the issue exists, so a later card
-  // failure can never re-create the issue — the per-issue loop heals the
-  // missing card on the next pass (membership gap).
+  // safety property: the entity and a placeholder mirror item are written
+  // BEFORE the remote call, so an interruption can never orphan an issue — the
+  // next pass finds the placeholder and either adopts the issue (it exists) or
+  // retries the creation (it does not). Once the issue exists the placeholder
+  // is re-pointed to the issue's url and base; the card write follows, and a
+  // later card failure is healed by the per-issue loop's membership gap.
   private async createOutward(
     existing: EntityRecord | null,
     vault: TaskData,
     notePath: string,
     input: SyncGithubTasksInput,
     identity: ProjectIdentityData,
-    defaultLane: string,
+    laneOptionId: string | undefined,
   ): Promise<void> {
+    // Registry-first: the entity and its placeholder item exist before the
+    // remote call. A crash before the issue exists leaves a placeholder the next
+    // pass retries; a crash after leaves a placeholder the next pass adopts.
+    // Either way no second note is materialized for the same work.
+    const record = existing ?? { id: crypto.randomUUID(), notePath };
+    if (existing === null) {
+      await this.syncState.setEntity(record);
+    }
+    await this.ensurePlaceholder(record, input.projectName);
+
     const body = toIssueBody(vault.body);
     const handle = await this.projectManagement.createIssue(identity.repoUrl, {
       title: vault.title,
       body,
       type: vault.type,
     });
-
-    // The entity is created only once the issue exists, so a failed creation
-    // never leaves a dangling record.
-    const record = existing ?? { id: crypto.randomUUID(), notePath };
-    if (existing === null) {
-      await this.syncState.setEntity(record);
-    }
 
     // The base is a diff view of the canonical task, with the issue-comparable
     // body digest — the same form the next pass's diff reads.
@@ -648,28 +698,143 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       entityId: record.id,
       base,
     });
+    await this.syncState.removeMirrorItem(
+      input.projectName,
+      'github',
+      pendingCreationHandle(record.id),
+    );
 
-    // The card: add it and place it in the note's lane (the default lane when
-    // the note carries none).
+    // The card: add it and place it in the note's lane. The lane was validated
+    // against the board's options by the caller, so this write cannot fail on an
+    // unknown option.
     await this.projectManagement.addBoardItem(identity.projectNodeId, handle.url);
-    const lane = vault.status !== '' ? vault.status : defaultLane;
-    if (lane !== '') {
+    if (laneOptionId !== undefined) {
       await this.projectManagement.setBoardStatus(
         identity.projectNodeId,
         identity.statusFieldId,
         handle.url,
-        boardOptionIDByName(identity.statusOptions, lane),
+        laneOptionId,
       );
     }
   }
 
-  // Whether an entity already holds a github mirror item. The registry is the
-  // identity source, so this is the one check the outward phase needs to leave
-  // an already-mirrored note untouched.
-  private async hasGithubMirror(entityId: string): Promise<boolean> {
-    return (
-      (await this.syncState.findMirrorItemByEntity('github', entityId)) !== null
+  // Writes the placeholder mirror item for an entity about to be created
+  // outward, unless it already carries a mirror item (a real handle or an
+  // earlier placeholder).
+  private async ensurePlaceholder(
+    record: EntityRecord,
+    projectName: string,
+  ): Promise<void> {
+    const item = await this.syncState.findMirrorItemByEntity(
+      'github',
+      record.id,
     );
+    if (item !== null) {
+      return;
+    }
+    await this.syncState.setMirrorItem(
+      projectName,
+      'github',
+      pendingCreationHandle(record.id),
+      { entityId: record.id, base: null },
+    );
+  }
+
+  // Heals interrupted outward creations: a placeholder entity whose issue was
+  // created (the remote call landed, the mirror write did not) adopts the
+  // issue's handle and base here. A placeholder with no matching issue is left
+  // for the outward phase to retry.
+  private async adoptPendingIssues(
+    issues: GithubTaskData[],
+    cardByUrl: Map<string, BoardItemData>,
+    input: SyncGithubTasksInput,
+    doneLane: string,
+    defaultLane: string,
+  ): Promise<void> {
+    const items = await this.syncState.listMirrorItems(
+      input.projectName,
+      'github',
+    );
+    const pending = items.filter(({ handle }) =>
+      isPendingCreationHandle(handle),
+    );
+    if (pending.length === 0) {
+      return;
+    }
+    const mirrored = new Set(
+      items
+        .filter(({ handle }) => !isPendingCreationHandle(handle))
+        .map(({ handle }) => handle),
+    );
+    for (const { handle, item } of pending) {
+      const record = await this.syncState.getEntity(item.entityId);
+      if (record === null) {
+        await this.syncState.removeMirrorItem(
+          input.projectName,
+          'github',
+          handle,
+        );
+        continue;
+      }
+      const note = await this.vault.getNoteByPath(record.notePath);
+      if (note === null) {
+        continue;
+      }
+      const parsed = VaultTaskMapper.parseTask(note.content, record.notePath, {
+        projectName: input.projectName,
+        doneLane,
+      });
+      if (parsed === null || parsed.type === '') {
+        continue;
+      }
+      // Match the orphan issue the interrupted creation left: an untracked,
+      // open, typed issue carrying the note's own title and type. A title
+      // collision is resolved by first match; the per-issue loop then treats it
+      // as tracked.
+      const match = issues.find(
+        (issue) =>
+          !mirrored.has(issue.url) &&
+          issue.state === 'open' &&
+          typeFromLabels(issue.labels) === parsed.type &&
+          issue.title === parsed.title,
+      );
+      if (match === undefined) {
+        continue;
+      }
+      const card = cardByUrl.get(match.url) ?? null;
+      const { remote } = await this.remoteViews(
+        match,
+        record,
+        null,
+        card,
+        doneLane,
+        defaultLane,
+      );
+      await this.syncState.setMirrorItem(
+        input.projectName,
+        'github',
+        match.url,
+        { entityId: record.id, base: toDiffViewWithBody(remote) },
+      );
+      await this.syncState.removeMirrorItem(
+        input.projectName,
+        'github',
+        handle,
+      );
+      mirrored.add(match.url);
+    }
+  }
+
+  // Whether an entity already holds a REAL github mirror item (an issue handle,
+  // not the registry-first placeholder). The registry is the identity source, so
+  // this is the check that lets the outward phase leave an already-mirrored note
+  // untouched while still retrying a placeholder whose issue does not exist.
+  private async hasRealGithubMirror(entityId: string): Promise<boolean> {
+    const item = await this.syncState.findMirrorItemByEntity(
+      'github',
+      entityId,
+    );
+    return item !== null && !isPendingCreationHandle(item.handle);
   }
 }
 

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import { ProjectData } from '../../src/shared/ProjectData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectBoardData } from '../../src/projects/ProjectBoardData.js';
-import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
+import type { ProjectBoardData } from '../../src/shared/ProjectBoardData.js';
+import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
+import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
@@ -15,6 +16,9 @@ import { FakeSyncState } from '../helpers/fakeSyncState.js';
 // stamping is observable.
 class FakeProjectManagement implements ProjectManagementPort {
   createCalls: string[] = [];
+  boards: ProjectData[] = [];
+  identities = new Map<string, ProjectIdentityData>();
+  identityCalls: string[] = [];
   board: ProjectBoardData = {
     projectNodeId: 'PVT_new',
     boardUrl: 'https://github.com/users/acme/projects/7',
@@ -27,11 +31,14 @@ class FakeProjectManagement implements ProjectManagementPort {
     return this.board;
   }
 
-  async fetchViewerProjects(): Promise<never> {
-    throw new Error('not used in this test');
+  async fetchViewerProjects(): Promise<ProjectData[]> {
+    return this.boards;
   }
-  async fetchProjectIdentity(): Promise<null> {
-    return null;
+  async fetchProjectIdentity(data: {
+    boardUrl: string;
+  }): Promise<ProjectIdentityData | null> {
+    this.identityCalls.push(data.boardUrl);
+    return this.identities.get(data.boardUrl) ?? null;
   }
   async fetchProject(): Promise<never> {
     throw new Error('not used in this test');
@@ -183,5 +190,67 @@ describe('PRJ-1 — a vault project gains a board', () => {
       statusFieldId: 'PVTF_new',
       statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     });
+  });
+
+  it('adopts a same-name board instead of creating a duplicate', async () => {
+    const h = setup();
+    const boardUrl = 'https://github.com/users/acme/projects/7';
+    h.port.boards = [
+      new ProjectData(
+        'PVT_existing',
+        '',
+        { github: boardUrl },
+        'Acme Widgets',
+        null,
+        ['Unshaped'],
+        'Shipped',
+        '2026-09-01T00:00:00Z',
+        null,
+      ),
+    ];
+    h.port.identities.set(
+      boardUrl,
+      identity({
+        projectNodeId: 'PVT_existing',
+        statusFieldId: 'PVTF_existing',
+        statusOptions: [{ id: 'PVTSSF_existing', name: 'Unshaped' }],
+      }),
+    );
+
+    await h.action.execute({ projectName: 'Acme Widgets', notePath });
+
+    expect(h.port.createCalls).toEqual([]);
+    expect(h.port.identityCalls).toEqual([boardUrl]);
+    expect(await h.syncState.getIdentity('Acme Widgets')).toEqual({
+      repoUrl: '',
+      repoNodeId: '',
+      projectNodeId: 'PVT_existing',
+      statusFieldId: 'PVTF_existing',
+      statusOptions: [{ id: 'PVTSSF_existing', name: 'Unshaped' }],
+    });
+    expect(h.vault.notes.get(notePath)).toContain(`board: ${boardUrl}`);
+  });
+
+  it('does not create a second board when a same-name board is unresolvable', async () => {
+    const h = setup();
+    h.port.boards = [
+      new ProjectData(
+        'PVT_existing',
+        '',
+        { github: 'https://github.com/users/acme/projects/7' },
+        'Acme Widgets',
+        null,
+        ['Unshaped'],
+        'Shipped',
+        '2026-09-01T00:00:00Z',
+        null,
+      ),
+    ];
+    // No identity registered for the board url: fetchProjectIdentity yields null.
+
+    await h.action.execute({ projectName: 'Acme Widgets', notePath });
+
+    expect(h.port.createCalls).toEqual([]);
+    expect(await h.syncState.getIdentity('Acme Widgets')).toBeNull();
   });
 });

@@ -1,8 +1,8 @@
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
-import type { ArchiveBaselineData } from './ArchiveBaselineData.js';
+import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
 import { ProjectData } from '../shared/ProjectData.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { RemoteProjectData } from '../shared/RemoteProjectData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';

@@ -1,4 +1,4 @@
-import type ProjectManagementPlugin from '../main.js';
+import type ProjectManagementPlugin from '../../main.js';
 import { PromoteModal } from '../modals/PromoteModal.js';
 import type { PromoteIssueAction } from '../../tasks/PromoteIssueAction.js';
 import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';

@@ -1,4 +1,4 @@
-import type { ProjectStateData } from '../projects/ProjectStateData.js';
+import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 

@@ -1,6 +1,12 @@
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
 import { projectAffiliationLink } from '../shared/projectAffiliation.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
+import { slugify } from '../shared/slugify.js';
+
+// Re-exported so note-facing callers keep importing slugify from the vault
+// module; the implementation lives in shared so the shared kernel never
+// depends on a vault module.
+export { slugify };
 
 // The task fields a note is rendered from. Structural, so the canonical
 // TaskData satisfies it directly. The id is deliberately absent (dt-20): the
@@ -28,17 +34,6 @@ export interface TaskNoteContext {
 export interface TaskNote {
   path: string;
   content: string;
-}
-
-// Sanitises a title into a filename slug: lowercase, spaces to dashes, strip
-// everything outside [a-z0-9-], collapse runs of dashes, trim the ends.
-export function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 // Derives the user-facing title from a note's filename: strips a legacy

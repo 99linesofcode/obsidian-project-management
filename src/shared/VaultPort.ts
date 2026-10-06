@@ -1,4 +1,4 @@
-import type { ProjectNoteData } from '../projects/ProjectNoteData.js';
+import type { ProjectNoteData } from './ProjectNoteData.js';
 
 // WHY this port lives in the shared kernel: it is the core's need, designed
 // for the core and owned by no provider. The vault adapter registers from its

@@ -3,14 +3,14 @@ import { CaptureRemoteProjectsAction } from '../../src/projects/CaptureRemotePro
 import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
 import { ReconcileProjectLifecycleAction } from '../../src/projects/ReconcileProjectLifecycleAction.js';
 import { ProjectData } from '../../src/shared/ProjectData.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectBoardData } from '../../src/projects/ProjectBoardData.js';
-import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
-import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
+import type { ProjectBoardData } from '../../src/shared/ProjectBoardData.js';
+import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
+import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
+import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
@@ -465,5 +465,79 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       statusFieldId: 'PVTF_new',
       statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     });
+  });
+});
+
+describe('F3/F4 — the capture cursor is a watermark over handled projects', () => {
+  it('does not advance the cursor past an unresolvable board, and retries it', async () => {
+    const h = setup();
+    h.syncState.projectCursors.set('github', cursor);
+    const boardUrl = 'https://github.com/users/acme/projects/9';
+    h.projectManagement.boards = [
+      board('New Board', '2026-10-05T10:00:00Z', boardUrl),
+    ];
+    // No identity registered: fetchProjectIdentity yields null, so the board is
+    // skipped rather than captured.
+
+    await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
+
+    expect(h.vault.created).toEqual([]);
+    expect(h.syncState.projectCursors.get('github')).toBe(cursor);
+
+    // The next pass resolves the identity and captures it.
+    h.projectManagement.identities.set(boardUrl, identityFor('9'));
+    const captured = await h.action.execute({
+      syncedAt: '2026-10-06T12:05:00Z',
+    });
+
+    expect(captured).toEqual(['New Board']);
+    expect(h.syncState.projectCursors.get('github')).toBe(
+      '2026-10-05T10:00:00Z',
+    );
+  });
+
+  it('does not report a home-note-skipped project as captured', async () => {
+    const h = setup();
+    h.syncState.projectCursors.set('todoist', cursor);
+    h.taskManager.projects = [
+      todoistProject({
+        id: 'P-new',
+        name: 'New Project',
+        createdAt: '2026-10-05T10:00:00Z',
+      }),
+    ];
+    // The home note exists but discovery does not list it, so the vault-links
+    // dedup misses it and materializeVaultProject early-returns.
+    h.vault.notes.set(
+      'Projecten/New Project/_New Project.md',
+      '---\npm: github\n---\n',
+    );
+
+    const captured = await h.action.execute({
+      syncedAt: '2026-10-06T12:00:00Z',
+    });
+
+    expect(captured).toEqual([]);
+    expect(h.vault.created).toEqual([]);
+    expect(h.syncState.projectCursors.get('todoist')).toBe(cursor);
+  });
+
+  it('performs zero cursor writes on a quiet tick', async () => {
+    const h = setup();
+    h.syncState.projectCursors.set('todoist', '2026-10-05T10:00:00Z');
+    h.syncState.projectCursors.set('github', '2026-10-05T10:00:00Z');
+    h.taskManager.projects = [
+      todoistProject({ createdAt: '2026-10-01T00:00:00Z' }),
+    ];
+    h.projectManagement.boards = [
+      board('Old Board', '2026-10-01T00:00:00Z'),
+    ];
+
+    const captured = await h.action.execute({
+      syncedAt: '2026-10-06T12:00:00Z',
+    });
+
+    expect(captured).toEqual([]);
+    expect(h.syncState.cursorSets).toEqual([]);
   });
 });

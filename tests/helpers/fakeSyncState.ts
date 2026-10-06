@@ -1,7 +1,7 @@
-import type { ArchiveBaselineData } from '../../src/projects/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ArchiveBaselineData } from '../../src/shared/ArchiveBaselineData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
-import type { WatchStateData } from '../../src/projects/WatchStateData.js';
+import type { WatchStateData } from '../../src/shared/WatchStateData.js';
 import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
 import type {
   EntityRecord,
@@ -342,6 +342,9 @@ export class FakeSyncState implements SyncStatePort {
 
   // The per-surface project-capture cursors (PRJ-2/PRJ-3).
   projectCursors = new Map<string, string>();
+  // Every setProjectCursor call, so a test can assert a quiet tick writes none
+  // (SYNC-8).
+  cursorSets: Array<{ portId: string; iso: string }> = [];
 
   async getProjectCursor(portId: string): Promise<string | null> {
     return this.projectCursors.get(portId) ?? null;
@@ -349,5 +352,6 @@ export class FakeSyncState implements SyncStatePort {
 
   async setProjectCursor(portId: string, iso: string): Promise<void> {
     this.projectCursors.set(portId, iso);
+    this.cursorSets.push({ portId, iso });
   }
 }

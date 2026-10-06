@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import type ProjectManagementPlugin from '../main.js';
+import type ProjectManagementPlugin from '../../main.js';
 
 export class ProjectManagementSettingTab extends PluginSettingTab {
   plugin: ProjectManagementPlugin;
