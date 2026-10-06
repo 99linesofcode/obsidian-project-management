@@ -94,7 +94,7 @@ provider actions. A provider's name never appears in the chain.
 | Component | Responsibility | Technology | Target |
 |---|---|---|---|
 | `src/main.ts` | The composition root: plugin lifecycle, settings load and migration, wiring, startup discovery and remote-project capture | host plugin API | the vault |
-| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema | host plugin API, `Component` | the vault |
+| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, and the SecretStorage-backed token store | host plugin API, `Component` | the vault |
 | `src/sync/` | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep | TypeScript | in-process |
 | `src/github/` | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer) | GraphQL + REST | the code host |
 | `src/todoist/` | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers | REST v1 | the task manager |
@@ -134,6 +134,12 @@ registers from its own module.
 
 A component that reaches around a port is a defect. The provider modules never
 import each other; the two sync halves meet only through `shared/` and `sync/`.
+
+The API tokens are not settings and not a port: they live in Obsidian's
+SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
+composition root reads at adapter construction and the settings tab sets and
+clears. `data.json` is secret-free; the legacy plaintext fields are migrated
+into the store and stripped on first load.
 
 ## 4. Data Stores
 

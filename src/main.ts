@@ -4,6 +4,14 @@ import {
   settingsFromData,
   type ProjectManagementSettings,
 } from './app/settings/settings.js';
+import {
+  GITHUB_TOKEN_KEY,
+  SecretStorageAdapter,
+  TODOIST_TOKEN_KEY,
+  type SecretStore,
+} from './app/settings/SecretStorageAdapter.js';
+import { migrateLegacyTokens } from './app/settings/migrateLegacyTokens.js';
+import { transportFromSecret } from './app/settings/transportFromSecret.js';
 import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
@@ -113,12 +121,17 @@ function createTransport(token: string): Transport {
 function composePlugin(
   plugin: ProjectManagementPlugin,
   syncState: SyncStateAdapter,
+  secrets: SecretStore,
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
   captureRemoteProjects: CaptureRemoteProjectsAction;
 } {
-  const transport = createTransport(plugin.settings.githubToken);
+  const transport = transportFromSecret(
+    secrets,
+    GITHUB_TOKEN_KEY,
+    createTransport,
+  );
   const vault = new VaultAdapter(plugin.app, (eventRef) =>
     plugin.registerEvent(eventRef),
   );
@@ -180,7 +193,7 @@ function composePlugin(
   // The Todoist half of the tick: the adapter is token-bound through its
   // transport, so a missing token surfaces as a failed request, not a crash.
   const todoist = new TodoistAdapter(
-    createTodoistTransport(plugin.settings.todoistToken),
+    transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
   );
   // t4: ONE lifecycle action with ONE freeze verdict. It merges the former
   // archive-state, Todoist-project and archived-watch actions: folder ⇄
@@ -254,7 +267,11 @@ function composePlugin(
     syncState,
   );
 
-  const promoteIssue = new PromoteIssueAction(github, syncState, createTaskNote);
+  const promoteIssue = new PromoteIssueAction(
+    github,
+    syncState,
+    createTaskNote,
+  );
   const promoteToTask = new PromoteToTaskCommand(
     () => plugin.projectNames,
     syncState,
@@ -309,8 +326,7 @@ function composePlugin(
     queue,
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
-    () =>
-      captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
+    () => captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
   );
 
   return { scheduler, discoverProjects, captureRemoteProjects };
@@ -318,6 +334,9 @@ function composePlugin(
 
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
+  // The plugin's secret store, retained so the settings tab can read the
+  // stored/not-set state and set or clear a token.
+  secrets!: SecretStore;
   projectNames: string[] = [];
   // The registry adapter, retained so a settings save can share its
   // serialization chain (REG-3).
@@ -337,6 +356,14 @@ export default class ProjectManagementPlugin extends Plugin {
     if (migrateLegacyState(raw)) {
       await this.saveData(raw);
     }
+    // Move the legacy plaintext tokens into SecretStorage before any adapter is
+    // built, then strip them from the root so they cannot round-trip. A profile
+    // that never set a token is left untouched (no secret write, no save).
+    const secrets = new SecretStorageAdapter(this.app.secretStorage);
+    if (migrateLegacyTokens(raw, secrets)) {
+      await this.saveData(raw);
+    }
+    this.secrets = secrets;
     // The registry container is stripped out of the settings merge: a stale
     // registry snapshot in settings would be written back over every registry
     // write made since onload (REG-3).
@@ -354,10 +381,8 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const { scheduler, discoverProjects, captureRemoteProjects } = composePlugin(
-      this,
-      syncState,
-    );
+    const { scheduler, discoverProjects, captureRemoteProjects } =
+      composePlugin(this, syncState, this.secrets);
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
