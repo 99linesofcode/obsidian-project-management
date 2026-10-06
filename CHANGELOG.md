@@ -1,3 +1,12 @@
+## [0.5.1](https://github.com/99linesofcode/obsidian-project-management/compare/v0.5.0...v0.5.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **lint:** classify the composition root and arm the unknown-file gate ([cfdcb32](https://github.com/99linesofcode/obsidian-project-management/commit/cfdcb3275626b5f76c0b964f75472e51ed0697e1))
+
+
+
 # [0.5.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.4.0...v0.5.0) (2026-10-06)
 
 
@@ -94,15 +103,6 @@
 * to-do note domain layer (checklist parser, mapper, parser) ([e97dde0](https://github.com/99linesofcode/obsidian-project-management/commit/e97dde075c1cf20c1265f34889f219ab4f0be074))
 * to-do notes carry the Todos.base category and datetime completion ([6995255](https://github.com/99linesofcode/obsidian-project-management/commit/6995255777c3810470d5aa002679ea087f71448e))
 * watch archived repositories and re-activate on new issues ([3278089](https://github.com/99linesofcode/obsidian-project-management/commit/3278089536fda83e70561a8d54b713de82fea556))
-
-
-
-## [0.1.1](https://github.com/99linesofcode/obsidian-project-management/compare/v0.1.0...v0.1.1) (2026-09-24)
-
-
-### Bug Fixes
-
-* **deps:** bump devshell from `27205da` to `231cbce` ([#35](https://github.com/99linesofcode/obsidian-project-management/issues/35)) ([dabda91](https://github.com/99linesofcode/obsidian-project-management/commit/dabda91225726e2e84d34f686ddfe803c201308b))
 
 
 
