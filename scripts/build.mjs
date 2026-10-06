@@ -6,7 +6,7 @@ const watch = process.argv.includes('--watch');
 const production = !watch;
 
 const context = await esbuild.context({
-  entryPoints: ['src/main.ts'],
+  entryPoints: ['src/app/main.ts'],
   bundle: true,
   external: ['obsidian'],
   format: 'cjs',
