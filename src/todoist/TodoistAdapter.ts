@@ -1,3 +1,4 @@
+import { requestUrl } from 'obsidian';
 import { isRecord } from '../shared/isRecord.js';
 import type { CreateTodoistTaskData } from './CreateTodoistTaskData.js';
 import type { TodoistProjectData } from './TodoistProjectData.js';
@@ -25,21 +26,32 @@ const BASE_URL = 'https://api.todoist.com/api/v1';
 // Builds the token-bound transport the adapter talks through. The adapter
 // stays token-agnostic; the Authorization header is added here. Kept beside
 // the adapter so the live probe and the plugin wiring share one transport.
+//
+// Obsidian's requestUrl is used rather than the browser fetch: it bypasses
+// CORS and works on mobile, where fetch is CORS-bound. `throw: false` keeps
+// the adapter's status-based error handling — a non-2xx comes back as a
+// response for assertOk to reject, exactly as the raw fetch did; only a
+// network failure rejects.
 export function createTodoistTransport(token: string): TodoistTransport {
   const request = async (
     method: string,
     path: string,
     body?: string,
   ): Promise<TodoistResponse> => {
-    const response = await fetch(`${BASE_URL}${path}`, {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    };
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const response = await requestUrl({
+      url: `${BASE_URL}${path}`,
       method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      },
+      headers,
       ...(body === undefined ? {} : { body }),
+      throw: false,
     });
-    const text = await response.text();
+    const text = response.text;
     return {
       status: response.status,
       json: text.length > 0 ? JSON.parse(text) : null,
