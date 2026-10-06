@@ -9,15 +9,10 @@ import boundaries from 'eslint-plugin-boundaries';
 // including provider isolation, which the old gate could only approximate.
 
 // The module tree. Each element is one folder under src/, except app, which
-// also owns the composition root at src/main.ts — one type, two descriptors.
-// WHY `mode: 'full'` for the root file: element patterns describe folders, so
-// `partialMatch: false` still expands to `<pattern>/**/*` and cannot match a
-// lone file. A full-path descriptor is the plugin's way to classify one file;
-// the option is deprecated but the replacement does not cover this case, and
-// `boundaries/legacy-warnings` keeps the run quiet.
+// also owns the composition root at src/main.ts: its root-level pattern sits
+// LAST, so deeper module patterns classify first and only src-root files
+// fall through to it — no deprecated full-path descriptor needed.
 const ELEMENT_PATTERNS = [
-  { type: 'app', pattern: 'src/app/**' },
-  { type: 'app', pattern: 'src/main.ts', mode: 'full' },
   { type: 'shared', pattern: 'src/shared/**' },
   { type: 'github', pattern: 'src/github/**' },
   { type: 'todoist', pattern: 'src/todoist/**' },
@@ -27,6 +22,8 @@ const ELEMENT_PATTERNS = [
   { type: 'todos', pattern: 'src/todos/**' },
   { type: 'projects', pattern: 'src/projects/**' },
   { type: 'sync', pattern: 'src/sync/**' },
+  { type: 'app', pattern: 'src/app/**' },
+  { type: 'app', pattern: 'src' },
 ];
 
 const ALL_ELEMENT_TYPES = [
