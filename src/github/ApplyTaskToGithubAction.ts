@@ -1,5 +1,5 @@
 import { TaskData } from '../shared/TaskData.js';
-import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { boardOptionIDByName } from '../projects/boardOptionIDByName.js';
 import { toIssueBody } from '../vault/Checklist.js';
 import { slugify } from '../vault/TaskNoteMapper.js';

@@ -1191,7 +1191,7 @@ that this wave resolved are listed at the end.
 
 The tree is module-first; each module owns one surface of the system.
 
-- The wiring and construction order: `src/app/main.ts` (`onload`, `composePlugin`).
+- The wiring and construction order: `src/main.ts` (`onload`, `composePlugin`).
 - The chain and the halves: `src/sync/` (`SyncProjectAction`, `SyncHalves`,
   `ProbeProjectsAction`).
 - The registry: `src/registry/` (`SyncStateAdapter`, `SyncStateSchema`,

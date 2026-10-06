@@ -3,10 +3,10 @@ import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardA
 import { ProjectData } from '../../src/shared/ProjectData.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectBoardData } from '../../src/projects/ProjectBoardData.js';
+import type { ProjectBoardData } from '../../src/shared/ProjectBoardData.js';
 import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
+import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';

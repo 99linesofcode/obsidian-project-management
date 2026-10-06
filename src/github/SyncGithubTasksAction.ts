@@ -1,6 +1,6 @@
 import type { BoardItemData } from '../shared/BoardItemData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
-import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { TaskData } from '../shared/TaskData.js';
 import { defaultStatusName } from '../projects/defaultStatusName.js';
 import { hasTypeLabel } from '../shared/hasTypeLabel.js';

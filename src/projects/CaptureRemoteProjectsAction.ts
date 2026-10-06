@@ -2,7 +2,7 @@ import { ProjectMapper } from './ProjectMapper.js';
 import { projectHomePath } from '../shared/projectHomePath.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import type { ProjectData } from '../shared/ProjectData.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { TaskManagerPort } from '../shared/TaskManagerPort.js';

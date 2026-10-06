@@ -3,7 +3,7 @@ import type { DimensionVerdict, SyncVerdict } from './SyncVerdict.js';
 import { hash } from './hash.js';
 import { slugify } from './slugify.js';
 import { toIssueBody } from './Checklist.js';
-import { statusNameFromState } from '../tasks/statusNameFromState.js';
+import { statusNameFromState } from './statusNameFromState.js';
 
 // The pure reconciliation arithmetic shared by both sync halves and the
 // verdict resolver. Every function here is a total function over canonical

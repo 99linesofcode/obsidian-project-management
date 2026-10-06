@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CaptureTodoistCreationsAction } from '../../src/todoist/CaptureTodoistCreationsAction.js';
 import type { CaptureTodoistCreationsInput } from '../../src/todoist/CaptureTodoistCreationsAction.js';
 import { splitFrontmatter } from '../../src/vault/splitFrontmatter.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';

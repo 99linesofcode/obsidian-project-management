@@ -11,7 +11,7 @@ import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';

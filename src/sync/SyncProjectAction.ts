@@ -1,5 +1,5 @@
-import type { ProjectNoteData } from '../projects/ProjectNoteData.js';
-import type { ProjectStateData } from '../projects/ProjectStateData.js';
+import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
+import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';

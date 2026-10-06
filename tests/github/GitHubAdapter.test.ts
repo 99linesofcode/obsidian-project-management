@@ -3,7 +3,7 @@ import {
   GitHubAdapter,
   type Transport,
 } from '../../src/github/GitHubAdapter.js';
-import type { AttachProjectData } from '../../src/projects/AttachProjectData.js';
+import type { AttachProjectData } from '../../src/shared/AttachProjectData.js';
 
 // A fake transport at the boundary: returns canned responses in call order
 // and records the request bodies/paths, so the adapter's mapping is what's

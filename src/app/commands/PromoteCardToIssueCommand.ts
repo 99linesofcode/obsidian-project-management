@@ -1,4 +1,4 @@
-import type ProjectManagementPlugin from '../main.js';
+import type ProjectManagementPlugin from '../../main.js';
 import { PromoteCardModal } from '../modals/PromoteCardModal.js';
 import type { PromoteCardAction } from '../../tasks/PromoteCardAction.js';
 import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';

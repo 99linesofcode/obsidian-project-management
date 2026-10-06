@@ -1,7 +1,7 @@
-import type { ArchiveBaselineData } from '../../src/projects/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ArchiveBaselineData } from '../../src/shared/ArchiveBaselineData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
-import type { WatchStateData } from '../../src/projects/WatchStateData.js';
+import type { WatchStateData } from '../../src/shared/WatchStateData.js';
 import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
 import type {
   EntityRecord,

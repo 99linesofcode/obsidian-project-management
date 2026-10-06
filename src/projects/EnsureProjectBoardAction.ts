@@ -1,6 +1,6 @@
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
-import type { ProjectBoardData } from './ProjectBoardData.js';
-import type { ProjectIdentityData } from './ProjectIdentityData.js';
+import type { ProjectBoardData } from '../shared/ProjectBoardData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';

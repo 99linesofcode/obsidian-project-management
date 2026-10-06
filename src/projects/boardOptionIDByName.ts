@@ -1,6 +1,6 @@
 // Resolve a project Status option by name. An unknown name is a config
 // error — the caller's status does not exist on this board.
-import type { ProjectStatusOption } from './ProjectIdentityData.js';
+import type { ProjectStatusOption } from '../shared/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
 
 export function boardOptionIDByName(

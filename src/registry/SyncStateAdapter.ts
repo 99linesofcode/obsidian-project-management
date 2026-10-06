@@ -1,8 +1,8 @@
 import { isRecord } from '../shared/isRecord.js';
 import { projectFromNotePath } from '../projects/projectFromNotePath.js';
-import type { ArchiveBaselineData } from '../projects/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
-import type { WatchStateData } from '../projects/WatchStateData.js';
+import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
+import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import type { WatchStateData } from '../shared/WatchStateData.js';
 import type {
   EntityRecord,
   MirrorItem,

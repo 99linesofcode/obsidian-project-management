@@ -1,5 +1,5 @@
 import { App, EventRef, TFile } from 'obsidian';
-import type { ProjectNoteData } from '../projects/ProjectNoteData.js';
+import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 import { folderChainForPath } from './folderChainForPath.js';
 import { projectNoteFromCache } from './projectNoteFromCache.js';

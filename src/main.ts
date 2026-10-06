@@ -3,54 +3,54 @@ import {
   mergeSettingsIntoData,
   settingsFromData,
   type ProjectManagementSettings,
-} from './settings/settings.js';
-import { ProjectManagementSettingTab } from './settings/PluginSettingTab.js';
-import { SyncScheduler } from './SyncScheduler.js';
-import { SyncQueue } from './SyncQueue.js';
-import { AttachProjectAction } from '../projects/AttachProjectAction.js';
-import { CreateTaskNoteAction } from '../tasks/CreateTaskNoteAction.js';
-import { ApplyTaskToGithubAction } from '../github/ApplyTaskToGithubAction.js';
-import { ApplyTaskToTodoistAction } from '../todoist/ApplyTaskToTodoistAction.js';
-import { ApplyTaskToVaultAction } from '../tasks/ApplyTaskToVaultAction.js';
-import { ApplyTodoistCompletionAction } from '../todoist/ApplyTodoistCompletionAction.js';
-import { ApplyTodoistRemoteChangesAction } from '../todoist/ApplyTodoistRemoteChangesAction.js';
-import { BoardStatusAction } from '../projects/BoardStatusAction.js';
-import { CaptureTodoistCreationsAction } from '../todoist/CaptureTodoistCreationsAction.js';
-import { CaptureRemoteProjectsAction } from '../projects/CaptureRemoteProjectsAction.js';
-import { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
-import { DetectNoteRenamesAction } from '../sync/DetectNoteRenamesAction.js';
-import { DiscoverProjectsAction } from '../projects/DiscoverProjectsAction.js';
-import { CleanupNoteFrontmatterAction } from '../sync/CleanupNoteFrontmatterAction.js';
-import { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
-import { EnsureTodoistSectionsAction } from '../todoist/EnsureTodoistSectionsAction.js';
-import { HandleDeletedNoteAction } from '../sync/HandleDeletedNoteAction.js';
-import { MirrorTodoStatusAction } from '../todos/MirrorTodoStatusAction.js';
-import { PropagateStatusAction } from '../tasks/PropagateStatusAction.js';
-import { PromoteIssueAction } from '../tasks/PromoteIssueAction.js';
-import { PromoteCardAction } from '../tasks/PromoteCardAction.js';
-import { ProbeProjectsAction } from '../sync/ProbeProjectsAction.js';
-import { PropagateTodoistDeletionsAction } from '../todoist/PropagateTodoistDeletionsAction.js';
-import { ReconcileProjectLifecycleAction } from '../projects/ReconcileProjectLifecycleAction.js';
-import { RelinkRenamedTodoAction } from '../todoist/RelinkRenamedTodoAction.js';
-import { RelocateTaskStatusAction } from '../tasks/RelocateTaskStatusAction.js';
-import { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
-import { SyncGithubTasksAction } from '../github/SyncGithubTasksAction.js';
-import { SyncProjectAction } from '../sync/SyncProjectAction.js';
-import { SyncTodoistTasksAction } from '../todoist/SyncTodoistTasksAction.js';
-import { VerdictResolver } from '../shared/VerdictResolver.js';
-import { GitHubAdapter, type Transport } from '../github/GitHubAdapter.js';
-import { VaultAdapter } from '../vault/VaultAdapter.js';
+} from './app/settings/settings.js';
+import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
+import { SyncScheduler } from './app/SyncScheduler.js';
+import { SyncQueue } from './app/SyncQueue.js';
+import { AttachProjectAction } from './projects/AttachProjectAction.js';
+import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
+import { ApplyTaskToGithubAction } from './github/ApplyTaskToGithubAction.js';
+import { ApplyTaskToTodoistAction } from './todoist/ApplyTaskToTodoistAction.js';
+import { ApplyTaskToVaultAction } from './tasks/ApplyTaskToVaultAction.js';
+import { ApplyTodoistCompletionAction } from './todoist/ApplyTodoistCompletionAction.js';
+import { ApplyTodoistRemoteChangesAction } from './todoist/ApplyTodoistRemoteChangesAction.js';
+import { BoardStatusAction } from './projects/BoardStatusAction.js';
+import { CaptureTodoistCreationsAction } from './todoist/CaptureTodoistCreationsAction.js';
+import { CaptureRemoteProjectsAction } from './projects/CaptureRemoteProjectsAction.js';
+import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
+import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
+import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
+import { CleanupNoteFrontmatterAction } from './sync/CleanupNoteFrontmatterAction.js';
+import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
+import { EnsureTodoistSectionsAction } from './todoist/EnsureTodoistSectionsAction.js';
+import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
+import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
+import { PropagateStatusAction } from './tasks/PropagateStatusAction.js';
+import { PromoteIssueAction } from './tasks/PromoteIssueAction.js';
+import { PromoteCardAction } from './tasks/PromoteCardAction.js';
+import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
+import { PropagateTodoistDeletionsAction } from './todoist/PropagateTodoistDeletionsAction.js';
+import { ReconcileProjectLifecycleAction } from './projects/ReconcileProjectLifecycleAction.js';
+import { RelinkRenamedTodoAction } from './todoist/RelinkRenamedTodoAction.js';
+import { RelocateTaskStatusAction } from './tasks/RelocateTaskStatusAction.js';
+import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
+import { SyncGithubTasksAction } from './github/SyncGithubTasksAction.js';
+import { SyncProjectAction } from './sync/SyncProjectAction.js';
+import { SyncTodoistTasksAction } from './todoist/SyncTodoistTasksAction.js';
+import { VerdictResolver } from './shared/VerdictResolver.js';
+import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
+import { VaultAdapter } from './vault/VaultAdapter.js';
 import {
   SyncStateAdapter,
   migrateLegacyState,
-} from '../registry/SyncStateAdapter.js';
-import { loadDataSafely } from '../registry/loadDataSafely.js';
+} from './registry/SyncStateAdapter.js';
+import { loadDataSafely } from './registry/loadDataSafely.js';
 import {
   TodoistAdapter,
   createTodoistTransport,
-} from '../todoist/TodoistAdapter.js';
-import { PromoteToTaskCommand } from './commands/PromoteToTaskCommand.js';
-import { PromoteCardToIssueCommand } from './commands/PromoteCardToIssueCommand.js';
+} from './todoist/TodoistAdapter.js';
+import { PromoteToTaskCommand } from './app/commands/PromoteToTaskCommand.js';
+import { PromoteCardToIssueCommand } from './app/commands/PromoteCardToIssueCommand.js';
 
 // One authenticated GitHub request. GraphQL goes over POST to /graphql; the
 // REST calls pass their path. The adapter stays token-agnostic; the

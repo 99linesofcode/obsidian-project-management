@@ -1,5 +1,5 @@
 import { isRecord } from '../shared/isRecord.js';
-import type { ProjectNoteData } from '../projects/ProjectNoteData.js';
+import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
 
 // Maps a markdown file's path and frontmatter cache to a project note, or
 // null when the file does not carry a pm property or is not directly inside a

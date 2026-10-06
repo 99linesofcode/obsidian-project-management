@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoverProjectsAction } from '../../src/projects/DiscoverProjectsAction.js';
 import { AttachProjectAction } from '../../src/projects/AttachProjectAction.js';
-import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
-import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
+import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 

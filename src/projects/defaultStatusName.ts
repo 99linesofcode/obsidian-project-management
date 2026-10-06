@@ -1,7 +1,7 @@
 // The lane a new card starts in: the project's first Status option (the
 // default state of a new card). A project with no status options is a config
 // error.
-import type { ProjectStatusOption } from './ProjectIdentityData.js';
+import type { ProjectStatusOption } from '../shared/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
 
 export function defaultStatusName(
