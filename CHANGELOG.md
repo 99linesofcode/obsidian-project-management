@@ -1,3 +1,51 @@
+# [0.5.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.4.0...v0.5.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* registry invariants — handle re-pointing, notePath eviction, cross-project item relocation, version-gated migrations, conformance suite (t15) ([db97b47](https://github.com/99linesofcode/obsidian-project-management/commit/db97b4764db87d8ae5d10831a60fa58f807e2190))
+* the final verification findings — registry-first creation, cursor watermark, settings mutex ([75254cf](https://github.com/99linesofcode/obsidian-project-management/commit/75254cfad5da9f08d717cd146443efaf81bf3cce))
+* the outward placeholder coexistence window — heal the stale placeholder, scan all refs ([22a32e8](https://github.com/99linesofcode/obsidian-project-management/commit/22a32e8a9aabc1b89674d7e17b0e881530989398))
+* the probe gate discovers GitHub-side issue relations — one-time full scan per project ([f2c511a](https://github.com/99linesofcode/obsidian-project-management/commit/f2c511ae77e5f5f3a85e7785e6924f92070a343d))
+* the review's blocking findings — registry integrity, settings isolation, the ladder fallback ([8f2b09d](https://github.com/99linesofcode/obsidian-project-management/commit/8f2b09da8c4afd10d19ce0c31fbb899fe28894da))
+
+
+### Features
+
+* GitHub sub-issues become Todoist subtasks via affiliation seeding (t8) ([210fea7](https://github.com/99linesofcode/obsidian-project-management/commit/210fea73511f4cbff9f44e63206fb27ae41fbbc2))
+* outward materialization and project propagation across surfaces ([0eaf0f7](https://github.com/99linesofcode/obsidian-project-management/commit/0eaf0f7557b21831af427761a9b6a6f1304a1f29))
+* slices never materialize in Todoist — flatten-before-delete retirement ([44d8a51](https://github.com/99linesofcode/obsidian-project-management/commit/44d8a516cf6e575db47d61df5a02c6cf50c5c7b7))
+* the canonical identity core — TaskData, Mirror, the uuid registry with per-mirror bases ([fd1d220](https://github.com/99linesofcode/obsidian-project-management/commit/fd1d220e7f9c32beb973ab852babfc15d7b5f3c0))
+* the project home note renamed to _<folder> ([fb3bf1d](https://github.com/99linesofcode/obsidian-project-management/commit/fb3bf1d1d7d045afb0769ad7f68a8bc4be019ed1))
+* the project layer — archivedAt, the home-note convention, the dead-code sweep ([024c246](https://github.com/99linesofcode/obsidian-project-management/commit/024c2468119adad22df252aea4fb31b4dc1b4fc5))
+* the vault identity layer and both sync halves on the registry ([4c4eb16](https://github.com/99linesofcode/obsidian-project-management/commit/4c4eb1608e141aa77deb5cf2dbd597848e1e74b3))
+
+
+
+# [0.4.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.3.0...v0.4.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* carry the todoist anchor through a GitHub task rewrite ([8d42d8b](https://github.com/99linesofcode/obsidian-project-management/commit/8d42d8b9621ec12c08664fa4d6d7ac866ab26ab6))
+* create Todoist twins parents-before-children ([49a8c1c](https://github.com/99linesofcode/obsidian-project-management/commit/49a8c1c297e674febdd6425f9b30a5f9e2e85985)), closes [#61](https://github.com/99linesofcode/obsidian-project-management/issues/61)
+* move a reopened task twin back to its lane section ([6a9895f](https://github.com/99linesofcode/obsidian-project-management/commit/6a9895faddaaa573de7818dbfa3751997c9baabd))
+* resolve checklist links to the to-do's real path before projection ([f3e5fb2](https://github.com/99linesofcode/obsidian-project-management/commit/f3e5fb246f33b4b501ca31a8a0f6e5b06000f906))
+* resolve short and wrong-folder checklist links before creating to-dos ([3831788](https://github.com/99linesofcode/obsidian-project-management/commit/3831788c7b5a672d9c4c137244fc25fabe1924cd))
+* skip closed untracked issues on materialisation ([9af137c](https://github.com/99linesofcode/obsidian-project-management/commit/9af137c8f2f3ed14bd2013a97331fa315be74d17))
+* stop completed tasks re-syncing every tick ([29cfa89](https://github.com/99linesofcode/obsidian-project-management/commit/29cfa8991c75bef06815d60ddc1a98321c959ffc))
+* sweep a deleted note by deleting its board card ([c3bb803](https://github.com/99linesofcode/obsidian-project-management/commit/c3bb80328d0d8daa3b3be920b06b7340bcf65aae))
+
+
+### Features
+
+* cascade a done task onto its checklist line and to-dos ([59584e5](https://github.com/99linesofcode/obsidian-project-management/commit/59584e5e80683136b41fb55ce662c1a7e607205a))
+* detect note renames from snapshot drift ([661a692](https://github.com/99linesofcode/obsidian-project-management/commit/661a692d1ec8a7637f311244afab291f3b12722f))
+* name projects from their folder and accept _home.md ([fbd2e52](https://github.com/99linesofcode/obsidian-project-management/commit/fbd2e5203c6ff822e4ec092a020c79108827d327))
+* serialise project syncs through one coalescing queue ([a9362df](https://github.com/99linesofcode/obsidian-project-management/commit/a9362dfe519640a37019ae02dd2550d5851b0712))
+
+
+
 # [0.3.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.2.0...v0.3.0) (2026-09-25)
 
 
@@ -55,38 +103,6 @@
 ### Bug Fixes
 
 * **deps:** bump devshell from `27205da` to `231cbce` ([#35](https://github.com/99linesofcode/obsidian-project-management/issues/35)) ([dabda91](https://github.com/99linesofcode/obsidian-project-management/commit/dabda91225726e2e84d34f686ddfe803c201308b))
-
-
-
-# [0.1.0](https://github.com/99linesofcode/obsidian-project-management/compare/6eed1fe2dc2ec35e50a0aca1e130381c23ac2a9e...v0.1.0) (2026-09-21)
-
-
-### Bug Fixes
-
-* a new project's notes materialize on its first sync ([2f5d3dd](https://github.com/99linesofcode/obsidian-project-management/commit/2f5d3dd117bffa19f3a1b7d1269b8a44839b414e))
-* create missing folders when materializing task notes ([50d8e0b](https://github.com/99linesofcode/obsidian-project-management/commit/50d8e0bb24b30ba826d503e1e73c82fd1b209216))
-* the plugin loads again — no more crash on a missing repo url ([09c91cf](https://github.com/99linesofcode/obsidian-project-management/commit/09c91cf7a28279dc6835093f1f48b601a6dcd04b))
-
-
-### Features
-
-* attach a project — resolve repo + board identities (UC1) ([#2](https://github.com/99linesofcode/obsidian-project-management/issues/2)) ([9e54c9a](https://github.com/99linesofcode/obsidian-project-management/commit/9e54c9aaf2a921132e11dbe685bb7b12c9f38f81))
-* build as esmodule for nodenext ([e17541f](https://github.com/99linesofcode/obsidian-project-management/commit/e17541ff4609b21e6b3abf5083d8316461bcd57f))
-* close or reopen a task's GitHub issue from its note status (UC6) ([#7](https://github.com/99linesofcode/obsidian-project-management/issues/7)) ([188cc23](https://github.com/99linesofcode/obsidian-project-management/commit/188cc23ed54ca3d6d8f189f8f782a727c700861b))
-* find the vault's synced projects automatically (project discovery) ([#19](https://github.com/99linesofcode/obsidian-project-management/issues/19)) ([b1aafda](https://github.com/99linesofcode/obsidian-project-management/commit/b1aafdaaa0a6d1918a84521b235451499596ce3c))
-* github actions dependabot workflow ([8b4e02a](https://github.com/99linesofcode/obsidian-project-management/commit/8b4e02ace71a13e2fcd6a247061567548917f154))
-* hello world ([6eed1fe](https://github.com/99linesofcode/obsidian-project-management/commit/6eed1fe2dc2ec35e50a0aca1e130381c23ac2a9e))
-* keep task notes in step with GitHub automatically (UC3) ([#4](https://github.com/99linesofcode/obsidian-project-management/issues/4)) ([5e6df4a](https://github.com/99linesofcode/obsidian-project-management/commit/5e6df4ae355623fd2fc5914efd5c1d861f68a6a3))
-* materialise a task note from a promoted issue (UC2) ([#3](https://github.com/99linesofcode/obsidian-project-management/issues/3)) ([4d3ff0a](https://github.com/99linesofcode/obsidian-project-management/commit/4d3ff0abca837d3b23287641e9ec5bb5ba3dc7c5))
-* mirror the board status column and let it drive the issue and note (UC7-UC9) ([#8](https://github.com/99linesofcode/obsidian-project-management/issues/8)) ([ac9a4ff](https://github.com/99linesofcode/obsidian-project-management/commit/ac9a4ff64b7f5b7baddfd8732d9a230ee9e82e3f))
-* obsidian plugin shell with settings ([#1](https://github.com/99linesofcode/obsidian-project-management/issues/1)) ([71e65ce](https://github.com/99linesofcode/obsidian-project-management/commit/71e65cec1696e8652f2f91dfe3665dfc07dc1f6d))
-* project status names lead — notes carry the board's lanes ([a12d420](https://github.com/99linesofcode/obsidian-project-management/commit/a12d420310a7c27ad0f9661d96177ca3484e3792))
-* promote a draft card on the board into a GitHub issue from Obsidian (UC11) ([#10](https://github.com/99linesofcode/obsidian-project-management/issues/10)) ([40900a9](https://github.com/99linesofcode/obsidian-project-management/commit/40900a932640d4eb73f7534930f853c4ed017f37))
-* promote a GitHub issue into a tracked task from Obsidian (UC10) ([#9](https://github.com/99linesofcode/obsidian-project-management/issues/9)) ([b0634ff](https://github.com/99linesofcode/obsidian-project-management/commit/b0634fff30e58d06faadcf8de3a12a552da8558e))
-* push note edits onto their GitHub issues automatically (UC4) ([#6](https://github.com/99linesofcode/obsidian-project-management/issues/6)) ([137c52c](https://github.com/99linesofcode/obsidian-project-management/commit/137c52c844fa3c6565049f3da8ceb6bdd8579da3))
-* reconcile competing note and remote edits, note wins (UC5) ([#5](https://github.com/99linesofcode/obsidian-project-management/issues/5)) ([b560623](https://github.com/99linesofcode/obsidian-project-management/commit/b5606230c89bd8c8007edb2b66a167ddc5d9e241))
-* sync only tasks that carry a type label ([ed06c91](https://github.com/99linesofcode/obsidian-project-management/commit/ed06c9151f4df6416930d8f4bff55eec9d66935e))
-* use the spaced type: task / type: slice label convention ([1989b68](https://github.com/99linesofcode/obsidian-project-management/commit/1989b68673314ff0d1c9520464cc84d1a1812d56))
 
 
 
