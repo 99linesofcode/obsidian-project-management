@@ -1,28 +1,28 @@
-import { TaskData } from '../../src/Domain/DataTransferObjects/TaskData.js';
-import type { TodoistTaskData } from '../../src/Domain/DataTransferObjects/TodoistTaskData.js';
+import { TaskData } from '../../src/shared/TaskData.js';
+import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
 import type {
   EntityRecord,
   MirrorItem,
   PortState,
-} from '../../src/Domain/Ports/SyncStatePort.js';
+} from '../../src/shared/SyncStatePort.js';
 
 // A canonical task with sensible defaults, so a test names only the fields it
 // cares about. TaskData is a class, so the factory constructs it: the registry,
 // the diff views and the mappers all share one shape.
 export function taskData(overrides: Partial<TaskData> = {}): TaskData {
-  return new TaskData(
-    overrides.id ?? 'task-uuid',
-    overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    overrides.mirrors ?? {},
-    overrides.title ?? 'Fix the bug',
-    overrides.body ?? '',
-    overrides.status ?? '',
-    overrides.completedAt ?? null,
-    overrides.type ?? '',
-    overrides.parent ?? null,
-    overrides.createdAt ?? null,
-    overrides.updatedAt ?? null,
-  );
+  return new TaskData({
+    id: overrides.id ?? 'task-uuid',
+    notePath: overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    mirrors: overrides.mirrors ?? {},
+    title: overrides.title ?? 'Fix the bug',
+    body: overrides.body ?? '',
+    status: overrides.status ?? '',
+    completedAt: overrides.completedAt ?? null,
+    type: overrides.type ?? '',
+    parent: overrides.parent ?? null,
+    createdAt: overrides.createdAt ?? null,
+    updatedAt: overrides.updatedAt ?? null,
+  });
 }
 
 // A hub entity: its uuid and where its note lives. The mirrors are NOT on the

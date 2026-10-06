@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
+    "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "typecheck": "tsc --noEmit",
     "audit": "pnpm audit",
     "format": "prettier --write .",

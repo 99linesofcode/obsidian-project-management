@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   EntityRecord,
   SyncStatePort,
-} from '../../src/Domain/Ports/SyncStatePort.js';
+} from '../../src/shared/SyncStatePort.js';
 import { taskData } from './records.js';
 
 // The port-contract conformance harness. It is deliberately the SAME suite for
