@@ -4,11 +4,12 @@ import type { GithubTaskData } from '../../github/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../shared/SyncStatePort.js';
 
-// Obsidian runs in a browser where MouseEvent/KeyboardEvent are DOM globals;
-// the node type environment does not declare them. Alias them so the modal's
-// onChooseItem override can name them, as SyncScheduler does for window.
-type MouseEvent = unknown;
-type KeyboardEvent = unknown;
+// The event type the base FuzzySuggestModal hands onChooseItem. The DOM lib is
+// not in the type environment, so it is derived from the base signature rather
+// than named directly.
+type ChooseEvent = Parameters<
+  FuzzySuggestModal<PromoteSuggestion>['onChooseItem']
+>[1];
 
 // A candidate in the promote modal: the unpromoted issue plus the project it
 // belongs to, so the display can be prefixed and the note lands in the right
@@ -49,7 +50,7 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
       }
     }
     this.items = items;
-    super.onOpen();
+    await super.onOpen();
   }
 
   getItems(): PromoteSuggestion[] {
@@ -64,7 +65,7 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
   // pick only needs the chosen issue.
   onChooseItem(
     item: PromoteSuggestion,
-    _evt: MouseEvent | KeyboardEvent,
+    _evt: ChooseEvent,
   ): void {
     void this.promote.execute({
       url: item.task.url,
