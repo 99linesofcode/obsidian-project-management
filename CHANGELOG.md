@@ -1,27 +1,3 @@
-# [0.4.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.3.0...v0.4.0) (2026-10-06)
-
-
-### Bug Fixes
-
-* carry the todoist anchor through a GitHub task rewrite ([8d42d8b](https://github.com/99linesofcode/obsidian-project-management/commit/8d42d8b9621ec12c08664fa4d6d7ac866ab26ab6))
-* create Todoist twins parents-before-children ([49a8c1c](https://github.com/99linesofcode/obsidian-project-management/commit/49a8c1c297e674febdd6425f9b30a5f9e2e85985)), closes [#61](https://github.com/99linesofcode/obsidian-project-management/issues/61)
-* move a reopened task twin back to its lane section ([6a9895f](https://github.com/99linesofcode/obsidian-project-management/commit/6a9895faddaaa573de7818dbfa3751997c9baabd))
-* resolve checklist links to the to-do's real path before projection ([f3e5fb2](https://github.com/99linesofcode/obsidian-project-management/commit/f3e5fb246f33b4b501ca31a8a0f6e5b06000f906))
-* resolve short and wrong-folder checklist links before creating to-dos ([3831788](https://github.com/99linesofcode/obsidian-project-management/commit/3831788c7b5a672d9c4c137244fc25fabe1924cd))
-* skip closed untracked issues on materialisation ([9af137c](https://github.com/99linesofcode/obsidian-project-management/commit/9af137c8f2f3ed14bd2013a97331fa315be74d17))
-* stop completed tasks re-syncing every tick ([29cfa89](https://github.com/99linesofcode/obsidian-project-management/commit/29cfa8991c75bef06815d60ddc1a98321c959ffc))
-* sweep a deleted note by deleting its board card ([c3bb803](https://github.com/99linesofcode/obsidian-project-management/commit/c3bb80328d0d8daa3b3be920b06b7340bcf65aae))
-
-
-### Features
-
-* cascade a done task onto its checklist line and to-dos ([59584e5](https://github.com/99linesofcode/obsidian-project-management/commit/59584e5e80683136b41fb55ce662c1a7e607205a))
-* detect note renames from snapshot drift ([661a692](https://github.com/99linesofcode/obsidian-project-management/commit/661a692d1ec8a7637f311244afab291f3b12722f))
-* name projects from their folder and accept _home.md ([fbd2e52](https://github.com/99linesofcode/obsidian-project-management/commit/fbd2e5203c6ff822e4ec092a020c79108827d327))
-* serialise project syncs through one coalescing queue ([a9362df](https://github.com/99linesofcode/obsidian-project-management/commit/a9362dfe519640a37019ae02dd2550d5851b0712))
-
-
-
 # [0.3.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.2.0...v0.3.0) (2026-09-25)
 
 

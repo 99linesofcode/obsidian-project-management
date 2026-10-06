@@ -1,8 +1,149 @@
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import boundaries from 'eslint-plugin-boundaries';
 
-// Build output is compiled, not authored — linting it produces false
-// failures on whatever the bundler emitted.
+// WHY boundaries are enforced by ESLint rather than a bespoke script: the
+// module tree is an architectural contract, and the linter is already the
+// place a broken import is caught. The hand-rolled gate expressed one rule
+// (the shared kernel's direction); the plugin expresses the whole matrix,
+// including provider isolation, which the old gate could only approximate.
+
+// The module tree. Each element is one folder under src/, except app, which
+// also owns the composition root at src/main.ts: its root-level pattern sits
+// LAST, so deeper module patterns classify first and only src-root files
+// fall through to it — no deprecated full-path descriptor needed.
+const ELEMENT_PATTERNS = [
+  { type: 'shared', pattern: 'src/shared/**' },
+  { type: 'github', pattern: 'src/github/**' },
+  { type: 'todoist', pattern: 'src/todoist/**' },
+  { type: 'vault', pattern: 'src/vault/**' },
+  { type: 'registry', pattern: 'src/registry/**' },
+  { type: 'tasks', pattern: 'src/tasks/**' },
+  { type: 'todos', pattern: 'src/todos/**' },
+  { type: 'projects', pattern: 'src/projects/**' },
+  { type: 'sync', pattern: 'src/sync/**' },
+  { type: 'app', pattern: 'src/app/**' },
+  { type: 'app', pattern: 'src' },
+];
+
+const ALL_ELEMENT_TYPES = [
+  ...new Set(ELEMENT_PATTERNS.map((element) => element.type)),
+];
+
+// The dependency matrix, derived from the real import graph. Each entry lists
+// the element types its module may import; every other edge is a violation.
+//
+// WHY these edges and no others:
+// - shared imports nothing. It is the kernel: the ports and their DTOs live
+//   here precisely so no provider's shape leaks into neutral ground.
+// - github/todoist never import each other. A mirror's module may not depend
+//   on a sibling mirror; the sync halves meet only through shared and sync.
+// - app is the composition root and wires every module.
+// - The domain and orchestration modules keep their real, legitimate edges:
+//   vault/tasks/todos/projects write notes, sync orchestrates them, and the
+//   registry reads project paths. Everything else is forbidden, which makes
+//   the matrix acyclic by construction (no circular module dependencies).
+const MATRIX = {
+  app: [
+    'app',
+    'shared',
+    'github',
+    'todoist',
+    'vault',
+    'registry',
+    'tasks',
+    'todos',
+    'projects',
+    'sync',
+  ],
+  shared: [],
+  github: ['shared', 'tasks', 'todos', 'vault', 'projects', 'sync'],
+  todoist: [
+    'shared',
+    'tasks',
+    'todos',
+    'vault',
+    'projects',
+    'registry',
+    'sync',
+  ],
+  projects: ['shared', 'vault'],
+  tasks: ['shared', 'projects', 'vault'],
+  todos: ['shared', 'vault'],
+  sync: ['shared', 'projects', 'tasks', 'todos'],
+  registry: ['shared', 'projects'],
+  vault: ['shared'],
+};
+
+const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
+  from: { element: { type } },
+  // An empty allow list (the shared kernel) leaves the global disallow in
+  // force: shared may import nothing.
+  ...(allowed.length === 0
+    ? { disallow: { to: { element: { types: { anyOf: ALL_ELEMENT_TYPES } } } } }
+    : { allow: { to: { element: { types: { anyOf: allowed } } } } }),
+  message:
+    type === 'shared'
+      ? 'the shared kernel imports no module; move the neutral shape into shared'
+      : `the ${type} module may not import that element`,
+}));
+
+// The public surface of each provider module: the only files another element
+// may import. The composition root wires the adapter and the half's actions;
+// everything else inside the provider is private to it. Expressed with the
+// modern dependencies rule (the entry-point rule is deprecated in v7).
+//
+// The surface policies are scoped to the elements the matrix already lets
+// import that provider, and they come last: last-write-wins lets the specific
+// allow override the general disallow for exactly the public files, while a
+// module the matrix forbids (say, shared) is still caught by the matrix and is
+// never granted access by the surface allow.
+const PROVIDER_SURFACE = {
+  github: [
+    'GitHubAdapter.ts',
+    'ApplyTaskToGithubAction.ts',
+    'SyncGithubTasksAction.ts',
+    // The promote modal lists unpromoted issues from the provider's transport
+    // shape; the type is part of what the app is allowed to see.
+    'GithubTaskData.ts',
+  ],
+  todoist: [
+    'TodoistAdapter.ts',
+    'ApplyTaskToTodoistAction.ts',
+    'SyncTodoistTasksAction.ts',
+    'ApplyTodoistCompletionAction.ts',
+    'ApplyTodoistRemoteChangesAction.ts',
+    'CaptureTodoistCreationsAction.ts',
+    'EnsureTodoistSectionsAction.ts',
+    'PropagateTodoistDeletionsAction.ts',
+    'RelinkRenamedTodoAction.ts',
+  ],
+};
+
+// The elements the matrix lets import a provider; the surface narrows those
+// edges only, so it can never grant a provider to a module the matrix forbids.
+const importersOf = (provider) =>
+  Object.entries(MATRIX)
+    .filter(([, allowed]) => allowed.includes(provider))
+    .map(([type]) => type);
+
+const surfacePolicies = Object.entries(PROVIDER_SURFACE).flatMap(
+  ([type, files]) => {
+    const importers = importersOf(type);
+    return [
+      {
+        from: { element: { types: { anyOf: importers } } },
+        disallow: { to: { element: { type } } },
+        message: `the ${type} module is imported through its public surface only`,
+      },
+      {
+        from: { element: { types: { anyOf: importers } } },
+        allow: { to: { element: { type, fileInternalPath: files } } },
+      },
+    ];
+  },
+);
+
 export default tseslint.config(
   { ignores: ['build/**', 'dist/**', 'main.js'] },
   ...tseslint.configs.recommended,
@@ -15,6 +156,44 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+    },
+  },
+  {
+    // The resolver is CommonJS by necessity: eslint-module-utils `require()`s
+    // it, so it cannot be an ESM module in this `type: module` package.
+    files: ['**/*.cjs'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
+    // Boundaries describe the source tree. Tests, scripts and config files
+    // wire modules freely, so they are not classified and not checked.
+    files: ['src/**/*.ts'],
+    plugins: { boundaries },
+    settings: {
+      'boundaries/elements': ELEMENT_PATTERNS,
+      // `mode: 'full'` on the root-file descriptor is deprecated but is the
+      // only way to classify a lone file; `legacy-warnings` keeps that (and
+      // the deprecation chatter we have already migrated away from) quiet.
+      'boundaries/legacy-warnings': false,
+      // Resolve the tree's NodeNext `.js` specifiers onto their `.ts` sources,
+      // or the plugin cannot classify any local import (see the resolver).
+      'import/resolver': { './scripts/eslint-ts-resolver.cjs': {} },
+    },
+    rules: {
+      // The matrix. `default: disallow` means any edge not listed is a
+      // violation, so a new import fails until it is deliberately allowed.
+      'boundaries/dependencies': [
+        'error',
+        {
+          default: 'disallow',
+          policies: [...matrixPolicies, ...surfacePolicies],
+        },
+      ],
+      // Every source file must belong to an element, and every local import
+      // must resolve to one, so a new top-level module cannot slip in
+      // unclassified.
+      'boundaries/no-unknown-files': 'error',
+      'boundaries/no-unknown-dependencies': 'error',
     },
   },
 );
