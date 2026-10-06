@@ -2,6 +2,8 @@ import { App, PluginSettingTab, Setting } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
 import { GITHUB_TOKEN_KEY, TODOIST_TOKEN_KEY } from './SecretStorageAdapter.js';
 import { TokenSettings } from './TokenSettings.js';
+import { DEFAULT_SETTINGS } from './settings.js';
+import { SEED_ARTIFACTS, type SeedArtifact } from '../seedArtifacts.js';
 
 export class ProjectManagementSettingTab extends PluginSettingTab {
   plugin: ProjectManagementPlugin;
@@ -70,33 +72,37 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           }),
       );
 
-    new Setting(containerEl)
-      .setName('Task template')
-      .setDesc(
-        'Vault path to the template new task notes render from. {{date}} and {{time}} resolve to the sync stamp; url, status, synced and affiliation are filled by the sync. Falls back to the built-in frontmatter when the file is missing.',
-      )
+    // The six vault-owned artifacts the plugin seeds on first run. Each row is
+    // the configured path plus a Scaffold button that creates the file when it
+    // is missing — the same create-if-missing semantics as the onload seed.
+    for (const artifact of SEED_ARTIFACTS) {
+      this.artifactSetting(artifact);
+    }
+  }
+
+  // A path row for one vault artifact: the path input and a Scaffold button.
+  // The button is a no-op when the file already exists, so it is safe to press
+  // repeatedly.
+  private artifactSetting(artifact: SeedArtifact): void {
+    new Setting(this.containerEl)
+      .setName(artifact.label)
+      .setDesc(artifact.description)
       .addText((text) =>
         text
-          .setPlaceholder('Templates/Task.md')
-          .setValue(this.plugin.settings.taskTemplatePath)
+          .setPlaceholder(DEFAULT_SETTINGS[artifact.settingKey])
+          .setValue(this.plugin.settings[artifact.settingKey])
           .onChange(async (value) => {
-            this.plugin.settings.taskTemplatePath = value.trim();
+            this.plugin.settings[artifact.settingKey] = value.trim();
             await this.plugin.saveSettings();
           }),
-      );
-
-    new Setting(containerEl)
-      .setName('To-do template')
-      .setDesc(
-        'Vault path to the template new to-do notes render from. {{date}} and {{time}} resolve to the sync stamp; affiliation, status and completed are filled by the sync. Falls back to the built-in frontmatter when the file is missing.',
       )
-      .addText((text) =>
-        text
-          .setPlaceholder('Templates/ToDo.md')
-          .setValue(this.plugin.settings.todoTemplatePath)
-          .onChange(async (value) => {
-            this.plugin.settings.todoTemplatePath = value.trim();
-            await this.plugin.saveSettings();
+      .addButton((button) =>
+        button
+          .setButtonText('Scaffold')
+          .setTooltip('Create this file if it does not exist')
+          .onClick(async () => {
+            await this.plugin.seedArtifacts.executeOne(artifact.key);
+            this.display();
           }),
       );
   }

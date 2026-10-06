@@ -261,3 +261,49 @@ describe('VaultAdapter.moveFolder', () => {
     expect(vault.renames).toEqual([]);
   });
 });
+
+// A fake vault with a folder set and a file map, so createNote's mkdir -p
+// chain can be exercised: Obsidian's create throws on a missing parent, so the
+// adapter builds the chain first.
+class CreateVault {
+  folders = new Set<string>();
+  files = new Map<string, string>();
+
+  getFolderByPath(path: string): unknown {
+    return this.folders.has(path) ? {} : null;
+  }
+
+  async createFolder(path: string): Promise<void> {
+    this.folders.add(path);
+  }
+
+  async create(path: string, content: string): Promise<void> {
+    this.files.set(path, content);
+  }
+}
+
+function createSetup() {
+  const vault = new CreateVault();
+  const app = { vault } as unknown as App;
+  const adapter = new VaultAdapter(app, () => {});
+  return { vault, adapter };
+}
+
+describe('VaultAdapter.createNote', () => {
+  it('creates the missing parent folder before writing the file', async () => {
+    const { vault, adapter } = createSetup();
+
+    await adapter.createNote('Templates/Task.md', 'starter');
+
+    expect(vault.folders.has('Templates')).toBe(true);
+    expect(vault.files.get('Templates/Task.md')).toBe('starter');
+  });
+
+  it('creates each level of a nested folder chain', async () => {
+    const { vault, adapter } = createSetup();
+
+    await adapter.createNote('Bases/My/Projects.base', 'x');
+
+    expect([...vault.folders].sort()).toEqual(['Bases', 'Bases/My']);
+  });
+});

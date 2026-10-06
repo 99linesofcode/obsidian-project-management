@@ -83,3 +83,43 @@ describe('settings are secret-free', () => {
     expect(merged).not.toHaveProperty('todoistToken');
   });
 });
+
+describe('the six seeded artifact paths round-trip', () => {
+  const custom = {
+    projectTemplatePath: 'Templates/MijnProject.md',
+    taskTemplatePath: 'Templates/MijnTaken.md',
+    todoTemplatePath: 'Templates/MijnTodos.md',
+    projectsBasePath: 'Bases/MijnProjecten.base',
+    tasksBasePath: 'Bases/MijnTaken.base',
+    todosBasePath: 'Bases/MijnTodos.base',
+  };
+
+  it('defaults each path when data.json does not set it', () => {
+    const settings = settingsFromData({});
+
+    expect(settings.projectTemplatePath).toBe('Templates/Project.md');
+    expect(settings.taskTemplatePath).toBe('Templates/Task.md');
+    expect(settings.todoTemplatePath).toBe('Templates/ToDo.md');
+    expect(settings.projectsBasePath).toBe('Bases/Projects.base');
+    expect(settings.tasksBasePath).toBe('Bases/Tasks.base');
+    expect(settings.todosBasePath).toBe('Bases/Todos.base');
+  });
+
+  it('loads every configured path from data.json', () => {
+    const settings = settingsFromData(custom);
+
+    for (const [key, value] of Object.entries(custom)) {
+      expect(settings[key as keyof typeof custom]).toBe(value);
+    }
+  });
+
+  it('persists every configured path on a settings save', () => {
+    const settings = settingsFromData(custom);
+
+    const merged = mergeSettingsIntoData({}, settings);
+
+    for (const [key, value] of Object.entries(custom)) {
+      expect(merged[key]).toBe(value);
+    }
+  });
+});

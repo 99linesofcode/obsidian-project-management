@@ -4,16 +4,27 @@ export interface ProjectManagementSettings {
   pollIntervalMinutes: number;
   doneOptionName: string;
   debounceSeconds: number;
+  // The six vault artifacts the plugin assumes exist: three note templates and
+  // three Bases files. Each is seeded create-if-missing at its configured path
+  // on init, and scaffoldable on demand from the settings tab.
+  projectTemplatePath: string;
   taskTemplatePath: string;
   todoTemplatePath: string;
+  projectsBasePath: string;
+  tasksBasePath: string;
+  todosBasePath: string;
 }
 
 export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   pollIntervalMinutes: 5,
   doneOptionName: 'Shipped',
   debounceSeconds: 5,
+  projectTemplatePath: 'Templates/Project.md',
   taskTemplatePath: 'Templates/Task.md',
   todoTemplatePath: 'Templates/ToDo.md',
+  projectsBasePath: 'Bases/Projects.base',
+  tasksBasePath: 'Bases/Tasks.base',
+  todosBasePath: 'Bases/Todos.base',
 };
 
 // The pre-SecretStorage plaintext token fields. They are stripped on load and

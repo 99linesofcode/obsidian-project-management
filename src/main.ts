@@ -13,6 +13,7 @@ import {
 import { migrateLegacyTokens } from './app/settings/migrateLegacyTokens.js';
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
 import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
+import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
@@ -126,6 +127,7 @@ function composePlugin(
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
   captureRemoteProjects: CaptureRemoteProjectsAction;
+  seedArtifacts: SeedVaultArtifactsAction;
 } {
   const transport = transportFromSecret(
     secrets,
@@ -135,6 +137,10 @@ function composePlugin(
   const vault = new VaultAdapter(plugin.app, (eventRef) =>
     plugin.registerEvent(eventRef),
   );
+  // Seeds the six vault-owned templates and Bases files on first run. The
+  // action only writes when a configured path is genuinely absent, so it is
+  // safe on every init and the settings tab reuses it to scaffold on demand.
+  const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
   const github = new GitHubAdapter(transport);
   // The frontmatter cleanup runs at the chain start, per project, before any
@@ -329,7 +335,7 @@ function composePlugin(
     () => captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
   );
 
-  return { scheduler, discoverProjects, captureRemoteProjects };
+  return { scheduler, discoverProjects, captureRemoteProjects, seedArtifacts };
 }
 
 export default class ProjectManagementPlugin extends Plugin {
@@ -341,6 +347,9 @@ export default class ProjectManagementPlugin extends Plugin {
   // The registry adapter, retained so a settings save can share its
   // serialization chain (REG-3).
   private syncState!: SyncStateAdapter;
+  // Retained so the settings tab can scaffold a single missing artifact on
+  // demand, with the same create-if-missing semantics as the onload seed.
+  seedArtifacts!: SeedVaultArtifactsAction;
 
   override async onload(): Promise<void> {
     // Read the root through the safe loader: a corrupt data.json is quarantined
@@ -381,8 +390,17 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const { scheduler, discoverProjects, captureRemoteProjects } =
-      composePlugin(this, syncState, this.secrets);
+    const {
+      scheduler,
+      discoverProjects,
+      captureRemoteProjects,
+      seedArtifacts,
+    } = composePlugin(this, syncState, this.secrets);
+    this.seedArtifacts = seedArtifacts;
+    // Seed the vault-owned templates and Bases files before any note is
+    // created: a fresh vault gets all six at their configured paths, and an
+    // existing file is never overwritten.
+    await seedArtifacts.execute();
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
