@@ -5,10 +5,11 @@ It is written against the code, not against the design brief: where the two
 disagree, the code is described and the disagreement is called out in
 [Code-vs-brief discrepancies](#5-code-vs-brief-discrepancies).
 
-The behavioral contract is `planning/opm-identity-model/scenarios.md`
-(capabilities DISC…PRB). The decision log is
-`planning/opm-identity-model/map.md` (dt-01…dt-23). Scenario IDs are cited per
-flow.
+The manual is self-contained: it states the behavioral contract — the
+capabilities (DISC…PRB) and the five core promises the plugin must keep — and
+records the decision log (dt-01…dt-23), the design decisions the code
+implements. Scenario and decision identifiers are cited per flow so every
+described behavior can be traced.
 
 ---
 
@@ -48,7 +49,7 @@ from the adapter's own module:
   board status/membership, project open/close.
 - **TaskManagerPort** — the task manager: projects, sections, tasks, completion,
   labels.
-- **VaultPort** — the Obsidian vault: notes, folders, events.
+- **VaultPort** — the vault: notes, folders, events.
 - **SyncStatePort** — the registry: entities, mirror items, port state,
   identities, watch state and the project-capture cursors.
 
