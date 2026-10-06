@@ -250,6 +250,281 @@ describe('GitHubAdapter', () => {
     await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/Status/);
   });
 
+  it('maps a ProjectV2 node onto the canonical ProjectData', async () => {
+    // Given — a transport returning the project content node
+    const contentResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            id: 'PVT_123',
+            title: 'Acme Widgets',
+            closed: false,
+            fields: {
+              nodes: [
+                {
+                  id: 'PVTF_456',
+                  name: 'Status',
+                  options: [
+                    { id: 'PVTSSF_1', name: 'Unshaped' },
+                    { id: 'PVTSSF_2', name: 'Shipped' },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([contentResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reads the canonical project
+    const project = await adapter.fetchProject(
+      'https://github.com/acme/widgets',
+      'PVT_123',
+      'Shipped',
+    );
+
+    // Then — the content is canonical (option names, not ids) and the raw
+    // ProjectV2 shape never crosses the port
+    expect(project.name).toBe('Acme Widgets');
+    expect(project.statusOptions).toEqual(['Unshaped', 'Shipped']);
+    expect(project.doneLane).toBe('Shipped');
+    expect(project.archivedAt).toBeNull();
+    expect(project.mirrors).toEqual({
+      github: 'https://github.com/acme/widgets',
+    });
+    expect(bodies[0]).toContain('ProjectContent');
+    expect(bodies[0]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('resolves a board-only identity without a repository (repo attach deferred)', async () => {
+    // Given — a board url and no repo url, with only the board response queued
+    const { transport, bodies } = fakeTransport([userProjectResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter resolves the identity
+    const result = await adapter.fetchProjectIdentity({
+      pm: 'github',
+      repoUrl: '',
+      boardUrl: 'https://github.com/users/acme/projects/1',
+    });
+
+    // Then — the board is resolved and the repo addressing stays empty
+    expect(result).toEqual({
+      repoUrl: '',
+      repoNodeId: '',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Unshaped' },
+        { id: 'PVTSSF_2', name: 'Done' },
+      ],
+    });
+    // And — no repository query was made: only the board query ran
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain('user');
+  });
+
+  it('creates a board under the token viewer and returns its addressing', async () => {
+    // Given — a viewer and a created project with a default Status field
+    const viewerResponse = {
+      status: 200,
+      json: { data: { viewer: { id: 'U_kgDOAAAA' } } },
+    };
+    const createResponse = {
+      status: 200,
+      json: {
+        data: {
+          createProjectV2: {
+            projectV2: {
+              id: 'PVT_9',
+              url: 'https://github.com/users/acme/projects/9',
+              fields: {
+                nodes: [
+                  {
+                    id: 'PVTF_9',
+                    name: 'Status',
+                    options: [{ id: 'PVTSSF_1', name: 'Todo' }],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([
+      viewerResponse,
+      createResponse,
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter creates the board
+    const board = await adapter.createProject('New Project');
+
+    // Then — the addressing is returned and the owner is the viewer
+    expect(board).toEqual({
+      projectNodeId: 'PVT_9',
+      boardUrl: 'https://github.com/users/acme/projects/9',
+      statusFieldId: 'PVTF_9',
+      statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+    });
+    expect(bodies[0]).toContain('viewer');
+    expect(bodies[1]).toContain('createProjectV2');
+    expect(bodies[1]).toContain('"ownerId":"U_kgDOAAAA"');
+    expect(bodies[1]).toContain('"title":"New Project"');
+  });
+
+  it('caches the viewer id across board creations', async () => {
+    // Given — one viewer response and two created projects
+    const viewerResponse = {
+      status: 200,
+      json: { data: { viewer: { id: 'U_kgDOAAAA' } } },
+    };
+    const created = (id: string) => ({
+      status: 200,
+      json: {
+        data: {
+          createProjectV2: {
+            projectV2: { id, url: `https://github.com/users/acme/projects/1` },
+          },
+        },
+      },
+    });
+    const { transport, bodies } = fakeTransport([
+      viewerResponse,
+      created('PVT_1'),
+      created('PVT_2'),
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — two boards are created
+    await adapter.createProject('One');
+    await adapter.createProject('Two');
+
+    // Then — the viewer is queried once and reused
+    expect(bodies.filter((body) => body.includes('viewer'))).toHaveLength(1);
+    expect(bodies[1]).toContain('"ownerId":"U_kgDOAAAA"');
+    expect(bodies[2]).toContain('"ownerId":"U_kgDOAAAA"');
+  });
+
+  it('lists the viewer boards as canonical ProjectData', async () => {
+    // Given — a viewer listing carrying one board
+    const listResponse = {
+      status: 200,
+      json: {
+        data: {
+          viewer: {
+            projectsV2: {
+              nodes: [
+                {
+                  id: 'PVT_9',
+                  title: 'Fresh Board',
+                  url: 'https://github.com/users/acme/projects/9',
+                  closed: false,
+                  createdAt: '2026-10-02T09:00:00Z',
+                  fields: {
+                    nodes: [
+                      {
+                        id: 'PVTF_9',
+                        name: 'Status',
+                        options: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([listResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the boards are listed
+    const boards = await adapter.fetchViewerProjects();
+
+    // Then — the listing is canonical: the board url is the mirror, the clock
+    // is createdAt and the Status vocabulary carries NAMES
+    expect(boards).toHaveLength(1);
+    expect(boards[0]!.name).toBe('Fresh Board');
+    expect(boards[0]!.mirrors).toEqual({
+      github: 'https://github.com/users/acme/projects/9',
+    });
+    expect(boards[0]!.createdAt).toBe('2026-10-02T09:00:00Z');
+    expect(boards[0]!.statusOptions).toEqual(['Unshaped']);
+    expect(bodies[0]).toContain('ViewerProjects');
+  });
+
+  it('creates an issue with the vault-owned type as a type label', async () => {
+    // Given — a transport that returns the created issue
+    const created = {
+      status: 201,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/50',
+        node_id: 'I_kwDOAAAA50',
+      },
+    };
+    const { transport, bodies, paths } = fakeTransport([created]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter creates the issue
+    const handle = await adapter.createIssue(
+      'https://github.com/acme/widgets',
+      { title: 'Fix the bug', body: 'The bug.', type: 'bug' },
+    );
+
+    // Then — the REST create targeted the repo and rendered the type label
+    expect(handle).toEqual({
+      url: 'https://github.com/acme/widgets/issues/50',
+      nodeId: 'I_kwDOAAAA50',
+    });
+    expect(paths[0]).toBe('/repos/acme/widgets/issues');
+    expect(bodies[0]).toContain('"title":"Fix the bug"');
+    expect(bodies[0]).toContain('"labels":["type: bug"]');
+  });
+
+  it('omits the label when the vault-owned type is empty', async () => {
+    // Given — a transport that returns the created issue
+    const created = {
+      status: 201,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/51',
+        node_id: 'I_kwDOAAAA51',
+      },
+    };
+    const { transport, bodies } = fakeTransport([created]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter creates an untyped issue
+    await adapter.createIssue('https://github.com/acme/widgets', {
+      title: 'Untyped',
+      body: '',
+      type: '',
+    });
+
+    // Then — no label is sent
+    expect(bodies[0]).not.toContain('labels');
+  });
+
+  it('throws when issue creation fails', async () => {
+    // Given — a transport that rejects the create
+    const { transport } = fakeTransport([{ status: 422, json: {} }]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When/Then — the failure surfaces so the caller leaves no mirror state
+    await expect(
+      adapter.createIssue('https://github.com/acme/widgets', {
+        title: 'Fix the bug',
+        body: '',
+        type: 'task',
+      }),
+    ).rejects.toThrow(/status 422/);
+  });
+
   it('keeps issues carrying any type label — task, bug, chore, slice', async () => {
     // Given — a REST response mixing every type label with an untyped issue
     const issuesResponse = {

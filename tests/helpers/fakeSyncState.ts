@@ -327,4 +327,15 @@ export class FakeSyncState implements SyncStatePort {
     this.fullScanConsumes.push({ project: projectName, pending });
     return pending;
   }
+
+  // The per-surface project-capture cursors (PRJ-2/PRJ-3).
+  projectCursors = new Map<string, string>();
+
+  async getProjectCursor(portId: string): Promise<string | null> {
+    return this.projectCursors.get(portId) ?? null;
+  }
+
+  async setProjectCursor(portId: string, iso: string): Promise<void> {
+    this.projectCursors.set(portId, iso);
+  }
 }

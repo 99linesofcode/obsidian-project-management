@@ -290,4 +290,48 @@ describe('SyncScheduler', () => {
     // Then — nothing is enqueued
     expect(queue.enqueued).toEqual([]);
   });
+
+  it('runs the capture hook before enumerating and enqueues captured names', async () => {
+    // Given — a scheduler with a capture hook that adopts one project
+    const vault = new FakeVault();
+    vault.projectNotes = [projectNote('Acme Widgets', null)];
+    const queue = new FakeQueue();
+    const scheduler = new SyncScheduler(
+      vault,
+      queue as unknown as SyncQueue,
+      60_000,
+      0,
+      async () => ['New Project'],
+    );
+    scheduler.load();
+
+    // When — one interval elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — the captured project is enqueued alongside the discovered ones
+    expect(queue.enqueued).toEqual(['Acme Widgets', 'New Project']);
+  });
+
+  it('still runs the tick when the capture hook fails', async () => {
+    // Given — a scheduler whose capture hook throws
+    const vault = new FakeVault();
+    vault.projectNotes = [projectNote('Acme Widgets', null)];
+    const queue = new FakeQueue();
+    const scheduler = new SyncScheduler(
+      vault,
+      queue as unknown as SyncQueue,
+      60_000,
+      0,
+      async () => {
+        throw new Error('capture failed');
+      },
+    );
+    scheduler.load();
+
+    // When — one interval elapses
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Then — discovery still enqueues the known projects
+    expect(queue.enqueued).toEqual(['Acme Widgets']);
+  });
 });

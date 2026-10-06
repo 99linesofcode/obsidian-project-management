@@ -39,11 +39,15 @@ export class ProjectData extends DataTransferObject {
   }
 
   // Called on DIFF VIEWS only. Identity and provenance are excluded.
+  // WHY the lane vocabulary is NUL-joined: the contract delimits every field
+  // with \u0000, so a ',' inside a lane name would let two different
+  // vocabularies collide on one canonical string. The delimiter must be the
+  // same one the field boundaries use.
   override canonical(): string {
     return [
       this.name,
       this.archivedAt ?? '',
-      this.statusOptions.join(','),
+      this.statusOptions.join('\u0000'),
       this.doneLane,
     ].join('\u0000');
   }

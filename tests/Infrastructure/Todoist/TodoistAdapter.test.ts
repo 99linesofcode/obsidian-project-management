@@ -42,6 +42,7 @@ function project(overrides: Record<string, unknown> = {}) {
     id: 'P1',
     name: 'Widgets',
     is_archived: false,
+    created_at: '2026-09-01T00:00:00Z',
     ...overrides,
   };
 }
@@ -90,10 +91,20 @@ describe('TodoistAdapter', () => {
     // When — the adapter fetches the projects
     const result = await adapter.fetchProjects();
 
-    // Then — both are mapped, archived state included
+    // Then — both are mapped, archived state and creation clock included
     expect(result).toEqual([
-      { id: 'P1', name: 'Widgets', isArchived: false },
-      { id: 'P2', name: 'Old', isArchived: true },
+      {
+        id: 'P1',
+        name: 'Widgets',
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00Z',
+      },
+      {
+        id: 'P2',
+        name: 'Old',
+        isArchived: true,
+        createdAt: '2026-09-01T00:00:00Z',
+      },
     ]);
     // And the GET targeted the projects endpoint
     expect(calls[0]).toEqual({ method: 'GET', path: '/projects', body: '' });
@@ -130,7 +141,12 @@ describe('TodoistAdapter', () => {
     const result = await adapter.fetchProject('P2');
 
     // Then — the archived project is mapped
-    expect(result).toEqual({ id: 'P2', name: 'Widgets', isArchived: true });
+    expect(result).toEqual({
+      id: 'P2',
+      name: 'Widgets',
+      isArchived: true,
+      createdAt: '2026-09-01T00:00:00Z',
+    });
     // And the GET targeted the project
     expect(calls[0]).toEqual({ method: 'GET', path: '/projects/P2', body: '' });
   });
@@ -158,7 +174,12 @@ describe('TodoistAdapter', () => {
     const result = await adapter.createProject('Fresh');
 
     // Then — the created project is mapped
-    expect(result).toEqual({ id: 'P9', name: 'Fresh', isArchived: false });
+    expect(result).toEqual({
+      id: 'P9',
+      name: 'Fresh',
+      isArchived: false,
+      createdAt: '2026-09-01T00:00:00Z',
+    });
     // And the POST carried the name
     expect(calls[0]).toEqual({
       method: 'POST',

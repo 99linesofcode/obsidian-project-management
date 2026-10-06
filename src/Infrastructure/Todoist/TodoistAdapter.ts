@@ -258,6 +258,10 @@ export class TodoistAdapter implements TaskManagerPort {
       id: this.stringField(raw, 'id'),
       name: this.stringField(raw, 'name'),
       isArchived: raw.is_archived === true,
+      // The provider's creation clock the capture cursor compares against; a
+      // missing clock is null (the cursor then never treats it as new).
+      createdAt:
+        typeof raw.created_at === 'string' ? raw.created_at : null,
     };
   }
 

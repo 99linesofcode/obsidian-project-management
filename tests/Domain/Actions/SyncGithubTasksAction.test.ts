@@ -125,6 +125,27 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchLatestIssueActivity(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  createIssueCalls: Array<{
+    repoUrl: string;
+    title: string;
+    body: string;
+    type: string;
+  }> = [];
+  createdIssueUrl = 'https://github.com/acme/widgets/issues/99';
+  failCreateIssue = false;
+  async createIssue(
+    repoUrl: string,
+    payload: { title: string; body: string; type: string },
+  ): Promise<{ url: string; nodeId: string }> {
+    this.createIssueCalls.push({ repoUrl, ...payload });
+    if (this.failCreateIssue) {
+      throw new Error('create failed');
+    }
+    return { url: this.createdIssueUrl, nodeId: 'I_kwDOAAAA99' };
+  }
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -136,6 +157,12 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async setProjectClosed(): Promise<void> {}
   async lockIssue(): Promise<void> {}
+  async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';
@@ -994,5 +1021,155 @@ describe('SyncGithubTasksAction', () => {
     // Then — it fails with a clear error and fetches nothing
     await expect(action.execute(input)).rejects.toThrow(/no repo url/);
     expect(projectManagement.detailCalls).toEqual([]);
+  });
+
+  it('quietly skips a board with no repository attached', async () => {
+    // Given — a stored identity for a board whose repo is not attached yet
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, { ...identity, repoUrl: '' });
+    const projectManagement = new FakeProjectManagement();
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — no fetch happens and no error is thrown: a board without a repo
+    // materializes no issues until the user attaches one
+    expect(projectManagement.detailCalls).toEqual([]);
+    expect(projectManagement.createIssueCalls).toEqual([]);
+  });
+
+  it('materializes a vault-born task note outward: issue, card and mirror', async () => {
+    // Given — a task note in taken/ with no registry record and no mirror
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = { issues: [], cards: [] };
+    const action = makeAction(vault, syncState, projectManagement);
+    const bornPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({ type: 'bug', body: 'A fresh bug.', status: defaultLane }),
+    );
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the issue is created from the canonical view, the card is added
+    // in the note's lane, and the mirror item carries a diff-view base
+    expect(projectManagement.createIssueCalls).toEqual([
+      {
+        repoUrl: identity.repoUrl,
+        title: 'fix the bug',
+        body: 'A fresh bug.',
+        type: 'bug',
+      },
+    ]);
+    expect(projectManagement.addBoardItemCalls).toEqual([
+      {
+        projectNodeId: 'PVT_123',
+        issueUrl: projectManagement.createdIssueUrl,
+      },
+    ]);
+    expect(projectManagement.boardStatusCalls).toEqual([
+      { issueUrl: projectManagement.createdIssueUrl, optionId: 'PVTSSF_1' },
+    ]);
+    const record = await syncState.findByMirror(
+      'github',
+      projectManagement.createdIssueUrl,
+    );
+    expect(record).not.toBeNull();
+    expect(record?.notePath).toBe(bornPath);
+    const base = syncState.baseOf(record!.id, 'github');
+    expect(base).not.toBeNull();
+    expect(base?.body).toBe(hash('A fresh bug.'));
+    expect(base?.type).toBe('bug');
+  });
+
+  it('leaves no mirror state when outward creation fails, and retries next pass', async () => {
+    // Given — a vault-born task whose issue creation fails
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = { issues: [], cards: [] };
+    projectManagement.failCreateIssue = true;
+    const action = makeAction(vault, syncState, projectManagement);
+    const bornPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({ type: 'task', body: 'A fresh task.', status: defaultLane }),
+    );
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — no mirror item and no entity are written, and no card is added
+    expect(projectManagement.createIssueCalls).toHaveLength(1);
+    expect(
+      await syncState.findByMirror('github', projectManagement.createdIssueUrl),
+    ).toBeNull();
+    expect(await syncState.findByNotePath(bornPath)).toBeNull();
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
+
+    // When — the next pass succeeds
+    projectManagement.failCreateIssue = false;
+    await action.execute(input);
+
+    // Then — the note materializes
+    const record = await syncState.findByMirror(
+      'github',
+      projectManagement.createdIssueUrl,
+    );
+    expect(record).not.toBeNull();
+    expect(record?.notePath).toBe(bornPath);
+  });
+
+  it('leaves an already-mirrored note untouched by the outward phase', async () => {
+    // Given — a tracked note that already holds a github mirror
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = { issues: [issueA], cards: [card()] };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — the outward phase creates nothing
+    expect(projectManagement.createIssueCalls).toEqual([]);
+  });
+
+  it('opens the gate for a new vault-born note beside a settled mirror', async () => {
+    // Given — a settled tracked issue and a new task note with no mirror
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = { issues: [issueA], cards: [card()] };
+    const action = makeAction(vault, syncState, projectManagement);
+    const bornPath = 'Projecten/Acme Widgets/taken/a-new-task.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({ type: 'task', body: 'A new task.', status: defaultLane }),
+    );
+
+    // When — the board is quiet (includeBoard false)
+    await action.execute({ ...input, includeBoard: false });
+
+    // Then — the outward drift re-opens the fetch and the note materializes
+    expect(projectManagement.detailCalls).toHaveLength(1);
+    expect(projectManagement.createIssueCalls).toHaveLength(1);
   });
 });

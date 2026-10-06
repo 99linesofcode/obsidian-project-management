@@ -97,4 +97,15 @@ export interface SyncStatePort {
   isFullScanPending(projectName: string): Promise<boolean>;
   // Clears the project's marker. Returns whether it was pending.
   consumeFullScan(projectName: string): Promise<boolean>;
+
+  // The project-capture cursor for one remote SURFACE (portId 'todoist' or
+  // 'github'): the newest provider creation clock seen at the last poll. A
+  // remote project is captured only when it was created strictly after this
+  // value, so pre-existing unrelated projects are never adopted (PRJ-2/PRJ-3).
+  // WHY per-surface and not per-project: the cursor guards a global listing
+  // (all of a user's Todoist projects, all of the viewer's boards), which has
+  // no project to nest under; a first sight (null) adopts the current newest
+  // clock and captures nothing.
+  getProjectCursor(portId: string): Promise<string | null>;
+  setProjectCursor(portId: string, iso: string): Promise<void>;
 }

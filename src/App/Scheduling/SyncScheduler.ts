@@ -27,6 +27,13 @@ export class SyncScheduler extends Component {
     private readonly queue: SyncQueue,
     private readonly intervalMs: number,
     private readonly debounceMs: number,
+    // A global pre-tick hook: the plugin wires the remote-project capture here
+    // so a project born on Todoist or GitHub becomes a vault project before the
+    // tick enumerates them (PRJ-2/PRJ-3). The scheduler makes no decision about
+    // what it does — it invokes the injected action and enqueues what it
+    // returns. Optional so a scheduler assembled without the project wave
+    // still constructs.
+    private readonly captureProjects?: () => Promise<string[]>,
   ) {
     super();
   }
@@ -63,11 +70,26 @@ export class SyncScheduler extends Component {
   }
 
   // Discovery: every pm-project is enqueued; the chain probes and gates the
-  // GitHub half itself, so the scheduler no longer probes.
+  // GitHub half itself, so the scheduler no longer probes. The pre-tick capture
+  // runs first so a remote-born project exists as a vault project before the
+  // enumeration; its names are enqueued explicitly because a freshly created
+  // note may not be visible to the metadata cache within the same tick.
   private async tick(): Promise<void> {
+    let captured: string[] = [];
+    if (this.captureProjects) {
+      try {
+        captured = await this.captureProjects();
+      } catch (error) {
+        // A capture failure must never stop the tick's normal work.
+        console.error('SyncScheduler: project capture failed', error);
+      }
+    }
     const notes = await this.vault.findProjectNotes();
     for (const note of notes) {
       this.queue.enqueue(note.projectName);
+    }
+    for (const projectName of captured) {
+      this.queue.enqueue(projectName);
     }
   }
 

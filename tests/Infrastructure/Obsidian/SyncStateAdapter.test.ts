@@ -78,6 +78,24 @@ describe('SyncStateAdapter', () => {
     });
   });
 
+  it('round-trips a per-surface project cursor', async () => {
+    // Given — an empty storage
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    // When — no cursor exists yet, then one is written
+    const before = await adapter.getProjectCursor('todoist');
+    await adapter.setProjectCursor('todoist', '2026-10-05T10:00:00Z');
+    const after = await adapter.getProjectCursor('todoist');
+
+    // Then — it is null before and round-trips after, under a container key
+    expect(before).toBeNull();
+    expect(after).toBe('2026-10-05T10:00:00Z');
+    expect(container(snapshot())['projectCursors']).toEqual({
+      todoist: '2026-10-05T10:00:00Z',
+    });
+  });
+
   it('returns null for an unknown entity id', async () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);

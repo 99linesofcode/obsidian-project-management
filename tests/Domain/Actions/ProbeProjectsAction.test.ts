@@ -60,10 +60,22 @@ class FakeProjectManagement implements ProjectManagementPort {
   async setBoardStatus(): Promise<void> {}
   async addBoardItem(): Promise<void> {}
   async addLabel(): Promise<void> {}
+  async fetchProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createIssue(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async promoteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
   async deleteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
