@@ -887,7 +887,7 @@ export class SyncStateAdapter implements SyncStatePort {
       const node = projectNode(readProjectsMap(container), projectName);
       const pending = node !== null && node[FULL_SCAN_PENDING_KEY] === true;
       if (pending) {
-        node![FULL_SCAN_PENDING_KEY] = false;
+        node[FULL_SCAN_PENDING_KEY] = false;
         await this.persist();
       }
       return pending;
