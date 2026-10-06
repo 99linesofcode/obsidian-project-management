@@ -1,5 +1,8 @@
 import type { AttachProjectData } from '../DataTransferObjects/AttachProjectData.js';
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
+import type { CreateIssueData } from '../DataTransferObjects/CreateIssueData.js';
+import type { IssueHandleData } from '../DataTransferObjects/IssueHandleData.js';
+import type { ProjectData } from '../DataTransferObjects/ProjectData.js';
 import type { ProjectDetailData } from '../DataTransferObjects/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../DataTransferObjects/ProjectStateData.js';
@@ -18,6 +21,24 @@ export interface ProjectManagementPort {
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
+  // The canonical project read: the provider's project payload mapped onto
+  // ProjectData at the boundary. WHY separate from fetchProjectIdentity:
+  // identity is attach-time addressing the adapter owns (repo/board/field ids),
+  // while ProjectData is the canonical content the core reasons about (name,
+  // archivedAt, status option names, done lane). The raw ProjectV2 shape never
+  // crosses the port.
+  fetchProject(
+    repoUrl: string,
+    projectNodeId: string,
+    doneLane: string,
+  ): Promise<ProjectData>;
+  // Creates a new issue from a vault-born task's canonical view. The adapter
+  // renders the vault-owned type as the `type:*` label, so the issue is
+  // immediately tracked. Returns the issue's mirror handle.
+  createIssue(
+    repoUrl: string,
+    payload: CreateIssueData,
+  ): Promise<IssueHandleData>;
   // The whole-project fetch the sync chain works from: tracked issues (with
   // bodies) and the board's cards in one call. Replaces the GitHub half's
   // fetchTrackedIssues + fetchBoardItems pair; the older methods survive for

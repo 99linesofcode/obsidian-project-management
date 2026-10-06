@@ -2,6 +2,8 @@ import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { projectHomePath } from '../Notes/projectHomePath.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import type { ArchiveBaselineData } from '../DataTransferObjects/ArchiveBaselineData.js';
+import { ProjectData } from '../DataTransferObjects/ProjectData.js';
+import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import type { TodoistProjectData } from '../DataTransferObjects/TodoistProjectData.js';
 import type { ProjectManagementPort } from '../Ports/ProjectManagementPort.js';
 import type { EntityRecord, SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -111,6 +113,23 @@ export class ReconcileProjectLifecycleAction {
     const baseline = await this.syncState.getArchiveBaseline(input.projectName);
     const todoistArchived = project?.isArchived ?? null;
 
+    // The canonical project view the lifecycle reasons about. WHY the mapping
+    // lives here: ProjectData is the canonical content shape; the registry's
+    // ProjectIdentityData and ArchiveBaselineData are STORAGE shapes. Identity
+    // is the attach-time addressing the adapter owns (repo/board/field ids and
+    // option ids) and never enters ProjectData; the baseline is the archive
+    // fact (last reconciled location/closed plus the freeze stamp), and its
+    // archivedAt is the canonical stamp ProjectData carries. The core reasons
+    // about ProjectData and maps it back into the two storage records at this
+    // seam.
+    const identity = await this.syncState.getIdentity(input.projectName);
+    const canonical = this.canonicalProject(
+      input.projectName,
+      identity,
+      baseline,
+      input.locationArchived,
+    );
+
     if (!baseline) {
       // First sight adopts the current pair without transitioning, so a project
       // discovered mid-life never self-transitions. The Todoist project mirrors
@@ -124,13 +143,10 @@ export class ReconcileProjectLifecycleAction {
           input.locationArchived,
         );
       }
-      await this.syncState.setArchiveBaseline(input.projectName, {
-        locationArchived: input.locationArchived,
-        closed: input.closed ?? input.locationArchived,
-        // First sight adopts the location without a transition: an already
-        // archived project carries '' because its transition time is unknown.
-        archivedAt: input.locationArchived ? '' : null,
-      });
+      await this.syncState.setArchiveBaseline(
+        input.projectName,
+        this.baselineFrom(canonical, input.closed ?? input.locationArchived),
+      );
       if (!input.locationArchived && project !== null) {
         await this.ensureTodoistBookkeeping(input.projectName, input.syncedAt);
       }
@@ -138,7 +154,7 @@ export class ReconcileProjectLifecycleAction {
         todoistProjectId: input.locationArchived ? null : (project?.id ?? null),
         frozen: input.locationArchived,
         notePath,
-        archivedAt: input.locationArchived ? '' : null,
+        archivedAt: canonical.archivedAt,
       };
     }
 
@@ -173,16 +189,16 @@ export class ReconcileProjectLifecycleAction {
           project,
         );
         if (reactivated) {
-          await this.syncState.setArchiveBaseline(input.projectName, {
-            locationArchived: false,
-            closed: false,
-            archivedAt: null,
-          });
+          canonical.archivedAt = null;
+          await this.syncState.setArchiveBaseline(
+            input.projectName,
+            this.baselineFrom(canonical, false),
+          );
           return {
             todoistProjectId: null,
             frozen: true,
             notePath: this.activeNotePath(input.projectName, notePath),
-            archivedAt: null,
+            archivedAt: canonical.archivedAt,
           };
         }
       }
@@ -192,7 +208,7 @@ export class ReconcileProjectLifecycleAction {
         notePath,
         // A settled archive keeps the stamp it was given at the transition, so
         // a second pass never re-stamps it.
-        archivedAt: archived ? baseline.archivedAt : null,
+        archivedAt: canonical.archivedAt,
       };
     }
 
@@ -200,7 +216,6 @@ export class ReconcileProjectLifecycleAction {
     if (input.locationArchived !== archived) {
       notePath = await this.moveFolder(input.projectName, archived, notePath);
     }
-    const identity = await this.syncState.getIdentity(input.projectName);
     if (
       input.closed !== undefined &&
       input.closed !== archived &&
@@ -233,16 +248,16 @@ export class ReconcileProjectLifecycleAction {
         // The watch moved the folder active; settle the baseline to active so
         // the next tick reads a settled active project. This tick still returns
         // frozen, matching the former one-tick materialisation delay.
-        await this.syncState.setArchiveBaseline(input.projectName, {
-          locationArchived: false,
-          closed: false,
-          archivedAt: null,
-        });
+        canonical.archivedAt = null;
+        await this.syncState.setArchiveBaseline(
+          input.projectName,
+          this.baselineFrom(canonical, false),
+        );
         return {
           todoistProjectId: null,
           frozen: true,
           notePath: this.activeNotePath(input.projectName, notePath),
-          archivedAt: null,
+          archivedAt: canonical.archivedAt,
         };
       }
     }
@@ -250,19 +265,19 @@ export class ReconcileProjectLifecycleAction {
     // The stamp the transition earns: syncedAt on a genuine active -> archived
     // move, the preserved baseline value when already archived.
     const archivedAt = this.stampedAt(archived, baseline, input.syncedAt);
+    canonical.archivedAt = archivedAt;
 
     // Settle the baseline after a successful reconcile.
-    await this.syncState.setArchiveBaseline(input.projectName, {
-      locationArchived: archived,
-      closed: archived,
-      archivedAt,
-    });
+    await this.syncState.setArchiveBaseline(
+      input.projectName,
+      this.baselineFrom(canonical, archived),
+    );
 
     return {
       todoistProjectId: archived ? null : (project?.id ?? null),
       frozen: archived,
       notePath,
-      archivedAt,
+      archivedAt: canonical.archivedAt,
     };
   }
 
@@ -308,6 +323,51 @@ export class ReconcileProjectLifecycleAction {
       return null;
     }
     return baseline.locationArchived ? baseline.archivedAt : syncedAt;
+  }
+
+  // The canonical project view the lifecycle reasons about, built from the two
+  // registry STORAGE shapes. WHY the split: ProjectIdentityData is the
+  // attach-time addressing the adapter owns (repo/board/field ids and option
+  // ids) and never enters ProjectData; ArchiveBaselineData is the archive fact
+  // (last reconciled location/closed plus the freeze stamp), and its archivedAt
+  // is the canonical stamp ProjectData carries. ProjectData holds only the
+  // canonical content — the name, the plugin-stamped archivedAt, the status
+  // option NAMES and the done lane — so the core never reasons about provider
+  // ids. The reverse mapping is baselineFrom.
+  private canonicalProject(
+    projectName: string,
+    identity: ProjectIdentityData | null,
+    baseline: ArchiveBaselineData | null,
+    locationArchived: boolean,
+  ): ProjectData {
+    return new ProjectData(
+      '', // id is registry storage, not canonical content
+      '', // path is registry storage; the note path is the caller's input
+      identity?.repoUrl ? { github: identity.repoUrl } : {},
+      projectName,
+      // First sight adopts the location without a transition: an already
+      // archived project carries '' because its transition time is unknown.
+      baseline ? baseline.archivedAt : locationArchived ? '' : null,
+      (identity?.statusOptions ?? []).map((option) => option.name),
+      this.doneOptionName,
+      null,
+      null,
+    );
+  }
+
+  // The reverse seam: the canonical project's archive fact back into the
+  // registry's baseline storage shape. locationArchived is derived from the
+  // canonical stamp (a project is archived exactly when it carries one), and
+  // closed is the reconciled board state the caller supplies.
+  private baselineFrom(
+    project: ProjectData,
+    closed: boolean,
+  ): ArchiveBaselineData {
+    return {
+      locationArchived: project.archivedAt !== null,
+      closed,
+      archivedAt: project.archivedAt,
+    };
   }
 
   // The Todoist project for a note: the anchored one, a name match, or a fresh

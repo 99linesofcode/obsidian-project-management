@@ -175,6 +175,17 @@ describe('ProjectData.canonical', () => {
     });
     expect(moved.canonical()).toBe(project().canonical());
   });
+
+  it('keeps lane boundaries distinct when a lane name contains a comma', () => {
+    // Given — the same characters split across a lane boundary. A ',' delimiter
+    // would collapse these onto one canonical string; the NUL delimiter keeps
+    // the split, matching the field-boundary contract.
+    const oneLane = project({ statusOptions: ['a,b'] });
+    const twoLanes = project({ statusOptions: ['a', 'b'] });
+
+    // When/Then — the canonical strings differ
+    expect(oneLane.canonical()).not.toBe(twoLanes.canonical());
+  });
 });
 
 describe('DataTransferObject.snapshotHash', () => {

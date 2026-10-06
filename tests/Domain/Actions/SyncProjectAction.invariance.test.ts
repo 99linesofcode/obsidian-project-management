@@ -202,6 +202,12 @@ class FakeProjectManagement implements ProjectManagementPort {
   async addLabel(url: string, label: string): Promise<void> {
     this.mutations.push(`addLabel:${url}:${label}`);
   }
+  async fetchProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createIssue(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async promoteCard(): Promise<GithubTaskData> {
     throw new Error('not used');
   }

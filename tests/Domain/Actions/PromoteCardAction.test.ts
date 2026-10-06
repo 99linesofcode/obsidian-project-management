@@ -28,6 +28,12 @@ class FakePort implements ProjectManagementPort {
     parentUrl: null,
   };
 
+  async fetchProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createIssue(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async promoteCard(
     itemId: string,
     repoNodeId: string,

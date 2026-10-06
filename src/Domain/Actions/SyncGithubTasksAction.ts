@@ -1,6 +1,8 @@
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
 import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
+import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
 import { TaskData } from '../DataTransferObjects/TaskData.js';
+import { boardOptionIDByName } from '../Board/boardOptionIDByName.js';
 import { defaultStatusName } from '../Board/defaultStatusName.js';
 import { statusNameFromState } from '../Board/statusNameFromState.js';
 import { hasTypeLabel } from '../Labels/hasTypeLabel.js';
@@ -14,6 +16,7 @@ import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
 import { stampFrontmatterField } from '../Notes/stampFrontmatterField.js';
 import { slugify } from '../Notes/TaskNoteMapper.js';
 import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
+import { toDiffView } from '../Reconciliation/toDiffView.js';
 import type { ConflictHints } from '../Reconciliation/VerdictResolver.js';
 import { VerdictResolver } from '../Reconciliation/VerdictResolver.js';
 import type {
@@ -70,8 +73,14 @@ export class SyncGithubTasksAction {
     // The probe gate: skip the whole fetch when the remote is unmoved and the
     // vault is settled. A vault-side drift re-opens it so the drift can be
     // pushed; a project with no github-mirrored records is unknown, so it
-    // fetches.
-    if (!input.includeBoard && !(await this.hasVaultDrift(input.projectName))) {
+    // fetches. Outward drift (a vault-born task note with no github mirror)
+    // also re-opens it, so a new note materializes even when the board is
+    // quiet.
+    if (
+      !input.includeBoard &&
+      !(await this.hasVaultDrift(input.projectName)) &&
+      !(await this.hasOutwardDrift(input.projectName))
+    ) {
       return;
     }
 
@@ -115,6 +124,12 @@ export class SyncGithubTasksAction {
         defaultLane,
       );
     }
+
+    // Outward materialization runs AFTER the per-issue loop so existing mirrors
+    // settle first. A vault-born task note with no github mirror gains an issue
+    // and a card; a creation failure leaves the entity unmirrored and the next
+    // pass retries.
+    await this.materializeOutward(input, identity, doneLane, defaultLane);
   }
 
   // An untracked issue: materialise the note and add the card. A closed
@@ -508,6 +523,160 @@ export class SyncGithubTasksAction {
         return true;
       }
       if (!matchesBase(parsed, base)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Outward drift: a typed task note in the project's taken/ folder with no
+  // github mirror. WHY the GitHub half owns this: a vault-born note has no
+  // registry record until a half creates one, and the GitHub half is the one
+  // that materializes it outward, so it creates the entity itself rather than
+  // waiting for the Todoist half (which may be frozen or absent). A note with
+  // no record counts as drift, so the gate opens for it.
+  private async hasOutwardDrift(projectName: string): Promise<boolean> {
+    const folder = `Projecten/${projectName}/taken`;
+    for (const notePath of await this.vault.listNotesInFolder(folder)) {
+      const record = await this.syncState.findByNotePath(notePath);
+      if (
+        record !== null &&
+        (await this.hasGithubMirror(record.id, projectName))
+      ) {
+        continue;
+      }
+      const note = await this.vault.getNoteByPath(notePath);
+      if (note === null) {
+        continue;
+      }
+      const parsed = VaultTaskMapper.parseTask(note.content, notePath, {
+        projectName,
+        doneLane: this.doneOptionName,
+      });
+      // Only a typed task note is materializable; an untyped or malformed note
+      // must not hold the gate open forever.
+      if (parsed !== null && parsed.type !== '') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The outward phase: every taken/ task note with no github mirror gains an
+  // issue, a board card in the note's lane, and a mirror item. To-dos live in
+  // todos/ and are never issues; a note with no vault-owned type cannot carry
+  // the type label the adoption gate requires, so it is skipped.
+  private async materializeOutward(
+    input: SyncGithubTasksInput,
+    identity: ProjectIdentityData,
+    doneLane: string,
+    defaultLane: string,
+  ): Promise<void> {
+    const folder = `Projecten/${input.projectName}/taken`;
+    for (const notePath of await this.vault.listNotesInFolder(folder)) {
+      const note = await this.vault.getNoteByPath(notePath);
+      if (note === null) {
+        continue;
+      }
+      const vault = VaultTaskMapper.parseTask(note.content, notePath, {
+        projectName: input.projectName,
+        doneLane,
+      });
+      if (vault === null || vault.type === '') {
+        continue;
+      }
+      const existing = await this.syncState.findByNotePath(notePath);
+      if (
+        existing !== null &&
+        (await this.hasGithubMirror(existing.id, input.projectName))
+      ) {
+        // Already mirrored: the per-issue loop owns it; leave it untouched.
+        continue;
+      }
+      try {
+        await this.createOutward(
+          existing,
+          vault,
+          notePath,
+          input,
+          identity,
+          defaultLane,
+        );
+      } catch (error) {
+        // A failed creation leaves the entity unmirrored (no partial mirror
+        // state); the next pass sees the same outward drift and retries. One
+        // note's failure must not starve the others.
+        console.error(
+          `SyncGithubTasksAction: outward creation failed for ${notePath}`,
+          error,
+        );
+      }
+    }
+  }
+
+  // Creates the issue for one vault-born task and links it. Ordering is the
+  // safety property: the issue is created first, so a failure throws before any
+  // registry write and the entity is left untouched (retried next pass). The
+  // mirror item is set immediately after the issue exists, so a later card
+  // failure can never re-create the issue — the per-issue loop heals the
+  // missing card on the next pass (membership gap).
+  private async createOutward(
+    existing: EntityRecord | null,
+    vault: TaskData,
+    notePath: string,
+    input: SyncGithubTasksInput,
+    identity: ProjectIdentityData,
+    defaultLane: string,
+  ): Promise<void> {
+    const body = toIssueBody(vault.body);
+    const handle = await this.projectManagement.createIssue(identity.repoUrl, {
+      title: vault.title,
+      body,
+      type: vault.type,
+    });
+
+    // The entity is created only once the issue exists, so a failed creation
+    // never leaves a dangling record.
+    const record = existing ?? { id: crypto.randomUUID(), notePath };
+    if (existing === null) {
+      await this.syncState.setEntity(record);
+    }
+
+    // The base is a diff view of the canonical task, with the issue-comparable
+    // body digest — the same form the next pass's diff reads.
+    vault.id = record.id;
+    const base = toDiffView(vault, body);
+    await this.syncState.setMirrorItem(input.projectName, 'github', handle.url, {
+      entityId: record.id,
+      base,
+    });
+
+    // The card: add it and place it in the note's lane (the default lane when
+    // the note carries none).
+    await this.projectManagement.addBoardItem(identity.projectNodeId, handle.url);
+    const lane = vault.status !== '' ? vault.status : defaultLane;
+    if (lane !== '') {
+      await this.projectManagement.setBoardStatus(
+        identity.projectNodeId,
+        identity.statusFieldId,
+        handle.url,
+        boardOptionIDByName(identity.statusOptions, lane),
+      );
+    }
+  }
+
+  // Whether an entity already holds a github mirror item. The registry is the
+  // identity source, so this is the one check the outward phase needs to leave
+  // an already-mirrored note untouched.
+  private async hasGithubMirror(
+    entityId: string,
+    projectName: string,
+  ): Promise<boolean> {
+    for (const entry of await this.syncState.listMirrorItems(
+      projectName,
+      'github',
+    )) {
+      if (entry.item.entityId === entityId) {
         return true;
       }
     }

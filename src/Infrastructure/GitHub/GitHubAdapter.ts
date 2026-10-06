@@ -1,5 +1,8 @@
 import type { AttachProjectData } from '../../Domain/DataTransferObjects/AttachProjectData.js';
 import type { BoardItemData } from '../../Domain/DataTransferObjects/BoardItemData.js';
+import type { CreateIssueData } from '../../Domain/DataTransferObjects/CreateIssueData.js';
+import type { IssueHandleData } from '../../Domain/DataTransferObjects/IssueHandleData.js';
+import type { ProjectData } from '../../Domain/DataTransferObjects/ProjectData.js';
 import type {
   ProjectIdentityData,
   ProjectStatusOption,
@@ -7,6 +10,7 @@ import type {
 import type { ProjectStateData } from '../../Domain/DataTransferObjects/ProjectStateData.js';
 import type { ProjectDetailData } from '../../Domain/DataTransferObjects/ProjectDetailData.js';
 import type { GithubTaskData } from '../../Domain/DataTransferObjects/GithubTaskData.js';
+import { ProjectMapper } from '../../Domain/Mappers/ProjectMapper.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
@@ -76,6 +80,30 @@ const ORG_PROJECT_QUERY = `
     organization(login: $login) {
       projectV2(number: $number) {
         id
+        fields(first: 20) {
+          nodes {
+            ... on ProjectV2SingleSelectField {
+              id
+              name
+              options { id name }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// The canonical project read: one node query returns the ProjectV2 content
+// (title, closed, Status options) the core reasons about. The adapter maps it
+// onto ProjectData; the raw ProjectV2 shape never crosses the port.
+const PROJECT_CONTENT_QUERY = `
+  query ProjectContent($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        id
+        title
+        closed
         fields(first: 20) {
           nodes {
             ... on ProjectV2SingleSelectField {
@@ -273,7 +301,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     const repo = this.parseRepoUrl(data.repoUrl);
 
     const repoNodeId = await this.fetchRepoNodeId(repo);
-    const project = await this.fetchProject(board);
+    const project = await this.fetchProjectByBoard(board);
 
     return {
       repoUrl: data.repoUrl,
@@ -281,6 +309,78 @@ export class GitHubAdapter implements ProjectManagementPort {
       projectNodeId: project.id,
       statusFieldId: project.statusFieldId,
       statusOptions: project.statusOptions,
+    };
+  }
+
+  // The canonical project read. The ProjectV2 node is mapped onto ProjectData
+  // at the boundary; the option ids stay in the identity storage shape, so the
+  // core only ever sees the canonical content.
+  async fetchProject(
+    repoUrl: string,
+    projectNodeId: string,
+    doneLane: string,
+  ): Promise<ProjectData> {
+    const data = await this.postQuery(PROJECT_CONTENT_QUERY, {
+      projectId: projectNodeId,
+    });
+    const project = data.node;
+    if (!isRecord(project) || typeof project.id !== 'string') {
+      throw new Error('GitHubAdapter: project not found');
+    }
+    const status = this.findStatusField(project.fields);
+    return ProjectMapper.fromGithubProject(
+      {
+        id: project.id,
+        name: typeof project.title === 'string' ? project.title : '',
+        closed: project.closed === true,
+        statusOptions: status.options,
+      },
+      { path: '', doneLane, archivedAt: null, repoUrl },
+    );
+  }
+
+  // Creates a new issue from a vault-born task's canonical view. The vault-owned
+  // type is rendered as the `type:*` label, so the created issue is immediately
+  // tracked by the same gate that adopts typed issues. The REST create is the
+  // adapter's issue-creation internal; promoteCard's draft conversion is a
+  // different path (it needs an existing draft card), so it is not reused here.
+  async createIssue(
+    repoUrl: string,
+    payload: CreateIssueData,
+  ): Promise<IssueHandleData> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const path = `/repos/${repo.owner}/${repo.name}/issues`;
+    const body: Record<string, unknown> = {
+      title: payload.title,
+      body: payload.body,
+    };
+    if (payload.type !== '') {
+      body.labels = [`type: ${payload.type}`];
+    }
+
+    const response = await this.transport.postPath(
+      path,
+      JSON.stringify(body),
+    );
+    if (response.status !== 201 && response.status !== 200) {
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
+    }
+    if (!isRecord(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+    const url =
+      typeof response.json.html_url === 'string' ? response.json.html_url : '';
+    if (url === '') {
+      throw new Error('GitHubAdapter: create issue returned no url');
+    }
+    return {
+      url,
+      nodeId:
+        typeof response.json.node_id === 'string'
+          ? response.json.node_id
+          : '',
     };
   }
 
@@ -819,7 +919,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     return repository.id;
   }
 
-  private async fetchProject(board: BoardParts): Promise<{
+  private async fetchProjectByBoard(board: BoardParts): Promise<{
     id: string;
     statusFieldId: string;
     statusOptions: ProjectStatusOption[];

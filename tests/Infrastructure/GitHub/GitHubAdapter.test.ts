@@ -250,6 +250,121 @@ describe('GitHubAdapter', () => {
     await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/Status/);
   });
 
+  it('maps a ProjectV2 node onto the canonical ProjectData', async () => {
+    // Given — a transport returning the project content node
+    const contentResponse = {
+      status: 200,
+      json: {
+        data: {
+          node: {
+            id: 'PVT_123',
+            title: 'Acme Widgets',
+            closed: false,
+            fields: {
+              nodes: [
+                {
+                  id: 'PVTF_456',
+                  name: 'Status',
+                  options: [
+                    { id: 'PVTSSF_1', name: 'Unshaped' },
+                    { id: 'PVTSSF_2', name: 'Shipped' },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([contentResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter reads the canonical project
+    const project = await adapter.fetchProject(
+      'https://github.com/acme/widgets',
+      'PVT_123',
+      'Shipped',
+    );
+
+    // Then — the content is canonical (option names, not ids) and the raw
+    // ProjectV2 shape never crosses the port
+    expect(project.name).toBe('Acme Widgets');
+    expect(project.statusOptions).toEqual(['Unshaped', 'Shipped']);
+    expect(project.doneLane).toBe('Shipped');
+    expect(project.archivedAt).toBeNull();
+    expect(project.mirrors).toEqual({
+      github: 'https://github.com/acme/widgets',
+    });
+    expect(bodies[0]).toContain('ProjectContent');
+    expect(bodies[0]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('creates an issue with the vault-owned type as a type label', async () => {
+    // Given — a transport that returns the created issue
+    const created = {
+      status: 201,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/50',
+        node_id: 'I_kwDOAAAA50',
+      },
+    };
+    const { transport, bodies, paths } = fakeTransport([created]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter creates the issue
+    const handle = await adapter.createIssue(
+      'https://github.com/acme/widgets',
+      { title: 'Fix the bug', body: 'The bug.', type: 'bug' },
+    );
+
+    // Then — the REST create targeted the repo and rendered the type label
+    expect(handle).toEqual({
+      url: 'https://github.com/acme/widgets/issues/50',
+      nodeId: 'I_kwDOAAAA50',
+    });
+    expect(paths[0]).toBe('/repos/acme/widgets/issues');
+    expect(bodies[0]).toContain('"title":"Fix the bug"');
+    expect(bodies[0]).toContain('"labels":["type: bug"]');
+  });
+
+  it('omits the label when the vault-owned type is empty', async () => {
+    // Given — a transport that returns the created issue
+    const created = {
+      status: 201,
+      json: {
+        html_url: 'https://github.com/acme/widgets/issues/51',
+        node_id: 'I_kwDOAAAA51',
+      },
+    };
+    const { transport, bodies } = fakeTransport([created]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When — the adapter creates an untyped issue
+    await adapter.createIssue('https://github.com/acme/widgets', {
+      title: 'Untyped',
+      body: '',
+      type: '',
+    });
+
+    // Then — no label is sent
+    expect(bodies[0]).not.toContain('labels');
+  });
+
+  it('throws when issue creation fails', async () => {
+    // Given — a transport that rejects the create
+    const { transport } = fakeTransport([{ status: 422, json: {} }]);
+    const adapter = new GitHubAdapter(transport);
+
+    // When/Then — the failure surfaces so the caller leaves no mirror state
+    await expect(
+      adapter.createIssue('https://github.com/acme/widgets', {
+        title: 'Fix the bug',
+        body: '',
+        type: 'task',
+      }),
+    ).rejects.toThrow(/status 422/);
+  });
+
   it('keeps issues carrying any type label — task, bug, chore, slice', async () => {
     // Given — a REST response mixing every type label with an untyped issue
     const issuesResponse = {
