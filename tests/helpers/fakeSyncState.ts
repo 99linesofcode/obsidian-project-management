@@ -1,14 +1,14 @@
-import type { ArchiveBaselineData } from '../../src/Domain/DataTransferObjects/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { TaskData } from '../../src/Domain/DataTransferObjects/TaskData.js';
-import type { WatchStateData } from '../../src/Domain/DataTransferObjects/WatchStateData.js';
-import { projectFromNotePath } from '../../src/Domain/Notes/projectFromNotePath.js';
+import type { ArchiveBaselineData } from '../../src/projects/ArchiveBaselineData.js';
+import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
+import type { TaskData } from '../../src/shared/TaskData.js';
+import type { WatchStateData } from '../../src/projects/WatchStateData.js';
+import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
 import type {
   EntityRecord,
   MirrorItem,
   PortState,
   SyncStatePort,
-} from '../../src/Domain/Ports/SyncStatePort.js';
+} from '../../src/registry/SyncStatePort.js';
 
 // A port item seed: the handle plus its last-synced base.
 interface SeededMirror {
@@ -192,6 +192,18 @@ export class FakeSyncState implements SyncStatePort {
     handle: string,
   ): Promise<MirrorItem | null> {
     return this.items.get(portId)?.get(handle) ?? null;
+  }
+
+  async findMirrorItemByEntity(
+    portId: string,
+    entityId: string,
+  ): Promise<{ handle: string; item: MirrorItem } | null> {
+    const handle = this.handleOf(entityId, portId);
+    if (handle === null) {
+      return null;
+    }
+    const item = this.items.get(portId)?.get(handle);
+    return item === undefined ? null : { handle, item };
   }
 
   async setMirrorItem(
