@@ -1,0 +1,59 @@
+name: Release Obsidian plugin
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Conventional Changelog
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v6 # docs: https://github.com/TriPSs/conventional-changelog-action
+        with:
+          github-token: ${{ secrets.github_token }}
+          git-user-name: Conventional Changelog Action
+          git-user-email: 3071062+changelog@users.noreply.github.com
+          # Obsidian installs assets from the release tagged with the EXACT
+          # manifest version — '1.0.0', never 'v1.0.0'.
+          tag-prefix: ''
+          # The manifest is the plugin's version of record; the action bumps
+          # it and the release commit carries the bump, so the manifest at
+          # the tag always matches the released asset.
+          version-file: 'manifest.json'
+
+      - name: Build
+        if: ${{ steps.changelog.outputs.skipped == 'false' }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: GitHub Release
+        if: ${{ steps.changelog.outputs.skipped == 'false' }}
+        uses: softprops/action-gh-release@v3 # docs: https://github.com/softprops/action-gh-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body: ${{ steps.changelog.outputs.clean_changelog }}
+          release_name: ${{ steps.changelog.outputs.tag }}
+          tag_name: ${{ steps.changelog.outputs.tag }}
+          files: |
+            manifest.json
+            main.js

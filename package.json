@@ -1,6 +1,6 @@
 {
   "name": "obsidian-project-management",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "Sync vault projects with GitHub Projects — the vault is the system of record.",
   "type": "module",
   "main": "main.js",
