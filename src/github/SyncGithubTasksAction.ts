@@ -572,7 +572,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       const record = await this.syncState.findByNotePath(notePath);
       if (
         record !== null &&
-        (await this.hasRealGithubMirror(record.id))
+        (await this.hasRealGithubMirror(projectName, record.id))
       ) {
         continue;
       }
@@ -617,7 +617,10 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
         continue;
       }
       const existing = await this.syncState.findByNotePath(notePath);
-      if (existing !== null && (await this.hasRealGithubMirror(existing.id))) {
+      if (
+        existing !== null &&
+        (await this.hasRealGithubMirror(input.projectName, existing.id))
+      ) {
         // Already mirrored: the per-issue loop owns it; leave it untouched.
         continue;
       }
@@ -766,9 +769,27 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
         .filter(({ handle }) => !isPendingCreationHandle(handle))
         .map(({ handle }) => handle),
     );
+    // The entities that already hold a real handle. A crash between the real
+    // mirror write and the placeholder removal leaves BOTH items for one entity
+    // (placeholder first), so the placeholder is stale: the real mirror already
+    // covers the entity, and the placeholder would shadow it in every
+    // first-match lookup. Drop it before orphan matching.
+    const realByEntity = new Set(
+      items
+        .filter(({ handle }) => !isPendingCreationHandle(handle))
+        .map(({ item }) => item.entityId),
+    );
     for (const { handle, item } of pending) {
       const record = await this.syncState.getEntity(item.entityId);
       if (record === null) {
+        await this.syncState.removeMirrorItem(
+          input.projectName,
+          'github',
+          handle,
+        );
+        continue;
+      }
+      if (realByEntity.has(item.entityId)) {
         await this.syncState.removeMirrorItem(
           input.projectName,
           'github',
@@ -829,12 +850,21 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
   // not the registry-first placeholder). The registry is the identity source, so
   // this is the check that lets the outward phase leave an already-mirrored note
   // untouched while still retrying a placeholder whose issue does not exist.
-  private async hasRealGithubMirror(entityId: string): Promise<boolean> {
-    const item = await this.syncState.findMirrorItemByEntity(
-      'github',
-      entityId,
+  //
+  // WHY every github ref and not just the first: a crash between the real mirror
+  // write and the placeholder removal leaves both items for one entity,
+  // placeholder first. findMirrorItemByEntity would return that stale
+  // placeholder, hiding the real handle and letting the outward phase create a
+  // duplicate issue. Scan the project's items for ANY non-pending handle.
+  private async hasRealGithubMirror(
+    projectName: string,
+    entityId: string,
+  ): Promise<boolean> {
+    const items = await this.syncState.listMirrorItems(projectName, 'github');
+    return items.some(
+      ({ handle, item }) =>
+        item.entityId === entityId && !isPendingCreationHandle(handle),
     );
-    return item !== null && !isPendingCreationHandle(item.handle);
   }
 }
 

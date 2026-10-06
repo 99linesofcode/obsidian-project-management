@@ -1043,6 +1043,110 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     ]);
   });
 
+  it('heals a crash after the real mirror write: drops the stale placeholder, keeps the real mirror, no duplicate', async () => {
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    const bornPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({ type: 'bug', body: 'A fresh bug.', status: defaultLane }),
+    );
+    const record = { id: 'uuid-born', notePath: bornPath };
+    const createdUrl = projectManagement.createdIssueUrl;
+    // The state a crash between the real mirror write and the placeholder
+    // removal leaves: the placeholder was inserted first, the real handle
+    // second. A first-match lookup (findMirrorItemByEntity) therefore sees the
+    // stale placeholder, not the real handle.
+    syncState.seed(record, {
+      github: { handle: 'pendingCreation:uuid-born', base: null },
+    });
+    await syncState.setMirrorItem(projectName, 'github', createdUrl, {
+      entityId: record.id,
+      base: taskData({
+        id: record.id,
+        notePath: bornPath,
+        title: 'fix the bug',
+        body: hash('A fresh bug.'),
+        status: defaultLane,
+        completedAt: null,
+        type: 'bug',
+      }),
+    });
+    projectManagement.detail = {
+      issues: [
+        issue({
+          url: createdUrl,
+          title: 'fix the bug',
+          body: 'A fresh bug.',
+          labels: ['type: bug'],
+        }),
+      ],
+      cards: [],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    await action.execute(input);
+
+    // No duplicate: the coexistence is healed, so the outward phase sees the
+    // real mirror and never re-creates the issue.
+    expect(projectManagement.createIssueCalls).toEqual([]);
+    expect(vault.created).toEqual([]);
+    // The stale placeholder is gone; the note keeps its real mirror.
+    expect(
+      await syncState.findMirrorItem('github', 'pendingCreation:uuid-born'),
+    ).toBeNull();
+    const item = await syncState.findMirrorItem('github', createdUrl);
+    expect(item?.entityId).toBe('uuid-born');
+    // The per-issue loop heals the missing card.
+    expect(projectManagement.addBoardItemCalls).toEqual([
+      { projectNodeId: 'PVT_123', issueUrl: createdUrl },
+    ]);
+  });
+
+  it('hasRealGithubMirror is true when a real item exists after a placeholder', async () => {
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    const bornPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({ type: 'bug', body: 'A fresh bug.', status: defaultLane }),
+    );
+    const record = { id: 'uuid-born', notePath: bornPath };
+    const createdUrl = projectManagement.createdIssueUrl;
+    // Placeholder first, real second — the exact coexistence a post-write crash
+    // leaves. The outward phase must read the real handle across ALL refs, not
+    // the first (placeholder) hit, or it materializes a duplicate.
+    syncState.seed(record, {
+      github: { handle: 'pendingCreation:uuid-born', base: null },
+    });
+    await syncState.setMirrorItem(projectName, 'github', createdUrl, {
+      entityId: record.id,
+      base: null,
+    });
+    const action = makeAction(vault, syncState, projectManagement);
+    const probe = action as unknown as {
+      hasRealGithubMirror(
+        projectName: string,
+        entityId: string,
+      ): Promise<boolean>;
+    };
+
+    expect(await probe.hasRealGithubMirror(projectName, record.id)).toBe(true);
+    // The placeholder alone is not a real mirror.
+    const barePath = 'Projecten/Acme Widgets/taken/bare.md';
+    syncState.seed(
+      { id: 'uuid-bare', notePath: barePath },
+      { github: { handle: 'pendingCreation:uuid-bare', base: null } },
+    );
+    expect(await probe.hasRealGithubMirror(projectName, 'uuid-bare')).toBe(
+      false,
+    );
+  });
+
   it('skips outward creation when the note lane is not a board option (L2)', async () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();

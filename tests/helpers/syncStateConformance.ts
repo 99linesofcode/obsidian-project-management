@@ -36,6 +36,8 @@ const PATH_A = 'Projecten/Project A/taken/one.md';
 const PATH_B = 'Projecten/Project B/taken/two.md';
 const PATH_A2 = 'Projecten/Project A/taken/two.md';
 const GH = 'https://github.com/acme/repo/issues/1';
+const GH2 = 'https://github.com/acme/repo/issues/2';
+const PENDING = 'pendingCreation:e1';
 const TD = 'T1';
 
 function entity(id: string, notePath: string): EntityRecord {
@@ -144,6 +146,55 @@ export function runSyncStateConformance(
         });
         expect((await port.findMirrorItem('github', GH))?.base?.title).toBe(
           'new',
+        );
+      });
+    });
+
+    describe('multiple items per entity append ordering', () => {
+      it('returns the first-written item from the single-item lookup and lists both', async () => {
+        const port = harness.create();
+        await port.setEntity(entity('e1', PATH_A));
+        await port.setMirrorItem(PROJECT_A, 'github', PENDING, {
+          entityId: 'e1',
+          base: null,
+        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH2, {
+          entityId: 'e1',
+          base: taskData({ id: 'e1', notePath: PATH_A }),
+        });
+
+        // Append order: the item written first wins the single-item lookup, so
+        // an entity can hold a stale placeholder ahead of its real handle. The
+        // action must scan listMirrorItems for a real one rather than trust
+        // findMirrorItemByEntity's first hit.
+        expect(await port.findMirrorItemByEntity('github', 'e1')).toEqual({
+          handle: PENDING,
+          item: { entityId: 'e1', base: null },
+        });
+        expect(
+          (await port.listMirrorItems(PROJECT_A, 'github')).map(
+            ({ handle }) => handle,
+          ),
+        ).toEqual([PENDING, GH2]);
+      });
+
+      it('drops only the named item and keeps the other', async () => {
+        const port = harness.create();
+        await port.setEntity(entity('e1', PATH_A));
+        await port.setMirrorItem(PROJECT_A, 'github', PENDING, {
+          entityId: 'e1',
+          base: null,
+        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH2, {
+          entityId: 'e1',
+          base: null,
+        });
+
+        await port.removeMirrorItem(PROJECT_A, 'github', PENDING);
+
+        expect(await port.findMirrorItem('github', PENDING)).toBeNull();
+        expect((await port.findMirrorItemByEntity('github', 'e1'))?.handle).toBe(
+          GH2,
         );
       });
     });
