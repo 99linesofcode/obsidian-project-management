@@ -1,5 +1,5 @@
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
-import type { VaultPort } from './VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 // Writes one sync-owned field into a note's frontmatter, in place when the
 // field is declared and appended otherwise. A note without a frontmatter block

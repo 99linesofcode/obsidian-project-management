@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ApplyTaskToGithubAction } from '../../src/tasks/ApplyTaskToGithubAction.js';
+import { ApplyTaskToGithubAction } from '../../src/github/ApplyTaskToGithubAction.js';
 import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

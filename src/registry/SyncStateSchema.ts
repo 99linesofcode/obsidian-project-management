@@ -1,6 +1,6 @@
 import { isRecord } from '../shared/isRecord.js';
 import { TaskData } from '../shared/TaskData.js';
-import type { MirrorItem, PortState } from './SyncStatePort.js';
+import type { MirrorItem, PortState } from '../shared/SyncStatePort.js';
 
 // The container schema: the persisted shape's constants and the pure readers
 // and writers of its nested nodes. Migrations and the adapter share these so
@@ -23,7 +23,7 @@ export const ITEMS_KEY = 'items';
 
 // The project-capture cursors, keyed by remote SURFACE (portId). WHY a
 // container-level map and not a per-project node: the cursor guards a global
-// listing (all Todoist projects, all the viewer's boards), which has no
+// listing (all task-manager projects, all the viewer's boards), which has no
 // project to nest under. It is a new top-level dimension beside `projects`.
 export const PROJECT_CURSORS_KEY = 'projectCursors';
 

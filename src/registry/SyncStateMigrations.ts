@@ -91,9 +91,9 @@ export function migrateLegacyState(data: Record<string, unknown>): boolean {
 // One-shot migration of the two legacy per-entity stores into the uuid-keyed
 // registry (the v2 shape, still with a per-entity mirrors map). A `status.<url>`
 // record becomes an entity with a `github` mirror; a `todoistItem.<notePath>`
-// record merges into the entity at that path, or creates a Todoist-only entity
-// when none exists (a vault to-do has no GitHub issue and legitimately has no
-// GitHub record). The legacy keys are deleted afterwards, so a second load is a
+// record merges into the entity at that path, or creates a task-manager-only entity
+// when none exists (a vault to-do has no code-host issue and legitimately has no
+// code-host record). The legacy keys are deleted afterwards, so a second load is a
 // no-op. Never drops data: a record that cannot be parsed is left in place
 // rather than discarded.
 export function migrateEntities(container: Record<string, unknown>): boolean {
@@ -116,7 +116,7 @@ export function migrateEntities(container: Record<string, unknown>): boolean {
   const entities: Record<string, unknown> = isRecord(container[ENTITIES_KEY])
     ? container[ENTITIES_KEY]
     : {};
-  // The path index lets the Todoist half merge into the GitHub entity that
+  // The path index lets the task-manager half merge into the code-host entity that
   // already owns the note. Seeded from any entities present so a resumed
   // migration still joins the two halves.
   const idByNotePath = new Map<string, string>();
@@ -323,7 +323,7 @@ export function parseLegacyStatusRecord(raw: Record<string, unknown>): LegacyFie
   };
 }
 
-// A `todoistItem.<notePath>` record, canonical or pre-t5 `TodoistStateData`.
+// A `todoistItem.<notePath>` record, canonical or pre-t5 legacy task-manager state.
 // A to-do has no body text and no vault lane; its parent is a mirror id here,
 // remapped to the parent's uuid by a later ticket.
 export function parseLegacyTodoRecord(raw: Record<string, unknown>): LegacyFields {
@@ -358,7 +358,7 @@ export function migratedCompletedAt(completed: boolean): string | null {
   return completed ? '' : null;
 }
 
-// The GitHub base is a diff view whose body already held the issue-body digest,
+// The code-host base is a diff view whose body already held the issue-body digest,
 // so it is stored as-is — re-hashing would change the fingerprint and make
 // every migrated task look locally edited.
 export function githubBase(id: string, fields: LegacyFields): TaskData {

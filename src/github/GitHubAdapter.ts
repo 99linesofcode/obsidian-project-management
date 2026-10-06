@@ -1,6 +1,6 @@
 import { isRecord } from '../shared/isRecord.js';
 import type { AttachProjectData } from '../projects/AttachProjectData.js';
-import type { BoardItemData } from '../projects/BoardItemData.js';
+import type { BoardItemData } from './BoardItemData.js';
 import type { CreateIssueData } from './CreateIssueData.js';
 import type { IssueHandleData } from './IssueHandleData.js';
 import type { ProjectBoardData } from '../projects/ProjectBoardData.js';
@@ -10,10 +10,10 @@ import type {
   ProjectStatusOption,
 } from '../projects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../projects/ProjectStateData.js';
-import type { ProjectDetailData } from '../projects/ProjectDetailData.js';
+import type { ProjectDetailData } from './ProjectDetailData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
 import { ProjectMapper } from '../projects/ProjectMapper.js';
-import type { ProjectManagementPort } from './ProjectManagementPort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
 // GraphQL goes over POST, the REST reads over GET, the REST update over
@@ -425,7 +425,7 @@ export class GitHubAdapter implements ProjectManagementPort {
         continue;
       }
       projects.push(
-        ProjectMapper.fromGithubBoard(
+        ProjectMapper.fromCodeHostBoard(
           {
             id: node.id,
             name: typeof node.title === 'string' ? node.title : '',
@@ -472,7 +472,7 @@ export class GitHubAdapter implements ProjectManagementPort {
       throw new Error('GitHubAdapter: project not found');
     }
     const status = this.findStatusField(project.fields);
-    return ProjectMapper.fromGithubProject(
+    return ProjectMapper.fromCodeHostProject(
       {
         id: project.id,
         name: typeof project.title === 'string' ? project.title : '',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CleanupNoteFrontmatterAction } from '../../src/sync/CleanupNoteFrontmatterAction.js';
 import { splitFrontmatter } from '../../src/vault/splitFrontmatter.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 // A fake vault at the port: a path→content map plus a folder→paths listing, so
 // the action's cleanup decisions are what's under test.

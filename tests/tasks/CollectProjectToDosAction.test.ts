@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CollectProjectToDosAction } from '../../src/tasks/CollectProjectToDosAction.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 class FakeVault {
   notes = new Map<string, string>();

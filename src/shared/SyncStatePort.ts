@@ -1,6 +1,6 @@
 import type { ArchiveBaselineData } from '../projects/ArchiveBaselineData.js';
 import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
-import type { TaskData } from '../shared/TaskData.js';
+import type { TaskData } from './TaskData.js';
 import type { WatchStateData } from '../projects/WatchStateData.js';
 
 // One hub entity's registry entry: its uuid and where its note lives. The
@@ -31,9 +31,14 @@ export interface PortState {
   lanes: Record<string, string>;
 }
 
+// WHY this port lives in the shared kernel: it is the core's need, designed
+// for the core and owned by no provider. Three modules consume it, so it
+// belongs on neutral ground; the data.json-backed adapter registers from its
+// own module.
+//
 // The core's need for sync state: project-nested, port-grouped storage. The
-// registry replaces the two-store seam — the GitHub-keyed `status.*` store and
-// the Todoist-twin `todoistItem.*` store — with one entity per hub and one
+// registry replaces the two-store seam — the code-host-keyed `status.*` store and
+// the task-manager-twin `todoistItem.*` store — with one entity per hub and one
 // item per mirror, grouped under the port that owns it. The data.json-backed
 // implementation lives in Infrastructure.
 export interface SyncStatePort {
@@ -98,7 +103,7 @@ export interface SyncStatePort {
   // fetch and every other project stayed blind to issue-level relations
   // (sub-issues) the board's updatedAt cannot surface (PRB-3).
   //
-  // isFullScanPending is a read-only peek. The chain peeks before the GitHub
+  // isFullScanPending is a read-only peek. The chain peeks before the code host
   // half and calls consumeFullScan only after that half succeeds, so a failed
   // or interrupted fetch never spends the scan.
   isFullScanPending(projectName: string): Promise<boolean>;
@@ -110,7 +115,7 @@ export interface SyncStatePort {
   // remote project is captured only when it was created strictly after this
   // value, so pre-existing unrelated projects are never adopted (PRJ-2/PRJ-3).
   // WHY per-surface and not per-project: the cursor guards a global listing
-  // (all of a user's Todoist projects, all of the viewer's boards), which has
+  // (all of a user's task-manager projects, all of the viewer's boards), which has
   // no project to nest under; a first sight (null) adopts the current newest
   // clock and captures nothing.
   getProjectCursor(portId: string): Promise<string | null>;

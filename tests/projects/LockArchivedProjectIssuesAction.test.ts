@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LockArchivedProjectIssuesAction } from '../../src/projects/LockArchivedProjectIssuesAction.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 import { taskData } from '../helpers/records.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 
 function harness() {
   const syncState = new FakeSyncState();

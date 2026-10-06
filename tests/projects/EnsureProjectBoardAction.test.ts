@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
-import type { BoardItemData } from '../../src/projects/BoardItemData.js';
+import type { BoardItemData } from '../../src/github/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectBoardData } from '../../src/projects/ProjectBoardData.js';
-import type { ProjectDetailData } from '../../src/projects/ProjectDetailData.js';
+import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the project-management port records board creations and

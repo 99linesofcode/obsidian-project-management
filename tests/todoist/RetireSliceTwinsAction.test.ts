@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { RetireSliceTwinsAction } from '../../src/tasks/RetireSliceTwinsAction.js';
+import { RetireSliceTwinsAction } from '../../src/todoist/RetireSliceTwinsAction.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 import { todoistTask } from '../helpers/records.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
 
 function harness() {
   const syncState = new FakeSyncState();

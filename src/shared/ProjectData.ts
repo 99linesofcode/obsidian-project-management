@@ -1,7 +1,7 @@
 import { DataTransferObject } from './DataTransferObject.js';
 
-// The canonical project: one provider-neutral shape for a GitHub project and a
-// Todoist project. Identity and provenance link the representations; the
+// The canonical project: one provider-neutral shape for a code-host project and a
+// task-manager project. Identity and provenance link the representations; the
 // content fields are the shape the diff compares. The lane vocabulary is
 // project-owned; every mapper translates against it.
 export class ProjectData extends DataTransferObject {

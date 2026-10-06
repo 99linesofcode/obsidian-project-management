@@ -4,7 +4,7 @@ import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
 import { ToDoNoteParser } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface MirrorTodoStatusInput {
   todoPath: string;

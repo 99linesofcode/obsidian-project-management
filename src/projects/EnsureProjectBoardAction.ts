@@ -1,23 +1,23 @@
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface EnsureProjectBoardInput {
   projectName: string;
   notePath: string;
 }
 
-// UC: complete PRJ-1's vault -> GitHub leg. A vault project whose identity has
+// UC: complete PRJ-1's vault -> code-host leg. A vault project whose identity has
 // no board yet gains one: a ProjectV2 board is created under the token's
 // viewer and its node id, Status field and option ids are stored in the
-// project identity, so the probe and the GitHub half can address it from the
+// project identity, so the probe and the code host half can address it from the
 // next read. The board's url is stamped onto the home note (the `board:`
 // anchor) so discovery can re-resolve the identity after a registry loss.
 //
 // Repo attachment is deliberately NOT part of this act (ATT-1 owns it). A
-// board without a repository materializes no issues — the GitHub half skips a
+// board without a repository materializes no issues — the code host half skips a
 // project whose identity has no repo url — which is correct until the user
 // attaches one.
 //

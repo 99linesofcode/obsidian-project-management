@@ -20,8 +20,8 @@ export interface CapturedTaskNote {
   content: string;
 }
 
-// Maps a Todoist-created item onto a captured draft task note (dt-06). It is a
-// task note without a GitHub issue: no `url` frontmatter and no Status record —
+// Maps a task-manager-created item onto a captured draft task note (dt-06). It is a
+// task note without a code-host issue: no `url` frontmatter and no Status record —
 // the registry's todoist mirror is its identity and bookkeeping. The body stays
 // empty; a draft is a placeholder the user promotes through the existing UC21
 // flow. Deliberately not template-rendered: the task template carries a `url`
@@ -45,7 +45,7 @@ export const CapturedTaskNoteMapper = {
 };
 
 // The note path: the project's taken folder, keyed by the title slug. No remote
-// id prefixes the name — a captured draft has no GitHub issue yet.
+// id prefixes the name — a captured draft has no code-host issue yet.
 function capturedTaskNotePath(input: CapturedTaskNoteInput): string {
   return `Projecten/${input.projectName}/taken/${slugify(input.title)}.md`;
 }

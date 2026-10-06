@@ -1,5 +1,5 @@
 import { projectHomePath } from '../shared/projectHomePath.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface MigrateProjectHomeNoteInput {
   projectName: string;

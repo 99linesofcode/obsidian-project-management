@@ -17,10 +17,10 @@ export interface TaskDataInit {
   updatedAt: string | null;
 }
 
-// The canonical task: one provider-neutral shape for a GitHub issue, a Todoist
+// The canonical task: one provider-neutral shape for a code-host issue, a task-manager
 // task and a vault task note. Identity and provenance link the representations;
 // the content fields are the shape the diff compares. Provider transport DTOs
-// (GithubTaskData, TodoistTaskData) are mapped onto this at the boundary by the
+// provider DTOs are mapped onto this at the boundary by the
 // mappers; the core never sees a provider shape.
 export class TaskData extends DataTransferObject {
   id: string; // uuid — vault-owned, assigned at creation

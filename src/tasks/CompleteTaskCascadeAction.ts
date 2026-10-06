@@ -5,7 +5,7 @@ import { stemOf } from '../shared/stemOf.js';
 import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface CompleteTaskCascadeInput {
   notePath: string;
@@ -100,8 +100,8 @@ export class CompleteTaskCascadeAction {
   }
 
   // Every linked to-do that is still open completes; an already-completed one is
-  // left untouched, so a second pass writes nothing. The to-do's Todoist twin is
-  // not touched here — the existing vault -> Todoist projection settles it on
+  // left untouched, so a second pass writes nothing. The to-do's task-manager twin is
+  // not touched here — the existing vault -> task-manager projection settles it on
   // the next chain pass.
   private async completeToDos(
     input: CompleteTaskCascadeInput,

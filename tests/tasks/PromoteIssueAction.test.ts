@@ -4,8 +4,8 @@ import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { slugify } from '../../src/vault/TaskNoteMapper.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the project management port records the labels it was

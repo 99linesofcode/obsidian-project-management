@@ -16,7 +16,7 @@ export type ConflictHints = {
 // Decides, per content field, whether the vault or the remote changed since the
 // last sync and which way the change should move. Attribution is content-vs-
 // base, not timestamp-vs-timestamp: clocks skew across machines and providers,
-// and a provider's updatedAt moves for reasons that are not content (GitHub
+// and the code host's updatedAt moves for reasons that are not content (it
 // bumps it on comments), so a timestamp alone cannot say who changed what. Only
 // a remote field time that provably postdates every local edit is trusted.
 // Otherwise a field changed on both sides resolves by origin authority — the

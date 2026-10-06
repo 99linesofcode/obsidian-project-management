@@ -1,4 +1,4 @@
-import type { SyncStatePort } from './SyncStatePort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 // The vault-owned uuid of a note, minted at record creation when absent. The
 // registry is the id's home (dt-20): a note with no record gets a fresh entity

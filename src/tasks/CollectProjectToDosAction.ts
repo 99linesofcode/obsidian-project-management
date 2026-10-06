@@ -4,7 +4,7 @@ import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { stemOf } from '../shared/stemOf.js';
 import { TaskNoteParser } from '../vault/TaskNoteParser.js';
 import { ToDoNoteParser } from '../vault/ToDoNoteParser.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 // One to-do linked from a tracked task's checklist, resolved to its note and
 // the task note that owns it.
@@ -21,7 +21,7 @@ export interface ToDoItem {
   // The owning task's lane, so a top-level to-do lands in its lane's section.
   taskLane: string;
   // The parent to-do's note stem when this to-do nests under another to-do
-  // (Todoist indent level 4 — the ceiling); null for a direct task child.
+  // (task-manager indent level 4 — the ceiling); null for a direct task child.
   parentStem: string | null;
 }
 

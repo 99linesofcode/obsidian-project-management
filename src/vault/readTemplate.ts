@@ -1,4 +1,4 @@
-import type { VaultPort } from './VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 // The template note's content, or null when it does not exist — render falls
 // back to the built-in frontmatter.

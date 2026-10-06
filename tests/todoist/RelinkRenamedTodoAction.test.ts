@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { RelinkRenamedTodoAction } from '../../src/todos/RelinkRenamedTodoAction.js';
+import { RelinkRenamedTodoAction } from '../../src/todoist/RelinkRenamedTodoAction.js';
 import { splitFrontmatter } from '../../src/vault/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

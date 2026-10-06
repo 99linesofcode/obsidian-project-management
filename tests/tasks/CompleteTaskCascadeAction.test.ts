@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { ToDoNoteParser } from '../../src/vault/ToDoNoteParser.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 // Fakes at the vault port: a path-keyed note store recording every write, so
 // the cascade's gates (an already-done to-do, an already-checked line) are

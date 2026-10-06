@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ApplyTodoistRemoteChangesAction } from '../../src/tasks/ApplyTodoistRemoteChangesAction.js';
-import type { ApplyTodoistRemoteChangesInput } from '../../src/tasks/ApplyTodoistRemoteChangesAction.js';
+import { ApplyTodoistRemoteChangesAction } from '../../src/todoist/ApplyTodoistRemoteChangesAction.js';
+import type { ApplyTodoistRemoteChangesInput } from '../../src/todoist/ApplyTodoistRemoteChangesAction.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

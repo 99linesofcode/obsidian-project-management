@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GithubTaskMapper } from '../../src/github/GithubTaskMapper.js';
-import type { BoardItemData } from '../../src/projects/BoardItemData.js';
+import type { BoardItemData } from '../../src/github/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 
 const DONE_LANE = 'Shipped';

@@ -4,8 +4,8 @@ import { boardOptionIDByName } from '../projects/boardOptionIDByName.js';
 import { toIssueBody } from '../vault/Checklist.js';
 import { slugify } from '../vault/TaskNoteMapper.js';
 import { toDiffViewWithBody } from '../shared/toDiffView.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 export interface ApplyTaskToGithubInput {
   // The winning canonical task — the vault's when the vault won, the remote's

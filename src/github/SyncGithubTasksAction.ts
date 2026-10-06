@@ -1,12 +1,12 @@
-import type { BoardItemData } from '../projects/BoardItemData.js';
-import type { GithubTaskData } from '../github/GithubTaskData.js';
+import type { BoardItemData } from './BoardItemData.js';
+import type { GithubTaskData } from './GithubTaskData.js';
 import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
 import { TaskData } from '../shared/TaskData.js';
 import { boardOptionIDByName } from '../projects/boardOptionIDByName.js';
 import { defaultStatusName } from '../projects/defaultStatusName.js';
 import { hasTypeLabel } from '../shared/hasTypeLabel.js';
 import { typeFromLabels } from '../shared/typeFromLabels.js';
-import { GithubTaskMapper } from '../github/GithubTaskMapper.js';
+import { GithubTaskMapper } from './GithubTaskMapper.js';
 import { VaultTaskMapper } from '../vault/VaultTaskMapper.js';
 import { toIssueBody } from '../vault/Checklist.js';
 import { hash } from '../shared/hash.js';
@@ -25,11 +25,12 @@ import {
   reconcileShape,
   reopenVetoed,
 } from '../shared/Reconciliation.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
-import type { ApplyTaskToGithubAction } from '../tasks/ApplyTaskToGithubAction.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
+import type { ApplyTaskToGithubAction } from './ApplyTaskToGithubAction.js';
 import type { ApplyTaskToVaultAction } from '../tasks/ApplyTaskToVaultAction.js';
+import type { CodeHostSyncHalf } from '../sync/SyncHalves.js';
 
 export interface SyncGithubTasksInput {
   projectName: string;
@@ -53,7 +54,7 @@ export interface SyncGithubTasksInput {
 // with its lane (a closed issue whose card sits in an active lane). The board
 // lane is eventually consistent, so a stale lane must never revert a
 // completion; the mirror is re-reconciled to the base instead.
-export class SyncGithubTasksAction {
+export class SyncGithubTasksAction implements CodeHostSyncHalf {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
     private readonly syncState: SyncStatePort,
@@ -260,7 +261,13 @@ export class SyncGithubTasksAction {
     }
 
     if (overall === 'pull') {
-      const vetoed = reopenVetoed(vault, remote, resolved, issue, doneLane);
+      const vetoed = reopenVetoed(
+        vault,
+        remote,
+        resolved,
+        issue.state === 'closed',
+        doneLane,
+      );
       if (!vetoed) {
         await this.applyToVault.execute({
           task: remote,
@@ -328,7 +335,14 @@ export class SyncGithubTasksAction {
     defaultLane: string,
   ): Promise<{ remote: TaskData; issueAsFetched: TaskData }> {
     const parsed = GithubTaskMapper.parse(issue, card, doneLane);
-    const lane = effectiveLane(card, issue, base, doneLane, defaultLane);
+    const lane = effectiveLane(
+      card?.statusOptionName,
+      card !== null,
+      issue.state,
+      base?.status,
+      doneLane,
+      defaultLane,
+    );
     const laneDone = doneLane !== '' && lane === doneLane;
     const stateDone = issue.state === 'closed';
     const cardLane = card?.statusOptionName ?? '';

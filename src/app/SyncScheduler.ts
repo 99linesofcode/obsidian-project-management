@@ -1,5 +1,5 @@
 import { Component } from 'obsidian';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 import type { SyncQueue } from './SyncQueue.js';
 
 // Obsidian runs in a browser where window is the global; the node type

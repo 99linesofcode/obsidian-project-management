@@ -1,8 +1,8 @@
 import { App, FuzzySuggestModal } from 'obsidian';
 import type { PromoteIssueAction } from '../../tasks/PromoteIssueAction.js';
 import type { GithubTaskData } from '../../github/GithubTaskData.js';
-import type { ProjectManagementPort } from '../../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../../shared/SyncStatePort.js';
 
 // Obsidian runs in a browser where MouseEvent/KeyboardEvent are DOM globals;
 // the node type environment does not declare them. Alias them so the modal's

@@ -1,6 +1,6 @@
 import { stateFromStatus } from './stateFromStatus.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { BoardStatusAction } from '../projects/BoardStatusAction.js';
 
 export interface PropagateStatusInput {
@@ -11,14 +11,14 @@ export interface PropagateStatusInput {
   projectName: string;
 }
 
-// UC6/UC7: propagate a task note's status onto its GitHub issue and mirror it
+// UC6/UC7: propagate a task note's status onto its code-host issue and mirror it
 // onto the board. The done lane closes the issue, every other lane reopens
 // it; the card moves to the lane the note carries. The mirror's base lane is
 // refreshed so the next pass sees the remote as settled (the echo guard).
 //
 // The issue state write is GATED: the base's lane already names the issue's
 // open/closed state, so a lane that does not flip done-ness is not re-written.
-// The gate IS the diff — only a real state change reaches GitHub.
+// The gate IS the diff — only a real state change reaches the code host.
 export class PropagateStatusAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,

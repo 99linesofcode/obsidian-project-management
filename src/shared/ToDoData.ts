@@ -1,7 +1,7 @@
 import { DataTransferObject } from './DataTransferObject.js';
 
-// The canonical to-do: a vault-only checklist item with no GitHub issue and no
-// board card, mirrored as a Todoist subtask. The parent to-do and owning task
+// The canonical to-do: a vault-only checklist item with no code-host issue and no
+// board card, mirrored as a task-manager subtask. The parent to-do and owning task
 // are uuid references; the content fields are the shape the diff compares.
 export class ToDoData extends DataTransferObject {
   id: string;

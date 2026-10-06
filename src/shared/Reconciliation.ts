@@ -4,14 +4,12 @@ import { hash } from './hash.js';
 import { slugify } from '../vault/TaskNoteMapper.js';
 import { toIssueBody } from '../vault/Checklist.js';
 import { statusNameFromState } from '../tasks/statusNameFromState.js';
-import type { BoardItemData } from '../projects/BoardItemData.js';
-import type { GithubTaskData } from '../github/GithubTaskData.js';
 
 // The pure reconciliation arithmetic shared by both sync halves and the
 // verdict resolver. Every function here is a total function over canonical
 // tasks: no I/O, no clocks, no provider calls. Provider-shaped inputs are
-// taken as narrow parameters (a state string, a card) so the arithmetic stays
-// testable without a transport.
+// taken as narrow neutral parameters (a state string, a card lane) so the
+// arithmetic stays testable without a transport.
 
 // Collapses the per-field verdicts into the one direction the writers can
 // apply. A vault push takes precedence over a pull (origin authority); after
@@ -43,14 +41,16 @@ export function isDone(task: TaskData, doneLane: string): boolean {
 }
 
 // The reopen veto (dt-17): a pull that would move a done note OFF the done lane
-// is vetoed when the mirror's own state disagrees with its lane — the issue is
+// is vetoed when the mirror's own state disagrees with its lane — the remote is
 // closed while its card sits in an active lane. The board lane is eventually
-// consistent; a stale lane must never revert a completion.
+// consistent; a stale lane must never revert a completion. remoteStateDone is
+// the remote item's own open/closed state, passed as a fact so this arithmetic
+// stays provider-neutral.
 export function reopenVetoed(
   vault: TaskData,
   remote: TaskData,
   resolved: SyncVerdict,
-  issue: GithubTaskData,
+  remoteStateDone: boolean,
   doneLane: string,
 ): boolean {
   if (resolved.status !== 'pull') {
@@ -59,28 +59,28 @@ export function reopenVetoed(
   if (!isDone(vault, doneLane)) {
     return false;
   }
-  return issue.state === 'closed' && remote.status !== doneLane;
+  return remoteStateDone && remote.status !== doneLane;
 }
 
-// The lane an issue sits in: the card's lane when it carries one; otherwise the
-// base lane (a card with no lane backfills from the last-synced lane) or the
-// lane its state implies (a card-less issue).
+// The lane a remote item sits in: the card's lane when it carries one;
+// otherwise the base lane (a card with no lane backfills from the last-synced
+// lane) or the lane its state implies (a card-less item). The card facts are
+// passed as neutral parameters so the arithmetic never names a provider shape.
 export function effectiveLane(
-  card: BoardItemData | null,
-  issue: GithubTaskData,
-  base: TaskData | null,
+  cardLane: string | undefined,
+  hasCard: boolean,
+  remoteState: 'open' | 'closed',
+  baseLane: string | undefined,
   doneLane: string,
   defaultLane: string,
 ): string {
-  if (card?.statusOptionName !== undefined) {
-    return card.statusOptionName;
+  if (cardLane !== undefined) {
+    return cardLane;
   }
-  if (card !== null) {
-    return (
-      base?.status ?? statusNameFromState(issue.state, doneLane, defaultLane)
-    );
+  if (hasCard) {
+    return baseLane ?? statusNameFromState(remoteState, doneLane, defaultLane);
   }
-  return statusNameFromState(issue.state, doneLane, defaultLane);
+  return statusNameFromState(remoteState, doneLane, defaultLane);
 }
 
 // The base's shape with the remote's own content: used to re-reconcile a stale
@@ -107,13 +107,13 @@ export function hasCompletionStamp(base: TaskData | null): boolean {
   return base !== null && base.completedAt !== null;
 }
 
-// The comparable GitHub shape the diff reads: the title is slug-compared (the
-// vault derives it from the filename, the remote from the issue title), the
-// body is the caller's digest, and parent is preserved so GitHub sub-issue
-// placement participates in the diff. Type is a constant: it travels on GitHub
-// only as a `type:*` label the writer does not manage (the label is the
-// mirror's representation of the vault-owned type), so it must never drive a
-// pull that would overwrite the note's type.
+// The comparable code-host shape the diff reads: the title is slug-compared
+// (the vault derives it from the filename, the remote from the issue title),
+// the body is the caller's digest, and parent is preserved so sub-issue
+// placement participates in the diff. Type is a constant: it travels on the
+// code host only as a `type:*` label the writer does not manage (the label is
+// the mirror's representation of the vault-owned type), so it must never drive
+// a pull that would overwrite the note's type.
 export function githubDiffView(task: TaskData, bodyDigest: string): TaskData {
   return new TaskData({
     id: task.id,
@@ -130,9 +130,10 @@ export function githubDiffView(task: TaskData, bodyDigest: string): TaskData {
   });
 }
 
-// The comparable Todoist shape the diff reads: the body is the digest of the
-// empty comparable body (the Todoist description is not vault content), and the
-// type is excluded — the vault-owned type never rides a Todoist base.
+// The comparable task-manager shape the diff reads: the body is the digest of
+// the empty comparable body (the task manager description is not vault
+// content), and the type is excluded — the vault-owned type never rides a
+// task-manager base.
 export function todoistDiffView(task: TaskData): TaskData {
   return new TaskData({
     id: task.id,
@@ -152,9 +153,9 @@ export function todoistDiffView(task: TaskData): TaskData {
 // Whether the note's live view still matches its mirror's base. The title is
 // slug-compared (the vault derives it from the filename). Parent and type are
 // excluded: the parsed vault view leaves parent unresolved (the action layer
-// resolves the affiliation, and GitHub placement changes only from GitHub), and
-// type is vault-owned — neither can be a GitHub write this gate must re-open
-// for.
+// resolves the affiliation, and code-host placement changes only from the code
+// host), and type is vault-owned — neither can be a code-host write this gate
+// must re-open for.
 export function matchesBase(vault: TaskData, base: TaskData): boolean {
   return (
     hash(toIssueBody(vault.body)) === base.body &&

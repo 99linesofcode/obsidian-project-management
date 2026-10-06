@@ -1,6 +1,6 @@
 import { boardOptionIDByName } from './boardOptionIDByName.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 export interface BoardStatusInput {
   projectName: string;

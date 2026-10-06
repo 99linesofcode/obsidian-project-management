@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { EnsureTodoistSectionsAction } from '../../src/projects/EnsureTodoistSectionsAction.js';
+import { EnsureTodoistSectionsAction } from '../../src/todoist/EnsureTodoistSectionsAction.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
 
 // A fake task manager holding the project's sections in memory, so the
 // ensure action's lookup-before-create and rename decisions are observable

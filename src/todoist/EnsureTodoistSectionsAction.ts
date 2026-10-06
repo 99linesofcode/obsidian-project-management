@@ -1,4 +1,4 @@
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
 
 // Whether two lane maps agree, so a settled project's bookkeeping is not
 // rewritten on every tick.

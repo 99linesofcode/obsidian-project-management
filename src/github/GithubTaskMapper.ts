@@ -1,4 +1,4 @@
-import type { BoardItemData } from '../projects/BoardItemData.js';
+import type { BoardItemData } from './BoardItemData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
 import { TaskData } from '../shared/TaskData.js';
 import { typeFromLabels } from '../shared/typeFromLabels.js';

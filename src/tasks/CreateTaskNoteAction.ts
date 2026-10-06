@@ -1,11 +1,11 @@
 import { freePath } from '../vault/freePath.js';
 import { TaskNoteMapper } from '../vault/TaskNoteMapper.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface CreateTaskNoteInput {
-  // The issue url when the note is GitHub-backed; '' for a vault-only note.
+  // The issue url when the note is code-host-backed; '' for a vault-only note.
   // Recorded as the github mirror handle so a later pass resolves the entity.
   url: string;
   title: string;

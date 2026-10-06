@@ -3,7 +3,7 @@ import type { CreateTodoistTaskData } from './CreateTodoistTaskData.js';
 import type { TodoistProjectData } from './TodoistProjectData.js';
 import type { TodoistSectionData } from './TodoistSectionData.js';
 import type { TodoistTaskData } from './TodoistTaskData.js';
-import type { TaskManagerPort } from './TaskManagerPort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
 // Todoist's REST v1 is path-based: reads over GET, writes over POST, deletes

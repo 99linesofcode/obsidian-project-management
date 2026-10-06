@@ -1,11 +1,11 @@
 import { parseChecklist, renderChecklist } from '../vault/Checklist.js';
-import { projectFromTodoPath } from './projectFromTodoPath.js';
+import { projectFromTodoPath } from '../todos/projectFromTodoPath.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
 import { ToDoNoteParser } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface RelinkRenamedTodoInput {
   oldPath: string;

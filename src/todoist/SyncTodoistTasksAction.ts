@@ -3,7 +3,7 @@ import { TaskData } from '../shared/TaskData.js';
 import { ToDoData } from '../shared/ToDoData.js';
 import { hasTypeLabel } from '../shared/hasTypeLabel.js';
 import { typeFromLabels } from '../shared/typeFromLabels.js';
-import { TodoistTaskMapper } from '../todoist/TodoistTaskMapper.js';
+import { TodoistTaskMapper } from './TodoistTaskMapper.js';
 import { stemOf } from '../shared/stemOf.js';
 import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
 import { TaskNoteParser } from '../vault/TaskNoteParser.js';
@@ -11,26 +11,27 @@ import { ToDoNoteParser } from '../vault/ToDoNoteParser.js';
 import type { ConflictHints } from '../shared/VerdictResolver.js';
 import { VerdictResolver } from '../shared/VerdictResolver.js';
 import { overallVerdict, todoistDiffView } from '../shared/Reconciliation.js';
-import { sameSections } from '../projects/EnsureTodoistSectionsAction.js';
+import { sameSections } from './EnsureTodoistSectionsAction.js';
 import { takenNotePath } from '../tasks/takenNotePath.js';
 import { todoistEntries } from '../registry/todoistEntries.js';
-import { RetireSliceTwinsAction } from '../tasks/RetireSliceTwinsAction.js';
+import { RetireSliceTwinsAction } from './RetireSliceTwinsAction.js';
 import {
   CollectProjectToDosAction,
   type ToDoItem,
 } from '../tasks/CollectProjectToDosAction.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
-import type { TodoistSectionData } from '../todoist/TodoistSectionData.js';
-import type { TodoistTaskData } from '../todoist/TodoistTaskData.js';
-import type { ApplyTaskToTodoistAction } from '../tasks/ApplyTaskToTodoistAction.js';
-import type { ApplyTodoistCompletionAction } from '../tasks/ApplyTodoistCompletionAction.js';
-import type { ApplyTodoistRemoteChangesAction } from '../tasks/ApplyTodoistRemoteChangesAction.js';
-import type { CaptureTodoistCreationsAction } from '../tasks/CaptureTodoistCreationsAction.js';
-import type { EnsureTodoistSectionsAction } from '../projects/EnsureTodoistSectionsAction.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
+import type { TodoistSectionData } from './TodoistSectionData.js';
+import type { TodoistTaskData } from './TodoistTaskData.js';
+import type { ApplyTaskToTodoistAction } from './ApplyTaskToTodoistAction.js';
+import type { ApplyTodoistCompletionAction } from './ApplyTodoistCompletionAction.js';
+import type { ApplyTodoistRemoteChangesAction } from './ApplyTodoistRemoteChangesAction.js';
+import type { CaptureTodoistCreationsAction } from './CaptureTodoistCreationsAction.js';
+import type { EnsureTodoistSectionsAction } from './EnsureTodoistSectionsAction.js';
 import type { PropagateTodoistDeletionsAction } from './PropagateTodoistDeletionsAction.js';
+import type { TaskManagerSyncHalf } from '../sync/SyncHalves.js';
 
 export interface SyncTodoistTasksInput {
   projectName: string;
@@ -72,7 +73,7 @@ interface ProjectionItem {
 // from the record. All diffing operates on diff views (body = digest, type
 // excluded — the vault-owned type never rides a Todoist base); base storage is
 // a diff view.
-export class SyncTodoistTasksAction {
+export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
   private readonly verdictResolver: VerdictResolver;
   private readonly retireSliceTwins: RetireSliceTwinsAction;
   private readonly collectProjectToDos: CollectProjectToDosAction;

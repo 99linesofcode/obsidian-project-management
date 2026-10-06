@@ -3,8 +3,8 @@ import { DiscoverProjectsAction } from '../../src/projects/DiscoverProjectsActio
 import { AttachProjectAction } from '../../src/projects/AttachProjectAction.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 // Fakes at the ports: the vault returns the project notes discovery finds,
 // and the project management port resolves identities. The discovery action's

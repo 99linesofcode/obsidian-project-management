@@ -1,6 +1,6 @@
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import { defaultStatusName } from '../projects/defaultStatusName.js';
 import { typeFromLabels } from '../shared/typeFromLabels.js';
 

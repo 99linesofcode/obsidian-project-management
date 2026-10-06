@@ -15,7 +15,7 @@ import {
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
 import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface SyncChecklistInput {
   notePath: string;

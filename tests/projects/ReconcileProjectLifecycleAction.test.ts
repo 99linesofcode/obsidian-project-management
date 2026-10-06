@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { ReconcileProjectLifecycleAction } from '../../src/projects/ReconcileProjectLifecycleAction.js';
-import type { BoardItemData } from '../../src/projects/BoardItemData.js';
+import type { BoardItemData } from '../../src/github/BoardItemData.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
@@ -361,7 +361,7 @@ describe('ARC-2 — any side can start the freeze', () => {
       expect(h.vault.writes).toHaveLength(1);
       expect(h.vault.writes[0]!.content).toContain('todoist: P-new');
       expect(h.syncState.todoistSets).toHaveLength(1);
-      expect(verdict.todoistProjectId).toBe('P-new');
+      expect(verdict.remoteProjectId).toBe('P-new');
       expect(verdict.frozen).toBe(false);
     });
 
@@ -373,7 +373,7 @@ describe('ARC-2 — any side can start the freeze', () => {
       const verdict = await h.action.execute(activeInput);
 
       expect(h.taskManager.createCalls).toEqual([]);
-      expect(verdict.todoistProjectId).toBe('P9');
+      expect(verdict.remoteProjectId).toBe('P9');
     });
 
     it('renames the project when the note name drifts', async () => {
@@ -404,7 +404,7 @@ describe('ARC-2 — any side can start the freeze', () => {
 
       expect(h.vault.moveCalls).toEqual([]);
       expect(verdict.frozen).toBe(true);
-      expect(verdict.todoistProjectId).toBeNull();
+      expect(verdict.remoteProjectId).toBeNull();
     });
   });
 
@@ -648,7 +648,7 @@ describe('ARC-2 — any side can start the freeze', () => {
       const verdict = await h.action.execute(archivedInput);
 
       expect(verdict.frozen).toBe(true);
-      expect(verdict.todoistProjectId).toBeNull();
+      expect(verdict.remoteProjectId).toBeNull();
       expect(h.taskManager.projects[0]!.id).toBe('P1');
     });
   });

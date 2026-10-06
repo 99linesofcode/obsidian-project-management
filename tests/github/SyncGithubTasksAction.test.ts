@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SyncGithubTasksAction } from '../../src/sync/SyncGithubTasksAction.js';
-import { ApplyTaskToGithubAction } from '../../src/tasks/ApplyTaskToGithubAction.js';
+import { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
+import { ApplyTaskToGithubAction } from '../../src/github/ApplyTaskToGithubAction.js';
 import { ApplyTaskToVaultAction } from '../../src/tasks/ApplyTaskToVaultAction.js';
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
@@ -8,12 +8,12 @@ import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
-import type { BoardItemData } from '../../src/projects/BoardItemData.js';
+import type { BoardItemData } from '../../src/github/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectDetailData } from '../../src/projects/ProjectDetailData.js';
+import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

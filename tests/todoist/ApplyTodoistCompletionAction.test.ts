@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ApplyTodoistCompletionAction } from '../../src/tasks/ApplyTodoistCompletionAction.js';
-import type { ApplyTodoistCompletionInput } from '../../src/tasks/ApplyTodoistCompletionAction.js';
+import { ApplyTodoistCompletionAction } from '../../src/todoist/ApplyTodoistCompletionAction.js';
+import type { ApplyTodoistCompletionInput } from '../../src/todoist/ApplyTodoistCompletionAction.js';
 import { ApplyTaskToVaultAction } from '../../src/tasks/ApplyTaskToVaultAction.js';
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
@@ -11,8 +11,8 @@ import type { TaskData } from '../../src/shared/TaskData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

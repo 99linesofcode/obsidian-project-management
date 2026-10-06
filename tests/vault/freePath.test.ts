@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { freePath } from '../../src/vault/freePath.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 // A vault fake backed by a path set, so the collision walk is observable.
 class FakeVault implements VaultPort {

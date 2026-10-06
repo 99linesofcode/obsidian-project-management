@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CaptureTodoistCreationsAction } from '../../src/tasks/CaptureTodoistCreationsAction.js';
-import type { CaptureTodoistCreationsInput } from '../../src/tasks/CaptureTodoistCreationsAction.js';
+import { CaptureTodoistCreationsAction } from '../../src/todoist/CaptureTodoistCreationsAction.js';
+import type { CaptureTodoistCreationsInput } from '../../src/todoist/CaptureTodoistCreationsAction.js';
 import { splitFrontmatter } from '../../src/vault/splitFrontmatter.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

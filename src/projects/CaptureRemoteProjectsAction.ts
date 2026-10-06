@@ -3,10 +3,10 @@ import { projectHomePath } from '../shared/projectHomePath.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import type { ProjectData } from '../shared/ProjectData.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface CaptureRemoteProjectsInput {
   syncedAt: string;
@@ -22,12 +22,12 @@ interface VaultLinks {
   boardUrls: Set<string>;
 }
 
-// UC: capture remote-born projects into the vault (PRJ-2 Todoist -> vault,
-// PRJ-3 GitHub -> vault). The vault is the splice: a project born on either
+// UC: capture remote-born projects into the vault (PRJ-2 task manager -> vault,
+// PRJ-3 code host -> vault). The vault is the splice: a project born on either
 // remote gains a `Projecten/<name>/` folder, a `_<name>.md` home note carrying
 // the anchor(s), and a registry identity record. The normal lifecycle then
-// materializes the other surfaces (the board for a Todoist-born project, the
-// Todoist project for a board-born one).
+// materializes the other surfaces (the board for a task-manager-born project,
+// the task-manager project for a board-born one).
 //
 // Scope guard (critical): only a project CREATED AFTER the last poll is
 // captured. Each surface keeps its own cursor (the newest provider creation
@@ -53,15 +53,16 @@ export class CaptureRemoteProjectsAction {
   // metadata-cache refresh.
   async execute(input: CaptureRemoteProjectsInput): Promise<string[]> {
     const captured: string[] = [];
-    captured.push(...(await this.captureTodoistProjects(input.syncedAt)));
-    captured.push(...(await this.captureGithubProjects(input.syncedAt)));
+    captured.push(...(await this.captureTaskManagerProjects(input.syncedAt)));
+    captured.push(...(await this.captureCodeHostProjects(input.syncedAt)));
     return captured;
   }
 
-  // PRJ-2: a Todoist project created by hand. Todoist projects come from the
-  // task-manager port as provider DTOs, so the boundary mapping happens here
-  // (ProjectMapper.fromTodoistProject) before the core touches the payload.
-  private async captureTodoistProjects(syncedAt: string): Promise<string[]> {
+  // PRJ-2: a task-manager project created by hand. Task-manager projects come
+  // from the task-manager port as provider DTOs, so the boundary mapping
+  // happens here (ProjectMapper.fromRemoteProject) before the core touches the
+  // payload.
+  private async captureTaskManagerProjects(syncedAt: string): Promise<string[]> {
     const projects = await this.taskManager.fetchProjects();
     const links = await this.vaultLinks();
     const cursor = await this.syncState.getProjectCursor('todoist');
@@ -75,7 +76,7 @@ export class CaptureRemoteProjectsAction {
 
     const captured: string[] = [];
     for (const payload of projects) {
-      const project = ProjectMapper.fromTodoistProject(payload, {
+      const project = ProjectMapper.fromRemoteProject(payload, {
         path: '',
         doneLane: this.doneOptionName,
         archivedAt: null,
@@ -101,11 +102,12 @@ export class CaptureRemoteProjectsAction {
     return captured;
   }
 
-  // PRJ-3: a board created on GitHub by hand. The port already mapped the
-  // listing onto canonical ProjectData (ProjectMapper.fromGithubBoard inside
-  // the adapter), so the core reasons only about ProjectData; the identity
-  // (node id + Status addressing) is resolved through the board-only attach.
-  private async captureGithubProjects(syncedAt: string): Promise<string[]> {
+  // PRJ-3: a board created on the code host by hand. The port already mapped
+  // the listing onto canonical ProjectData (ProjectMapper.fromCodeHostBoard
+  // inside the adapter), so the core reasons only about ProjectData; the
+  // identity (node id + Status addressing) is resolved through the board-only
+  // attach.
+  private async captureCodeHostProjects(syncedAt: string): Promise<string[]> {
     const boards: ProjectData[] =
       await this.projectManagement.fetchViewerProjects();
     const links = await this.vaultLinks();
@@ -172,10 +174,11 @@ export class CaptureRemoteProjectsAction {
     await this.syncState.setIdentity(name, options.identity);
   }
 
-  // The home note's content: the pm provider (GitHub owns the board) plus the
-  // anchor(s) the birth surface supplied. A Todoist-born project carries the
-  // todoist anchor and no board yet; a board-born project carries the board
-  // url and no todoist anchor yet. The lifecycle fills the missing anchor.
+  // The home note's content: the pm provider (the code host owns the board)
+  // plus the anchor(s) the birth surface supplied. A task-manager-born project
+  // carries the todoist anchor and no board yet; a board-born project carries
+  // the board url and no todoist anchor yet. The lifecycle fills the missing
+  // anchor.
   private homeNoteContent(
     name: string,
     todoistId: string,

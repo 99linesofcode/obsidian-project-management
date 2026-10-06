@@ -8,7 +8,7 @@ import type {
   MirrorItem,
   PortState,
   SyncStatePort,
-} from '../../src/registry/SyncStatePort.js';
+} from '../../src/shared/SyncStatePort.js';
 
 // A port item seed: the handle plus its last-synced base.
 interface SeededMirror {

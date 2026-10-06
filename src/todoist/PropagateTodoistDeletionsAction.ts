@@ -1,7 +1,7 @@
 import { TaskData } from '../shared/TaskData.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface PropagateTodoistDeletionsInput {
   projectName: string;

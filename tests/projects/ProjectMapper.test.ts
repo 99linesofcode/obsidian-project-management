@@ -21,7 +21,7 @@ describe('PRJ-4 — a project payload is canonical before the core sees it', () 
       ],
     };
 
-    const project = ProjectMapper.fromGithubProject(payload, context);
+    const project = ProjectMapper.fromCodeHostProject(payload, context);
 
     expect(project.name).toBe('Acme Widgets');
     expect(project.archivedAt).toBeNull();
@@ -40,7 +40,7 @@ describe('PRJ-4 — a project payload is canonical before the core sees it', () 
       statusOptions: [],
     };
 
-    const project = ProjectMapper.fromGithubProject(payload, {
+    const project = ProjectMapper.fromCodeHostProject(payload, {
       ...context,
       archivedAt: '2026-09-18T12:00:00Z',
     });
@@ -56,13 +56,13 @@ describe('PRJ-4 — a project payload is canonical before the core sees it', () 
       statusOptions: [],
     };
 
-    const project = ProjectMapper.fromGithubProject(payload, context);
+    const project = ProjectMapper.fromCodeHostProject(payload, context);
 
     expect(project.archivedAt).toBe('');
   });
 });
 
-describe('ProjectMapper.fromTodoistProject', () => {
+describe('ProjectMapper.fromRemoteProject', () => {
   it('maps a Todoist project payload onto the canonical project content', () => {
     const payload: TodoistProjectData = {
       id: 'P1',
@@ -70,7 +70,7 @@ describe('ProjectMapper.fromTodoistProject', () => {
       isArchived: false,
     };
 
-    const project = ProjectMapper.fromTodoistProject(payload, context);
+    const project = ProjectMapper.fromRemoteProject(payload, context);
 
     expect(project.name).toBe('Acme Widgets');
     expect(project.archivedAt).toBeNull();
@@ -86,7 +86,7 @@ describe('ProjectMapper.fromTodoistProject', () => {
       createdAt: '2026-10-01T08:00:00Z',
     };
 
-    const project = ProjectMapper.fromTodoistProject(payload, context);
+    const project = ProjectMapper.fromRemoteProject(payload, context);
 
     expect(project.createdAt).toBe('2026-10-01T08:00:00Z');
   });
@@ -98,13 +98,13 @@ describe('ProjectMapper.fromTodoistProject', () => {
       isArchived: true,
     };
 
-    const project = ProjectMapper.fromTodoistProject(payload, context);
+    const project = ProjectMapper.fromRemoteProject(payload, context);
 
     expect(project.archivedAt).toBe('');
   });
 });
 
-describe('ProjectMapper.fromGithubBoard', () => {
+describe('ProjectMapper.fromCodeHostBoard', () => {
   it('maps a viewer board onto the canonical content with its url and clock', () => {
     const payload = {
       id: 'PVT_9',
@@ -118,7 +118,7 @@ describe('ProjectMapper.fromGithubBoard', () => {
       ],
     };
 
-    const project = ProjectMapper.fromGithubBoard(payload, context);
+    const project = ProjectMapper.fromCodeHostBoard(payload, context);
 
     expect(project.name).toBe('Fresh Board');
     expect(project.mirrors).toEqual({
@@ -140,7 +140,7 @@ describe('ProjectMapper.fromGithubBoard', () => {
       statusOptions: [],
     };
 
-    const project = ProjectMapper.fromGithubBoard(payload, {
+    const project = ProjectMapper.fromCodeHostBoard(payload, {
       ...context,
       archivedAt: '2026-09-18T12:00:00Z',
     });

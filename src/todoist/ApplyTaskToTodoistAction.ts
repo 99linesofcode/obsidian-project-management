@@ -7,9 +7,9 @@ import { toDiffViewWithBody } from '../shared/toDiffView.js';
 import { TODO_LABEL } from '../shared/labels.js';
 import { ensureEntity } from '../registry/ensureEntity.js';
 import { parentUuid } from '../registry/parentUuid.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
-import type { TodoistTaskData } from '../todoist/TodoistTaskData.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
+import type { TodoistTaskData } from './TodoistTaskData.js';
 import type { ToDoData } from '../shared/ToDoData.js';
 
 export interface ApplyTaskToTodoistInput {

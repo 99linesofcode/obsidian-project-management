@@ -1,4 +1,4 @@
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 export interface RelocateTaskStatusInput {
   oldPath: string;
@@ -9,7 +9,7 @@ export interface RelocateTaskStatusInput {
 // Obsidian rewrites the to-dos' affiliation wikilinks on rename, so only the
 // plugin's own bookkeeping — the record's notePath — needs moving. The record's
 // mirrors (github handle + base, todoist handle + base) travel with it, so a
-// task note renamed by hand keeps every twin anchor; the old two-store Todoist
+// task note renamed by hand keeps every twin anchor; the old two-store task-manager
 // re-key is gone with the registry.
 export class RelocateTaskStatusAction {
   constructor(private readonly syncState: SyncStatePort) {}

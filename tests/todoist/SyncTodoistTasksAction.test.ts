@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { SyncTodoistTasksAction } from '../../src/sync/SyncTodoistTasksAction.js';
-import { ApplyTaskToTodoistAction } from '../../src/tasks/ApplyTaskToTodoistAction.js';
-import { SyncGithubTasksAction } from '../../src/sync/SyncGithubTasksAction.js';
-import { ApplyTaskToGithubAction } from '../../src/tasks/ApplyTaskToGithubAction.js';
+import { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
+import { ApplyTaskToTodoistAction } from '../../src/todoist/ApplyTaskToTodoistAction.js';
+import { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
+import { ApplyTaskToGithubAction } from '../../src/github/ApplyTaskToGithubAction.js';
 import { ApplyTaskToVaultAction } from '../../src/tasks/ApplyTaskToVaultAction.js';
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
-import type { BoardItemData } from '../../src/projects/BoardItemData.js';
-import type { ProjectDetailData } from '../../src/projects/ProjectDetailData.js';
+import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
 import type {
   ApplyTaskToTodoistInput,
   ApplyToDoToTodoistInput,
-} from '../../src/tasks/ApplyTaskToTodoistAction.js';
-import type { ApplyTodoistCompletionAction } from '../../src/tasks/ApplyTodoistCompletionAction.js';
-import type { ApplyTodoistRemoteChangesAction } from '../../src/tasks/ApplyTodoistRemoteChangesAction.js';
-import type { CaptureTodoistCreationsAction } from '../../src/tasks/CaptureTodoistCreationsAction.js';
-import type { EnsureTodoistSectionsAction } from '../../src/projects/EnsureTodoistSectionsAction.js';
-import type { PropagateTodoistDeletionsAction } from '../../src/sync/PropagateTodoistDeletionsAction.js';
+} from '../../src/todoist/ApplyTaskToTodoistAction.js';
+import type { ApplyTodoistCompletionAction } from '../../src/todoist/ApplyTodoistCompletionAction.js';
+import type { ApplyTodoistRemoteChangesAction } from '../../src/todoist/ApplyTodoistRemoteChangesAction.js';
+import type { CaptureTodoistCreationsAction } from '../../src/todoist/CaptureTodoistCreationsAction.js';
+import type { EnsureTodoistSectionsAction } from '../../src/todoist/EnsureTodoistSectionsAction.js';
+import type { PropagateTodoistDeletionsAction } from '../../src/todoist/PropagateTodoistDeletionsAction.js';
 import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
@@ -28,9 +28,9 @@ import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 import { toDiffViewWithBody } from '../../src/shared/toDiffView.js';

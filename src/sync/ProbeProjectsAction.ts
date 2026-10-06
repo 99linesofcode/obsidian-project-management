@@ -1,6 +1,6 @@
 import type { ProjectStateData } from '../projects/ProjectStateData.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 // UC: probe every discovered project's lightweight remote state in one cheap
 // query, so the poll can gate the expensive board fetch on updatedAt. Resolves

@@ -3,20 +3,20 @@ import { CaptureRemoteProjectsAction } from '../../src/projects/CaptureRemotePro
 import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
 import { ReconcileProjectLifecycleAction } from '../../src/projects/ReconcileProjectLifecycleAction.js';
 import { ProjectData } from '../../src/shared/ProjectData.js';
-import type { BoardItemData } from '../../src/projects/BoardItemData.js';
+import type { BoardItemData } from '../../src/github/BoardItemData.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectBoardData } from '../../src/projects/ProjectBoardData.js';
-import type { ProjectDetailData } from '../../src/projects/ProjectDetailData.js';
+import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
-import type { TaskManagerPort } from '../../src/todoist/TaskManagerPort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
+import type { TaskManagerPort } from '../../src/shared/TaskManagerPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 class FakeVault implements VaultPort {

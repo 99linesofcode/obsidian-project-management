@@ -1,5 +1,5 @@
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
 
 export interface LockArchivedProjectIssuesInput {
   projectName: string;
@@ -7,7 +7,7 @@ export interface LockArchivedProjectIssuesInput {
 
 // On a genuine archive transition, lock every tracked issue that is not yet
 // shipped. The lane is read from the github mirror item's base (the entity
-// itself carries no content); an entity with no github item is a Todoist-only
+// itself carries no content); an entity with no code-host item is a task-manager-only
 // to-do with no issue to lock. The lock runs after the folder move and Status
 // relocation, so a failure retries from a consistent place.
 export class LockArchivedProjectIssuesAction {

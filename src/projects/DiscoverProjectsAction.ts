@@ -1,9 +1,9 @@
 import type { AttachProjectAction } from './AttachProjectAction.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 // A project discovered in the vault: its name (from the note path) and the
-// GitHub identities it resolves to.
+// code-host identities it resolves to.
 export interface DiscoveredProject {
   projectName: string;
   identity: ProjectIdentityData;

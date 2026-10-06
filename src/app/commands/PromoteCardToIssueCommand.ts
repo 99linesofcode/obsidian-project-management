@@ -1,8 +1,8 @@
 import type ProjectManagementPlugin from '../main.js';
 import { PromoteCardModal } from '../modals/PromoteCardModal.js';
 import type { PromoteCardAction } from '../../tasks/PromoteCardAction.js';
-import type { ProjectManagementPort } from '../../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../../shared/SyncStatePort.js';
 
 // UC11: one command, one trigger. Wires the 'promote-card-to-issue' command
 // to open the promote-card modal. Thin driving-side wiring; the logic lives

@@ -42,8 +42,8 @@ export function renderChecklist(body: string, items: ChecklistItem[]): string {
   return [...out, ...items.slice(index).map(renderItem)].join('\n');
 }
 
-// Projects the body for the GitHub issue: checklist lines drop their wikilink
-// (GitHub's plain task-list form); every other line is verbatim.
+// Projects the body for the code-host issue: checklist lines drop their wikilink
+// (the code host's plain task-list form); every other line is verbatim.
 export function toIssueBody(body: string): string {
   return classifyLines(body)
     .map((entry) => (entry.item ? renderUnlinkedItem(entry.item) : entry.line))

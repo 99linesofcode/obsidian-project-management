@@ -1,5 +1,5 @@
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { TaskData } from '../shared/TaskData.js';
 
 export interface HandleDeletedNoteInput {
@@ -8,15 +8,15 @@ export interface HandleDeletedNoteInput {
 }
 
 // UC6/UC7: a deleted task note is a true removal. The board card is deleted
-// (GitHub's API has no issue deletion, so the issue itself is closed — close is
+// (the code host has no issue deletion, so the issue itself is closed — close is
 // the terminal state), then the registry record is removed. The note is gone,
 // so the record is found by its path; an untracked file (no record) is a no-op.
 // Obsidian deletes go to .trash; v1 closes the issue on the delete event and
 // does not reopen on restore (agreed 2026-09-18).
 //
 // The mirrors' remote twins are swept by the deletion propagation, unchanged:
-// this action removes the hub record and closes the GitHub side; the record's
-// absence is what lets the Todoist propagation treat the twin as gone.
+// this action removes the hub record and closes the code-host side; the record's
+// absence is what lets the task-manager propagation treat the twin as gone.
 export class HandleDeletedNoteAction {
   constructor(
     private readonly syncState: SyncStatePort,
@@ -38,7 +38,7 @@ export class HandleDeletedNoteAction {
     // The card goes first: a deleted note must leave no card behind. An issue
     // with no card is a no-op at the port; a board-less project has no identity
     // to resolve, and the issue is still closed below. A to-do-only entity has
-    // no github mirror and skips the whole GitHub side.
+    // no code-host mirror and skips the whole code-host side.
     const identity = await this.syncState.getIdentity(input.projectName);
     if (identity && url !== '') {
       await this.projectManagement.deleteCard(identity.projectNodeId, url);

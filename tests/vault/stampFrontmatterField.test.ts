@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { stampFrontmatterField } from '../../src/vault/stampFrontmatterField.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 // A vault fake that records writes, so the stamp's single decision (fill in
 // place, append, or leave alone) is observable.

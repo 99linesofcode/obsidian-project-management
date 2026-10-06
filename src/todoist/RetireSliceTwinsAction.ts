@@ -1,6 +1,6 @@
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
-import type { TodoistTaskData } from '../todoist/TodoistTaskData.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
+import type { TodoistTaskData } from './TodoistTaskData.js';
 
 export interface RetireSliceTwinsInput {
   projectName: string;

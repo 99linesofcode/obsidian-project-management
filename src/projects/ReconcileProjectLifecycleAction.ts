@@ -3,11 +3,11 @@ import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
 import type { ArchiveBaselineData } from './ArchiveBaselineData.js';
 import { ProjectData } from '../shared/ProjectData.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
-import type { TodoistProjectData } from '../todoist/TodoistProjectData.js';
-import type { ProjectManagementPort } from '../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
-import type { TaskManagerPort } from '../todoist/TaskManagerPort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { RemoteProjectData } from '../shared/RemoteProjectData.js';
+import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 import { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
 import { LockArchivedProjectIssuesAction } from './LockArchivedProjectIssuesAction.js';
 
@@ -16,27 +16,27 @@ export interface ReconcileProjectLifecycleInput {
   notePath: string;
   locationArchived: boolean;
   syncedAt: string;
-  // The GitHub probe's board state, when the project has a board. Absent when
-  // there is no GitHub attach.
+  // The code-host probe's board state, when the project has a board. Absent when
+  // there is no code-host attach.
   closed?: boolean;
 }
 
-// The one freeze verdict the chain consumes. todoistProjectId is the resolved
-// Todoist project when task writes are allowed and null when the project is
-// frozen; frozen gates every task write (GitHub and Todoist) while leaving the
+// The one freeze verdict the chain consumes. remoteProjectId is the resolved
+// remote project when task writes are allowed and null when the project is
+// frozen; frozen gates every task write (both halves) while leaving the
 // project observable (it is still polled by id). archivedAt is the reconciled
 // archive state: null when active, the plugin-stamped transition time once
 // archived ('' when the stamp predates the plugin). notePath is the state after
 // any folder backflow, so the caller works from the reconciled location.
 export interface ProjectLifecycleVerdict {
-  todoistProjectId: string | null;
+  remoteProjectId: string | null;
   frozen: boolean;
   notePath: string;
   archivedAt: string | null;
 }
 
-// UC: reconcile a project's lifecycle — the vault folder position, the GitHub
-// board's closed state and the Todoist project's is_archived — into ONE freeze
+// UC: reconcile a project's lifecycle — the vault folder position, the code-host
+// board's closed state and the remote project's is_archived — into ONE freeze
 // verdict. The merge is two-way (the vault wins conflicts) and the
 // ArchiveBaselineData record is the last reconciled state, so a settled pair
 // never re-triggers. A frozen project stays polled by id and watched through
@@ -69,7 +69,7 @@ export class ReconcileProjectLifecycleAction {
     if (!note) {
       // The note is gone; the deletion sweep owns it.
       return {
-        todoistProjectId: null,
+        remoteProjectId: null,
         frozen: true,
         notePath: input.notePath,
         archivedAt: input.locationArchived ? '' : null,
@@ -87,18 +87,18 @@ export class ReconcileProjectLifecycleAction {
       locationArchived: input.locationArchived,
     });
 
-    // Resolve/attach the Todoist project. The anchor is the identity: fetch it
+    // Resolve/attach the remote project. The anchor is the identity: fetch it
     // directly (the list endpoint omits archived projects), so a frozen project
     // stays observed by id. A missing anchor — or one pointing at a project
     // that no longer exists — falls back to a name match before creating, so a
     // duplicate is never made.
-    const project = await this.resolveTodoistProject(
+    const project = await this.resolveRemoteProject(
       input.projectName,
       notePath,
       note.content,
     );
 
-    // Name drift vs the Todoist project name remains a verdict (rename on
+    // Name drift vs the remote project name remains a verdict (rename on
     // drift).
     if (project !== null && project.name !== input.projectName) {
       await this.taskManager.updateProject(project.id, input.projectName);
@@ -126,7 +126,7 @@ export class ReconcileProjectLifecycleAction {
 
     if (!baseline) {
       // First sight adopts the current pair without transitioning, so a project
-      // discovered mid-life never self-transitions. The Todoist project mirrors
+      // discovered mid-life never self-transitions. The remote project mirrors
       // the folder (the vault is the source of truth).
       if (
         todoistArchived !== null &&
@@ -142,10 +142,10 @@ export class ReconcileProjectLifecycleAction {
         this.baselineFrom(canonical, input.closed ?? input.locationArchived),
       );
       if (!input.locationArchived && project !== null) {
-        await this.ensureTodoistBookkeeping(input.projectName, input.syncedAt);
+        await this.ensureRemoteBookkeeping(input.projectName, input.syncedAt);
       }
       return {
-        todoistProjectId: input.locationArchived ? null : (project?.id ?? null),
+        remoteProjectId: input.locationArchived ? null : (project?.id ?? null),
         frozen: input.locationArchived,
         notePath,
         archivedAt: canonical.archivedAt,
@@ -191,7 +191,7 @@ export class ReconcileProjectLifecycleAction {
         }
       }
       return {
-        todoistProjectId: archived ? null : (project?.id ?? null),
+        remoteProjectId: archived ? null : (project?.id ?? null),
         frozen: archived,
         notePath,
         // A settled archive keeps the stamp it was given at the transition, so
@@ -226,7 +226,7 @@ export class ReconcileProjectLifecycleAction {
     }
 
     // Frozen projects stay polled by id. The watch observes reactivation; a
-    // newer issue unarchives the project (folder, board and Todoist project),
+    // newer issue unarchives the project (folder, board and remote project),
     // and the task steps wait for the next tick's full reconcile.
     if (archived) {
       const reactivated = await this.reactivateIfNewerIssue(
@@ -255,7 +255,7 @@ export class ReconcileProjectLifecycleAction {
     );
 
     return {
-      todoistProjectId: archived ? null : (project?.id ?? null),
+      remoteProjectId: archived ? null : (project?.id ?? null),
       frozen: archived,
       notePath,
       archivedAt: canonical.archivedAt,
@@ -324,15 +324,15 @@ export class ReconcileProjectLifecycleAction {
     };
   }
 
-  // The Todoist project for a note: the anchored one, a name match, or a fresh
+  // The remote project for a note: the anchored one, a name match, or a fresh
   // project. Stamps the anchor when the note has none or it points at a project
   // that no longer exists and a name match took over. Returns null when the
   // provider is unavailable.
-  private async resolveTodoistProject(
+  private async resolveRemoteProject(
     projectName: string,
     notePath: string,
     noteContent: string,
-  ): Promise<TodoistProjectData | null> {
+  ): Promise<RemoteProjectData | null> {
     const anchor = splitFrontmatter(noteContent)?.fields.get('todoist') ?? '';
     let project =
       anchor === '' ? null : await this.taskManager.fetchProject(anchor);
@@ -355,7 +355,7 @@ export class ReconcileProjectLifecycleAction {
     return project;
   }
 
-  private async ensureTodoistBookkeeping(
+  private async ensureRemoteBookkeeping(
     projectName: string,
     syncedAt: string,
   ): Promise<void> {
@@ -416,13 +416,13 @@ export class ReconcileProjectLifecycleAction {
   // whether the newest issue changed (304 costs nothing). The first watch
   // adopts the current newest issue as the cursor, so issues predating the
   // watch don't re-activate the project. A newer issue reactivates it: folder
-  // back, board reopened, Todoist unarchived, watch cleared. A failed
+  // back, board reopened, remote project unarchived, watch cleared. A failed
   // reactivation throws before the watch state is cleared, so the next tick
   // retries. Returns whether the project was reactivated.
   private async reactivateIfNewerIssue(
     projectName: string,
     syncedAt: string,
-    project: TodoistProjectData | null,
+    project: RemoteProjectData | null,
   ): Promise<boolean> {
     const identity = await this.syncState.getIdentity(projectName);
     if (!identity?.repoUrl) {
@@ -466,12 +466,12 @@ export class ReconcileProjectLifecycleAction {
   }
 
   // The one unarchive implementation: move the folder back to Projecten,
-  // reopen the board, unarchive the Todoist project, relocate the Status
-  // records and ensure the Todoist bookkeeping exists.
+  // reopen the board, unarchive the remote project, relocate the Status
+  // records and ensure the remote bookkeeping exists.
   private async reactivate(
     projectName: string,
     syncedAt: string,
-    project: TodoistProjectData | null,
+    project: RemoteProjectData | null,
   ): Promise<void> {
     await this.moveFolder(projectName, false, '');
     const identity = await this.syncState.getIdentity(projectName);
@@ -484,7 +484,7 @@ export class ReconcileProjectLifecycleAction {
     if (project?.isArchived) {
       await this.taskManager.setProjectArchived(project.id, false);
     }
-    await this.ensureTodoistBookkeeping(projectName, syncedAt);
+    await this.ensureRemoteBookkeeping(projectName, syncedAt);
   }
   // The verdict a reactivated project returns: settle the baseline to active so
   // the next tick reads a settled active project. This tick still returns
@@ -500,7 +500,7 @@ export class ReconcileProjectLifecycleAction {
       this.baselineFrom(canonical, false),
     );
     return {
-      todoistProjectId: null,
+      remoteProjectId: null,
       frozen: true,
       notePath: this.activeNotePath(projectName, notePath),
       archivedAt: canonical.archivedAt,

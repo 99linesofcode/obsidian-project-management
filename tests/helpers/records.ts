@@ -4,7 +4,7 @@ import type {
   EntityRecord,
   MirrorItem,
   PortState,
-} from '../../src/registry/SyncStatePort.js';
+} from '../../src/shared/SyncStatePort.js';
 
 // A canonical task with sensible defaults, so a test names only the fields it
 // cares about. TaskData is a class, so the factory constructs it: the registry,

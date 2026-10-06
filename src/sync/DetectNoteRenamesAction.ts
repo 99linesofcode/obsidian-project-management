@@ -1,6 +1,6 @@
 import { normalizedStem } from '../shared/stemOf.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface DetectNoteRenamesInput {
   projectName: string;

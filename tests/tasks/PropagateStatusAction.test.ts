@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PropagateStatusAction } from '../../src/tasks/PropagateStatusAction.js';
 import { BoardStatusAction } from '../../src/projects/BoardStatusAction.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectManagementPort } from '../../src/github/ProjectManagementPort.js';
+import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

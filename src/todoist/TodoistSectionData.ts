@@ -1,9 +1,5 @@
-// A Todoist section (a lane) as fetched from the provider, in the shape the
-// core needs. Sections are the Todoist twin of the GitHub board's status
-// options (dt-07); the core maps lane name → section id in sync state, so the
-// name is the identity the core reconciles on.
-export interface TodoistSectionData {
-  id: string;
-  projectId: string;
-  name: string;
-}
+// The task-manager module's name for the remote section shape. The canonical
+// interface lives in shared/RemoteSectionData so neutral modules can carry a
+// remote section without naming the provider; this alias keeps the
+// provider-facing vocabulary local to the provider module.
+export type { RemoteSectionData as TodoistSectionData } from '../shared/RemoteSectionData.js';

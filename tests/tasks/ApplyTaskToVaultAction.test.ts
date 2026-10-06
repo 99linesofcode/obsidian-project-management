@@ -6,7 +6,7 @@ import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
 import { hash } from '../../src/shared/hash.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

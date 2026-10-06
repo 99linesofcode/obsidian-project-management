@@ -1,4 +1,4 @@
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface CleanupNoteFrontmatterInput {
   projectName: string;
@@ -8,7 +8,7 @@ export interface CleanupNoteFrontmatterInput {
 // note: `id:` (the vault-owned uuid that moved into the registry, dt-20),
 // `url:` (the old mirror address the registry now owns) and `todoist:` (the
 // old twin anchor the registry now owns — the registry is the identity source).
-// A project note carries a LIVE `todoist:` anchor (the Todoist project id), but
+// A project note carries a LIVE `todoist:` anchor (the task-manager project id), but
 // project notes live outside taken/ and todos/, so this walk never touches one.
 // Idempotent: a note carrying none of the fields is left untouched. Runs at
 // chain start, per project, before any half reads notes.

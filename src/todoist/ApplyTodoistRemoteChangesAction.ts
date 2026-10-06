@@ -1,4 +1,4 @@
-import { laneForSection } from './laneForSection.js';
+import { laneForSection } from '../tasks/laneForSection.js';
 import { hasCompletionStamp } from '../shared/Reconciliation.js';
 import { rewriteFrontmatterFields } from '../vault/rewriteFrontmatterFields.js';
 import { parseAffiliation } from '../shared/parseAffiliation.js';
@@ -11,15 +11,15 @@ import { slugify } from '../vault/TaskNoteMapper.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { withStatus } from '../vault/TaskNoteParser.js';
 import { TaskData } from '../shared/TaskData.js';
-import type { TodoistTaskSnapshotData } from '../todoist/TodoistTaskSnapshotData.js';
+import type { TodoistTaskSnapshotData } from './TodoistTaskSnapshotData.js';
 import { toDiffViewWithBody } from '../shared/toDiffView.js';
-import type { TodoistTaskData } from '../todoist/TodoistTaskData.js';
+import type { TodoistTaskData } from './TodoistTaskData.js';
 import { todoistEntries } from '../registry/todoistEntries.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
-import type { PropagateStatusAction } from './PropagateStatusAction.js';
-import type { RelinkRenamedTodoAction } from '../todos/RelinkRenamedTodoAction.js';
-import type { RelocateTaskStatusAction } from './RelocateTaskStatusAction.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
+import type { PropagateStatusAction } from '../tasks/PropagateStatusAction.js';
+import type { RelinkRenamedTodoAction } from './RelinkRenamedTodoAction.js';
+import type { RelocateTaskStatusAction } from '../tasks/RelocateTaskStatusAction.js';
 
 export interface ApplyTodoistRemoteChangesInput {
   projectName: string;

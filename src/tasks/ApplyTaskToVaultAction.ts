@@ -8,9 +8,9 @@ import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
 import { TaskNoteMapper, slugify } from '../vault/TaskNoteMapper.js';
 import { ToDoNoteParser } from '../vault/ToDoNoteParser.js';
 import { toDiffViewWithBody } from '../shared/toDiffView.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
 import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { CreateTaskNoteAction } from './CreateTaskNoteAction.js';
 
@@ -22,10 +22,10 @@ export interface ApplyTaskToVaultInput {
   projectName: string;
   syncedAt: string;
   // Which side won the diff. A pull advances the github base after the durable
-  // write; a push leaves the base to the GitHub writer, which knows what it
+  // write; a push leaves the base to the code-host writer, which knows what it
   // wrote and owns that bookkeeping.
   origin: 'pull' | 'push';
-  // The registry record, when the caller already resolved it (the GitHub half
+  // The registry record, when the caller already resolved it (the code host half
   // resolves by mirror handle). Falls back to a note-path lookup.
   record?: EntityRecord | null;
 }

@@ -1,7 +1,7 @@
-import type { VaultPort } from './VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 // Suffixes -2, -3, … until the note path is free. Shared by the checklist sync
-// and the Todoist capture so both handle a slug collision the same way.
+// and the task-manager capture so both handle a slug collision the same way.
 export async function freePath(
   vault: VaultPort,
   base: string,

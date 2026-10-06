@@ -12,12 +12,12 @@ import type {
 } from '../../src/projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
-import type { SyncGithubTasksAction } from '../../src/sync/SyncGithubTasksAction.js';
-import type { SyncTodoistTasksAction } from '../../src/sync/SyncTodoistTasksAction.js';
+import type { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
+import type { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';
-import type { EntityRecord } from '../../src/registry/SyncStatePort.js';
-import type { VaultPort } from '../../src/vault/VaultPort.js';
+import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
+import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
@@ -90,7 +90,7 @@ class FakeLifecycle {
       throw new Error('lifecycle failed');
     }
     return {
-      todoistProjectId: this.frozen ? null : this.projectId,
+      remoteProjectId: this.frozen ? null : this.projectId,
       frozen: this.frozen,
       notePath: input.notePath,
       archivedAt: this.frozen ? '' : null,

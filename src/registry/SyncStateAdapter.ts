@@ -8,7 +8,7 @@ import type {
   MirrorItem,
   PortState,
   SyncStatePort,
-} from './SyncStatePort.js';
+} from '../shared/SyncStatePort.js';
 import {
   FULL_SCAN_PENDING_KEY,
   PROJECT_CURSORS_KEY,
@@ -813,7 +813,7 @@ export class SyncStateAdapter implements SyncStatePort {
   }
 
   // Reads the project's one-shot marker without clearing it. The chain peeks
-  // before the GitHub half and only consumes after that half succeeds, so a
+  // before the code host half and only consumes after that half succeeds, so a
   // failed or interrupted fetch never spends the scan.
   async isFullScanPending(projectName: string): Promise<boolean> {
     return this.queue(async () => {

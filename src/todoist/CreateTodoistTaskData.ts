@@ -1,11 +1,5 @@
-// The input the core hands the port to create a Todoist task. sectionId and
-// parentId are mutually exclusive in practice: a subtask inherits its parent's
-// section (dt-02), so a nested task is placed by parentId alone. labels are
-// derived from the note's type (dt-09), never free-form.
-export interface CreateTodoistTaskData {
-  projectId: string;
-  sectionId?: string;
-  parentId?: string;
-  content: string;
-  labels?: string[];
-}
+// The task-manager module's name for the create-task input. The canonical
+// interface lives in shared/CreateRemoteTaskData so neutral modules can build
+// the input without naming the provider; this alias keeps the provider-facing
+// vocabulary local to the provider module.
+export type { CreateRemoteTaskData as CreateTodoistTaskData } from '../shared/CreateRemoteTaskData.js';

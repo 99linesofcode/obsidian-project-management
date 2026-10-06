@@ -1,6 +1,6 @@
-import { laneForSection } from './laneForSection.js';
+import { laneForSection } from '../tasks/laneForSection.js';
 import { TaskData } from '../shared/TaskData.js';
-import type { TodoistTaskSnapshotData } from '../todoist/TodoistTaskSnapshotData.js';
+import type { TodoistTaskSnapshotData } from './TodoistTaskSnapshotData.js';
 import { CapturedTaskNoteMapper } from '../vault/CapturedTaskNoteMapper.js';
 import { parseChecklist, renderChecklist } from '../vault/Checklist.js';
 import { freePath } from '../vault/freePath.js';
@@ -15,10 +15,10 @@ import { SLICE_LABEL } from '../shared/labels.js';
 import { ensureEntity } from '../registry/ensureEntity.js';
 import { parentUuid } from '../registry/parentUuid.js';
 import { todoistEntries } from '../registry/todoistEntries.js';
-import type { TodoistTaskData } from '../todoist/TodoistTaskData.js';
-import type { SyncStatePort } from '../registry/SyncStatePort.js';
+import type { TodoistTaskData } from './TodoistTaskData.js';
+import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../vault/VaultPort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface CaptureTodoistCreationsInput {
   projectName: string;

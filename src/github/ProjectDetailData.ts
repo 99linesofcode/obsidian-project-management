@@ -1,5 +1,5 @@
 import type { BoardItemData } from './BoardItemData.js';
-import type { GithubTaskData } from '../github/GithubTaskData.js';
+import type { GithubTaskData } from './GithubTaskData.js';
 
 // A project's whole GitHub detail in one round trip: the tracked issues (with
 // their bodies, so checklist → to-do extraction works from the same fetch) and

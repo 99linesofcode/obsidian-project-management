@@ -1,14 +1,14 @@
 import { TaskData } from '../shared/TaskData.js';
 import { hasCompletionStamp } from '../shared/Reconciliation.js';
-import type { TodoistTaskSnapshotData } from '../todoist/TodoistTaskSnapshotData.js';
+import type { TodoistTaskSnapshotData } from './TodoistTaskSnapshotData.js';
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { VaultTaskMapper } from '../vault/VaultTaskMapper.js';
 import { toDiffViewWithBody } from '../shared/toDiffView.js';
-import type { TodoistTaskData } from '../todoist/TodoistTaskData.js';
+import type { TodoistTaskData } from './TodoistTaskData.js';
 import { todoistEntries } from '../registry/todoistEntries.js';
-import type { EntityRecord, SyncStatePort } from '../registry/SyncStatePort.js';
-import type { VaultPort } from '../vault/VaultPort.js';
-import type { ApplyTaskToVaultAction } from './ApplyTaskToVaultAction.js';
+import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
+import type { VaultPort } from '../shared/VaultPort.js';
+import type { ApplyTaskToVaultAction } from '../tasks/ApplyTaskToVaultAction.js';
 
 export interface ApplyTodoistCompletionInput {
   projectName: string;

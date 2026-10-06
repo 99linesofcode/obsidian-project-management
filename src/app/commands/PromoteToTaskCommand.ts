@@ -1,8 +1,8 @@
 import type ProjectManagementPlugin from '../main.js';
 import { PromoteModal } from '../modals/PromoteModal.js';
 import type { PromoteIssueAction } from '../../tasks/PromoteIssueAction.js';
-import type { ProjectManagementPort } from '../../github/ProjectManagementPort.js';
-import type { SyncStatePort } from '../../registry/SyncStatePort.js';
+import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';
+import type { SyncStatePort } from '../../shared/SyncStatePort.js';
 
 // UC10: one command, one trigger. Wires the 'promote-to-task' command to open
 // the promote modal. Thin driving-side wiring; the logic lives in the action.
