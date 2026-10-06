@@ -16,6 +16,10 @@ export interface PropagateStatusInput {
 // it; the card moves to the lane the note carries. The Status record is
 // refreshed so the baseline tracks the new lane (the echo guard depends on
 // every write refreshing the full record).
+//
+// The issue state write is GATED: the stored record's lane already names the
+// issue's open/closed state, so a lane that does not flip done-ness is not
+// re-written. The gate IS the diff — only a real state change reaches GitHub.
 export class PropagateStatusAction {
   constructor(
     private readonly projectManagement: ProjectManagementPort,
@@ -25,10 +29,26 @@ export class PropagateStatusAction {
   ) {}
 
   async execute(input: PropagateStatusInput): Promise<void> {
-    const updated = await this.projectManagement.setTaskState(
-      input.url,
-      stateFromStatus(input.statusName, this.doneOptionName),
-    );
+    const status = await this.syncState.get(input.url);
+    const next = stateFromStatus(input.statusName, this.doneOptionName);
+
+    // No record: the note is untracked, so there is no baseline to compare
+    // against and the state is written. A record whose stored lane already
+    // implies the same state is skipped (the write would be a no-op).
+    let updatedAt = status?.updatedAt ?? '';
+    if (!status) {
+      const updated = await this.projectManagement.setTaskState(
+        input.url,
+        next,
+      );
+      updatedAt = updated.updatedAt;
+    } else if (stateFromStatus(status.status, this.doneOptionName) !== next) {
+      const updated = await this.projectManagement.setTaskState(
+        input.url,
+        next,
+      );
+      updatedAt = updated.updatedAt;
+    }
 
     await this.boardStatus.execute({
       projectName: input.projectName,
@@ -36,7 +56,6 @@ export class PropagateStatusAction {
       statusName: input.statusName,
     });
 
-    const status = await this.syncState.get(input.url);
     if (!status) {
       return;
     }
@@ -44,11 +63,16 @@ export class PropagateStatusAction {
     await this.syncState.set({
       url: status.url,
       remoteId: status.remoteId,
+      nodeId: status.nodeId,
+      todoistId: status.todoistId,
       notePath: input.notePath,
-      lastSyncedBodyHash: status.lastSyncedBodyHash,
-      lastSyncedRemoteUpdatedAt: updated.updatedAt,
-      lastSyncedStatus: input.statusName,
-      lastSyncedTitle: status.lastSyncedTitle,
+      title: status.title,
+      body: status.body,
+      status: input.statusName,
+      completed: input.statusName === this.doneOptionName,
+      parent: status.parent,
+      labels: status.labels,
+      updatedAt,
     });
   }
 }

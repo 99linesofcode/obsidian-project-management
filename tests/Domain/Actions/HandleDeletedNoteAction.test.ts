@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
-import { BoardStatusAction } from '../../../src/Domain/Actions/BoardStatusAction.js';
 import { hash } from '../../../src/Domain/Notes/hash.js';
 import type { ProjectIdentityData } from '../../../src/Domain/DataTransferObjects/ProjectIdentityData.js';
-import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
+import type { GithubTaskData } from '../../../src/Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../../src/Domain/Ports/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
-// Fakes at the ports: record the state change and the record removal the
-// action asks for, so the action's own behaviour (find → close → board →
-// remove) is what's under test.
+// Fakes at the ports: record the card deletion, the state change and the
+// record removal the action asks for, so the action's own behaviour (find →
+// delete card → close → remove) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   async setProjectClosed(): Promise<void> {}
   async lockIssue(): Promise<void> {}
@@ -18,21 +18,28 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
-  boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];
+  deleteCardCalls: Array<{ projectNodeId: string; issueUrl: string }> = [];
 
   async fetchProjectIdentity(): Promise<null> {
     return null;
   }
-  async fetchTrackedIssues(): Promise<TaskData[]> {
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
+  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
     return [];
   }
-  async fetchTask(): Promise<TaskData> {
+  async fetchTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async updateTask(): Promise<TaskData> {
+  async updateTask(): Promise<GithubTaskData> {
     throw new Error('not used in this test');
   }
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+  async setTaskState(
+    url: string,
+    state: 'open' | 'closed',
+  ): Promise<GithubTaskData> {
     this.stateCalls.push({ url, state });
     return {
       url,
@@ -48,16 +55,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchBoardItems(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({ issueUrl, statusOptionId });
+  async setBoardStatus(): Promise<void> {
+    throw new Error('not used in this test');
   }
   async addBoardItem(): Promise<void> {
     throw new Error('not used in this test');
+  }
+  async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
+    this.deleteCardCalls.push({ projectNodeId, issueUrl });
   }
 
   async fetchUnpromotedIssues(): Promise<never> {
@@ -109,17 +114,17 @@ class FakeSyncState implements SyncStatePort {
   async removeTodoistState(): Promise<void> {}
 
   async setArchiveBaseline(): Promise<void> {}
-  statuses = new Map<string, Status>();
+  statuses = new Map<string, TaskData>();
   removed: string[] = [];
   identity: ProjectIdentityData | null = null;
 
-  async get(url: string): Promise<Status | null> {
+  async get(url: string): Promise<TaskData | null> {
     return this.statuses.get(url) ?? null;
   }
-  async set(status: Status): Promise<void> {
+  async set(status: TaskData): Promise<void> {
     this.statuses.set(status.url, status);
   }
-  async findByNotePath(notePath: string): Promise<Status | null> {
+  async findByNotePath(notePath: string): Promise<TaskData | null> {
     for (const status of this.statuses.values()) {
       if (status.notePath === notePath) {
         return status;
@@ -131,7 +136,7 @@ class FakeSyncState implements SyncStatePort {
     this.statuses.delete(url);
     this.removed.push(url);
   }
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -140,7 +145,7 @@ class FakeSyncState implements SyncStatePort {
   }
 }
 
-const task: TaskData = {
+const task: GithubTaskData = {
   url: 'https://github.com/acme/widgets/issues/42',
   remoteId: 42,
   nodeId: 'I_kwDOAAAA42',
@@ -154,34 +159,28 @@ const task: TaskData = {
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const projectName = 'Acme Widgets';
 
-function makeStatus(overrides: Partial<Status> = {}): Status {
-  return {
+function makeStatus(overrides: Partial<TaskData> = {}): TaskData {
+  return taskRecord({
     url: task.url,
     remoteId: task.remoteId,
     notePath,
-    lastSyncedBodyHash: hash(task.body),
-    lastSyncedRemoteUpdatedAt: task.updatedAt,
-    lastSyncedStatus: 'open',
-    lastSyncedTitle: task.title,
+    body: hash(task.body),
+    updatedAt: task.updatedAt,
+    status: 'open',
+    title: task.title,
     ...overrides,
-  };
+  });
 }
 
 function makeAction(
   syncState: FakeSyncState,
   projectManagement: FakeProjectManagement,
 ) {
-  const boardStatus = new BoardStatusAction(syncState, projectManagement);
-  return new HandleDeletedNoteAction(
-    syncState,
-    projectManagement,
-    boardStatus,
-    'Shipped',
-  );
+  return new HandleDeletedNoteAction(syncState, projectManagement, 'Shipped');
 }
 
 describe('HandleDeletedNoteAction', () => {
-  it('closes the issue, mirrors done to the board and removes the record for a tracked note', async () => {
+  it('deletes the card, closes the issue and removes the record for a tracked note', async () => {
     // Given — a tracked note (a status record exists for its path) with an identity
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
@@ -204,15 +203,44 @@ describe('HandleDeletedNoteAction', () => {
     // When — the note is deleted
     await action.execute({ notePath, projectName });
 
-    // Then — the issue is closed, the board set to done, and the record removed
+    // Then — the card is deleted, the issue is closed, and the record is removed
+    expect(projectManagement.deleteCardCalls).toEqual([
+      { projectNodeId: 'PVT_123', issueUrl: task.url },
+    ]);
     expect(projectManagement.stateCalls).toEqual([
       { url: task.url, state: 'closed' },
     ]);
-    expect(projectManagement.boardStatusCalls).toEqual([
-      { issueUrl: task.url, statusOptionId: 'PVTSSF_5' },
-    ]);
     expect(syncState.removed).toEqual([task.url]);
     expect(syncState.statuses.has(task.url)).toBe(false);
+  });
+
+  it('still closes and removes when the issue has no card', async () => {
+    // Given — a tracked note whose issue is absent from the board (the port's
+    // delete is a no-op)
+    const projectManagement = new FakeProjectManagement();
+    const syncState = new FakeSyncState();
+    syncState.statuses.set(task.url, makeStatus());
+    syncState.identity = {
+      repoUrl: 'https://github.com/acme/widgets',
+      repoNodeId: 'R_kgDOAAAA',
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [{ id: 'PVTSSF_5', name: 'Shipped' }],
+    };
+    const action = makeAction(syncState, projectManagement);
+
+    // When — the note is deleted
+    await action.execute({ notePath, projectName });
+
+    // Then — the delete is still attempted, the issue closes, the record goes,
+    // and nothing throws
+    expect(projectManagement.deleteCardCalls).toEqual([
+      { projectNodeId: 'PVT_123', issueUrl: task.url },
+    ]);
+    expect(projectManagement.stateCalls).toEqual([
+      { url: task.url, state: 'closed' },
+    ]);
+    expect(syncState.removed).toEqual([task.url]);
   });
 
   it('does nothing for an untracked note', async () => {
@@ -227,9 +255,9 @@ describe('HandleDeletedNoteAction', () => {
       projectName,
     });
 
-    // Then — nothing is closed, mirrored or removed
+    // Then — nothing is deleted, closed or removed
+    expect(projectManagement.deleteCardCalls).toEqual([]);
     expect(projectManagement.stateCalls).toEqual([]);
-    expect(projectManagement.boardStatusCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);
   });
 });

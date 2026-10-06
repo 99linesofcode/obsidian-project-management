@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ApplyTodoistCompletionAction } from '../../../src/Domain/Actions/ApplyTodoistCompletionAction.js';
 import type { TodoistProjectData } from '../../../src/Domain/DataTransferObjects/TodoistProjectData.js';
 import type { TodoistProjectStateData } from '../../../src/Domain/DataTransferObjects/TodoistProjectStateData.js';
-import type { TodoistStateData } from '../../../src/Domain/DataTransferObjects/TodoistStateData.js';
 import type { TodoistTaskData } from '../../../src/Domain/DataTransferObjects/TodoistTaskData.js';
-import type { Status } from '../../../src/Domain/Models/Status.js';
 import type { SyncStatePort } from '../../../src/Domain/Ports/SyncStatePort.js';
 import type { TaskManagerPort } from '../../../src/Domain/Ports/TaskManagerPort.js';
 import type { VaultPort } from '../../../src/Domain/Ports/VaultPort.js';
+import type { TaskData } from '../../../src/Domain/DataTransferObjects/TaskData.js';
+import { taskRecord } from '../../helpers/records.js';
 
 // Fakes at the ports: the vault holds the to-do notes and records writes, the
 // task manager serves the completed-since and active sets (and can be made to
@@ -106,23 +106,20 @@ class FakeTaskManager implements TaskManagerPort {
 }
 
 class FakeSyncState implements SyncStatePort {
-  todoistItemStates = new Map<string, TodoistStateData>();
-  todoistItemSets: Array<{ notePath: string; state: TodoistStateData }> = [];
+  todoistItemStates = new Map<string, TaskData>();
+  todoistItemSets: Array<{ notePath: string; state: TaskData }> = [];
   projectState: TodoistProjectStateData | null = null;
   projectSets: Array<{ projectName: string; state: TodoistProjectStateData }> =
     [];
 
-  async getTodoistState(notePath: string): Promise<TodoistStateData | null> {
+  async getTodoistState(notePath: string): Promise<TaskData | null> {
     return this.todoistItemStates.get(notePath) ?? null;
   }
-  async setTodoistState(
-    notePath: string,
-    state: TodoistStateData,
-  ): Promise<void> {
+  async setTodoistState(notePath: string, state: TaskData): Promise<void> {
     this.todoistItemSets.push({ notePath, state });
     this.todoistItemStates.set(notePath, state);
   }
-  async listTodoistStates(): Promise<TodoistStateData[]> {
+  async listTodoistStates(): Promise<TaskData[]> {
     return [...this.todoistItemStates.values()];
   }
   async removeTodoistState(notePath: string): Promise<void> {
@@ -139,7 +136,7 @@ class FakeSyncState implements SyncStatePort {
     this.projectState = state;
   }
 
-  async get(): Promise<Status | null> {
+  async get(): Promise<TaskData | null> {
     return null;
   }
   async set(): Promise<void> {}
@@ -147,7 +144,7 @@ class FakeSyncState implements SyncStatePort {
     return null;
   }
   async remove(): Promise<void> {}
-  async list(): Promise<Status[]> {
+  async list(): Promise<TaskData[]> {
     return [];
   }
   async setIdentity(): Promise<void> {}
@@ -207,14 +204,9 @@ function task(
 function state(
   todoistId: string,
   notePath: string,
-  lastSyncedCompleted: boolean,
-): TodoistStateData {
-  return {
-    todoistId,
-    notePath,
-    lastSyncedHash: 'stale',
-    lastSyncedCompleted,
-  };
+  completed: boolean,
+): TaskData {
+  return taskRecord({ todoistId, notePath, completed });
 }
 
 function setup() {
@@ -254,15 +246,16 @@ describe('ApplyTodoistCompletionAction', () => {
     expect(syncState.todoistItemSets).toEqual([
       {
         notePath: todoPath,
-        state: {
+        state: taskRecord({
+          url: '',
+          remoteId: 0,
           todoistId: 'T2',
           notePath: todoPath,
-          lastSyncedHash: expect.any(String),
-          lastSyncedCompleted: true,
-          lastSyncedContent: 'Fix the widget',
-          lastSyncedLane: null,
-          lastSyncedParent: 'T1',
-        },
+          completed: true,
+          title: 'Fix the widget',
+          parent: 'T1',
+          labels: ['todo'],
+        }),
       },
     ]);
   });
@@ -284,7 +277,7 @@ describe('ApplyTodoistCompletionAction', () => {
     expect(content).toMatch(/completed:[ \t]*$/m);
     expect(content).not.toContain('2026-09-24T10:00:00Z');
     // And the snapshot now says open
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedCompleted).toBe(false);
+    expect(syncState.todoistItemSets[0]!.state.completed).toBe(false);
   });
 
   it('does not re-apply our own completion as a remote change', async () => {
@@ -317,7 +310,7 @@ describe('ApplyTodoistCompletionAction', () => {
     // Then — the vault note is untouched (its own stamp is kept) and only the
     // snapshot moves to completed
     expect(vault.writes).toEqual([]);
-    expect(syncState.todoistItemSets[0]!.state.lastSyncedCompleted).toBe(true);
+    expect(syncState.todoistItemSets[0]!.state.completed).toBe(true);
   });
 
   it('ignores a completed task twin that is not a to-do', async () => {

@@ -1,5 +1,7 @@
 import { parseChecklist, renderChecklist } from '../Notes/Checklist.js';
+import { projectFromTodoPath } from '../Notes/projectFromTodoPath.js';
 import { splitFrontmatter } from '../Notes/splitFrontmatter.js';
+import { taskLinkFromAffiliation } from '../Notes/taskLinkFromAffiliation.js';
 import { ToDoNoteParser } from '../Notes/ToDoNoteParser.js';
 import { withBody } from '../Notes/withBody.js';
 import type { SyncStatePort } from '../Ports/SyncStatePort.js';
@@ -82,28 +84,4 @@ export class RelinkRenamedTodoAction {
       });
     }
   }
-}
-
-// To-dos live at Projecten/<project>/todos/<file>.md.
-function projectFromTodoPath(path: string): string | null {
-  const segments = path.split('/');
-  if (segments[0] !== 'Projecten' || segments[2] !== 'todos') {
-    return null;
-  }
-  return segments[1] ?? null;
-}
-
-// The affiliation lists project first, then the parent task; the first link
-// that is not the project is the task.
-function taskLinkFromAffiliation(
-  affiliation: string[],
-  projectName: string,
-): string | null {
-  for (const link of affiliation) {
-    const target = link.replace(/^\[\[/, '').replace(/\]\]$/, '');
-    if (target !== projectName) {
-      return target;
-    }
-  }
-  return null;
 }

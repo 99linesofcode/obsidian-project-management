@@ -5,7 +5,8 @@ import type {
   ProjectStatusOption,
 } from '../../Domain/DataTransferObjects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../Domain/DataTransferObjects/ProjectStateData.js';
-import type { TaskData } from '../../Domain/DataTransferObjects/TaskData.js';
+import type { ProjectDetailData } from '../../Domain/DataTransferObjects/ProjectDetailData.js';
+import type { GithubTaskData } from '../../Domain/DataTransferObjects/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../Domain/Ports/ProjectManagementPort.js';
 
 // The transport the adapter talks through, injected so tests can fake it.
@@ -125,6 +126,63 @@ const BOARD_ITEMS_QUERY = `
   }
 `;
 
+// The whole-project fetch: the repository's issues (with bodies, so checklist
+// → to-do extraction works from the same response) and the project's board
+// items (cards + Status lanes), in ONE GraphQL round trip. Both connections
+// are capped at 100 nodes — the same cap the board query always had; a project
+// with more than 100 issues or cards is a follow-up pagination concern.
+const PROJECT_DETAIL_QUERY = `
+  query ProjectDetail($owner: String!, $name: String!, $projectId: ID!) {
+    repository(owner: $owner, name: $name) {
+      issues(first: 100, states: [OPEN, CLOSED]) {
+        nodes {
+          url
+          number
+          id
+          title
+          body
+          state
+          updatedAt
+          labels(first: 20) {
+            nodes { name }
+          }
+        }
+      }
+    }
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        items(first: 100) {
+          nodes {
+            id
+            type
+            content {
+              ... on Issue {
+                url
+              }
+              ... on DraftIssue {
+                title
+                body
+              }
+            }
+            fieldValues(first: 20) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field {
+                    ... on ProjectV2SingleSelectField {
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 const SET_BOARD_STATUS_MUTATION = `
   mutation SetBoardStatus($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
     updateProjectV2ItemFieldValue(
@@ -144,6 +202,14 @@ const ADD_BOARD_ITEM_MUTATION = `
   mutation AddBoardItem($projectId: ID!, $contentId: ID!) {
     addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
       item { id }
+    }
+  }
+`;
+
+const DELETE_BOARD_ITEM_MUTATION = `
+  mutation DeleteBoardItem($projectId: ID!, $itemId: ID!) {
+    deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+      deletedItemId
     }
   }
 `;
@@ -213,7 +279,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchTrackedIssues(repoUrl: string): Promise<TaskData[]> {
+  async fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
     const issues: Record<string, unknown>[] = [];
 
@@ -253,6 +319,76 @@ export class GitHubAdapter implements ProjectManagementPort {
         typeof label.name === 'string' &&
         label.name.startsWith('type:'),
     );
+  }
+
+  // The whole-project fetch the sync chain works from: one GraphQL POST
+  // returns the repository's issues (bodies included) and the project's board
+  // items. The adapter filters to typed issues here, so the core receives the
+  // tracked set; the board cards come along for the lane join.
+  async fetchProjectDetail(
+    repoUrl: string,
+    projectNodeId: string,
+  ): Promise<ProjectDetailData> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const data = await this.postQuery(PROJECT_DETAIL_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+      projectId: projectNodeId,
+    });
+
+    const repository = data.repository;
+    const issueNodes =
+      isRecord(repository) &&
+      isRecord(repository.issues) &&
+      Array.isArray(repository.issues.nodes)
+        ? repository.issues.nodes
+        : [];
+    const issues = issueNodes
+      .filter(isRecord)
+      .map((node) => this.mapGraphqlIssue(node))
+      .filter((issue) =>
+        issue.labels.some((label) => label.startsWith('type:')),
+      );
+
+    const project = data.node;
+    const cardNodes =
+      isRecord(project) &&
+      isRecord(project.items) &&
+      Array.isArray(project.items.nodes)
+        ? project.items.nodes
+        : [];
+    const cards = cardNodes
+      .filter(isRecord)
+      .map((node) => this.mapBoardItem(node))
+      .filter((item): item is BoardItemData => item !== null);
+
+    return { issues, cards };
+  }
+
+  // Maps a GraphQL issue node onto the transport DTO. GraphQL names differ
+  // from REST (url/id/updatedAt, labels as a connection, uppercase state).
+  private mapGraphqlIssue(node: Record<string, unknown>): GithubTaskData {
+    const labels =
+      isRecord(node.labels) && Array.isArray(node.labels.nodes)
+        ? node.labels.nodes
+            .filter(isRecord)
+            .filter(
+              (label): label is { name: string } =>
+                typeof label.name === 'string',
+            )
+            .map((label) => label.name)
+        : [];
+
+    return {
+      url: typeof node.url === 'string' ? node.url : '',
+      remoteId: typeof node.number === 'number' ? node.number : 0,
+      nodeId: typeof node.id === 'string' ? node.id : '',
+      title: typeof node.title === 'string' ? node.title : '',
+      body: typeof node.body === 'string' ? node.body : '',
+      state: node.state === 'CLOSED' ? 'closed' : 'open',
+      updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : '',
+      labels,
+    };
   }
 
   // The watched-repo read: the newest issues by creation date, through a
@@ -299,7 +435,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchUnpromotedIssues(repoUrl: string): Promise<TaskData[]> {
+  async fetchUnpromotedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
     // Open issues only; the client-side filter keeps untyped issues, so the
     // promote modal only offers what can be promoted.
@@ -351,7 +487,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     }
   }
 
-  async fetchTask(url: string): Promise<TaskData> {
+  async fetchTask(url: string): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -371,7 +507,7 @@ export class GitHubAdapter implements ProjectManagementPort {
   async updateTask(
     url: string,
     input: { title: string; body: string },
-  ): Promise<TaskData> {
+  ): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -388,7 +524,10 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
-  async setTaskState(url: string, state: 'open' | 'closed'): Promise<TaskData> {
+  async setTaskState(
+    url: string,
+    state: 'open' | 'closed',
+  ): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);
     const path = `/repos/${repo.owner}/${repo.name}/issues/${number}`;
@@ -503,7 +642,25 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
-  async promoteCard(itemId: string, repoNodeId: string): Promise<TaskData> {
+  // Resolves the issue's card from the board (the same join setBoardStatus
+  // uses) and deletes it. A card-less issue is a no-op, so a sweep can call
+  // this without first checking membership.
+  async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
+    const items = await this.fetchBoardItems(projectNodeId);
+    const item = items.find((candidate) => candidate.issueUrl === issueUrl);
+    if (!item) {
+      return;
+    }
+    await this.postQuery(DELETE_BOARD_ITEM_MUTATION, {
+      projectId: projectNodeId,
+      itemId: item.itemId,
+    });
+  }
+
+  async promoteCard(
+    itemId: string,
+    repoNodeId: string,
+  ): Promise<GithubTaskData> {
     const data = await this.postQuery(CONVERT_DRAFT_ISSUE_MUTATION, {
       itemId,
       repositoryId: repoNodeId,
@@ -597,7 +754,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     return number;
   }
 
-  private mapIssue(issue: Record<string, unknown>): TaskData {
+  private mapIssue(issue: Record<string, unknown>): GithubTaskData {
     const labels = Array.isArray(issue.labels)
       ? issue.labels
           .filter(isRecord)

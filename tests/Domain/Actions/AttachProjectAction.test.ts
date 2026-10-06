@@ -22,6 +22,10 @@ class FakePort implements ProjectManagementPort {
     return this.result;
   }
 
+  async fetchProjectDetail(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+
   async fetchTrackedIssues(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -63,6 +67,9 @@ class FakePort implements ProjectManagementPort {
   }
 
   async promoteCard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async deleteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
