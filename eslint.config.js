@@ -8,10 +8,10 @@ import boundaries from 'eslint-plugin-boundaries';
 // (the shared kernel's direction); the plugin expresses the whole matrix,
 // including provider isolation, which the old gate could only approximate.
 
-// The module tree. Each element is one folder under src/, except app, which
-// also owns the composition root at src/main.ts: its root-level pattern sits
-// LAST, so deeper module patterns classify first and only src-root files
-// fall through to it — no deprecated full-path descriptor needed.
+// The module tree. Each element is one folder under src/. Element patterns
+// match folders only (v7 dropped file-mode matching), so the composition
+// root at src/main.ts is classified by the file descriptor in the settings
+// block below, not by an element pattern.
 const ELEMENT_PATTERNS = [
   { type: 'shared', pattern: 'src/shared/**' },
   { type: 'github', pattern: 'src/github/**' },
@@ -23,7 +23,6 @@ const ELEMENT_PATTERNS = [
   { type: 'projects', pattern: 'src/projects/**' },
   { type: 'sync', pattern: 'src/sync/**' },
   { type: 'app', pattern: 'src/app/**' },
-  { type: 'app', pattern: 'src' },
 ];
 
 const ALL_ELEMENT_TYPES = [
@@ -144,6 +143,58 @@ const surfacePolicies = Object.entries(PROVIDER_SURFACE).flatMap(
   },
 );
 
+// The composition root is a lone file at the src root. Element patterns match
+// folders only, so src/main.ts cannot be an element; the file descriptor in
+// the settings block below keeps it known to no-unknown-files, and these
+// policies give it the same edges the app element has: every internal module,
+// with the providers reachable through their public surfaces only. Order
+// matters — last-write-wins, so the surface allow must come after the
+// provider disallow.
+const COMPOSITION_ROOT_CATEGORY = 'composition-root';
+
+const compositionRootPolicies = [
+  {
+    from: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } },
+    allow: {
+      to: {
+        element: {
+          types: {
+            anyOf: [
+              'app',
+              'shared',
+              'vault',
+              'registry',
+              'tasks',
+              'todos',
+              'projects',
+              'sync',
+            ],
+          },
+        },
+      },
+    },
+  },
+  ...Object.entries(PROVIDER_SURFACE).flatMap(([type, files]) => [
+    {
+      from: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } },
+      disallow: { to: { element: { type } } },
+      message: `the ${type} module is imported through its public surface only`,
+    },
+    {
+      from: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } },
+      allow: { to: { element: { type, fileInternalPath: files } } },
+    },
+  ]),
+  // The plugin class lives in main.ts (Obsidian's manifest entry), so app
+  // files type their back-reference to it. Type-only by importKind: a value
+  // import from the composition root stays a violation.
+  {
+    from: { element: { type: 'app' } },
+    allow: { to: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } } },
+    importKind: 'type',
+  },
+];
+
 export default tseslint.config(
   { ignores: ['build/**', 'dist/**', 'main.js'] },
   ...tseslint.configs.recommended,
@@ -171,9 +222,12 @@ export default tseslint.config(
     plugins: { boundaries },
     settings: {
       'boundaries/elements': ELEMENT_PATTERNS,
-      // `mode: 'full'` on the root-file descriptor is deprecated but is the
-      // only way to classify a lone file; `legacy-warnings` keeps that (and
-      // the deprecation chatter we have already migrated away from) quiet.
+      // The composition root is a lone file: element patterns match folders
+      // only, so this descriptor is what keeps src/main.ts known to
+      // no-unknown-files and addressable by the composition-root policies.
+      'boundaries/files': [
+        { pattern: 'src/main.ts', category: COMPOSITION_ROOT_CATEGORY },
+      ],
       'boundaries/legacy-warnings': false,
       // Resolve the tree's NodeNext `.js` specifiers onto their `.ts` sources,
       // or the plugin cannot classify any local import (see the resolver).
@@ -186,7 +240,11 @@ export default tseslint.config(
         'error',
         {
           default: 'disallow',
-          policies: [...matrixPolicies, ...surfacePolicies],
+          policies: [
+            ...matrixPolicies,
+            ...surfacePolicies,
+            ...compositionRootPolicies,
+          ],
         },
       ],
       // Every source file must belong to an element, and every local import
