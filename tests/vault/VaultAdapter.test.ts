@@ -307,3 +307,53 @@ describe('VaultAdapter.createNote', () => {
     expect([...vault.folders].sort()).toEqual(['Bases', 'Bases/My']);
   });
 });
+
+// A fake app with a file map and a fileManager, so trashNote's delegation to
+// FileManager.trashFile (which respects the user's deletion preference) can be
+// exercised.
+class TrashVault {
+  files: TFileInstance[];
+  trashed: string[] = [];
+
+  constructor(paths: string[]) {
+    this.files = paths.map(
+      (path) => new TFile(path, path.split('.').pop() ?? ''),
+    );
+  }
+
+  getAbstractFileByPath(path: string): TFileInstance | null {
+    return this.files.find((file) => file.path === path) ?? null;
+  }
+
+  fileManager = {
+    trashFile: async (file: TFileInstance): Promise<void> => {
+      this.trashed.push(file.path);
+    },
+  };
+}
+
+describe('VaultAdapter.trashNote', () => {
+  it('delegates to FileManager.trashFile so the user preference is respected', async () => {
+    const vault = new TrashVault([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+    const app = { vault, fileManager: vault.fileManager } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    await adapter.trashNote('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+
+    expect(vault.trashed).toEqual([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+  });
+
+  it('is a no-op for an unknown path', async () => {
+    const vault = new TrashVault([]);
+    const app = { vault, fileManager: vault.fileManager } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    await adapter.trashNote('Projecten/missing.md');
+
+    expect(vault.trashed).toEqual([]);
+  });
+});
