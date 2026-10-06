@@ -7,8 +7,8 @@ import { ApplyTaskToVaultAction } from '../../src/tasks/ApplyTaskToVaultAction.j
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
-import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
+import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type {
   ApplyTaskToTodoistInput,
   ApplyToDoToTodoistInput,

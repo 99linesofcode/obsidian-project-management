@@ -20,18 +20,25 @@ import {
 function fakeStorage(initial: Record<string, unknown> = {}) {
   let data: Record<string, unknown> = initial;
   let backups = 0;
+  let saves = 0;
   const storage: SyncStateStorage = {
     async load() {
       return data;
     },
     async save(next: unknown) {
       data = next as Record<string, unknown>;
+      saves += 1;
     },
     async backup() {
       backups += 1;
     },
   };
-  return { storage, snapshot: () => data, backups: () => backups };
+  return {
+    storage,
+    snapshot: () => data,
+    backups: () => backups,
+    saves: () => saves,
+  };
 }
 
 // The container under the top-level key, as the adapter persists it.
@@ -730,6 +737,95 @@ describe('SyncStateAdapter write serialisation', () => {
     );
 
     expect(backups()).toBe(1);
+  });
+});
+
+// F4 — a cursor that does not move is not a registry write. The capture runs
+// every tick, so persisting an unchanged watermark would dirty the store on a
+// quiet pass (SYNC-8).
+describe('F4 — a quiet tick writes nothing', () => {
+  it('does not persist a project cursor set to its current value', async () => {
+    const { storage, saves } = fakeStorage({
+      [SYNC_STATE_KEY]: { version: 3, projectCursors: { todoist: 'T' } },
+    });
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.getProjectCursor('todoist');
+    const before = saves();
+
+    await adapter.setProjectCursor('todoist', 'T');
+    expect(saves()).toBe(before);
+
+    await adapter.setProjectCursor('todoist', 'T2');
+    expect(saves()).toBe(before + 1);
+    expect(await adapter.getProjectCursor('todoist')).toBe('T2');
+  });
+});
+
+// F6 — a container written by a newer plugin version must never be rewritten in
+// this version's shape. Reads serve it; every mutating port method refuses.
+describe('F6 — a container from a newer plugin version is read-only', () => {
+  it('serves reads but refuses every mutation', async () => {
+    const { storage, snapshot } = fakeStorage({
+      [SYNC_STATE_KEY]: {
+        version: 4,
+        projects: { 'Acme Widgets': { entities: { e1: { notePath } } } },
+      },
+    });
+    const adapter = new SyncStateAdapter(storage);
+
+    expect(await adapter.getEntity('e1')).toEqual({ id: 'e1', notePath });
+    expect(await adapter.listEntities('Acme Widgets')).toHaveLength(1);
+
+    await expect(
+      adapter.setEntity(
+        entityRecord({ id: 'e2', notePath: 'Projecten/Acme Widgets/taken/2.md' }),
+      ),
+    ).rejects.toThrow(/newer plugin version/);
+    await expect(
+      adapter.setIdentity('Acme Widgets', identity),
+    ).rejects.toThrow(/refusing to mutate/);
+
+    expect(container(snapshot())['version']).toBe(4);
+    expect(project(snapshot(), 'Acme Widgets')['entities']).toEqual({
+      e1: { notePath },
+    });
+  });
+});
+
+// F7 — settings save and registry persist share one serialization chain, so a
+// concurrent save can never revert a registry write (REG-3). Without the chain
+// the two load-modify-save cycles interleave and the later save wins with a
+// stale root.
+describe('F7 — settings and registry writes share one chain', () => {
+  it('serialises a root mutation against a registry write', async () => {
+    let disk: Record<string, unknown> = {};
+    const storage: SyncStateStorage = {
+      async load() {
+        return structuredClone(disk);
+      },
+      async save(next: unknown) {
+        // A delayed save makes an unserialised interleave lose a write.
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        disk = structuredClone(next) as Record<string, unknown>;
+      },
+    };
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(entityRecord({ id: 'e1', notePath }));
+
+    await Promise.all([
+      adapter.setEntity(
+        entityRecord({ id: 'e2', notePath: 'Projecten/Acme Widgets/taken/2.md' }),
+      ),
+      adapter.mutateRoot((root) => ({ ...root, githubToken: 'tok' })),
+    ]);
+
+    expect(await adapter.getEntity('e2')).not.toBeNull();
+    expect(disk['githubToken']).toBe('tok');
+    const synced = disk[SYNC_STATE_KEY] as {
+      projects: Record<string, { entities: Record<string, unknown> }>;
+    };
+    expect(synced.projects['Acme Widgets']!.entities['e1']).toBeDefined();
+    expect(synced.projects['Acme Widgets']!.entities['e2']).toBeDefined();
   });
 });
 

@@ -8,9 +8,9 @@ import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
+import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
@@ -946,7 +946,7 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     expect(base?.type).toBe('bug');
   });
 
-  it('leaves no mirror state when outward creation fails, and retries next pass', async () => {
+  it('keeps a placeholder when outward creation fails, and retries without a duplicate', async () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identities.set(projectName, identity);
@@ -963,21 +963,129 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     await action.execute(input);
 
     expect(projectManagement.createIssueCalls).toHaveLength(1);
+    // Registry-first: the entity and its placeholder survive the failure, so
+    // the next pass retries instead of materializing a second note.
+    const record = await syncState.findByNotePath(bornPath);
+    expect(record).not.toBeNull();
+    expect(
+      await syncState.findMirrorItem('github', `pendingCreation:${record!.id}`),
+    ).not.toBeNull();
     expect(
       await syncState.findByMirror('github', projectManagement.createdIssueUrl),
     ).toBeNull();
-    expect(await syncState.findByNotePath(bornPath)).toBeNull();
     expect(projectManagement.addBoardItemCalls).toEqual([]);
 
     projectManagement.failCreateIssue = false;
     await action.execute(input);
 
-    const record = await syncState.findByMirror(
+    expect(projectManagement.createIssueCalls).toHaveLength(2);
+    const item = await syncState.findMirrorItem(
       'github',
       projectManagement.createdIssueUrl,
     );
-    expect(record).not.toBeNull();
-    expect(record?.notePath).toBe(bornPath);
+    expect(item?.entityId).toBe(record!.id);
+    expect(
+      await syncState.findMirrorItem('github', `pendingCreation:${record!.id}`),
+    ).toBeNull();
+    expect(projectManagement.addBoardItemCalls).toEqual([
+      {
+        projectNodeId: 'PVT_123',
+        issueUrl: projectManagement.createdIssueUrl,
+      },
+    ]);
+  });
+
+  it('heals an interrupted outward creation without a duplicate issue or note', async () => {
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    const bornPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({ type: 'bug', body: 'A fresh bug.', status: defaultLane }),
+    );
+    // The state a crash between createIssue and the mirror write leaves: the
+    // entity and its placeholder exist; the issue exists remotely, but the
+    // registry never learned its handle.
+    const record = { id: 'uuid-born', notePath: bornPath };
+    syncState.seed(record, {
+      github: { handle: `pendingCreation:uuid-born`, base: null },
+    });
+    const createdUrl = projectManagement.createdIssueUrl;
+    projectManagement.detail = {
+      issues: [
+        issue({
+          url: createdUrl,
+          title: 'fix the bug',
+          body: 'A fresh bug.',
+          labels: ['type: bug'],
+        }),
+      ],
+      cards: [],
+    };
+    const action = makeAction(vault, syncState, projectManagement);
+
+    await action.execute(input);
+
+    // No duplicate: the orphan issue is adopted, not re-created, and no second
+    // note is materialized for it.
+    expect(projectManagement.createIssueCalls).toEqual([]);
+    expect(vault.created).toEqual([]);
+    const item = await syncState.findMirrorItem('github', createdUrl);
+    expect(item?.entityId).toBe('uuid-born');
+    expect(
+      await syncState.findMirrorItem('github', 'pendingCreation:uuid-born'),
+    ).toBeNull();
+    // The per-issue loop heals the missing card (membership gap).
+    expect(projectManagement.addBoardItemCalls).toEqual([
+      { projectNodeId: 'PVT_123', issueUrl: createdUrl },
+    ]);
+  });
+
+  it('skips outward creation when the note lane is not a board option (L2)', async () => {
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    const projectManagement = new FakeProjectManagement();
+    projectManagement.detail = { issues: [], cards: [] };
+    const action = makeAction(vault, syncState, projectManagement);
+    const bornPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    vault.notes.set(
+      bornPath,
+      noteFor({
+        type: 'task',
+        body: 'A fresh task.',
+        status: 'Nonexistent Lane',
+      }),
+    );
+
+    await action.execute(input);
+
+    // No issue is created for an unmappable lane, so there is no
+    // issue-without-card retry loop.
+    expect(projectManagement.createIssueCalls).toEqual([]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
+    expect(await syncState.findByNotePath(bornPath)).toBeNull();
+  });
+
+  it('does not count an unparseable note as vault drift (L1)', async () => {
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, identity);
+    seed(vault, syncState, {
+      baseStatus: defaultLane,
+      noteStatus: defaultLane,
+    });
+    // Corrupt the note so it no longer parses as a task: it must not hold the
+    // probe gate open forever.
+    vault.notes.set(notePath, 'this is not a task note');
+    const projectManagement = new FakeProjectManagement();
+    const action = makeAction(vault, syncState, projectManagement);
+
+    await action.execute({ ...input, includeBoard: false });
+
+    expect(projectManagement.detailCalls).toEqual([]);
   });
 
   it('leaves an already-mirrored note untouched by the outward phase', async () => {

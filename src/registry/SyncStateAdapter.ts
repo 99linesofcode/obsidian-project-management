@@ -323,6 +323,10 @@ export class SyncStateAdapter implements SyncStatePort {
   private container: Record<string, unknown> | null = null;
   private chain: Promise<unknown> = Promise.resolve();
   private lastBackupAt: number | null = null;
+  // Set when the loaded container was written by a NEWER plugin version. Its
+  // schema is not ours to rewrite, so every mutating port method refuses: a
+  // downgrade would persist the newer layout in the old shape and corrupt it.
+  private readOnly = false;
 
   constructor(private readonly storage: SyncStateStorage) {}
 
@@ -341,6 +345,46 @@ export class SyncStateAdapter implements SyncStatePort {
       () => undefined,
     );
     return run;
+  }
+
+  // Refuses a mutation against a container written by a newer plugin version.
+  // WHY throw instead of silently skipping: a silent skip would let the sync
+  // pass believe its writes landed, and the newer schema would never be
+  // corrupted but the divergence would be invisible. The caller's step isolation
+  // logs the refusal and retries after the user upgrades.
+  private assertWritable(): void {
+    if (this.readOnly) {
+      throw new Error(
+        'registry written by a newer plugin version — refusing to mutate',
+      );
+    }
+  }
+
+  // A serialized mutation of the data.json ROOT for the plugin's non-registry
+  // writers (settings). It runs on the SAME promise chain as every port method,
+  // so a settings save and a registry write can never interleave their
+  // load-modify-save and lose one (REG-2/REG-3). The caller's function receives
+  // a fresh root and returns the root to persist; the registry container rides
+  // along from that fresh read, never from the adapter's cache, so the two
+  // writers share one file without sharing one snapshot. WHY not a port method:
+  // settings are the composition root's concern, and the registry port owns
+  // registry state, not the root's other keys.
+  mutateRoot(
+    fn: (
+      root: Record<string, unknown>,
+    ) => Record<string, unknown> | Promise<Record<string, unknown>>,
+  ): Promise<void> {
+    return this.queue(async () => {
+      // Ensure the container is loaded (and migrations run) before the root is
+      // touched, so the settings write never lands ahead of the first registry
+      // load. A newer container is deliberately not asserted writable here:
+      // saving settings must still work, and this method never rewrites the
+      // registry container.
+      await this.loadContainer();
+      const data = await this.storage.load();
+      const next = await fn(data);
+      await this.storage.save(next);
+    });
   }
 
   // The namespaced container, running the chained one-shot migration on first
@@ -366,7 +410,9 @@ export class SyncStateAdapter implements SyncStatePort {
     if (typeof version === 'number' && version > VERSION) {
       // A NEWER container is never re-migrated: its schema is not ours to
       // rewrite, and a downgrade would corrupt it. Leave it byte-for-byte and
-      // note it (the reads below still serve whatever the newer layout holds).
+      // note it. Reads still serve whatever the newer layout holds; writes are
+      // refused below so the newer layout is never persisted in the old shape.
+      this.readOnly = true;
       console.warn(
         `SyncStateAdapter: registry version ${version} is newer than supported ${VERSION}; leaving it untouched`,
       );
@@ -455,6 +501,7 @@ export class SyncStateAdapter implements SyncStatePort {
   async setEntity(record: EntityRecord): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       const indexes = this.indexes!;
       // The project key is derived from the note path (Projecten/<name>/... and
       // Archief/<name>/... both key <name>); WHY: the path convention IS the
@@ -505,6 +552,7 @@ export class SyncStateAdapter implements SyncStatePort {
   async removeEntity(id: string): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       dropEntity(container, this.indexes!, id);
       await this.persist();
     });
@@ -581,6 +629,7 @@ export class SyncStateAdapter implements SyncStatePort {
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       const indexes = this.indexes!;
 
       // A (portId, handle) address has exactly one owner. Re-pointing it does
@@ -628,6 +677,7 @@ export class SyncStateAdapter implements SyncStatePort {
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       const node = projectNode(readProjectsMap(container), projectName);
       const port = node === null ? null : portNode(node, portId);
       if (port !== null) {
@@ -694,6 +744,7 @@ export class SyncStateAdapter implements SyncStatePort {
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       const node = ensureProjectNode(ensureProjects(container), projectName);
       const port = ensurePortNode(node, portId);
       port.provider = state.provider;
@@ -709,6 +760,7 @@ export class SyncStateAdapter implements SyncStatePort {
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       ensureProjectNode(ensureProjects(container), projectName).identity =
         identity;
       await this.persist();
@@ -736,6 +788,7 @@ export class SyncStateAdapter implements SyncStatePort {
   async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       ensureProjectNode(ensureProjects(container), projectName).lastProjectUpdate =
         iso;
       await this.persist();
@@ -759,6 +812,7 @@ export class SyncStateAdapter implements SyncStatePort {
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       ensureProjectNode(ensureProjects(container), projectName).archive =
         baseline;
       await this.persist();
@@ -800,6 +854,7 @@ export class SyncStateAdapter implements SyncStatePort {
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       ensureProjectNode(ensureProjects(container), projectName).watch = state;
       await this.persist();
     });
@@ -828,6 +883,7 @@ export class SyncStateAdapter implements SyncStatePort {
   async consumeFullScan(projectName: string): Promise<boolean> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       const node = projectNode(readProjectsMap(container), projectName);
       const pending = node !== null && node[FULL_SCAN_PENDING_KEY] === true;
       if (pending) {
@@ -853,10 +909,19 @@ export class SyncStateAdapter implements SyncStatePort {
   async setProjectCursor(portId: string, iso: string): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
+      this.assertWritable();
       if (!isRecord(container[PROJECT_CURSORS_KEY])) {
         container[PROJECT_CURSORS_KEY] = {};
       }
-      (container[PROJECT_CURSORS_KEY] as Record<string, unknown>)[portId] = iso;
+      const cursors = container[PROJECT_CURSORS_KEY] as Record<string, unknown>;
+      // A cursor that does not move is not a write. WHY: the capture runs on
+      // every tick, and persisting an unchanged watermark would make a quiet
+      // tick dirty the registry (SYNC-8). The caller also guards, but the
+      // adapter is the single writer and owns the invariant.
+      if (cursors[portId] === iso) {
+        return;
+      }
+      cursors[portId] = iso;
       await this.persist();
     });
   }

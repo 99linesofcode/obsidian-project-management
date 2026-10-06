@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ProbeProjectsAction } from '../../src/sync/ProbeProjectsAction.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';

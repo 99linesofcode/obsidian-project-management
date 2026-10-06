@@ -1,11 +1,11 @@
 import type { AttachProjectData } from '../projects/AttachProjectData.js';
-import type { BoardItemData } from '../github/BoardItemData.js';
+import type { BoardItemData } from './BoardItemData.js';
 import type { CodeHostTaskData } from './CodeHostTaskData.js';
-import type { CreateIssueData } from '../github/CreateIssueData.js';
-import type { IssueHandleData } from '../github/IssueHandleData.js';
+import type { CreateIssueData } from './CreateIssueData.js';
+import type { IssueHandleData } from './IssueHandleData.js';
 import type { ProjectBoardData } from '../projects/ProjectBoardData.js';
 import type { ProjectData } from './ProjectData.js';
-import type { ProjectDetailData } from '../github/ProjectDetailData.js';
+import type { ProjectDetailData } from './ProjectDetailData.js';
 import type { ProjectIdentityData } from '../projects/ProjectIdentityData.js';
 import type { ProjectStateData } from '../projects/ProjectStateData.js';
 

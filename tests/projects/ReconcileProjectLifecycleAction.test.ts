@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ReconcileProjectLifecycleAction } from '../../src/projects/ReconcileProjectLifecycleAction.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';

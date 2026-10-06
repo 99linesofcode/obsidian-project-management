@@ -319,6 +319,9 @@ function composePlugin(
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
   projectNames: string[] = [];
+  // The registry adapter, retained so a settings save can share its
+  // serialization chain (REG-3).
+  private syncState!: SyncStateAdapter;
 
   override async onload(): Promise<void> {
     // Read the root through the safe loader: a corrupt data.json is quarantined
@@ -349,6 +352,7 @@ export default class ProjectManagementPlugin extends Plugin {
       save: (data) => this.saveData(data),
       backup: () => this.backupDataFile(),
     });
+    this.syncState = syncState;
 
     const { scheduler, discoverProjects, captureRemoteProjects } = composePlugin(
       this,
@@ -402,10 +406,14 @@ export default class ProjectManagementPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    // Merge into a FRESH read of data.json so registry writes made after onload
-    // survive a settings save (REG-2/REG-3).
-    const data = (await this.loadData()) ?? {};
-    await this.saveData(mergeSettingsIntoData(data, this.settings));
+    // Route the settings save through the adapter's serialization so it shares
+    // one promise chain with every registry write: a concurrent settings save
+    // and registry persist can no longer each write a stale root and lose one
+    // (REG-3). The adapter hands back a FRESH data.json root (so registry writes
+    // made since onload survive) and persists the merge on the shared chain.
+    await this.syncState.mutateRoot((data) =>
+      mergeSettingsIntoData(data, this.settings),
+    );
   }
 
   // Obsidian's saveData is a whole-file write, so a crash mid-write can

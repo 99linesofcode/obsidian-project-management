@@ -25,9 +25,9 @@ import { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js
 import { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
 import { hash } from '../../src/shared/hash.js';
-import type { BoardItemData } from '../../src/github/BoardItemData.js';
+import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectDetailData } from '../../src/github/ProjectDetailData.js';
+import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/projects/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/projects/ProjectStateData.js';

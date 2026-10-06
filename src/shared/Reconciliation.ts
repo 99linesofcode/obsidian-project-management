@@ -1,8 +1,8 @@
 import { TaskData } from './TaskData.js';
 import type { DimensionVerdict, SyncVerdict } from './SyncVerdict.js';
 import { hash } from './hash.js';
-import { slugify } from '../vault/TaskNoteMapper.js';
-import { toIssueBody } from '../vault/Checklist.js';
+import { slugify } from './slugify.js';
+import { toIssueBody } from './Checklist.js';
 import { statusNameFromState } from '../tasks/statusNameFromState.js';
 
 // The pure reconciliation arithmetic shared by both sync halves and the
