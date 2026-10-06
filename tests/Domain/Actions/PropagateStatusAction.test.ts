@@ -75,6 +75,12 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async setProjectClosed(): Promise<void> {}
   async lockIssue(): Promise<void> {}
+  async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';

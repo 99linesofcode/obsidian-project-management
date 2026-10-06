@@ -16,10 +16,12 @@ import { ApplyTodoistCompletionAction } from './Domain/Actions/ApplyTodoistCompl
 import { ApplyTodoistRemoteChangesAction } from './Domain/Actions/ApplyTodoistRemoteChangesAction.js';
 import { BoardStatusAction } from './Domain/Actions/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './Domain/Actions/CaptureTodoistCreationsAction.js';
+import { CaptureRemoteProjectsAction } from './Domain/Actions/CaptureRemoteProjectsAction.js';
 import { CompleteTaskCascadeAction } from './Domain/Actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './Domain/Actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './Domain/Actions/DiscoverProjectsAction.js';
 import { CleanupNoteFrontmatterAction } from './Domain/Actions/CleanupNoteFrontmatterAction.js';
+import { EnsureProjectBoardAction } from './Domain/Actions/EnsureProjectBoardAction.js';
 import { EnsureTodoistSectionsAction } from './Domain/Actions/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './Domain/Actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './Domain/Actions/MirrorTodoStatusAction.js';
@@ -282,6 +284,20 @@ export default class ProjectManagementPlugin extends Plugin {
       this.settings.todoTemplatePath,
       this.settings.doneOptionName,
     );
+    // The project-propagation legs: capture remote-born projects into the
+    // vault (PRJ-2/PRJ-3), then the chain's board step completes PRJ-1.
+    const captureRemoteProjects = new CaptureRemoteProjectsAction(
+      github,
+      todoist,
+      vault,
+      syncState,
+      this.settings.doneOptionName,
+    );
+    const ensureProjectBoard = new EnsureProjectBoardAction(
+      github,
+      vault,
+      syncState,
+    );
 
     const promoteIssue = new PromoteIssueAction(
       github,
@@ -338,6 +354,7 @@ export default class ProjectManagementPlugin extends Plugin {
       syncTodoistTasks,
       handleDeletedNote,
       cleanupNoteFrontmatter,
+      ensureProjectBoard,
     );
     const queue = new SyncQueue(syncProject);
     const scheduler = new SyncScheduler(
@@ -345,11 +362,17 @@ export default class ProjectManagementPlugin extends Plugin {
       queue,
       this.settings.pollIntervalMinutes * 60 * 1000,
       this.settings.debounceSeconds * 1000,
+      () =>
+        captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
     );
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
-      void this.discoverAndSync(discoverProjects, syncState);
+      void this.discoverAndSync(
+        discoverProjects,
+        syncState,
+        captureRemoteProjects,
+      );
     });
 
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
@@ -363,6 +386,7 @@ export default class ProjectManagementPlugin extends Plugin {
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
+    captureRemoteProjects: CaptureRemoteProjectsAction,
   ): Promise<void> {
     try {
       const { projects, errors } = await discoverProjects.execute();
@@ -375,6 +399,12 @@ export default class ProjectManagementPlugin extends Plugin {
           `Project discovery: ${errors.length} project(s) could not be attached`,
         );
       }
+      // Capture remote-born projects AFTER discovery, so a just-created vault
+      // project is not re-attached this startup. The captured names are picked
+      // up by the scheduler's next tick.
+      await captureRemoteProjects.execute({
+        syncedAt: new Date().toISOString(),
+      });
     } catch (error) {
       new Notice(
         `Project discovery failed: ${error instanceof Error ? error.message : String(error)}`,

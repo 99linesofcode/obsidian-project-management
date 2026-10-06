@@ -81,6 +81,12 @@ class FakePort implements ProjectManagementPort {
   async deleteCard(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeVault implements VaultPort {

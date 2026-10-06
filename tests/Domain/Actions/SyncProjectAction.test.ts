@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../../src/Domain/Actions/SyncProjectAction.js';
 import type { DetectNoteRenamesAction } from '../../../src/Domain/Actions/DetectNoteRenamesAction.js';
 import type { CleanupNoteFrontmatterAction } from '../../../src/Domain/Actions/CleanupNoteFrontmatterAction.js';
+import type { EnsureProjectBoardAction } from '../../../src/Domain/Actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../src/Domain/Actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../../src/Domain/Actions/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../../src/Domain/Actions/ProbeProjectsAction.js';
@@ -146,6 +147,7 @@ interface HarnessOptions {
   statuses?: EntityRecord[];
   taken?: string[];
   todos?: string[];
+  ensureBoard?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -207,6 +209,14 @@ function harness(options: HarnessOptions = {}) {
     },
   } as unknown as HandleDeletedNoteAction;
 
+  const ensureBoard = options.ensureBoard
+    ? ({
+        execute: async (input: { projectName: string }) => {
+          events.push(`ensureBoard:${input.projectName}`);
+        },
+      } as unknown as EnsureProjectBoardAction)
+    : undefined;
+
   const action = new SyncProjectAction(
     vault,
     syncState,
@@ -220,6 +230,7 @@ function harness(options: HarnessOptions = {}) {
     todoist,
     handleDeleted,
     cleanup,
+    ensureBoard,
   );
 
   return { action, events, vault, syncState, probe, sweep, lifecycle };
@@ -512,5 +523,35 @@ describe('SyncProjectAction', () => {
       { project: 'Other', pending: true },
     ]);
     expect(h.syncState.fullScanPending.size).toBe(0);
+  });
+
+  it('ensures the board for an active project before the probe', async () => {
+    // Given — an active project with the board leg wired
+    const h = harness({ state: openState, ensureBoard: true });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the board step runs after cleanup and before the lifecycle/probe
+    expect(h.events.slice(0, 3)).toEqual([
+      'cleanup',
+      'ensureBoard:Acme Widgets',
+      'lifecycle',
+    ]);
+  });
+
+  it('never ensures a board for an archived project', async () => {
+    // Given — an archived project with the board leg wired
+    const h = harness({
+      projectNotes: [projectNote('Acme Widgets', '')],
+      state: { ...openState, closed: true },
+      ensureBoard: true,
+    });
+
+    // When — the project is synced
+    await h.action.execute('Acme Widgets');
+
+    // Then — the board leg is skipped: a frozen project spawns no board
+    expect(h.events).not.toContain('ensureBoard:Acme Widgets');
   });
 });

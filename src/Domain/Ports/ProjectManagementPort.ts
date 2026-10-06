@@ -2,6 +2,7 @@ import type { AttachProjectData } from '../DataTransferObjects/AttachProjectData
 import type { BoardItemData } from '../DataTransferObjects/BoardItemData.js';
 import type { CreateIssueData } from '../DataTransferObjects/CreateIssueData.js';
 import type { IssueHandleData } from '../DataTransferObjects/IssueHandleData.js';
+import type { ProjectBoardData } from '../DataTransferObjects/ProjectBoardData.js';
 import type { ProjectData } from '../DataTransferObjects/ProjectData.js';
 import type { ProjectDetailData } from '../DataTransferObjects/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../DataTransferObjects/ProjectIdentityData.js';
@@ -18,6 +19,10 @@ import type { GithubTaskData } from '../DataTransferObjects/GithubTaskData.js';
 // conditional read. Designed for the core, not to mimic GitHub's API. Returns
 // null when the provider is not ours to handle.
 export interface ProjectManagementPort {
+  // Resolves a project note's GitHub identities. A note with a board but no
+  // repository yet (repo attachment is a separate ATT-1 act) resolves the board
+  // alone: repoUrl/repoNodeId stay empty. A pm: github note with no board is a
+  // config error the caller surfaces.
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
@@ -32,6 +37,16 @@ export interface ProjectManagementPort {
     projectNodeId: string,
     doneLane: string,
   ): Promise<ProjectData>;
+  // Creates a new ProjectV2 board for a vault-born project (PRJ-1). The owner
+  // is the token's viewer: a vault-born project carries no repo/board address
+  // yet, so the token's own account is the only defensible owner. Returns the
+  // board's addressing for the identity record; repo attachment stays a
+  // separate act (ATT-1), so a board without a repo materializes no issues.
+  createProject(name: string): Promise<ProjectBoardData>;
+  // The viewer's ProjectV2 boards, mapped onto canonical ProjectData at the
+  // boundary (PRJ-3). The board's url rides on mirrors.github and its creation
+  // clock on createdAt, so the capture cursor never sees a raw provider shape.
+  fetchViewerProjects(): Promise<ProjectData[]>;
   // Creates a new issue from a vault-born task's canonical view. The adapter
   // renders the vault-owned type as the `type:*` label, so the issue is
   // immediately tracked. Returns the issue's mirror handle.

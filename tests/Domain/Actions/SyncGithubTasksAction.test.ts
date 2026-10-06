@@ -157,6 +157,12 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async setProjectClosed(): Promise<void> {}
   async lockIssue(): Promise<void> {}
+  async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';
@@ -1015,6 +1021,23 @@ describe('SyncGithubTasksAction', () => {
     // Then — it fails with a clear error and fetches nothing
     await expect(action.execute(input)).rejects.toThrow(/no repo url/);
     expect(projectManagement.detailCalls).toEqual([]);
+  });
+
+  it('quietly skips a board with no repository attached', async () => {
+    // Given — a stored identity for a board whose repo is not attached yet
+    const vault = new FakeVault();
+    const syncState = new FakeSyncState();
+    syncState.identities.set(projectName, { ...identity, repoUrl: '' });
+    const projectManagement = new FakeProjectManagement();
+    const action = makeAction(vault, syncState, projectManagement);
+
+    // When — the project is synced
+    await action.execute(input);
+
+    // Then — no fetch happens and no error is thrown: a board without a repo
+    // materializes no issues until the user attaches one
+    expect(projectManagement.detailCalls).toEqual([]);
+    expect(projectManagement.createIssueCalls).toEqual([]);
   });
 
   it('materializes a vault-born task note outward: issue, card and mirror', async () => {

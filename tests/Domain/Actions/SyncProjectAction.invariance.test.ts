@@ -223,6 +223,13 @@ class FakeProjectManagement implements ProjectManagementPort {
     }
     return { ...found, title: title ?? found.title, body: body ?? found.body };
   }
+
+  async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeTaskManager implements TaskManagerPort {

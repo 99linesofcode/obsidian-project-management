@@ -38,6 +38,12 @@ const PROJECTS_KEY = 'projects';
 const PORTS_KEY = 'ports';
 const ITEMS_KEY = 'items';
 
+// The project-capture cursors, keyed by remote SURFACE (portId). WHY a
+// container-level map and not a per-project node: the cursor guards a global
+// listing (all Todoist projects, all the viewer's boards), which has no
+// project to nest under. It is a new top-level dimension beside `projects`.
+const PROJECT_CURSORS_KEY = 'projectCursors';
+
 // The one-shot marker that forces the first parent-aware fetch after a store
 // predates parent tracking. It lives on the PROJECT node (projects.<name>.
 // fullScanPending): a single container-level flag was consumed by whichever
@@ -1346,6 +1352,29 @@ export class SyncStateAdapter implements SyncStatePort {
         await this.persist();
       }
       return pending;
+    });
+  }
+
+  async getProjectCursor(portId: string): Promise<string | null> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const cursors = container[PROJECT_CURSORS_KEY];
+      if (!isRecord(cursors)) {
+        return null;
+      }
+      const raw = cursors[portId];
+      return typeof raw === 'string' ? raw : null;
+    });
+  }
+
+  async setProjectCursor(portId: string, iso: string): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      if (!isRecord(container[PROJECT_CURSORS_KEY])) {
+        container[PROJECT_CURSORS_KEY] = {};
+      }
+      (container[PROJECT_CURSORS_KEY] as Record<string, unknown>)[portId] = iso;
+      await this.persist();
     });
   }
 

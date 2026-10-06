@@ -15,6 +15,7 @@ import type { SyncChecklistAction } from './SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { SyncGithubTasksAction } from './SyncGithubTasksAction.js';
 import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
+import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
 
 // THE CHAIN: one work item kind — a project folder name — and one entry point.
 // The chain re-resolves the project from the vault, so a stale work item (a
@@ -25,6 +26,7 @@ import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
 // preserved by the underlying actions.
 //
 //   1. resolve project (inline) — pm-note exists? else no-op
+//   1b. ensure board (PRJ-1) — an active project with no board gains one
 //   2. reconcile lifecycle — ONE freeze verdict (folder ⇄ archive ⇄ Todoist)
 //   3. renames — DetectNoteRenamesAction (snapshot drift)
 //   4. GitHub half — probe → SyncGithubTasks (single-query canonical pipeline)
@@ -33,7 +35,9 @@ import type { SyncTodoistTasksAction } from './SyncTodoistTasksAction.js';
 //   7. deletions last — status records whose note is gone
 //
 // The probe is hoisted to the top of the GitHub-side work because the lifecycle
-// gate needs the probed `closed` state; one probe serves both.
+// gate needs the probed `closed` state; one probe serves both. The board step
+// runs BEFORE the probe so a board created this tick is visible to the probe
+// and the GitHub half in the same pass.
 export class SyncProjectAction {
   constructor(
     private readonly vault: VaultPort,
@@ -51,6 +55,9 @@ export class SyncProjectAction {
     // identity layer (and the tests that pin the older halves) still
     // constructs.
     private readonly cleanupNoteFrontmatter?: CleanupNoteFrontmatterAction,
+    // PRJ-1's board leg. Optional for the same reason as the cleanup: a chain
+    // assembled before the project-propagation wave still constructs.
+    private readonly ensureProjectBoard?: EnsureProjectBoardAction,
   ) {}
 
   async execute(project: string): Promise<void> {
@@ -69,6 +76,20 @@ export class SyncProjectAction {
     if (this.cleanupNoteFrontmatter) {
       await this.step('cleanup frontmatter', () =>
         this.cleanupNoteFrontmatter!.execute({ projectName: project }),
+      );
+    }
+
+    // 1.5. Ensure the GitHub board exists (PRJ-1). Runs before the probe so a
+    // board created this tick is visible to the probe and the GitHub half in
+    // the same pass. An archived project never spawns a board: the folder
+    // location is the vault's own freeze signal, and a frozen project accepts
+    // no board work.
+    if (this.ensureProjectBoard && note.archivedAt === null) {
+      await this.step('ensure board', () =>
+        this.ensureProjectBoard!.execute({
+          projectName: project,
+          notePath: note.path,
+        }),
       );
     }
 

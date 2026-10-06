@@ -2,6 +2,7 @@ import type { AttachProjectData } from '../../Domain/DataTransferObjects/AttachP
 import type { BoardItemData } from '../../Domain/DataTransferObjects/BoardItemData.js';
 import type { CreateIssueData } from '../../Domain/DataTransferObjects/CreateIssueData.js';
 import type { IssueHandleData } from '../../Domain/DataTransferObjects/IssueHandleData.js';
+import type { ProjectBoardData } from '../../Domain/DataTransferObjects/ProjectBoardData.js';
 import type { ProjectData } from '../../Domain/DataTransferObjects/ProjectData.js';
 import type {
   ProjectIdentityData,
@@ -271,6 +272,69 @@ const SET_PROJECT_CLOSED_MUTATION = `
   }
 `;
 
+// The owner a vault-born board is created under. WHY the viewer and not the
+// note's existing identity resolution: a vault-born project (PRJ-1) has no
+// repo or board address yet, so there is no login to resolve from. The token's
+// own account is the only defensible owner; the board can be transferred later.
+const VIEWER_QUERY = `
+  query Viewer {
+    viewer { id }
+  }
+`;
+
+// Creates a board under the viewer and returns the addressing the registry
+// stores: the node id, its url (the note's board anchor) and the default
+// project's Status field. GitHub's default template carries a Status field;
+// the parser tolerates its absence so a created board never fails on a schema
+// the user can repair.
+const CREATE_PROJECT_MUTATION = `
+  mutation CreateProject($ownerId: ID!, $title: String!) {
+    createProjectV2(input: { ownerId: $ownerId, title: $title }) {
+      projectV2 {
+        id
+        url
+        fields(first: 20) {
+          nodes {
+            ... on ProjectV2SingleSelectField {
+              id
+              name
+              options { id name }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// The viewer's boards (PRJ-3). createdAt is the capture cursor's clock and url
+// is the note's board anchor; both ride on the canonical ProjectData the
+// adapter returns, so the raw ProjectV2 shape never crosses the port.
+const VIEWER_PROJECTS_QUERY = `
+  query ViewerProjects {
+    viewer {
+      projectsV2(first: 100) {
+        nodes {
+          id
+          title
+          url
+          closed
+          createdAt
+          fields(first: 20) {
+            nodes {
+              ... on ProjectV2SingleSelectField {
+                id
+                name
+                options { id name }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 // lockReason is omitted: the enum (RESOLVED/OFF_TOPIC/TOO_HEATED/SPAM) has no
 // "archived" reason, and the schema makes it optional. Re-locking an
 // already-locked issue is a no-op, so the archive retry is safe.
@@ -292,15 +356,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // call (from the attached project's identity) rather than bound at
 // construction, so constructing it can never fail on a bad url.
 export class GitHubAdapter implements ProjectManagementPort {
+  // The token viewer's node id, resolved lazily and cached for the adapter's
+  // lifetime (the token never changes while the plugin runs).
+  private cachedViewerId: string | null = null;
+
   constructor(private readonly transport: Transport) {}
 
   async fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null> {
     const board = this.parseBoardUrl(data.boardUrl);
-    const repo = this.parseRepoUrl(data.repoUrl);
-
-    const repoNodeId = await this.fetchRepoNodeId(repo);
+    // A board without a repository yet (repo attachment is a separate ATT-1
+    // act): the board alone resolves the identity, and repoUrl/repoNodeId stay
+    // empty. WHY not require a repo: a captured board (PRJ-3) and a vault-born
+    // board (PRJ-1) legitimately exist before the user attaches one.
+    const repoNodeId =
+      data.repoUrl === ''
+        ? ''
+        : await this.fetchRepoNodeId(this.parseRepoUrl(data.repoUrl));
     const project = await this.fetchProjectByBoard(board);
 
     return {
@@ -310,6 +383,80 @@ export class GitHubAdapter implements ProjectManagementPort {
       statusFieldId: project.statusFieldId,
       statusOptions: project.statusOptions,
     };
+  }
+
+  // Creates a ProjectV2 board under the token's viewer (PRJ-1). The viewer id
+  // is resolved once and cached: a fleet of vault-born projects creates their
+  // boards in one pass, and the viewer never changes for the token's lifetime.
+  async createProject(name: string): Promise<ProjectBoardData> {
+    const ownerId = await this.viewerId();
+    const data = await this.postQuery(CREATE_PROJECT_MUTATION, {
+      ownerId,
+      title: name,
+    });
+    const payload = data.createProjectV2;
+    const project =
+      isRecord(payload) && isRecord(payload.projectV2)
+        ? payload.projectV2
+        : undefined;
+    if (!project || typeof project.id !== 'string') {
+      throw new Error('GitHubAdapter: create project returned no project');
+    }
+    const status = this.statusFieldOrEmpty(project.fields);
+    return {
+      projectNodeId: project.id,
+      boardUrl: typeof project.url === 'string' ? project.url : '',
+      statusFieldId: status.id,
+      statusOptions: status.options,
+    };
+  }
+
+  // The viewer's ProjectV2 boards, mapped onto canonical ProjectData (PRJ-3).
+  // A malformed node is skipped rather than failing the whole listing.
+  async fetchViewerProjects(): Promise<ProjectData[]> {
+    const data = await this.postQuery(VIEWER_PROJECTS_QUERY, {});
+    const viewer = data.viewer;
+    const nodes =
+      isRecord(viewer) &&
+      isRecord(viewer.projectsV2) &&
+      Array.isArray(viewer.projectsV2.nodes)
+        ? viewer.projectsV2.nodes
+        : [];
+    const projects: ProjectData[] = [];
+    for (const node of nodes) {
+      if (!isRecord(node) || typeof node.id !== 'string') {
+        continue;
+      }
+      projects.push(
+        ProjectMapper.fromGithubBoard(
+          {
+            id: node.id,
+            name: typeof node.title === 'string' ? node.title : '',
+            closed: node.closed === true,
+            createdAt:
+              typeof node.createdAt === 'string' ? node.createdAt : null,
+            url: typeof node.url === 'string' ? node.url : '',
+            statusOptions: this.statusFieldOrEmpty(node.fields).options,
+          },
+          { path: '', doneLane: '', archivedAt: null, repoUrl: '' },
+        ),
+      );
+    }
+    return projects;
+  }
+
+  // The token viewer's node id, resolved once and cached.
+  private async viewerId(): Promise<string> {
+    if (this.cachedViewerId !== null) {
+      return this.cachedViewerId;
+    }
+    const data = await this.postQuery(VIEWER_QUERY, {});
+    const viewer = data.viewer;
+    if (!isRecord(viewer) || typeof viewer.id !== 'string') {
+      throw new Error('GitHubAdapter: viewer not found');
+    }
+    this.cachedViewerId = viewer.id;
+    return viewer.id;
   }
 
   // The canonical project read. The ProjectV2 node is mapped onto ProjectData
@@ -972,6 +1119,37 @@ export class GitHubAdapter implements ProjectManagementPort {
       return { id: node.id, options };
     }
     throw new Error('GitHubAdapter: project has no Status field');
+  }
+
+  // The tolerant sibling of findStatusField: a newly created board or a listing
+  // node whose fields have not loaded yet yields an empty Status rather than
+  // failing. WHY: the attach path must reject a board with no Status (a real
+  // config problem), but a create/list read must not — the user can repair the
+  // board and the next pass picks the field up.
+  private statusFieldOrEmpty(fields: unknown): StatusField {
+    if (!isRecord(fields) || !Array.isArray(fields.nodes)) {
+      return { id: '', options: [] };
+    }
+    for (const node of fields.nodes) {
+      if (
+        !isRecord(node) ||
+        node.name !== 'Status' ||
+        typeof node.id !== 'string'
+      ) {
+        continue;
+      }
+      const options = Array.isArray(node.options)
+        ? node.options
+            .filter(isRecord)
+            .filter(
+              (o): o is { id: string; name: string } =>
+                typeof o.id === 'string' && typeof o.name === 'string',
+            )
+            .map((o) => ({ id: o.id, name: o.name }))
+        : [];
+      return { id: node.id, options };
+    }
+    return { id: '', options: [] };
   }
 
   private async postQuery(

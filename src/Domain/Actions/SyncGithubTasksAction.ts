@@ -64,10 +64,16 @@ export class SyncGithubTasksAction {
 
   async execute(input: SyncGithubTasksInput): Promise<void> {
     const identity = await this.syncState.getIdentity(input.projectName);
-    if (!identity?.repoUrl) {
+    if (identity === null) {
       throw new Error(
         `SyncGithubTasksAction: no repo url for project ${input.projectName}`,
       );
+    }
+    // A board without a repository attached (ATT-1 is a separate act): there
+    // are no issues to fetch, so the half is a quiet no-op rather than a
+    // per-tick failure. The board is still probed and archived by the chain.
+    if (identity.repoUrl === '') {
+      return;
     }
 
     // The probe gate: skip the whole fetch when the remote is unmoved and the
