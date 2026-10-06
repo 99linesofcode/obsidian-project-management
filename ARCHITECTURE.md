@@ -174,8 +174,10 @@ over HTTPS.
 - **Distribution** — a community plugin. `pnpm run build` bundles `src/` with
   esbuild to `main.js` (beside `manifest.json`), copied into a vault's
   `.obsidian/plugins/project-management/` and enabled under Community plugins.
-- **CI/CD** — GitHub Actions (changelog and automatic-updates), inherited from
-  the shared starters; there is no server-side deploy.
+- **CI/CD** — GitHub Actions: a dedicated release workflow (conventional
+  commits → semver → bare-version tag carrying `manifest.json` and `main.js`,
+  the shape Obsidian's plugin review requires) plus automatic-updates,
+  inherited from the shared starters; there is no server-side deploy.
 - **Monitoring/logging** — none remote. The plugin logs through the host
   console; a corrupt `data.json` is quarantined rather than silently reset.
 

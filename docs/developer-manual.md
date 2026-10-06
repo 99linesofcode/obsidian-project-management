@@ -1,6 +1,6 @@
 # obsidian-project-management — Developer Manual
 
-This manual walks every path through the source on branch `feat/identity-model`.
+This manual walks every path through the source on branch `main`.
 It is written against the code, not against the design brief: where the two
 disagree, the code is described and the disagreement is called out in
 [Code-vs-brief discrepancies](#5-code-vs-brief-discrepancies).
