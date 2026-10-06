@@ -42,10 +42,8 @@ const syncedAt = '2026-09-18T12:00:00Z';
 const oldPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const newPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 
-describe('DetectNoteRenamesAction', () => {
+describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
   it('pairs a vanished-path record with a same-stem note, mirrors intact', async () => {
-    // Given — a record at the old (prefixed) path whose note was hand-renamed
-    // to the prefix-free stem
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: oldPath }), {
       github: {
@@ -55,10 +53,8 @@ describe('DetectNoteRenamesAction', () => {
     });
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
 
-    // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — the record follows the stem to the new path; its item is intact
     const record = await h.syncState.get('uuid-1');
     expect(record?.notePath).toBe(newPath);
     expect(h.syncState.handleOf('uuid-1', 'github')).toBe(
@@ -67,7 +63,6 @@ describe('DetectNoteRenamesAction', () => {
   });
 
   it('pairs a to-do record whose note was renamed', async () => {
-    // Given — a to-do record whose note dropped its prefix
     const h = harness();
     const oldTodo = 'Projecten/Acme Widgets/todos/42-ship-it.md';
     const newTodo = 'Projecten/Acme Widgets/todos/ship-it.md';
@@ -76,43 +71,34 @@ describe('DetectNoteRenamesAction', () => {
     });
     h.vault.folders.set('Projecten/Acme Widgets/todos', [newTodo]);
 
-    // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — the record follows the stem
     expect((await h.syncState.get('todo-uuid'))?.notePath).toBe(newTodo);
   });
 
   it('leaves a record whose note still exists alone', async () => {
-    // Given — a record whose note is present at its recorded path
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: newPath }));
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
 
-    // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — nothing moves and nothing is written
     expect(h.syncState.setCalls).toEqual([]);
   });
 
   it('leaves a record whose note is gone and has no stem match alone', async () => {
-    // Given — a record whose note is gone and no current note shares its stem
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: oldPath }));
     h.vault.folders.set('Projecten/Acme Widgets/taken', [
       'Projecten/Acme Widgets/taken/99-other.md',
     ]);
 
-    // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — the deletion sweep owns it, not the rename detector
     expect(h.syncState.setCalls).toEqual([]);
   });
 
   it('pairs each vanished record to its own same-stem note', async () => {
-    // Given — two records whose notes both vanished and both reappear unprefixed
     const h = harness();
     const oldA = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
     const newA = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
@@ -122,10 +108,8 @@ describe('DetectNoteRenamesAction', () => {
     h.syncState.seed(entityRecord({ id: 'uuid-b', notePath: oldB }));
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newA, newB]);
 
-    // When — drift is detected
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
-    // Then — each record takes its own stem's note
     expect((await h.syncState.get('uuid-a'))?.notePath).toBe(newA);
     expect((await h.syncState.get('uuid-b'))?.notePath).toBe(newB);
   });

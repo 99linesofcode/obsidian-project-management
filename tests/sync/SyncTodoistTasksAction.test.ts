@@ -418,18 +418,15 @@ function composedHarness() {
 
 const input = { projectName, projectId, syncedAt };
 
-describe('SyncTodoistTasksAction', () => {
+describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('absorbs remote changes and captures before projecting, deletions last', async () => {
-    // Given — a tracked issue with a task note
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
     seedTask(h.syncState, taskUrl, taskPath, 'uuid-42');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the retained steps run around the canonical projection
     expect(h.events).toEqual([
       'applyRemoteChanges',
       'captureCreations',
@@ -444,23 +441,18 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it('resolves a tracked task by its registry handle, not a note anchor', async () => {
-    // Given — a tracked issue whose note lives at a non-slug path the registry
-    // points at
     const h = harness();
     const registryPath = 'Projecten/Acme Widgets/taken/7-fix-the-bug.md';
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(registryPath, taskNote('Building'));
     seedTask(h.syncState, taskUrl, registryPath, 'uuid-42');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the projection follows the record's note path
     expect(h.writer.taskCalls[0]!.notePath).toBe(registryPath);
   });
 
   it('skips the writer when the remote twin moved (per-field pull)', async () => {
-    // Given — a tracked task whose twin sits in another lane than the base
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
@@ -483,15 +475,12 @@ describe('SyncTodoistTasksAction', () => {
       todoistTask({ id: 'T9', content: 'Fix the bug', sectionId: 'S1' }),
     ];
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the remote moved, so the writer is not asked to re-push
     expect(h.writer.taskCalls).toEqual([]);
   });
 
   it('diffs per field: a remote title change is a pull even with the updatedAt hint', async () => {
-    // Given — a tracked task whose twin was renamed in Todoist
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
@@ -518,16 +507,12 @@ describe('SyncTodoistTasksAction', () => {
       }),
     ];
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the title field alone drives the pull, and the writer is skipped
     expect(h.writer.taskCalls).toEqual([]);
   });
 
   it('pulls a status conflict when the twin update postdates the vault mtime', async () => {
-    // Given — both sides changed the lane and the twin's own update is newer
-    // than the note's mtime
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Unshaped'));
@@ -555,15 +540,12 @@ describe('SyncTodoistTasksAction', () => {
       }),
     ];
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the remote lane wins on the decisive timestamp, so no push runs
     expect(h.writer.taskCalls).toEqual([]);
   });
 
   it('pushes the vault lane when the twin update predates the vault mtime', async () => {
-    // Given — both sides changed the lane and the twin's update is older
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Unshaped'));
@@ -591,26 +573,20 @@ describe('SyncTodoistTasksAction', () => {
       }),
     ];
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the timestamp is not decisive; origin authority moves the twin to
-    // the vault's lane
     expect(h.writer.taskCalls).toHaveLength(1);
     expect(h.writer.taskCalls[0]!.sectionId).toBe('S1');
   });
 
   it('records the lane map when the sections moved', async () => {
-    // Given — a project with no stored lane map
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
     seedTask(h.syncState, taskUrl, taskPath, 'uuid-42');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the lane map is persisted
     expect(h.syncState.todoistProjects.get(projectName)).toEqual({
       sections,
       lastCompletedPoll: input.syncedAt,
@@ -618,7 +594,6 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it('gives a slice no Todoist twin and places its child top-level', async () => {
-    // Given — a slice and a child affiliated to it (dt-23)
     const h = harness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
@@ -639,19 +614,14 @@ describe('SyncTodoistTasksAction', () => {
     seedTask(h.syncState, sliceUrl, slicePath, 'uuid-slice');
     seedTask(h.syncState, childUrl, childPath, 'uuid-child');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the slice is never projected; its child sits top-level in its lane
     expect(h.writer.order).toEqual(['task:The child']);
     expect(h.writer.taskCalls[0]!.parentId).toBeNull();
     expect(h.writer.taskCalls[0]!.sectionId).toBe('S2');
   });
 
   it('nests a deep chain from the first materialized ancestor', async () => {
-    // Given — slice -> task -> sub -> sub-sub: the slice does not materialize,
-    // so the task is top-level and each descendant nests under its nearest
-    // materialized ancestor
     const h = harness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const taskPath = 'Projecten/Acme Widgets/taken/41-the-task.md';
@@ -688,11 +658,8 @@ describe('SyncTodoistTasksAction', () => {
     seedTask(h.syncState, subUrl, subPath, 'uuid-sub');
     seedTask(h.syncState, subSubUrl, subSubPath, 'uuid-sub-sub');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the slice is skipped; the task is top-level; each descendant nests
-    // under the twin of its nearest materialized ancestor
     expect(h.writer.order).toEqual([
       'task:The task',
       'task:The sub',
@@ -704,7 +671,6 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it('retires an existing slice twin, flattening its children before the delete', async () => {
-    // Given — a slice with an existing twin and a child twin nested under it
     const h = harness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
@@ -735,23 +701,17 @@ describe('SyncTodoistTasksAction', () => {
       todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
     ];
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the flatten move is recorded BEFORE the slice delete, and the
-    // child survives (unparented, so the API cascade has nothing to take)
     expect(h.taskManager.mutations).toEqual(['move:T-child', 'delete:T-slice']);
     expect(h.taskManager.active.map((task) => task.id)).toEqual(['T-child']);
     expect(h.taskManager.active[0]!.parentId).toBeNull();
-    // And the stale mirror item is gone, so the slice is never re-created
     expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).toBeNull();
-    // And the child is projected top-level in its lane
     expect(h.writer.order).toEqual(['task:The child']);
     expect(h.writer.taskCalls[0]!.parentId).toBeNull();
   });
 
   it('blocks the slice delete when a flatten move fails', async () => {
-    // Given — a slice twin with a child, and a flatten move that throws
     const h = harness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
@@ -783,18 +743,14 @@ describe('SyncTodoistTasksAction', () => {
     ];
     h.taskManager.failMove = true;
 
-    // When — the Todoist half runs (execute swallows the step failure)
     await h.action.execute(input);
 
-    // Then — no delete ran; the twin and its mirror survive for the next tick
     expect(h.taskManager.deleteTaskCalls).toEqual([]);
     expect(h.taskManager.mutations).toEqual(['move:T-child']);
     expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).not.toBeNull();
   });
 
   it('settles after retiring a slice twin: a second pass writes nothing', async () => {
-    // Given — a composed writer over a slice with an existing twin and a child
-    // nested under it
     const h = composedHarness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
@@ -844,12 +800,10 @@ describe('SyncTodoistTasksAction', () => {
       todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
     ];
 
-    // When — the first pass retires the slice and re-projects the child
     await h.action.execute(input);
     expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).toBeNull();
     expect(h.taskManager.active.map((task) => task.id)).toEqual(['T-child']);
 
-    // And — a second pass runs with no external change
     h.taskManager.createTaskCalls = [];
     h.taskManager.updateTaskCalls = [];
     h.taskManager.moveTaskCalls = [];
@@ -858,8 +812,6 @@ describe('SyncTodoistTasksAction', () => {
     h.taskManager.mutations = [];
     await h.action.execute(input);
 
-    // Then — nothing is created, moved, completed or deleted, and no slice twin
-    // is re-created
     expect(h.taskManager.createTaskCalls).toEqual([]);
     expect(h.taskManager.updateTaskCalls).toEqual([]);
     expect(h.taskManager.moveTaskCalls).toEqual([]);
@@ -871,7 +823,6 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it("places a slice's to-do top-level in the slice's lane", async () => {
-    // Given — a slice note whose checklist links a to-do note
     const h = harness();
     const slicePath = 'Projecten/Acme Widgets/taken/40-the-slice.md';
     const sliceUrl = 'https://github.com/acme/widgets/issues/40';
@@ -901,19 +852,14 @@ describe('SyncTodoistTasksAction', () => {
     seedTask(h.syncState, sliceUrl, slicePath, 'uuid-slice');
     h.vault.folders.set('Projecten/Acme Widgets/taken', [slicePath]);
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the to-do has no parent twin to hang under, so it sits top-level
-    // in the slice's lane section
     expect(h.writer.todoCalls).toHaveLength(1);
     expect(h.writer.todoCalls[0]!.parentId).toBeNull();
     expect(h.writer.todoCalls[0]!.sectionId).toBe('S2');
   });
 
   it('nests a sub-issue under a non-slice parent task twin', async () => {
-    // Given — a plain parent task and a child affiliated to it (a GitHub
-    // sub-issue of a non-slice task)
     const h = harness();
     const parentPath = 'Projecten/Acme Widgets/taken/40-the-parent.md';
     const childPath = 'Projecten/Acme Widgets/taken/42-the-child.md';
@@ -943,18 +889,14 @@ describe('SyncTodoistTasksAction', () => {
     seedTask(h.syncState, parentUrl, parentPath, 'uuid-parent');
     seedTask(h.syncState, childUrl, childPath, 'uuid-child');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the parent is created top-level and the child hangs under it
     expect(h.writer.order).toEqual(['task:The parent', 'task:The child']);
     expect(h.writer.taskCalls[0]!.parentId).toBeNull();
     expect(h.writer.taskCalls[1]!.parentId).toBe(h.writer.taskReturns[0]);
   });
 
   it('converges an already-adopted sub-issue onto its parent twin in two passes', async () => {
-    // Given — a tracked parent and an already-adopted sub-issue whose note has
-    // no affiliation yet and whose twin still sits top-level
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identities.set(projectName, identity);
@@ -1094,7 +1036,6 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it('projects a to-do linked from a task checklist', async () => {
-    // Given — a tracked task with a linked to-do note
     const h = harness();
     const todoPath = 'Projecten/Acme Widgets/todos/step-one.md';
     h.projectManagement.issues = [issue()];
@@ -1112,11 +1053,8 @@ describe('SyncTodoistTasksAction', () => {
     seedTask(h.syncState, taskUrl, taskPath, 'uuid-42');
     h.vault.folders.set('Projecten/Acme Widgets/taken', [taskPath]);
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the to-do is projected under the task's twin, with its owning task
-    // uuid resolved
     expect(h.writer.todoCalls).toHaveLength(1);
     expect(h.writer.todoCalls[0]!.todo.title).toBe('Step one');
     expect(h.writer.todoCalls[0]!.todo.task).toBe('uuid-42');
@@ -1124,7 +1062,6 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it('settles: a second pass over the composed writer writes nothing', async () => {
-    // Given — a clean tree rebuilt in one pass by the real writer
     const h = composedHarness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
@@ -1134,10 +1071,8 @@ describe('SyncTodoistTasksAction', () => {
     const created = h.taskManager.createTaskCalls.length;
     expect(created).toBe(1);
 
-    // When — a second pass runs with no external change
     await h.action.execute(input);
 
-    // Then — nothing is created, updated, moved or completed again
     expect(h.taskManager.createTaskCalls).toHaveLength(created);
     expect(h.taskManager.updateTaskCalls).toEqual([]);
     expect(h.taskManager.moveTaskCalls).toEqual([]);
@@ -1145,38 +1080,29 @@ describe('SyncTodoistTasksAction', () => {
   });
 
   it('fetches the pass snapshot once and hands it to every consumer', async () => {
-    // Given — a tracked issue with a task note
     const h = harness();
     h.projectManagement.issues = [issue()];
     h.vault.notes.set(taskPath, taskNote('Building'));
     seedTask(h.syncState, taskUrl, taskPath, 'uuid-42');
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — the project's active and completed sets were listed exactly once
-    // each, however many absorbers and projections consumed them
     expect(h.taskManager.completedFetches).toBe(1);
     expect(h.taskManager.activeFetches).toBe(1);
   });
 
   it('aborts the half before any absorber when the snapshot fetch fails', async () => {
-    // Given — a failing completed-since fetch
     const h = harness();
     h.taskManager.failCompleted = true;
 
-    // When — the Todoist half runs
     await h.action.execute(input);
 
-    // Then — no absorber or projection ran and no bookkeeping advanced, so the
-    // window retries next tick
     expect(h.events).toEqual([]);
     expect(h.writer.taskCalls).toEqual([]);
     expect(h.syncState.portStateSets).toEqual([]);
   });
 
   it('swallows a step failure so the GitHub half is never affected', async () => {
-    // Given — a remote-absorption step that throws
     const events: string[] = [];
     const action = new SyncTodoistTasksAction(
       new FakeTaskManager(),
@@ -1196,10 +1122,8 @@ describe('SyncTodoistTasksAction', () => {
       'Shipped',
     );
 
-    // When — the Todoist half runs
     await expect(action.execute(input)).resolves.toBeUndefined();
 
-    // Then — no later step ran and the failure did not propagate
     expect(events).toEqual([]);
   });
 });

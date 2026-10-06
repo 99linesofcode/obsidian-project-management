@@ -191,40 +191,33 @@ const base = {
   syncedAt: '2026-09-18T12:00:00Z',
 };
 
-describe('ApplyTaskToTodoistAction', () => {
-  describe('tasks', () => {
+describe('SYNC-1 — a vault task flows outward to Todoist', () => {
+  describe('MAT-1 — a task projects to its Todoist twin', () => {
     it('creates a twin and records the todoist mirror when none exists', async () => {
-      // Given — a tracked issue with no twin
       const h = setup();
       seedRecord(h.syncState, null);
       h.vault.notes.set(notePath, noteContent);
 
-      // When — the winning task is rendered
       const id = await h.action.executeTask({
         task: task(),
         current: null,
         ...base,
       });
 
-      // Then — a task is created and the mirror recorded; the dead `todoist`
-      // note anchor is NOT stamped (the registry is the identity source)
       expect(h.taskManager.createTaskCalls).toHaveLength(1);
       expect(h.taskManager.ensureLabelCalls).toEqual(['task']);
       expect(h.vault.writes).toEqual([]);
       expect(h.syncState.handleOf('uuid-42', 'todoist')).toBe('T1');
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.title).toBe('Fix the bug');
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.status).toBe('Building');
-      // And the github mirror survived the advance
       expect(h.syncState.handleOf('uuid-42', 'github')).toBe(url);
       expect(id).toBe('T1');
     });
 
     it('writes nothing when the twin already matches', async () => {
-      // Given — a settled twin
       const h = setup();
       seedRecord(h.syncState, 'T9', taskData({ status: 'Building' }));
 
-      // When — the task is rendered
       await h.action.executeTask({
         task: task(),
         current: todoistTask({
@@ -236,7 +229,6 @@ describe('ApplyTaskToTodoistAction', () => {
         ...base,
       });
 
-      // Then — no mutation happens
       expect(h.taskManager.createTaskCalls).toEqual([]);
       expect(h.taskManager.updateTaskCalls).toEqual([]);
       expect(h.taskManager.moveTaskCalls).toEqual([]);
@@ -245,7 +237,6 @@ describe('ApplyTaskToTodoistAction', () => {
     });
 
     it('repairs an old-format base digest without a remote write when the twin matches', async () => {
-      // Given — a settled twin whose base still carries a pre-widening digest
       const h = setup();
       seedRecord(
         h.syncState,
@@ -253,7 +244,6 @@ describe('ApplyTaskToTodoistAction', () => {
         taskData({ status: 'Building', body: 'a1b2c3d4' }),
       );
 
-      // When — the identical task is rendered
       await h.action.executeTask({
         task: task(),
         current: todoistTask({
@@ -265,8 +255,6 @@ describe('ApplyTaskToTodoistAction', () => {
         ...base,
       });
 
-      // Then — no remote mutation happens, but the base advances to the new
-      // 16-char digest
       expect(h.taskManager.createTaskCalls).toEqual([]);
       expect(h.taskManager.updateTaskCalls).toEqual([]);
       expect(h.taskManager.moveTaskCalls).toEqual([]);
@@ -277,8 +265,6 @@ describe('ApplyTaskToTodoistAction', () => {
     });
 
     it('leaves the base untouched on an equal-state pass with no remote write', async () => {
-      // Given — a settled twin whose stored base already carries the desired
-      // diff view (settled by one pass)
       const h = setup();
       seedRecord(h.syncState, 'T9', null);
       const current = todoistTask({
@@ -295,11 +281,8 @@ describe('ApplyTaskToTodoistAction', () => {
       h.taskManager.ensureLabelCalls = [];
       const before = h.syncState.baseOf('uuid-42', 'todoist');
 
-      // When — the identical task is rendered again
       await h.action.executeTask({ task: task(), current, ...base });
 
-      // Then — no remote mutation and the base is not rewritten: the same
-      // no-op-skip contract ApplyTaskToGithubAction enforces.
       expect(h.taskManager.createTaskCalls).toEqual([]);
       expect(h.taskManager.updateTaskCalls).toEqual([]);
       expect(h.taskManager.moveTaskCalls).toEqual([]);
@@ -309,11 +292,9 @@ describe('ApplyTaskToTodoistAction', () => {
     });
 
     it('updates content and labels only when they differ', async () => {
-      // Given — a twin whose content and labels drifted
       const h = setup();
       seedRecord(h.syncState, 'T9');
 
-      // When — the winning task is rendered
       await h.action.executeTask({
         task: task({ title: 'Fix the widget' }),
         current: todoistTask({
@@ -325,101 +306,103 @@ describe('ApplyTaskToTodoistAction', () => {
         ...base,
       });
 
-      // Then — only content and labels are written
       expect(h.taskManager.updateTaskCalls).toEqual([
         { id: 'T9', content: 'Fix the widget', labels: ['task'] },
       ]);
       expect(h.taskManager.moveTaskCalls).toEqual([]);
     });
 
-    it('moves the section only when the lane differs', async () => {
-      // Given — a twin in a different section
-      const h = setup();
-      seedRecord(h.syncState, 'T9');
+    it('moves the twin only for the placement that actually differs', async () => {
+      const cases: Array<{
+        name: string;
+        seeded: TaskData | null;
+        task: TaskData;
+        current: TodoistTaskData;
+        sectionId: string | null;
+        parentId?: string | null;
+        expected: Array<{
+          id: string;
+          to: { sectionId?: string; parentId?: string | null };
+        }>;
+      }> = [
+        {
+          name: 'lane differs',
+          seeded: taskData({ status: 'Building' }),
+          task: task({ status: 'Shipped' }),
+          current: todoistTask({ id: 'T9', sectionId: 'S2' }),
+          sectionId: 'S3',
+          expected: [{ id: 'T9', to: { sectionId: 'S3' } }],
+        },
+        {
+          name: 'parent changes',
+          seeded: taskData({ status: 'Building' }),
+          task: task(),
+          current: todoistTask({ id: 'T9', sectionId: 'S1' }),
+          sectionId: null,
+          parentId: 'T-parent',
+          expected: [{ id: 'T9', to: { parentId: 'T-parent' } }],
+        },
+      ];
+      for (const { name, seeded, task: t, current, sectionId, parentId, expected } of cases) {
+        const h = setup();
+        seedRecord(h.syncState, 'T9', seeded);
 
-      // When — the winning task sits in another lane
-      await h.action.executeTask({
-        task: task({ status: 'Shipped' }),
-        current: todoistTask({ id: 'T9', sectionId: 'S2' }),
-        ...base,
-        sectionId: 'S3',
-      });
+        await h.action.executeTask({
+          task: t,
+          current,
+          ...base,
+          sectionId,
+          ...(parentId === undefined ? {} : { parentId }),
+        });
 
-      // Then — only the section move happens
-      expect(h.taskManager.moveTaskCalls).toEqual([
-        { id: 'T9', to: { sectionId: 'S3' } },
-      ]);
+        expect(h.taskManager.moveTaskCalls, name).toEqual(expected);
+      }
     });
 
-    it('moves an existing twin when its parent changes', async () => {
-      // Given — a settled top-level twin that the vault now nests under a
-      // parent twin (the sub-issue repair path)
-      const h = setup();
-      seedRecord(h.syncState, 'T9', taskData({ status: 'Building' }));
-
-      // When — the task is rendered with a parent
-      await h.action.executeTask({
-        task: task(),
-        current: todoistTask({ id: 'T9', sectionId: 'S1' }),
-        ...base,
-        sectionId: null,
-        parentId: 'T-parent',
+    it('completes or reopens the twin to match the vault, and advances the base', async () => {
+      const done = task({
+        status: 'Shipped',
+        completedAt: '2026-09-18T12:00:00Z',
       });
-
-      // Then — the twin is moved under the parent
-      expect(h.taskManager.moveTaskCalls).toEqual([
-        { id: 'T9', to: { parentId: 'T-parent' } },
-      ]);
-    });
-
-    it('completes the twin and advances the base when the vault completed the task', async () => {
-      // Given — an active twin the vault marked done
       const h = setup();
       seedRecord(h.syncState, 'T9', taskData({ status: 'Building' }));
-
-      // When — the winning task is completed
       await h.action.executeTask({
-        task: task({ status: 'Shipped', completedAt: '2026-09-18T12:00:00Z' }),
+        task: done,
         current: todoistTask({ id: 'T9' }),
         ...base,
         sectionId: 'S3',
       });
-
-      // Then — the twin is completed and the base carries the completion stamp
       expect(h.taskManager.completeCalls).toEqual([
         { id: 'T9', completed: true },
       ]);
-      const storedBase = h.syncState.baseOf('uuid-42', 'todoist');
-      expect(storedBase?.completedAt).toBe('2026-09-18T12:00:00Z');
-      expect(storedBase?.status).toBe('Shipped');
-    });
+      expect(h.syncState.baseOf('uuid-42', 'todoist')?.completedAt).toBe(
+        '2026-09-18T12:00:00Z',
+      );
+      expect(h.syncState.baseOf('uuid-42', 'todoist')?.status).toBe('Shipped');
 
-    it('reopens an absent twin and moves it out of the done section', async () => {
-      // Given — a stored twin absent from the active set (completed in the done
-      // section) that the vault reopened into a non-done lane
-      const h = setup();
+      const reopened = setup();
       seedRecord(
-        h.syncState,
+        reopened.syncState,
         'T9',
         taskData({ status: 'Shipped', completedAt: '2026-09-18T12:00:00Z' }),
       );
-
-      // When — the winning task is open in the default lane
-      await h.action.executeTask({ task: task(), current: null, ...base });
-
-      // Then — the twin is reopened AND moved back to the lane's section
-      expect(h.taskManager.completeCalls).toEqual([
+      await reopened.action.executeTask({
+        task: task(),
+        current: null,
+        ...base,
+      });
+      expect(reopened.taskManager.completeCalls).toEqual([
         { id: 'T9', completed: false },
       ]);
-      expect(h.taskManager.moveTaskCalls).toEqual([
+      expect(reopened.taskManager.moveTaskCalls).toEqual([
         { id: 'T9', to: { sectionId: 'S1' } },
       ]);
-      expect(h.syncState.baseOf('uuid-42', 'todoist')?.completedAt).toBeNull();
+      expect(
+        reopened.syncState.baseOf('uuid-42', 'todoist')?.completedAt,
+      ).toBeNull();
     });
 
     it('re-points a stale record’s todoist handle to the real record (the handle index)', async () => {
-      // Given — a stale record elsewhere claiming the twin handle the real
-      // record is about to mint
       const h = setup();
       seedRecord(h.syncState, null);
       h.vault.notes.set(notePath, noteContent);
@@ -431,19 +414,14 @@ describe('ApplyTaskToTodoistAction', () => {
         { todoist: { handle: 'T1' } },
       );
 
-      // When — the real record creates and claims the twin
       await h.action.executeTask({ task: task(), current: null, ...base });
 
-      // Then — the handle index resolves to the real record; the stale record
-      // loses the handle but survives (a collision re-points, never destroys)
       const owner = await h.syncState.findByMirror('todoist', 'T1');
       expect(owner?.id).toBe('uuid-42');
       expect(await h.syncState.get('stale-uuid')).not.toBeNull();
     });
 
     it('leaves an already-completed absent twin settled (no re-complete, no base rewrite)', async () => {
-      // Given — a stored twin absent from the active set whose base already
-      // carries the completion stamp
       const h = setup();
       seedRecord(
         h.syncState,
@@ -452,7 +430,6 @@ describe('ApplyTaskToTodoistAction', () => {
       );
       const before = await h.syncState.get('uuid-42');
 
-      // When — the winning task is still completed
       await h.action.executeTask({
         task: task({ status: 'Shipped', completedAt: '2026-09-18T12:00:00Z' }),
         current: null,
@@ -460,17 +437,30 @@ describe('ApplyTaskToTodoistAction', () => {
         sectionId: 'S3',
       });
 
-      // Then — no completion write and no base rewrite (the dt-17 settle)
       expect(h.taskManager.completeCalls).toEqual([]);
       expect(await h.syncState.get('uuid-42')).toBe(before);
     });
+
+    it('never moves the GitHub base when the Todoist mirror is written', async () => {
+      const h = setup();
+      const githubBase = taskData({ id: 'uuid-42', notePath });
+      h.syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+        github: { handle: url, base: githubBase },
+      });
+      h.vault.notes.set(notePath, noteContent);
+
+      await h.action.executeTask({ task: task(), current: null, ...base });
+
+      expect(h.syncState.handleOf('uuid-42', 'todoist')).toBe('T1');
+      expect(h.syncState.baseOf('uuid-42', 'github')).toBe(githubBase);
+      expect(h.syncState.handleOf('uuid-42', 'github')).toBe(url);
+    });
   });
 
-  describe('to-dos', () => {
+  describe('TODO-1 — a to-do projects under its actionable parent', () => {
     const todoPath = 'Projecten/Acme Widgets/todos/step-one.md';
 
     it('creates a to-do under its parent and records its base with the parent uuid', async () => {
-      // Given — a to-do with no twin and a parent task record
       const h = setup();
       h.syncState.seed(entityRecord({ id: 'task-uuid', notePath }), {
         todoist: { handle: 'T9' },
@@ -483,7 +473,6 @@ describe('ApplyTaskToTodoistAction', () => {
         '---\nid: todo-uuid\nstatus: open\n---\n',
       );
 
-      // When — the winning to-do is rendered
       const id = await h.action.executeToDo({
         todo: todo(),
         current: null,
@@ -494,8 +483,6 @@ describe('ApplyTaskToTodoistAction', () => {
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
-      // Then — a `todo`-labelled subtask is created and the base records the
-      // parent's uuid
       expect(h.taskManager.createTaskCalls[0]).toMatchObject({
         projectId: 'P1',
         parentId: 'T9',
@@ -512,13 +499,11 @@ describe('ApplyTaskToTodoistAction', () => {
     });
 
     it('updates a to-do only when content or labels differ', async () => {
-      // Given — a settled to-do twin
       const h = setup();
       h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }), {
         todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
       });
 
-      // When — the to-do is rendered with the same shape
       await h.action.executeToDo({
         todo: todo(),
         current: todoistTask({
@@ -534,19 +519,16 @@ describe('ApplyTaskToTodoistAction', () => {
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
-      // Then — no write happens
       expect(h.taskManager.updateTaskCalls).toEqual([]);
       expect(h.taskManager.moveTaskCalls).toEqual([]);
     });
 
     it('completes a to-do only when the vault-side completion moved', async () => {
-      // Given — an active twin the vault completed
       const h = setup();
       h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }), {
         todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
       });
 
-      // When — the to-do is rendered completed
       await h.action.executeToDo({
         todo: todo({ status: 'completed' }),
         current: todoistTask({
@@ -562,7 +544,6 @@ describe('ApplyTaskToTodoistAction', () => {
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
-      // Then — the twin is completed and the base records it
       expect(h.taskManager.completeCalls).toEqual([
         { id: 'T9', completed: true },
       ]);
@@ -572,10 +553,8 @@ describe('ApplyTaskToTodoistAction', () => {
     });
 
     it('refuses a note outside the project to-do folder', async () => {
-      // Given — a to-do whose notePath is a bare stem, not the todos/ note
       const h = setup();
 
-      // When — the winning to-do is rendered
       const id = await h.action.executeToDo({
         todo: todo({ notePath: 'note-edit-step-one' }),
         current: null,
@@ -586,7 +565,6 @@ describe('ApplyTaskToTodoistAction', () => {
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
-      // Then — nothing is created, labelled, stamped or written
       expect(id).toBe('');
       expect(h.taskManager.createTaskCalls).toEqual([]);
       expect(h.taskManager.ensureLabelCalls).toEqual([]);
@@ -594,13 +572,11 @@ describe('ApplyTaskToTodoistAction', () => {
     });
 
     it('creates a top-level to-do in its lane section when it has no parent twin', async () => {
-      // Given — a to-do whose parent is a slice (no twin to nest under, dt-23)
       const h = setup();
       h.syncState.seed(
         entityRecord({ id: 'todo-uuid', notePath: todoPath }),
       );
 
-      // When — the winning to-do is rendered top-level
       const id = await h.action.executeToDo({
         todo: todo(),
         current: null,
@@ -612,8 +588,6 @@ describe('ApplyTaskToTodoistAction', () => {
         syncedAt: '2026-09-18T12:00:00Z',
       });
 
-      // Then — the `todo`-labelled task is created in the lane section, with no
-      // parent, and its base records no parent uuid
       expect(h.taskManager.createTaskCalls[0]).toMatchObject({
         projectId: 'P1',
         sectionId: 'S2',
@@ -625,66 +599,53 @@ describe('ApplyTaskToTodoistAction', () => {
       expect(id).toBe('T1');
     });
 
-    it('unparents a nested to-do into its lane section when it moves to top-level', async () => {
-      // Given — a to-do twin nested under a slice twin it can no longer follow
-      const h = setup();
-      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }), {
-        todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
-      });
+    it('moves a top-level to-do to its lane, unparenting first when nested', async () => {
+      const cases: Array<{
+        name: string;
+        currentParentId: string | null;
+        expected: { sectionId?: string; parentId?: string | null };
+      }> = [
+        {
+          name: 'nested under a slice',
+          currentParentId: 'SLICE',
+          expected: { sectionId: 'S2', parentId: null },
+        },
+        {
+          name: 'already top-level',
+          currentParentId: null,
+          expected: { sectionId: 'S2' },
+        },
+      ];
+      for (const { name, currentParentId, expected } of cases) {
+        const h = setup();
+        h.syncState.seed(
+          entityRecord({ id: 'todo-uuid', notePath: todoPath }),
+          {
+            todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
+          },
+        );
 
-      // When — the to-do is rendered top-level in its lane
-      await h.action.executeToDo({
-        todo: todo(),
-        current: todoistTask({
-          id: 'T9',
-          content: 'Step one',
-          labels: ['todo'],
-          parentId: 'SLICE',
-          sectionId: 'S1',
-        }),
-        projectId: 'P1',
-        parentId: null,
-        sectionId: 'S2',
-        projectName,
-        notePath: todoPath,
-        syncedAt: '2026-09-18T12:00:00Z',
-      });
-
-      // Then — one move unparents it and lands it in the lane section
-      expect(h.taskManager.moveTaskCalls).toEqual([
-        { id: 'T9', to: { sectionId: 'S2', parentId: null } },
-      ]);
-    });
-
-    it('moves a top-level to-do to its lane section only', async () => {
-      // Given — a top-level to-do twin in the wrong section
-      const h = setup();
-      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }), {
-        todoist: { handle: 'T9', base: taskData({ status: 'open' }) },
-      });
-
-      // When — the to-do is rendered in another lane
-      await h.action.executeToDo({
-        todo: todo(),
-        current: todoistTask({
-          id: 'T9',
-          content: 'Step one',
-          labels: ['todo'],
+        await h.action.executeToDo({
+          todo: todo(),
+          current: todoistTask({
+            id: 'T9',
+            content: 'Step one',
+            labels: ['todo'],
+            parentId: currentParentId,
+            sectionId: 'S1',
+          }),
+          projectId: 'P1',
           parentId: null,
-          sectionId: 'S1',
-        }),
-        projectId: 'P1',
-        parentId: null,
-        sectionId: 'S2',
-        projectName,
-        notePath: todoPath,
-        syncedAt: '2026-09-18T12:00:00Z',
-      });
+          sectionId: 'S2',
+          projectName,
+          notePath: todoPath,
+          syncedAt: '2026-09-18T12:00:00Z',
+        });
 
-      // Then — only a section move happens (no spurious unparent)
-      expect(h.taskManager.moveTaskCalls).toEqual([
-        { id: 'T9', to: { sectionId: 'S2' } },
-      ]);
+        expect(h.taskManager.moveTaskCalls, name).toEqual([
+          { id: 'T9', to: expected },
+        ]);
+      }
     });
   });
 });

@@ -242,20 +242,16 @@ const openState: ProjectStateData = {
   closed: false,
 };
 
-describe('SyncProjectAction', () => {
+describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
   it('runs the frontmatter cleanup first, then the steps in order', async () => {
-    // Given — an active project with one task note and one to-do note
     const h = harness({
       state: openState,
       taken: ['Projecten/Acme Widgets/taken/42-fix-the-bug.md'],
       todos: ['Projecten/Acme Widgets/todos/fix-the-bug.md'],
     });
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the cleanup runs before any half reads notes, and the steps run in
-    // the chain's order, vault consistency after the sweep, Todoist last
     expect(h.events).toEqual([
       'cleanup',
       'lifecycle',
@@ -269,114 +265,110 @@ describe('SyncProjectAction', () => {
   });
 
   it('no-ops a stale work item whose pm-note is gone', async () => {
-    // Given — a work item for a project with no pm-note
     const h = harness({ projectNotes: [] });
 
-    // When — the stale item is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — no step runs: project-level deletion is never propagated
     expect(h.events).toEqual([]);
   });
 
-  it('runs the Todoist half even when the GitHub sweep fails', async () => {
-    // Given — an active project whose sweep throws
-    const h = harness({ state: openState });
-    h.sweep.fail = true;
+  it('isolates a half-failure: a failing step never starves the rest', async () => {
+    type H = ReturnType<typeof harness>;
+    const cases: Array<{
+      name: string;
+      prepare: (h: H) => void;
+      assert: (h: H) => void;
+    }> = [
+      {
+        name: 'sweep fails',
+        prepare: (h) => {
+          h.sweep.fail = true;
+        },
+        assert: (h) => {
+          expect(h.events).toContain('todoist');
+          expect(h.syncState.lastUpdateSets).toEqual([]);
+        },
+      },
+      {
+        name: 'probe fails',
+        prepare: (h) => {
+          h.probe.fail = true;
+        },
+        assert: (h) => {
+          expect(h.events).toEqual([
+            'cleanup',
+            'lifecycle',
+            'renames',
+            'todoist',
+          ]);
+        },
+      },
+      {
+        name: 'lifecycle fails',
+        prepare: (h) => {
+          h.lifecycle.fail = true;
+        },
+        assert: (h) => {
+          expect(h.events).toEqual([
+            'cleanup',
+            'lifecycle',
+            'renames',
+            'sweep',
+          ]);
+        },
+      },
+    ];
+    for (const c of cases) {
+      const h = harness({ state: openState });
+      c.prepare(h);
 
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
+      await h.action.execute('Acme Widgets');
 
-    // Then — the Todoist half still ran, and the cursor did not advance
-    expect(h.events).toContain('todoist');
-    expect(h.syncState.lastUpdateSets).toEqual([]);
-  });
-
-  it('runs the Todoist half even when the probe fails', async () => {
-    // Given — a project whose probe throws
-    const h = harness({ state: openState });
-    h.probe.fail = true;
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the GitHub side is skipped but the Todoist half still runs
-    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'todoist']);
-  });
-
-  it('does not block the GitHub half when the lifecycle fails', async () => {
-    // Given — an active project whose lifecycle throws
-    const h = harness({ state: openState });
-    h.lifecycle.fail = true;
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the GitHub half still runs; the Todoist half is skipped
-    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'sweep']);
+      c.assert(h);
+    }
   });
 
   it('advances the stored update only after a successful sweep', async () => {
-    // Given — an active project whose probe reports a newer updatedAt
     const h = harness({ state: openState });
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the probe's updatedAt is persisted
     expect(h.syncState.lastUpdateSets).toEqual([
       { projectName: 'Acme Widgets', iso: '2026-09-18T10:00:00Z' },
     ]);
   });
 
-  it('freezes an archived project: no sweep and no Todoist task writes', async () => {
-    // Given — an archived project whose board is closed
-    const h = harness({
-      projectNotes: [projectNote('Acme Widgets', '')],
-      state: { ...openState, closed: true },
-    });
+  it('freezes a project when the folder is archived or the board is closed', async () => {
+    for (const options of [
+      {
+        projectNotes: [projectNote('Acme Widgets', '')],
+        state: { ...openState, closed: true },
+      },
+      { state: { ...openState, closed: true } },
+    ]) {
+      const h = harness(options);
 
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
+      await h.action.execute('Acme Widgets');
 
-    // Then — the lifecycle reconciles, both task halves are skipped
-    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
-  });
-
-  it('freezes a closed-board project: no sweep and no Todoist task writes', async () => {
-    // Given — an active folder whose board is closed
-    const h = harness({ state: { ...openState, closed: true } });
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the lifecycle reconciles to frozen, both task halves are skipped
-    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
+      expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
+    }
   });
 
   it('skips the GitHub side but still mirrors Todoist when there is no probed state', async () => {
-    // Given — a project with no GitHub attach (the probe returns no state)
     const h = harness({ state: undefined });
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — no sweep; the Todoist half still runs
     expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'todoist']);
   });
 
-  it('runs the deletion sweep last, after the Todoist half', async () => {
-    // Given — a status record whose note no longer exists
-    const h = harness({
+  it('sweeps only a gone active-project note, last, after the Todoist half', async () => {
+    const gone = harness({
       state: openState,
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the deletion runs after the Todoist half
-    expect(h.events).toEqual([
+    await gone.action.execute('Acme Widgets');
+    expect(gone.events).toEqual([
       'cleanup',
       'lifecycle',
       'renames',
@@ -384,87 +376,55 @@ describe('SyncProjectAction', () => {
       'todoist',
       'delete:Projecten/Acme Widgets/taken/42-gone.md',
     ]);
-  });
 
-  it('leaves a status record whose note still exists alone', async () => {
-    // Given — a status record whose note is present
-    const h = harness({
+    const present = harness({
       state: openState,
       statuses: [status('Projecten/Acme Widgets/taken/42-fix-the-bug.md')],
     });
-    h.vault.notes.set(
+    present.vault.notes.set(
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
       'content',
     );
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — no deletion runs
-    expect(h.events).not.toContain(
+    await present.action.execute('Acme Widgets');
+    expect(present.events).not.toContain(
       'delete:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     );
-  });
 
-  it('does not sweep a deletion record under Archief', async () => {
-    // Given — an archived project's status record whose note is gone
-    const h = harness({
+    const archived = harness({
       state: openState,
       statuses: [status('Archief/Acme Widgets/taken/42-gone.md')],
     });
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the frozen project is never swept
-    expect(h.events).not.toContain(
+    await archived.action.execute('Acme Widgets');
+    expect(archived.events).not.toContain(
       'delete:Archief/Acme Widgets/taken/42-gone.md',
     );
   });
 
-  it('closes the board gate when the stored update matches the probe', async () => {
-    // Given — a stored update equal to the probe's updatedAt
-    const h = harness({ state: openState });
-    h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
+  it('opens the board gate only when the probe updatedAt moved', async () => {
+    const closed = harness({ state: openState });
+    closed.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
+    await closed.action.execute('Acme Widgets');
+    expect(closed.sweep.calls[0]!.includeBoard).toBe(false);
 
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the sweep is told to skip the board fetch
-    expect(h.sweep.calls[0]!.includeBoard).toBe(false);
-  });
-
-  it('opens the board gate when the probe updatedAt moved', async () => {
-    // Given — a stored update older than the probe's updatedAt
-    const h = harness({ state: openState });
-    h.syncState.lastUpdates.set('Acme Widgets', '2026-09-18T09:00:00Z');
-
-    // When — the project is synced
-    await h.action.execute('Acme Widgets');
-
-    // Then — the sweep is told to fetch the board
-    expect(h.sweep.calls[0]!.includeBoard).toBe(true);
+    const open = harness({ state: openState });
+    open.syncState.lastUpdates.set('Acme Widgets', '2026-09-18T09:00:00Z');
+    await open.action.execute('Acme Widgets');
+    expect(open.sweep.calls[0]!.includeBoard).toBe(true);
   });
 
   it('forces one full scan while the marker is pending, then closes the gate', async () => {
-    // Given — a quiet probe (the stored update matches) and a store that
-    // predates parent tracking, whose one-shot marker is pending
     const h = harness({ state: openState });
     h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
     h.syncState.fullScanPending.add('Acme Widgets');
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the board fetch is forced exactly once, so issue-level relations
-    // (sub-issues) the board's updatedAt cannot surface are discovered
     expect(h.sweep.calls[0]!.includeBoard).toBe(true);
     expect(h.syncState.fullScanConsumes).toEqual([
       { project: 'Acme Widgets', pending: true },
     ]);
     expect(h.syncState.fullScanPending.has('Acme Widgets')).toBe(false);
 
-    // And — the next quiet pass closes the gate again: the marker is spent
     h.sweep.calls = [];
     await h.action.execute('Acme Widgets');
     expect(h.sweep.calls[0]!.includeBoard).toBe(false);
@@ -474,25 +434,19 @@ describe('SyncProjectAction', () => {
   });
 
   it('leaves the forced scan pending when the GitHub half fails', async () => {
-    // Given — a quiet project whose one-shot marker is pending and whose
-    // GitHub half throws
     const h = harness({ state: openState });
     h.syncState.lastUpdates.set('Acme Widgets', openState.updatedAt);
     h.syncState.fullScanPending.add('Acme Widgets');
     h.sweep.fail = true;
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the scan was not spent: the marker is still pending and the
-    // update cursor did not advance
     expect(h.syncState.fullScanPending.has('Acme Widgets')).toBe(true);
     expect(h.syncState.fullScanConsumes).toEqual([]);
     expect(h.syncState.lastUpdateSets).toEqual([]);
   });
 
   it('gives each project its own forced scan', async () => {
-    // Given — two quiet projects whose markers are both pending
     const h = harness({
       projectNotes: [
         projectNote('Acme Widgets', null),
@@ -509,11 +463,9 @@ describe('SyncProjectAction', () => {
     h.syncState.fullScanPending.add('Acme Widgets');
     h.syncState.fullScanPending.add('Other');
 
-    // When — each project is synced in turn
     await h.action.execute('Acme Widgets');
     await h.action.execute('Other');
 
-    // Then — the first project's consume does not spend the second's scan
     expect(h.sweep.calls.map((call) => call.includeBoard)).toEqual([
       true,
       true,
@@ -526,13 +478,10 @@ describe('SyncProjectAction', () => {
   });
 
   it('ensures the board for an active project before the probe', async () => {
-    // Given — an active project with the board leg wired
     const h = harness({ state: openState, ensureBoard: true });
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the board step runs after cleanup and before the lifecycle/probe
     expect(h.events.slice(0, 3)).toEqual([
       'cleanup',
       'ensureBoard:Acme Widgets',
@@ -541,17 +490,14 @@ describe('SyncProjectAction', () => {
   });
 
   it('never ensures a board for an archived project', async () => {
-    // Given — an archived project with the board leg wired
     const h = harness({
       projectNotes: [projectNote('Acme Widgets', '')],
       state: { ...openState, closed: true },
       ensureBoard: true,
     });
 
-    // When — the project is synced
     await h.action.execute('Acme Widgets');
 
-    // Then — the board leg is skipped: a frozen project spawns no board
     expect(h.events).not.toContain('ensureBoard:Acme Widgets');
   });
 });

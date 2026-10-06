@@ -94,9 +94,8 @@ const identity: ProjectIdentityData = {
   statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 
-describe('AttachProjectAction', () => {
-  it('resolves identities for a github project note', async () => {
-    // Given — a github note and a port that resolves it
+describe('ATT-1 — attach resolves the repo, board and lane vocabulary', () => {
+  it('resolves the repo, board and lane vocabulary for a github project note', async () => {
     const port = new FakePort();
     port.result = identity;
     const action = new AttachProjectAction(port);
@@ -106,16 +105,17 @@ describe('AttachProjectAction', () => {
       boardUrl: 'https://github.com/orgs/acme/projects/1',
     };
 
-    // When — the action runs
     const result = await action.execute(data);
 
-    // Then — the port was asked and its identity returned
     expect(port.calls).toEqual([data]);
     expect(result).toBe(identity);
+    expect(result?.repoUrl).toBe('https://github.com/acme/widgets');
+    expect(result?.statusOptions).toEqual([
+      { id: 'PVTSSF_1', name: 'Unshaped' },
+    ]);
   });
 
   it('returns null for a non-github provider without calling the port', async () => {
-    // Given — a note for a provider this plugin does not handle
     const port = new FakePort();
     const action = new AttachProjectAction(port);
     const data: AttachProjectData = {
@@ -124,16 +124,13 @@ describe('AttachProjectAction', () => {
       boardUrl: 'https://linear.app/acme/project/1',
     };
 
-    // When — the action runs
     const result = await action.execute(data);
 
-    // Then — nothing is resolved and the port is never touched
     expect(result).toBeNull();
     expect(port.calls).toEqual([]);
   });
 
   it('throws a domain error when a github note is missing its board url', async () => {
-    // Given — a github note with no board url (a config error)
     const port = new FakePort();
     const action = new AttachProjectAction(port);
     const data: AttachProjectData = {
@@ -142,7 +139,6 @@ describe('AttachProjectAction', () => {
       boardUrl: '',
     };
 
-    // When/Then — the action refuses with a clear domain error
     await expect(action.execute(data)).rejects.toThrow(/boardUrl/);
     expect(port.calls).toEqual([]);
   });

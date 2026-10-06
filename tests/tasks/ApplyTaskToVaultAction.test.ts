@@ -111,14 +111,12 @@ function seedRecord(
   });
 }
 
-describe('ApplyTaskToVaultAction', () => {
+describe('SYNC-2 — a remote change flows into the vault', () => {
   it('creates a note for an untracked issue and anchors its record', async () => {
-    // Given — a winning remote task with no note yet
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = makeAction(vault, syncState);
 
-    // When — the winning task is rendered onto the vault
     await action.execute({
       task: task(),
       current: null,
@@ -127,18 +125,15 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the note is created at the slug path and the record carries it
     expect(vault.created).toHaveLength(1);
     const created = vault.created[0]!;
     expect(created.path).toBe(notePath);
     const record = await syncState.findByMirror('github', url);
     expect(record?.notePath).toBe(notePath);
-    // And — a pull advanced the github base after the durable write
     expect(syncState.baseOf(record!.id, 'github')?.body).toBe(hash(task().body));
   });
 
   it('renames the note when the title changed', async () => {
-    // Given — a synced note whose remote title moved
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
@@ -146,7 +141,6 @@ describe('ApplyTaskToVaultAction', () => {
     const action = makeAction(vault, syncState);
     const retitled = task({ title: 'Fix the widget' });
 
-    // When — the winning task is rendered
     await action.execute({
       task: retitled,
       current: task(),
@@ -155,14 +149,12 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the note is renamed to the new title slug
     const newPath = 'Projecten/Acme Widgets/taken/fix-the-widget.md';
     expect(vault.renamed).toEqual([{ oldPath: notePath, newPath }]);
     expect((await syncState.get('uuid-42'))?.notePath).toBe(newPath);
   });
 
   it('rewrites the note body and status when they differ', async () => {
-    // Given — a synced note whose remote body moved
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
@@ -170,7 +162,6 @@ describe('ApplyTaskToVaultAction', () => {
     const action = makeAction(vault, syncState);
     const changed = task({ body: 'The bug now also happens on resize.' });
 
-    // When — the winning task is rendered
     await action.execute({
       task: changed,
       current: task(),
@@ -179,13 +170,10 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the note is rewritten with the new body
     expect(vault.written).toEqual([{ path: notePath, content: noteFor(changed) }]);
   });
 
   it('rewrites a task note without introducing a todoist anchor', async () => {
-    // Given — a synced note with no anchor: the cleanup strips any legacy one,
-    // so the registry is the only twin identity
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
@@ -193,7 +181,6 @@ describe('ApplyTaskToVaultAction', () => {
     const action = makeAction(vault, syncState);
     const changed = task({ body: 'The bug now also happens on resize.' });
 
-    // When — the winning task is rendered
     await action.execute({
       task: changed,
       current: task(),
@@ -202,20 +189,17 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the rewrite carries no anchor; an absent anchor is a no-op
     expect(vault.written).toHaveLength(1);
     expect(vault.written[0]!.content).not.toContain('todoist:');
   });
 
   it('skips the write when the note already matches', async () => {
-    // Given — a synced note already in step with the remote
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
     vault.notes.set(notePath, noteFor(task()));
     const action = makeAction(vault, syncState);
 
-    // When — the unchanged winning task is rendered
     await action.execute({
       task: task(),
       current: task(),
@@ -224,13 +208,11 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'push',
     });
 
-    // Then — nothing is written or renamed
     expect(vault.written).toEqual([]);
     expect(vault.renamed).toEqual([]);
   });
 
   it('rewrites the note through the template on a remote change', async () => {
-    // Given — a synced note and a vault holding the task template
     const vault = new FakeVault();
     const template = [
       '---',
@@ -263,7 +245,6 @@ describe('ApplyTaskToVaultAction', () => {
     );
     const changed = task({ body: 'The bug now also happens on resize.' });
 
-    // When — the winning task is rendered
     await action.execute({
       task: changed,
       current: task(),
@@ -272,7 +253,6 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the note is rewritten with the rendered template content
     const expected = TaskNoteMapper.render(
       template,
       {
@@ -287,7 +267,6 @@ describe('ApplyTaskToVaultAction', () => {
   });
 
   it('leaves unknown checklist items unlinked', async () => {
-    // Given — a synced note and a to-do for only one of two remote items
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
@@ -308,7 +287,6 @@ describe('ApplyTaskToVaultAction', () => {
       body: ['- [ ] New item', '- [x] Fix the bug'].join('\n'),
     });
 
-    // When — the winning task is rendered
     await action.execute({
       task: changed,
       current: task(),
@@ -317,7 +295,6 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the known item is re-linked and the unknown one stays unlinked
     const linkedBody = [
       '- [ ] New item',
       '- [x] [[Projecten/Acme Widgets/todos/fix-the-bug.md|Fix the bug]]',
@@ -331,7 +308,6 @@ describe('ApplyTaskToVaultAction', () => {
   });
 
   it('cascades a done status onto the checklist line and its to-dos', async () => {
-    // Given — a synced task whose to-do is linked and still open
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
@@ -355,7 +331,6 @@ describe('ApplyTaskToVaultAction', () => {
       body: '- [ ] Fix the bug',
     });
 
-    // When — the winning task applies the done status
     await action.execute({
       task: done,
       current: task(),
@@ -364,7 +339,6 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the line follows and the to-do completes (the dt-13 fan-out)
     expect(vault.notes.get(notePath)).toContain(
       `- [x] [[${todoPath}|Fix the bug]]`,
     );
@@ -372,7 +346,6 @@ describe('ApplyTaskToVaultAction', () => {
   });
 
   it('leaves an open status alone (reopen does not reopen to-dos)', async () => {
-    // Given — a task whose to-do is already completed
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     seedRecord(syncState);
@@ -391,7 +364,6 @@ describe('ApplyTaskToVaultAction', () => {
     );
     const action = makeAction(vault, syncState);
 
-    // When — an open (non-done) status applies
     await action.execute({
       task: task({ body: '- [x] Fix the bug' }),
       current: task(),
@@ -400,12 +372,10 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the completed to-do stays completed
     expect(vault.notes.get(todoPath)).toContain('status: completed');
   });
 
   it('resolves an affiliation parent to its hub uuid on the applied base', async () => {
-    // Given — a task note affiliated to a slice note that the registry knows
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const slicePath = 'Projecten/Acme Widgets/taken/the-slice.md';
@@ -421,7 +391,6 @@ describe('ApplyTaskToVaultAction', () => {
     const action = makeAction(vault, syncState);
     const changed = task({ body: 'The bug now also happens on resize.' });
 
-    // When — the winning task is rendered
     await action.execute({
       task: changed,
       current: task(),
@@ -430,13 +399,10 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the applied base carries the resolved parent uuid
     expect(syncState.baseOf('uuid-42', 'github')?.parent).toBe('slice-uuid');
   });
 
   it('updates the note affiliation when a pull changes the parent', async () => {
-    // Given — a tracked note with no parent affiliation and a registry-known
-    // parent, and a winning remote task that names that parent
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const parentPath = 'Projecten/Acme Widgets/taken/the-slice.md';
@@ -445,7 +411,6 @@ describe('ApplyTaskToVaultAction', () => {
     vault.notes.set(notePath, noteFor(task()));
     const action = makeAction(vault, syncState);
 
-    // When — the remote won the parent dimension (a pull)
     await action.execute({
       task: task({ parent: 'slice-uuid' }),
       current: task(),
@@ -454,8 +419,6 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the note's affiliation names the parent and the base carries its
-    // uuid
     expect(vault.written).toHaveLength(1);
     expect(vault.written[0]!.content).toContain(
       'affiliation: ["[[_Acme Widgets]]", "[[the-slice]]"]',
@@ -464,7 +427,6 @@ describe('ApplyTaskToVaultAction', () => {
   });
 
   it('advances mirrors.github.base only on a pull', async () => {
-    // Given — a tracked note with a github base at the previous state
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const oldBase = taskData({
@@ -479,7 +441,6 @@ describe('ApplyTaskToVaultAction', () => {
     const action = makeAction(vault, syncState);
     const changed = task({ body: 'The bug now also happens on resize.' });
 
-    // When — the remote won (a pull)
     await action.execute({
       task: changed,
       current: task(),
@@ -488,13 +449,11 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'pull',
     });
 
-    // Then — the base advanced to the applied remote state, after the write
     expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(hash(changed.body));
     expect(vault.written).toHaveLength(1);
   });
 
   it('leaves mirrors.github.base to the GitHub writer on a push', async () => {
-    // Given — a tracked note with a github base at the previous state
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const oldBase = taskData({
@@ -509,7 +468,6 @@ describe('ApplyTaskToVaultAction', () => {
     const action = makeAction(vault, syncState);
     const before = syncState.baseOf('uuid-42', 'github');
 
-    // When — the vault won (a push)
     await action.execute({
       task: task({ body: 'A vault-side edit.' }),
       current: task(),
@@ -518,7 +476,6 @@ describe('ApplyTaskToVaultAction', () => {
       origin: 'push',
     });
 
-    // Then — the base is untouched: the GitHub writer owns it
     const after = syncState.baseOf('uuid-42', 'github');
     expect(after).toBe(before);
   });

@@ -676,13 +676,10 @@ function touch(h: Harness, updatedAt = NEXT_AT): void {
 const TASK_TWIN = 'T2';
 const TODO_TWIN = 'T3';
 
-describe('SyncProjectAction double-sync invariance', () => {
+describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
   it('performs zero writes on a second pass with no external changes', async () => {
-    // Given — a fresh project with a task, a checklist-linked to-do and an
-    // archived sibling, and a settled remote on both providers
     const h = harness();
 
-    // When — the full chain runs once, reconciling the fresh state
     await h.chain.execute('Acme Widgets');
     await h.chain.execute('Old Project');
     const afterFirst = fingerprint(h.syncState);
@@ -694,26 +691,20 @@ describe('SyncProjectAction double-sync invariance', () => {
     );
     expect(h.vault.mutations.some((m) => m.startsWith('write:'))).toBe(true);
 
-    // And — the mutator logs are cleared, then the chain runs again with no
-    // external change
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
     await h.chain.execute('Acme Widgets');
     await h.chain.execute('Old Project');
 
-    // Then — every port mutator stayed untouched on the second pass
     expect(h.vault.mutations).toEqual([]);
     expect(h.github.mutations).toEqual([]);
     expect(h.todoist.mutations).toEqual([]);
 
-    // And — the canonical per-entity records are identical after both runs
     expect(fingerprint(h.syncState)).toBe(afterFirst);
   });
 
   it('does not advance the cursor when an apply fails, and retries next pass', async () => {
-    // Given — a tracked task whose remote body differs from the vault, and a
-    // GitHub write that throws on the first attempt
     const h = harness();
     h.github.detail.issues[0]!.body = '- [ ] Old text';
     seedRecord(
@@ -730,13 +721,10 @@ describe('SyncProjectAction double-sync invariance', () => {
       return original(...args);
     };
 
-    // When — the first pass runs and the body push fails
     await h.chain.execute('Acme Widgets');
 
-    // Then — the cursor did not advance (the failed half is retried next pass)
     expect(h.syncState.lastUpdates.has('Acme Widgets')).toBe(false);
 
-    // And — the second pass retries the write and advances the cursor
     await h.chain.execute('Acme Widgets');
     expect(h.syncState.lastUpdates.has('Acme Widgets')).toBe(true);
   });
@@ -750,22 +738,16 @@ describe('SyncProjectAction double-sync invariance', () => {
 // GitHub side is settled, so only the consistency step fires).
 describe('SyncProjectAction status cascade', () => {
   it('completes a done task to-dos when the vault edit drove the status', async () => {
-    // Given — the user set the note's status to the done lane; the remote is
-    // still open and the base still reads Building
     const h = harness();
     h.vault.notes.set(NOTE_PATH, doneTaskNote());
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the done status is pushed to GitHub and the to-do completes
     expect(h.github.mutations).toContain(`setTaskState:${ISSUE_URL}:closed`);
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
   });
 
   it('completes a done task to-dos when the status already arrived from a remote', async () => {
-    // Given — the base already reads done; the remote and the vault agree, so
-    // the GitHub half writes nothing
     const h = harness();
     h.vault.notes.set(NOTE_PATH, doneTaskNote());
     seedRecord(
@@ -779,10 +761,8 @@ describe('SyncProjectAction status cascade', () => {
     h.github.detail.issues[0]!.state = 'closed';
     h.github.detail.cards[0]!.statusOptionName = DONE_LANE;
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — no GitHub write is needed, yet the to-do still completes
     expect(h.github.mutations).toEqual([]);
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
   });
@@ -794,45 +774,35 @@ describe('SyncProjectAction status cascade', () => {
 // Todoist deletion propagation keeps the twin gone.
 describe('SyncProjectAction deletion sweep', () => {
   it('does not resurrect a deleted task after the sweep', async () => {
-    // Given — a settled project with a task note, its open issue, its card and
-    // its Todoist twin
     const h = harness();
     await h.chain.execute('Acme Widgets');
     expect(await h.syncState.findByMirror('github', ISSUE_URL)).not.toBeNull();
     expect(await h.syncState.findByNotePath(NOTE_PATH)).not.toBeNull();
 
-    // And — the user deletes the task note
     h.vault.notes.delete(NOTE_PATH);
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
 
-    // When — the sweep pass runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the card is deleted, the issue closed and the record removed
     expect(h.github.mutations).toContain(`deleteCard:PVT:${ISSUE_URL}`);
     expect(h.github.mutations).toContain(`setTaskState:${ISSUE_URL}:closed`);
     expect(await h.syncState.findByMirror('github', ISSUE_URL)).toBeNull();
     expect(h.github.detail.cards).toEqual([]);
 
-    // And — the Todoist twin is deleted (the API cascades the to-do subtask
-    // away with it) and both records are evicted
     expect(h.todoist.mutations).toContain(`deleteTask:${TASK_TWIN}`);
     expect(h.todoist.active).toEqual([]);
     expect(h.todoist.completed).toEqual([]);
     expect(await h.syncState.findByNotePath(NOTE_PATH)).toBeNull();
     expect(await h.syncState.findByNotePath(TODO_PATH)).toBeNull();
 
-    // And — the mutator logs are cleared, then two more passes run
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
     await h.chain.execute('Acme Widgets');
     await h.chain.execute('Acme Widgets');
 
-    // Then — the note stays gone, no card or twin is recreated, and no port is
-    // written after the sweep
     expect(h.vault.notes.has(NOTE_PATH)).toBe(false);
     expect(h.github.detail.cards).toEqual([]);
     expect(
@@ -851,10 +821,6 @@ describe('SyncProjectAction deletion sweep', () => {
 // the settle gate stops the recreate-every-tick loop.
 describe('SyncProjectAction completion settle', () => {
   it('performs zero completion writes on N passes after a completion settles', async () => {
-    // Given — a task note in the done lane with its checklist line already
-    // checked, its issue closed and its card in the done lane, and a base that
-    // already reads done — so the only remaining work is completing the
-    // still-open to-do and materialising the twins
     const h = harness();
     h.vault.notes.set(NOTE_PATH, doneTaskNote().replace('- [ ]', '- [x]'));
     seedRecord(
@@ -869,8 +835,6 @@ describe('SyncProjectAction completion settle', () => {
     h.github.detail.issues[0]!.state = 'closed';
     h.github.detail.cards[0]!.statusOptionName = DONE_LANE;
 
-    // When — the chain runs once to settlement: the first pass creates and
-    // completes both the task and the to-do twins
     await h.chain.execute('Acme Widgets');
     const completionWrites = h.todoist.mutations.filter((m) =>
       m.startsWith('setTaskCompleted:'),
@@ -878,21 +842,15 @@ describe('SyncProjectAction completion settle', () => {
     expect(completionWrites.length).toBeGreaterThan(0);
     expect(completionWrites.every((m) => m.endsWith(':true'))).toBe(true);
 
-    // And — the completed-since window ages past the completions (the cursor
-    // advanced), so neither twin is returned by either fetch anymore
     h.todoist.expireCompleted();
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
 
-    // And — N further passes with no external change
     for (let pass = 0; pass < 3; pass++) {
       await h.chain.execute('Acme Widgets');
     }
 
-    // Then — the twins are never re-completed, re-created or re-archived, and
-    // no port is written at all: the completed twins persist (dt-22) and the
-    // settle gate holds (dt-17)
     expect(
       h.todoist.mutations.filter((m) => m.startsWith('setTaskCompleted:')),
     ).toEqual([]);
@@ -911,69 +869,50 @@ describe('SyncProjectAction completion settle', () => {
 // The chain then reconciles the vault note and the Todoist twin to it.
 describe('SyncProjectAction three-way completion from GitHub', () => {
   it('completes the note and its twin when the issue is closed', async () => {
-    // Given — a settled open task
     const h = harness();
     await h.chain.execute('Acme Widgets');
 
-    // And — the user closes the issue; GitHub's "item closed" workflow moves
-    // the card to the done lane
     h.github.detail.issues[0]!.state = 'closed';
     h.github.detail.cards[0]!.statusOptionName = DONE_LANE;
     touch(h);
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the note follows the card into the done lane
     expect(h.vault.notes.get(NOTE_PATH)).toContain(`status: ${DONE_LANE}`);
 
-    // And — both twins settle to done
     expect(h.todoist.completed.map((task) => task.id)).toContain(TASK_TWIN);
     expect(h.todoist.completed.map((task) => task.id)).toContain(TODO_TWIN);
 
-    // And — the issue is already closed and the card already in done, so the
-    // GitHub half writes nothing
     expect(h.github.mutations).toEqual([]);
   });
 
   it('reopens the note and its task twin, and leaves the to-dos completed', async () => {
-    // Given — a settled open task, then completed through a GitHub close
     const h = harness();
     await h.chain.execute('Acme Widgets');
     h.github.detail.issues[0]!.state = 'closed';
     h.github.detail.cards[0]!.statusOptionName = DONE_LANE;
     touch(h);
     await h.chain.execute('Acme Widgets');
-    // And — a settle pass pushes the cascade's checked line onto the issue, so
-    // the done state is fully converged before the reopen
     await h.chain.execute('Acme Widgets');
     expect(h.vault.notes.get(NOTE_PATH)).toContain(`status: ${DONE_LANE}`);
     expect(h.github.detail.issues[0]!.body).toBe('- [x] Fix the bug');
 
-    // And — the user reopens the issue; GitHub's "item reopened" workflow moves
-    // the card back to the default lane
     h.github.detail.issues[0]!.state = 'open';
     h.github.detail.cards[0]!.statusOptionName = 'Unshaped';
     touch(h, '2026-09-18T13:00:00Z');
 
-    // When — the chain runs, then a settle pass with no external change
     await h.chain.execute('Acme Widgets');
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
     await h.chain.execute('Acme Widgets');
 
-    // Then — the note left the done lane for the default lane and stays there
     expect(h.vault.notes.get(NOTE_PATH)).toContain('status: Unshaped');
 
-    // And — the task twin reopened
     expect(h.todoist.active.map((task) => task.id)).toContain(TASK_TWIN);
 
-    // And — the asymmetric rule holds: the task reopen never auto-reopens its
-    // to-dos, so the to-do twin stays completed
     expect(h.todoist.completed.map((task) => task.id)).toContain(TODO_TWIN);
 
-    // And — the settle pass converged with zero writes on any surface
     expect(h.vault.mutations).toEqual([]);
     expect(h.github.mutations).toEqual([]);
     expect(h.todoist.mutations).toEqual([]);
@@ -985,29 +924,23 @@ describe('SyncProjectAction three-way completion from GitHub', () => {
 // is the per-line mirror, distinct from the task-level asymmetric reopen rule.
 describe('SyncProjectAction checklist mirror from GitHub', () => {
   it('checks the line, completes the to-do and checks the twin when an item is checked', async () => {
-    // Given — a settled task whose checklist item is checked on the issue
     const h = harness();
     await h.chain.execute('Acme Widgets');
     h.github.detail.issues[0]!.body = '- [x] Fix the bug';
     touch(h);
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the note's checklist line is checked
     expect(h.vault.notes.get(NOTE_PATH)).toContain(
       `- [x] [[${TODO_PATH}|Fix the bug]]`,
     );
 
-    // And — the to-do note is completed
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
 
-    // And — the Todoist subtask is checked
     expect(h.todoist.completed.map((task) => task.id)).toContain(TODO_TWIN);
   });
 
   it('reopens the to-do and unchecks the twin when an item is unchecked', async () => {
-    // Given — a settled task whose item was checked on the issue
     const h = harness();
     await h.chain.execute('Acme Widgets');
     h.github.detail.issues[0]!.body = '- [x] Fix the bug';
@@ -1015,48 +948,37 @@ describe('SyncProjectAction checklist mirror from GitHub', () => {
     await h.chain.execute('Acme Widgets');
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: completed');
 
-    // And — the user unchecks it again
     h.github.detail.issues[0]!.body = '- [ ] Fix the bug';
     touch(h, '2026-09-18T13:00:00Z');
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the note's line is unchecked
     expect(h.vault.notes.get(NOTE_PATH)).toContain(
       `- [ ] [[${TODO_PATH}|Fix the bug]]`,
     );
 
-    // And — the to-do note reopened
     expect(h.vault.notes.get(TODO_PATH)).toContain('status: open');
 
-    // And — the Todoist subtask is unchecked
     expect(h.todoist.active.map((task) => task.id)).toContain(TODO_TWIN);
     expect(h.todoist.completed.map((task) => task.id)).not.toContain(TODO_TWIN);
   });
 
   it('trashes the to-do and deletes its twin when an item is removed', async () => {
-    // Given — a settled task whose checklist item is removed from the issue
     const h = harness();
     await h.chain.execute('Acme Widgets');
     h.github.detail.issues[0]!.body = 'No items left.';
     touch(h);
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the note no longer carries the line
     expect(h.vault.notes.get(NOTE_PATH)).toContain('No items left.');
 
-    // And — the to-do note is trashed
     expect(h.vault.notes.has(TODO_PATH)).toBe(false);
 
-    // And — its Todoist twin is deleted and its record evicted
     expect(h.todoist.mutations).toContain(`deleteTask:${TODO_TWIN}`);
     expect(h.todoist.active.map((task) => task.id)).not.toContain(TODO_TWIN);
     expect(await h.syncState.findByNotePath(TODO_PATH)).toBeNull();
 
-    // And — nothing else is touched: the task twin and its record survive
     expect(h.todoist.active.map((task) => task.id)).toContain(TASK_TWIN);
     expect(await h.syncState.findByNotePath(NOTE_PATH)).not.toBeNull();
   });
@@ -1068,7 +990,6 @@ describe('SyncProjectAction checklist mirror from GitHub', () => {
 // then converges (the next pass writes nothing).
 describe('SyncProjectAction reopen after delete', () => {
   it('re-materialises the note, adds a new card and recreates the twin when the issue is reopened', async () => {
-    // Given — a settled task whose note is deleted and swept
     const h = harness();
     await h.chain.execute('Acme Widgets');
     h.vault.notes.delete(NOTE_PATH);
@@ -1077,23 +998,18 @@ describe('SyncProjectAction reopen after delete', () => {
     expect(h.github.detail.cards).toEqual([]);
     expect(h.todoist.active).toEqual([]);
 
-    // And — the user reopens the swept issue on GitHub
     h.github.detail.issues[0]!.state = 'open';
     touch(h, '2026-09-18T13:00:00Z');
 
-    // When — the chain runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the open untracked issue materialises a fresh note at the slug path
     const freshPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
     expect(h.vault.notes.has(freshPath)).toBe(true);
 
-    // And — a NEW board card is added in the default lane
     expect(h.github.mutations).toContain(`addBoardItem:${ISSUE_URL}`);
     expect(h.github.detail.cards).toHaveLength(1);
     expect(h.github.detail.cards[0]!.statusOptionName).toBe('Unshaped');
 
-    // And — the task and its to-do twin are recreated by the projection
     expect(h.todoist.active).toHaveLength(2);
     const taskTwin = h.todoist.active.find((task) => task.parentId === null);
     expect(taskTwin).toBeDefined();
@@ -1108,7 +1024,6 @@ describe('SyncProjectAction reopen after delete', () => {
       ),
     ).toBe(true);
 
-    // And — a further pass with no external change writes nothing
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
@@ -1125,8 +1040,6 @@ describe('SyncProjectAction reopen after delete', () => {
 // no later pass can re-anchor it. This pins the settle across repeated passes.
 describe('SyncProjectAction completed-twin churn', () => {
   it('evicts the stale record and deletes the twin, then writes nothing on N passes', async () => {
-    // Given — a settled project plus a captured draft note whose completed twin
-    // is anchored by a stale record
     const h = harness();
     await h.chain.execute('Acme Widgets');
     const capturedPath = 'Projecten/Acme Widgets/taken/captured-draft.md';
@@ -1171,24 +1084,19 @@ describe('SyncProjectAction completed-twin churn', () => {
       completedAt: UPDATED_AT,
     });
 
-    // And — the captured note vanishes
     h.vault.notes.delete(capturedPath);
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
 
-    // When — the chain runs once to settle the orphan
     await h.chain.execute('Acme Widgets');
 
-    // Then — the stale record is evicted and the twin deleted
     expect(await h.syncState.findByNotePath(capturedPath)).toBeNull();
     expect(h.todoist.active.map((task) => task.id)).not.toContain(capturedTwin);
     expect(h.todoist.completed.map((task) => task.id)).not.toContain(
       capturedTwin,
     );
 
-    // And — N further passes create no new notes, twins or records, and write
-    // nothing on any surface
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
@@ -1219,7 +1127,6 @@ describe('SyncProjectAction forced full scan', () => {
   const PARENT_TWIN = 'T4';
 
   it('discovers a sub-issue and moves its twin under the parent in one pass', async () => {
-    // Given — a settled project whose child twin sits top-level
     const h = harness();
     await h.chain.execute('Acme Widgets');
     expect(
@@ -1227,8 +1134,6 @@ describe('SyncProjectAction forced full scan', () => {
     ).toBeNull();
     const settledUpdate = h.syncState.lastUpdates.get('Acme Widgets');
 
-    // And — a tracked parent appears with its note, registry record, card and
-    // top-level twin
     h.github.detail.issues.push({
       url: PARENT_URL,
       nodeId: 'I40',
@@ -1281,31 +1186,24 @@ describe('SyncProjectAction forced full scan', () => {
       }),
     );
 
-    // And — GitHub makes issue 42 a sub-issue of issue 40; the board stays
-    // quiet, so the probe alone would leave includeBoard false
     h.github.detail.issues.find((issue) => issue.url === ISSUE_URL)!.parentUrl =
       PARENT_URL;
     expect(h.github.states.get('PVT')!.updatedAt).toBe(settledUpdate);
 
-    // And — the pre-parent-tracking store's one-shot marker is pending
     h.syncState.fullScanPending.add('Acme Widgets');
     h.vault.mutations = [];
     h.github.mutations = [];
     h.todoist.mutations = [];
 
-    // When — one chain pass runs
     await h.chain.execute('Acme Widgets');
 
-    // Then — the forced fetch discovered the parent and seeded the affiliation
     expect(h.vault.notes.get(NOTE_PATH)).toContain('[[the-parent]]');
 
-    // And — the child twin moved under the parent's twin in the same pass
     expect(h.todoist.mutations).toContain(`moveTask:${TASK_TWIN}`);
     expect(
       h.todoist.active.find((task) => task.id === TASK_TWIN)?.parentId,
     ).toBe(PARENT_TWIN);
 
-    // And — the one-shot marker is spent, so the next quiet pass closes the gate
     expect(h.syncState.fullScanPending.has('Acme Widgets')).toBe(false);
     h.vault.mutations = [];
     h.github.mutations = [];

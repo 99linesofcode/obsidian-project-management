@@ -76,27 +76,22 @@ function input() {
   };
 }
 
-describe('CreateTaskNoteAction', () => {
+describe('MAT-5 — a note filename is a human-readable slug', () => {
   it('creates a slug-named note carrying id, type and status, no url', async () => {
-    // Given — a vault with no existing note and an empty registry
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
-    // When — the action materialises the task note
     await action.execute(input());
 
-    // Then — the note lands at the title slug
     expect(vault.created).toHaveLength(1);
     const { path, content } = vault.created[0]!;
     expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
-    // And — the frontmatter carries type and status, no machine id or url
     const fields = splitFrontmatter(content)?.fields;
     expect(fields?.get('id')).toBeUndefined();
     expect(fields?.get('type')).toBe('task');
     expect(fields?.get('status')).toBe('Building');
     expect(content).not.toContain('url:');
-    // And — the registry entity anchors the note with the github mirror item
     expect(syncState.setCalls).toHaveLength(1);
     const record = syncState.setCalls[0]!;
     expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -105,17 +100,13 @@ describe('CreateTaskNoteAction', () => {
   });
 
   it('renders the note from the vault template', async () => {
-    // Given — a vault holding the task template
     const vault = new FakeVault();
     vault.notes.set(templatePath, template);
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
-    // When — the action materialises the task note
     await action.execute(input());
 
-    // Then — the rendered content keeps the template's vault-owned fields and
-    // fills the sync fields
     expect(vault.created).toHaveLength(1);
     const content = vault.created[0]!.content;
     expect(content).toContain('type: task');
@@ -125,20 +116,16 @@ describe('CreateTaskNoteAction', () => {
   });
 
   it('falls back to the built-in frontmatter when the template is missing', async () => {
-    // Given — a vault without the template note
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
-    // When — the action materialises the task note
     await action.execute(input());
 
-    // Then — the built-in mapping is used
     expect(vault.created[0]!.content).toContain('categories: [taken]');
   });
 
   it('is a no-op when the issue is already registered', async () => {
-    // Given — a registry that already tracks the issue
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.seed(
@@ -150,10 +137,8 @@ describe('CreateTaskNoteAction', () => {
     );
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
 
-    // When — the action runs
     await action.execute(input());
 
-    // Then — nothing is created and no new record is written
     expect(vault.created).toEqual([]);
     expect(syncState.setCalls).toEqual([]);
   });

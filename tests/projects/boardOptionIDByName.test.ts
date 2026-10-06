@@ -8,7 +8,7 @@ const options = [
   { id: 'opt_3', name: 'Shipped' },
 ];
 
-describe('boardOptionIDByName', () => {
+describe('LANE-1 — the board lane vocabulary maps to option ids', () => {
   it('resolves an option id by its exact name', () => {
     expect(boardOptionIDByName(options, 'Building')).toBe('opt_2');
     expect(boardOptionIDByName(options, 'Shipped')).toBe('opt_3');

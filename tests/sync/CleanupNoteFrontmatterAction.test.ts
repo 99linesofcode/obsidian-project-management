@@ -80,9 +80,8 @@ function makeAction(vault: FakeVault) {
   return new CleanupNoteFrontmatterAction(vault);
 }
 
-describe('CleanupNoteFrontmatterAction', () => {
+describe('DISC-2 — the home note frontmatter is cleaned once', () => {
   it('strips a legacy id and url from a task note', async () => {
-    // Given — a legacy note carrying both machine-id fields
     const vault = new FakeVault();
     vault.notes.set(
       takenPath,
@@ -95,10 +94,8 @@ describe('CleanupNoteFrontmatterAction', () => {
     vault.folderNotes = folderWith([takenPath]);
     const action = makeAction(vault);
 
-    // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — both fields are gone and the rest is preserved
     const parsed = splitFrontmatter(vault.notes.get(takenPath) ?? '');
     expect(parsed?.fields.has('id')).toBe(false);
     expect(parsed?.fields.has('url')).toBe(false);
@@ -107,7 +104,6 @@ describe('CleanupNoteFrontmatterAction', () => {
   });
 
   it('strips the machine-id fields from a to-do note too', async () => {
-    // Given — a to-do note with a legacy id
     const vault = new FakeVault();
     vault.notes.set(
       todoPath,
@@ -116,17 +112,14 @@ describe('CleanupNoteFrontmatterAction', () => {
     vault.folderNotes = folderWith([todoPath]);
     const action = makeAction(vault);
 
-    // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — the id is gone
     expect(
       splitFrontmatter(vault.notes.get(todoPath) ?? '')?.fields.has('id'),
     ).toBe(false);
   });
 
   it('strips the dead todoist anchor from a task note', async () => {
-    // Given — a note carrying the legacy twin anchor and a machine id
     const vault = new FakeVault();
     vault.notes.set(
       takenPath,
@@ -135,70 +128,56 @@ describe('CleanupNoteFrontmatterAction', () => {
     vault.folderNotes = folderWith([takenPath]);
     const action = makeAction(vault);
 
-    // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — the anchor and the machine id are gone, the rest is preserved
     const parsed = splitFrontmatter(vault.notes.get(takenPath) ?? '');
     expect(parsed?.fields.has('todoist')).toBe(false);
     expect(parsed?.fields.has('id')).toBe(false);
     expect(parsed?.fields.get('status')).toBe('open');
     expect(parsed?.body).toBe('Body text.');
 
-    // And — idempotent: a second run writes nothing more
     const writesAfterFirst = vault.writes.length;
     await action.execute({ projectName: 'Acme Widgets' });
     expect(vault.writes).toHaveLength(writesAfterFirst);
   });
 
   it("leaves a project note's live todoist anchor untouched", async () => {
-    // Given — a project note carrying the LIVE todoist PROJECT id anchor. It
-    // lives outside taken/ and todos/, so the cleanup's walk never sees it.
     const vault = new FakeVault();
     const projectPath = 'Projecten/Acme Widgets/_home.md';
     vault.notes.set(projectPath, noteWith(['pm: github', 'todoist: P1']));
     vault.folderNotes = folderWith([]);
     const action = makeAction(vault);
 
-    // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — the project anchor survives and nothing is written
     expect(vault.writes).toEqual([]);
     expect(vault.notes.get(projectPath)).toContain('todoist: P1');
   });
 
   it('leaves a note with neither field untouched', async () => {
-    // Given — a clean note
     const vault = new FakeVault();
     vault.notes.set(takenPath, noteWith(['status: open']));
     vault.folderNotes = folderWith([takenPath]);
     const action = makeAction(vault);
 
-    // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — nothing is written
     expect(vault.writes).toEqual([]);
   });
 
   it('skips a note that fails to parse', async () => {
-    // Given — a note without a frontmatter block
     const vault = new FakeVault();
     vault.notes.set(takenPath, 'no frontmatter here');
     vault.folderNotes = folderWith([takenPath]);
     const action = makeAction(vault);
 
-    // When — the cleanup runs
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — the malformed note is left as-is
     expect(vault.writes).toEqual([]);
     expect(vault.notes.get(takenPath)).toBe('no frontmatter here');
   });
 
   it('is idempotent: a second run writes nothing', async () => {
-    // Given — a note the first run cleaned
     const vault = new FakeVault();
     vault.notes.set(
       takenPath,
@@ -209,10 +188,8 @@ describe('CleanupNoteFrontmatterAction', () => {
     await action.execute({ projectName: 'Acme Widgets' });
     const writesAfterFirst = vault.writes.length;
 
-    // When — the cleanup runs again
     await action.execute({ projectName: 'Acme Widgets' });
 
-    // Then — nothing further is written
     expect(vault.writes).toHaveLength(writesAfterFirst);
   });
 });

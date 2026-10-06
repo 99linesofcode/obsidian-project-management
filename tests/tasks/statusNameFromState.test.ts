@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { statusNameFromState } from '../../src/tasks/statusNameFromState.js';
 
-describe('statusNameFromState', () => {
+describe('LANE-2 — an issue state maps to a lane', () => {
   it('puts a closed issue in the done lane', () => {
     expect(statusNameFromState('closed', 'Shipped', 'Unshaped')).toBe(
       'Shipped',

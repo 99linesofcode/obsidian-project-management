@@ -181,25 +181,21 @@ function setup() {
   return { action, run, vault, taskManager, syncState };
 }
 
-describe('CaptureTodoistCreationsAction', () => {
+describe('MAT-4 — a hand-made Todoist task is captured', () => {
   it('captures a top-level task and mints a record with a todoist handle', async () => {
-    // Given — a new top-level Todoist task in the Building section
     const { run, vault, taskManager, syncState } = setup();
     taskManager.active = [
       todoistTask({ id: 'T1', content: 'Buy milk', sectionId: 'S2' }),
     ];
 
-    // When — the creations are captured
     await run();
 
-    // Then — a draft task note is created, with no github mirror
     const path = 'Projecten/Acme Widgets/taken/buy-milk.md';
     const content = vault.notes.get(path)!;
     expect(content).toContain('status: Building');
     expect(content).toContain('affiliation: ["[[_Acme Widgets]]"]');
     expect(content).not.toContain('todoist:');
     expect(content).not.toContain('url:');
-    // And the registry record carries the todoist handle and a lane base
     const record = await syncState.findByMirror('todoist', 'T1');
     expect(record).not.toBeNull();
     expect(record?.notePath).toBe(path);
@@ -208,21 +204,17 @@ describe('CaptureTodoistCreationsAction', () => {
   });
 
   it('captures a section-less task in the default lane', async () => {
-    // Given — a new top-level task with no section
     const { run, vault, taskManager } = setup();
     taskManager.active = [todoistTask({ id: 'T1', content: 'Buy milk' })];
 
-    // When — the creations are captured
     await run();
 
-    // Then — the note lands in the default lane
     expect(vault.notes.get('Projecten/Acme Widgets/taken/buy-milk.md')).toContain(
       'status: Unshaped',
     );
   });
 
   it("captures a subtask under a slice's twin as a slice-affiliated draft", async () => {
-    // Given — a slice twin and a new subtask under it
     const { run, vault, taskManager, syncState } = setup();
     const slicePath = 'Projecten/Acme Widgets/taken/40-slice-1.md';
     vault.notes.set(slicePath, taskNote('Body.', 'SLICE'));
@@ -232,10 +224,8 @@ describe('CaptureTodoistCreationsAction', () => {
       todoistTask({ id: 'T2', content: 'Write the copy', parentId: 'SLICE' }),
     ];
 
-    // When — the creations are captured
     await run();
 
-    // Then — the child is a draft affiliated to the slice, in the default lane
     const path = 'Projecten/Acme Widgets/taken/write-the-copy.md';
     const content = vault.notes.get(path)!;
     expect(content).toContain(
@@ -243,13 +233,11 @@ describe('CaptureTodoistCreationsAction', () => {
     );
     expect(content).toContain('status: Unshaped');
     expect(content).not.toContain('todoist:');
-    // And its base records the slice's uuid as the parent
     const record = await syncState.findByMirror('todoist', 'T2');
     expect(syncState.baseOf(record!.id, 'todoist')?.parent).toBe('slice-uuid');
   });
 
   it("captures a subtask under a task's twin as a linked to-do", async () => {
-    // Given — a task twin and a new subtask under it
     const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Body.', 'TASK'));
@@ -259,10 +247,8 @@ describe('CaptureTodoistCreationsAction', () => {
       todoistTask({ id: 'T7', content: 'Fix the widget', parentId: 'TASK' }),
     ];
 
-    // When — the creations are captured
     await run();
 
-    // Then — a to-do note is created and linked from the task's checklist
     const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
     const todo = vault.notes.get(todoPath)!;
     expect(todo).toContain('status: open');
@@ -273,13 +259,11 @@ describe('CaptureTodoistCreationsAction', () => {
     expect(bodyOf(vault.notes.get(taskPath)!)).toContain(
       `- [ ] [[${todoPath}|Fix the widget]]`,
     );
-    // And the to-do's record carries the task twin's uuid as its parent
     const record = await syncState.findByMirror('todoist', 'T7');
     expect(syncState.baseOf(record!.id, 'todoist')?.parent).toBe('task-uuid');
   });
 
   it('captures an already-completed item as a done note', async () => {
-    // Given — a completed top-level task and a completed subtask
     const { run, vault, taskManager, syncState } = setup();
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Body.', 'TASK'));
@@ -289,14 +273,11 @@ describe('CaptureTodoistCreationsAction', () => {
       todoistTask({ id: 'T2', content: 'Done too', parentId: 'TASK', isCompleted: true, completedAt: syncedAt }),
     ];
 
-    // When — the creations are captured
     await run();
 
-    // Then — the top-level capture sits in the done lane
     expect(
       vault.notes.get('Projecten/Acme Widgets/taken/already-done.md'),
     ).toContain('status: Shipped');
-    // And the to-do capture is completed with a full ISO stamp
     const doneTodo = vault.notes.get(
       'Projecten/Acme Widgets/todos/done-too.md',
     )!;
@@ -307,7 +288,6 @@ describe('CaptureTodoistCreationsAction', () => {
   });
 
   it('does not re-capture an already-anchored item', async () => {
-    // Given — an item whose note is already anchored
     const { run, vault, taskManager, syncState } = setup();
     const path = 'Projecten/Acme Widgets/taken/buy-milk.md';
     vault.notes.set(path, taskNote('Body.', 'T1'));
@@ -315,49 +295,40 @@ describe('CaptureTodoistCreationsAction', () => {
     taskManager.active = [todoistTask({ id: 'T1', content: 'Buy milk' })];
     const before = await syncState.list();
 
-    // When — the creations are captured
     await run();
 
-    // Then — nothing is created and no record is re-stamped
     expect(vault.created).toEqual([]);
     expect(await syncState.list()).toEqual(before);
   });
 
   it('captures a parent and its child in one pass, parent first', async () => {
-    // Given — a new top-level task and a subtask under it
     const { run, vault, taskManager, syncState } = setup();
     taskManager.active = [
       todoistTask({ id: 'T9', content: 'New parent' }),
       todoistTask({ id: 'T2', content: 'New child', parentId: 'T9' }),
     ];
 
-    // When — the creations are captured
     await run();
 
-    // Then — the parent becomes a draft and the child a to-do linked to it
     const parentPath = 'Projecten/Acme Widgets/taken/new-parent.md';
     const childPath = 'Projecten/Acme Widgets/todos/new-child.md';
     expect(vault.notes.has(parentPath)).toBe(true);
     expect(vault.notes.get(childPath)).toContain(
       'affiliation: ["[[_Acme Widgets]]", "[[new-parent]]"]',
     );
-    // And the child's base resolves the parent's freshly minted uuid
     const parent = await syncState.findByMirror('todoist', 'T9');
     const child = await syncState.findByMirror('todoist', 'T2');
     expect(syncState.baseOf(child!.id, 'todoist')?.parent).toBe(parent?.id);
   });
 
   it('waits for a child whose parent is not in the fetched set', async () => {
-    // Given — a subtask whose parent twin is not fetched at all
     const { run, vault, taskManager } = setup();
     taskManager.active = [
       todoistTask({ id: 'T2', content: 'Orphan', parentId: 'GONE' }),
     ];
 
-    // When — the creations are captured
     await run();
 
-    // Then — nothing is created for the orphaned child
     expect(vault.created).toEqual([]);
   });
 });

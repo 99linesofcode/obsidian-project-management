@@ -5,9 +5,8 @@ import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
 const context = { projectName: 'Acme Widgets', doneLane: 'Shipped' };
 const notePath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 
-describe('VaultTaskMapper', () => {
+describe('MAT-1 — a vault task maps to the canonical shape', () => {
   it('parses a task note onto the canonical task', () => {
-    // Given — a task note produced by the note mapper
     const { content } = TaskNoteMapper.map(
       {
         type: 'task',
@@ -22,10 +21,8 @@ describe('VaultTaskMapper', () => {
       },
     );
 
-    // When — the note is parsed
     const task = VaultTaskMapper.parseTask(content, notePath, context);
 
-    // Then — the content is carried; identity waits for the registry record
     expect(task?.id).toBe('');
     expect(task?.type).toBe('task');
     expect(task?.notePath).toBe(notePath);
@@ -42,7 +39,6 @@ describe('VaultTaskMapper', () => {
   });
 
   it('reads the done lane as completed (the stamp may be unknown)', () => {
-    // Given — a task note in the done lane
     const { content } = TaskNoteMapper.map(
       {
         type: 'task',
@@ -57,21 +53,16 @@ describe('VaultTaskMapper', () => {
       },
     );
 
-    // When — the note is parsed
     const task = VaultTaskMapper.parseTask(content, notePath, context);
 
-    // Then — the task is completed: '' marks done with an unknown stamp
     expect(task?.completedAt).toBe('');
     expect(task?.status).toBe('Shipped');
   });
 
   it('returns null for a note that is not a task note', () => {
-    // Given — a plain note
 
-    // When — it is parsed
     const task = VaultTaskMapper.parseTask('Just a note.', notePath, context);
 
-    // Then — it is not a task note
     expect(task).toBeNull();
   });
 });

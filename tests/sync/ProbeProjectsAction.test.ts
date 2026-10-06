@@ -98,9 +98,8 @@ function state(projectId: string): ProjectStateData {
   };
 }
 
-describe('ProbeProjectsAction', () => {
+describe('PRB-1 — a quiet board is not fetched', () => {
   it('probes every project with an identity in one query, keyed by name', async () => {
-    // Given — two projects with stored identities and a state for each
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity('PVT_1'));
     syncState.identities.set('Other', identity('PVT_2'));
@@ -109,56 +108,44 @@ describe('ProbeProjectsAction', () => {
     projectManagement.states.set('PVT_2', state('PVT_2'));
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    // When — the projects are probed
     const result = await action.execute(['Acme Widgets', 'Other']);
 
-    // Then — one probe carries both node ids
     expect(projectManagement.probeCalls).toEqual([['PVT_1', 'PVT_2']]);
-    // And the result is keyed by project name
     expect([...result.keys()]).toEqual(['Acme Widgets', 'Other']);
     expect(result.get('Acme Widgets')).toEqual(state('PVT_1'));
   });
 
   it('skips a project with no stored identity', async () => {
-    // Given — one project with an identity and one without
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity('PVT_1'));
     const projectManagement = new FakeProjectManagement();
     projectManagement.states.set('PVT_1', state('PVT_1'));
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    // When — both projects are probed
     const result = await action.execute(['Acme Widgets', 'Unattached']);
 
-    // Then — only the attached project is probed and surfaced
     expect(projectManagement.probeCalls).toEqual([['PVT_1']]);
     expect([...result.keys()]).toEqual(['Acme Widgets']);
   });
 
   it('skips a project whose probe state is missing (deleted project)', async () => {
-    // Given — an identity whose project no longer resolves remotely
     const syncState = new FakeSyncState();
     syncState.identities.set('Gone', identity('PVT_9'));
     const projectManagement = new FakeProjectManagement();
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    // When — the project is probed
     const result = await action.execute(['Gone']);
 
-    // Then — it is dropped rather than surfaced with a missing state
     expect(result.size).toBe(0);
   });
 
   it('returns an empty map when no project has an identity', async () => {
-    // Given — no stored identities
     const syncState = new FakeSyncState();
     const projectManagement = new FakeProjectManagement();
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    // When — the projects are probed
     const result = await action.execute(['Acme Widgets', 'Other']);
 
-    // Then — nothing is surfaced and the probe carries no ids
     expect(result.size).toBe(0);
     expect(projectManagement.probeCalls).toEqual([[]]);
   });

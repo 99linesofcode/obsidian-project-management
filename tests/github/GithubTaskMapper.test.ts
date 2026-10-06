@@ -28,16 +28,11 @@ const card: BoardItemData = {
   updatedAt: null,
 };
 
-describe('GithubTaskMapper', () => {
+describe('MAT-3 — only typed issues are adopted', () => {
   it('parses an issue and its card onto the canonical task', () => {
-    // Given — an issue and its board card
 
-    // When — the pair is parsed
     const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
 
-    // Then — identity is empty (the half composes it from the registry), the
-    // content is carried, the lane comes from the card, and the type comes from
-    // the label
     expect(task.id).toBe('');
     expect(task.notePath).toBe('');
     expect(task.mirrors).toEqual({ github: issue.url });
@@ -51,51 +46,39 @@ describe('GithubTaskMapper', () => {
   });
 
   it('uses lastEditedAt as the content clock, not the comment-noisy updatedAt', () => {
-    // Given — an issue whose updatedAt (a comment) postdates its last edit
 
-    // When — the issue is parsed
     const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
 
-    // Then — the canonical clock is the edit, never the comment
     expect(task.updatedAt).toBe('2026-09-18T10:00:00Z');
   });
 
   it('parses a card-less issue with no lane', () => {
-    // Given — an issue with no board card
 
-    // When — the issue is parsed
     const task = GithubTaskMapper.parse(issue, null, DONE_LANE);
 
-    // Then — the lane is empty and no completion is derived
     expect(task.status).toBe('');
     expect(task.completedAt).toBeNull();
   });
 
   it('stamps a done-lane issue as completed (the invariant)', () => {
-    // Given — a card in the project's done lane
 
-    // When — the issue is parsed
     const task = GithubTaskMapper.parse(
       issue,
       { ...card, statusOptionName: DONE_LANE },
       DONE_LANE,
     );
 
-    // Then — completedAt is non-null ('' = done, stamp unknown)
     expect(task.completedAt).toBe('');
   });
 
   it('reads the vault-owned type from the type label', () => {
-    // Given — an issue carrying a legacy no-space type label
 
-    // When — the issue is parsed
     const task = GithubTaskMapper.parse(
       { ...issue, labels: ['type:bug'] },
       card,
       DONE_LANE,
     );
 
-    // Then — the type is stripped and trimmed
     expect(task.type).toBe('bug');
   });
 });

@@ -198,9 +198,8 @@ function setup() {
   return { action, run, vault, taskManager, syncState };
 }
 
-describe('ApplyTodoistCompletionAction', () => {
+describe('COM-3 — a Todoist completion fans out like a vault one', () => {
   it('completes a to-do note when Todoist completed the twin and stamps the base', async () => {
-    // Given — an open to-do whose twin appears in the completed-since window
     const { run, vault, taskManager, syncState } = setup();
     vault.notes.set(todoPath, todoNote(null));
     seedRecord(
@@ -214,11 +213,8 @@ describe('ApplyTodoistCompletionAction', () => {
       todoistTask({ id: 'T2', content: 'Step one', isCompleted: true, completedAt: cursor }),
     ];
 
-    // When — the completion is applied
     await run();
 
-    // Then — the note is completed with a full ISO datetime stamp and the base
-    // now says completed
     expect(vault.notes.get(todoPath)).toContain('status: completed');
     expect(vault.notes.get(todoPath)).toContain(`completed: ${syncedAt}`);
     const base = syncState.baseOf('uuid-todo', 'todoist');
@@ -227,7 +223,6 @@ describe('ApplyTodoistCompletionAction', () => {
   });
 
   it('completes a TASK twin: the note takes the done lane and the base is stamped', async () => {
-    // Given — an open task note whose twin was completed in Todoist
     const { run, vault, taskManager, syncState } = setup();
     vault.notes.set(taskPath, taskNote('Building'));
     seedRecord(
@@ -241,11 +236,8 @@ describe('ApplyTodoistCompletionAction', () => {
       todoistTask({ id: 'T9', content: 'Fix the widget', isCompleted: true, completedAt: cursor }),
     ];
 
-    // When — the completion pass runs
     await run();
 
-    // Then — the note is done and the todoist base is stamped (the ownership
-    // fix: a task twin is no longer left to the task-side reconciliation)
     expect(vault.notes.get(taskPath)).toContain(`status: ${doneLane}`);
     const base = syncState.baseOf('uuid-task', 'todoist');
     expect(base?.status).toBe(doneLane);
@@ -253,8 +245,6 @@ describe('ApplyTodoistCompletionAction', () => {
   });
 
   it('regression: a task twin completed remotely makes an open vault/GitHub task done', async () => {
-    // Given — the old bug shape: the task is open in the vault and on GitHub,
-    // but the Todoist twin was completed
     const { run, vault, taskManager, syncState } = setup();
     vault.notes.set(taskPath, taskNote(defaultLane));
     seedRecord(
@@ -269,16 +259,12 @@ describe('ApplyTodoistCompletionAction', () => {
     ];
     taskManager.active = [];
 
-    // When — the completion pass runs
     await run();
 
-    // Then — the vault is done, not stuck open
     expect(vault.notes.get(taskPath)).toContain(`status: ${doneLane}`);
   });
 
   it('reopens a task twin active again while the base says completed (asymmetric)', async () => {
-    // Given — a completed task note whose twin is active again, with a
-    // completed to-do that must stay completed
     const { run, vault, taskManager, syncState } = setup();
     vault.notes.set(taskPath, taskNote(doneLane));
     vault.notes.set(todoPath, todoNote('2026-09-24T10:00:00Z'));
@@ -291,20 +277,15 @@ describe('ApplyTodoistCompletionAction', () => {
     );
     taskManager.active = [todoistTask({ id: 'T9', isCompleted: false })];
 
-    // When — the reopen pass runs
     await run();
 
-    // Then — the task is pulled back to the default lane
     expect(vault.notes.get(taskPath)).toContain(`status: ${defaultLane}`);
-    // And the to-do is NOT reopened (the cascade's asymmetry)
     expect(vault.notes.get(todoPath)).toContain('status: completed');
-    // And the base now says open
     const base = syncState.baseOf('uuid-task', 'todoist');
     expect(base?.completedAt).toBeNull();
   });
 
   it('clears the completion stamp when Todoist reopened a to-do twin', async () => {
-    // Given — a completed to-do whose twin is active again
     const { run, vault, taskManager, syncState } = setup();
     vault.notes.set(todoPath, todoNote('2026-09-24T10:00:00Z'));
     seedRecord(
@@ -316,17 +297,13 @@ describe('ApplyTodoistCompletionAction', () => {
     );
     taskManager.active = [todoistTask({ id: 'T2', isCompleted: false })];
 
-    // When — the reopen is applied
     await run();
 
-    // Then — the note is reopened and the stamp cleared
     expect(vault.notes.get(todoPath)).toContain('status: open');
     expect(vault.notes.get(todoPath)).not.toContain('2026-09-24T10:00:00Z');
   });
 
   it('does not re-apply our own completion as a remote change (echo guard)', async () => {
-    // Given — a completed twin whose base already says completed, still showing
-    // in the window (the echo of our own close)
     const { run, vault, taskManager, syncState } = setup();
     vault.notes.set(todoPath, todoNote('2026-09-24T10:00:00Z'));
     seedRecord(
@@ -341,22 +318,17 @@ describe('ApplyTodoistCompletionAction', () => {
     ];
     const before = await syncState.get('uuid-todo');
 
-    // When — the window is processed
     await run();
 
-    // Then — no vault write and no base churn
     expect(vault.writes).toEqual([]);
     expect(await syncState.get('uuid-todo')).toBe(before);
   });
 
   it('advances the cursor and preserves the section map after a pass', async () => {
-    // Given — a project with a stored section map
     const { run, syncState } = setup();
 
-    // When — the action runs with nothing to apply
     await run();
 
-    // Then — the cursor moved to the tick and the sections survived
     expect(syncState.todoistProjects.get(projectName)).toEqual({
       sections: { Unshaped: 'S1' },
       lastCompletedPoll: syncedAt,

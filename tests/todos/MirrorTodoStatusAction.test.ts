@@ -84,18 +84,15 @@ function toDoNote(status: 'open' | 'completed'): string {
   ).content;
 }
 
-describe('MirrorTodoStatusAction', () => {
+describe('TODO-2 — a to-do state mirrors to its note', () => {
   it('checks the parent line when its to-do is completed', async () => {
-    // Given — a to-do completed, its parent line still unchecked
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${todoPath}|Fix the bug]]`));
     vault.notes.set(todoPath, toDoNote('completed'));
     const action = new MirrorTodoStatusAction(vault);
 
-    // When — the to-do change is mirrored
     await action.execute({ todoPath, syncedAt });
 
-    // Then — the parent line is checked
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
       `- [x] [[${todoPath}|Fix the bug]]`,
     );
@@ -103,59 +100,47 @@ describe('MirrorTodoStatusAction', () => {
   });
 
   it('unchecks the parent line when its to-do is reopened', async () => {
-    // Given — a to-do reopened, its parent line still checked
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [x] [[${todoPath}|Fix the bug]]`));
     vault.notes.set(todoPath, toDoNote('open'));
     const action = new MirrorTodoStatusAction(vault);
 
-    // When — the to-do change is mirrored
     await action.execute({ todoPath, syncedAt });
 
-    // Then — the parent line is unchecked
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
       `- [ ] [[${todoPath}|Fix the bug]]`,
     );
   });
 
   it('does nothing when the parent line already agrees', async () => {
-    // Given — a completed to-do and a checked parent line
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [x] [[${todoPath}|Fix the bug]]`));
     vault.notes.set(todoPath, toDoNote('completed'));
     const action = new MirrorTodoStatusAction(vault);
 
-    // When — the to-do change is mirrored
     await action.execute({ todoPath, syncedAt });
 
-    // Then — no write happens (the echo settles)
     expect(vault.written).toEqual([]);
   });
 
   it('does nothing when the parent has no line linking the to-do', async () => {
-    // Given — a completed to-do whose line was removed from the parent
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote('No items left.'));
     vault.notes.set(todoPath, toDoNote('completed'));
     const action = new MirrorTodoStatusAction(vault);
 
-    // When — the to-do change is mirrored
     await action.execute({ todoPath, syncedAt });
 
-    // Then — no write happens
     expect(vault.written).toEqual([]);
   });
 
   it('does nothing when the to-do note is gone', async () => {
-    // Given — a parent line whose to-do note no longer exists
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${todoPath}|Fix the bug]]`));
     const action = new MirrorTodoStatusAction(vault);
 
-    // When — the change is mirrored
     await action.execute({ todoPath, syncedAt });
 
-    // Then — no write happens
     expect(vault.written).toEqual([]);
   });
 });

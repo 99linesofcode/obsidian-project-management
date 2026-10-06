@@ -134,19 +134,16 @@ function makeAction(port: FakePort, vault: FakeVault): DiscoverProjectsAction {
   return new DiscoverProjectsAction(vault, new AttachProjectAction(port));
 }
 
-describe('DiscoverProjectsAction', () => {
+describe('DISC-1 — a project folder is discovered from its home note', () => {
   it('discovers github project notes with their project name and identity', async () => {
-    // Given — a vault with one github project note and a port that resolves it
     const vault = new FakeVault();
     vault.notes = [githubNote()];
     const port = new FakePort();
     port.result = identity;
     const action = makeAction(port, vault);
 
-    // When — discovery runs
     const result = await action.execute();
 
-    // Then — the project is discovered with its name and resolved identity
     expect(result.projects).toEqual([
       { projectName: 'Acme Widgets', identity },
     ]);
@@ -154,7 +151,6 @@ describe('DiscoverProjectsAction', () => {
   });
 
   it('skips project notes for providers this plugin does not handle', async () => {
-    // Given — a vault with a non-github project note
     const vault = new FakeVault();
     vault.notes = [
       githubNote({ pm: 'linear', board: 'https://linear.app/acme/project/1' }),
@@ -162,16 +158,13 @@ describe('DiscoverProjectsAction', () => {
     const port = new FakePort();
     const action = makeAction(port, vault);
 
-    // When — discovery runs
     const result = await action.execute();
 
-    // Then — nothing is discovered and no error is recorded
     expect(result.projects).toEqual([]);
     expect(result.errors).toEqual([]);
   });
 
   it('collects the error for a github note missing its board and still discovers the rest', async () => {
-    // Given — a vault with a broken github note (no board) and a valid one
     const vault = new FakeVault();
     vault.notes = [
       githubNote({
@@ -185,11 +178,8 @@ describe('DiscoverProjectsAction', () => {
     port.result = identity;
     const action = makeAction(port, vault);
 
-    // When — discovery runs
     const result = await action.execute();
 
-    // Then — the valid project is still discovered and the broken one's error
-    // is collected rather than aborting the whole discovery
     expect(result.projects).toEqual([
       { projectName: 'Acme Widgets', identity },
     ]);

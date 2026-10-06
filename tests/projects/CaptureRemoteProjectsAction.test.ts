@@ -230,10 +230,9 @@ function setup() {
 
 const cursor = '2026-09-30T00:00:00Z';
 
-describe('CaptureRemoteProjectsAction', () => {
+describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
   describe('PRJ-2: Todoist -> vault', () => {
     it('captures a project created after the cursor and ignores an older one', async () => {
-      // Given — a first-settled cursor, one old and one new Todoist project
       const h = setup();
       h.syncState.projectCursors.set('todoist', cursor);
       h.taskManager.projects = [
@@ -249,12 +248,10 @@ describe('CaptureRemoteProjectsAction', () => {
         }),
       ];
 
-      // When — the capture runs
       const captured = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — only the new project is adopted; the old one is never touched
       expect(captured).toEqual(['New Project']);
       expect(h.vault.created).toEqual(['Projecten/New Project/_New Project.md']);
       expect(h.vault.notes.get('Projecten/Old Project/_Old Project.md')).toBe(
@@ -263,7 +260,6 @@ describe('CaptureRemoteProjectsAction', () => {
       const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
       expect(home).toContain('pm: github');
       expect(home).toContain('todoist: P-new');
-      // And — a registry identity record exists for the new project
       expect(await h.syncState.getIdentity('New Project')).toEqual({
         repoUrl: '',
         repoNodeId: '',
@@ -274,18 +270,15 @@ describe('CaptureRemoteProjectsAction', () => {
     });
 
     it('adopts the current clock on first sight and captures nothing', async () => {
-      // Given — no cursor yet and a pre-existing Todoist project
       const h = setup();
       h.taskManager.projects = [
         todoistProject({ createdAt: '2026-09-01T00:00:00Z' }),
       ];
 
-      // When — the capture runs
       const captured = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — nothing is adopted and the cursor is seeded to the newest clock
       expect(captured).toEqual([]);
       expect(h.vault.created).toEqual([]);
       expect(await h.syncState.getProjectCursor('todoist')).toBe(
@@ -294,23 +287,19 @@ describe('CaptureRemoteProjectsAction', () => {
     });
 
     it('never adopts a project with no creation clock', async () => {
-      // Given — a project whose provider payload omits its clock
       const h = setup();
       h.syncState.projectCursors.set('todoist', cursor);
       h.taskManager.projects = [todoistProject({ createdAt: null })];
 
-      // When — the capture runs
       const captured = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — an unknown-age project is left alone
       expect(captured).toEqual([]);
       expect(h.vault.created).toEqual([]);
     });
 
     it('does not adopt a project whose name already has a vault home', async () => {
-      // Given — a new Todoist project whose name collides with a vault project
       const h = setup();
       h.syncState.projectCursors.set('todoist', cursor);
       h.vault.projectNotes = [
@@ -329,12 +318,10 @@ describe('CaptureRemoteProjectsAction', () => {
       );
       h.taskManager.projects = [todoistProject({ name: 'New Project' })];
 
-      // When — the capture runs
       const captured = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — the existing vault project wins; no duplicate is created
       expect(captured).toEqual([]);
       expect(h.vault.created).toEqual([]);
     });
@@ -342,7 +329,6 @@ describe('CaptureRemoteProjectsAction', () => {
 
   describe('PRJ-3: GitHub -> vault', () => {
     it('captures a board created after the cursor and ignores an older one', async () => {
-      // Given — a settled cursor, one old and one new board
       const h = setup();
       h.syncState.projectCursors.set('github', cursor);
       const newUrl = 'https://github.com/users/acme/projects/9';
@@ -352,18 +338,15 @@ describe('CaptureRemoteProjectsAction', () => {
       ];
       h.projectManagement.identities.set(newUrl, identityFor('9'));
 
-      // When — the capture runs
       const captured = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — only the new board is adopted
       expect(captured).toEqual(['New Board']);
       expect(h.vault.created).toEqual(['Projecten/New Board/_New Board.md']);
       const home = h.vault.notes.get('Projecten/New Board/_New Board.md');
       expect(home).toContain('pm: github');
       expect(home).toContain(`board: ${newUrl}`);
-      // And — the board's identity is resolved through the board-only attach
       expect(h.projectManagement.identityCalls).toEqual([newUrl]);
       expect(await h.syncState.getIdentity('New Board')).toEqual(
         identityFor('9'),
@@ -372,18 +355,15 @@ describe('CaptureRemoteProjectsAction', () => {
     });
 
     it('adopts the current clock on first sight and captures nothing', async () => {
-      // Given — no cursor yet and a pre-existing board
       const h = setup();
       h.projectManagement.boards = [
         board('Existing Board', '2026-09-01T00:00:00Z'),
       ];
 
-      // When — the capture runs
       const captured = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — nothing is adopted and the cursor is seeded
       expect(captured).toEqual([]);
       expect(h.vault.created).toEqual([]);
       expect(await h.syncState.getProjectCursor('github')).toBe(
@@ -392,7 +372,6 @@ describe('CaptureRemoteProjectsAction', () => {
     });
 
     it('materializes the captured board to Todoist through the lifecycle', async () => {
-      // Given — a new board captured into the vault
       const h = setup();
       h.syncState.projectCursors.set('github', cursor);
       const boardUrl = 'https://github.com/users/acme/projects/9';
@@ -403,7 +382,6 @@ describe('CaptureRemoteProjectsAction', () => {
       await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
       const homePath = 'Projecten/New Board/_New Board.md';
 
-      // When — the normal lifecycle runs for the captured project
       const lifecycle = new ReconcileProjectLifecycleAction(
         h.projectManagement,
         h.taskManager,
@@ -418,10 +396,8 @@ describe('CaptureRemoteProjectsAction', () => {
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // Then — a Todoist project is created and its anchor is stamped
       expect(h.taskManager.createCalls).toEqual(['New Board']);
       expect(h.vault.notes.get(homePath)).toContain('todoist: P-created');
-      // And — the board identity the capture resolved survives
       expect((await h.syncState.getIdentity('New Board'))?.projectNodeId).toBe(
         identityFor('9').projectNodeId,
       );
@@ -429,7 +405,6 @@ describe('CaptureRemoteProjectsAction', () => {
   });
 
   it('is idempotent: a second pass over a captured project captures nothing', async () => {
-    // Given — a new Todoist project captured once
     const h = setup();
     h.syncState.projectCursors.set('todoist', cursor);
     h.taskManager.projects = [
@@ -442,8 +417,6 @@ describe('CaptureRemoteProjectsAction', () => {
     await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
     h.vault.created = [];
 
-    // And — the project now appears as a vault home the way discovery would
-    // report it (the note exists in the fake's map).
     h.vault.projectNotes = [
       {
         path: 'Projecten/New Project/_New Project.md',
@@ -455,18 +428,15 @@ describe('CaptureRemoteProjectsAction', () => {
       },
     ];
 
-    // When — a second pass runs
     const captured = await h.action.execute({
       syncedAt: '2026-10-06T12:05:00Z',
     });
 
-    // Then — nothing is created again
     expect(captured).toEqual([]);
     expect(h.vault.created).toEqual([]);
   });
 
   it('splices a Todoist-captured project all the way to a board (PRJ-2 + PRJ-1)', async () => {
-    // Given — a new Todoist project and a settled cursor
     const h = setup();
     h.syncState.projectCursors.set('todoist', cursor);
     h.taskManager.projects = [
@@ -477,14 +447,12 @@ describe('CaptureRemoteProjectsAction', () => {
       }),
     ];
 
-    // When — the capture runs, then the board leg completes
     await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
     await h.ensureBoard.execute({
       projectName: 'New Project',
       notePath: 'Projecten/New Project/_New Project.md',
     });
 
-    // Then — the vault project carries both anchors and a board identity
     const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
     expect(home).toContain('todoist: P-new');
     expect(home).toContain(

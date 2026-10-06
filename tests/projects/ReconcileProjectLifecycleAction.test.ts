@@ -348,18 +348,15 @@ function setupLegacyHome(homePath: string, anchor = 'P1') {
   return h;
 }
 
-describe('ReconcileProjectLifecycleAction', () => {
+describe('ARC-2 — any side can start the freeze', () => {
   describe('Todoist project resolution', () => {
     it('creates and stamps the project on first sight', async () => {
-      // Given — a project note with no anchor and no matching Todoist project
       const h = setup('');
       h.vault.notes.set(activeNote, note());
       h.taskManager.projects = [];
 
-      // When — the lifecycle reconciles
       const verdict = await h.action.execute(activeInput);
 
-      // Then — a project is created, the anchor is stamped and bookkeeping set
       expect(h.taskManager.createCalls).toEqual(['Acme Widgets']);
       expect(h.vault.writes).toHaveLength(1);
       expect(h.vault.writes[0]!.content).toContain('todoist: P-new');
@@ -369,54 +366,42 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('resolves by name before creating, so no duplicate is made', async () => {
-      // Given — a note with no anchor and a Todoist project already named
       const h = setup('');
       h.vault.notes.set(activeNote, note());
       h.taskManager.projects = [project({ id: 'P9' })];
 
-      // When — the lifecycle reconciles
       const verdict = await h.action.execute(activeInput);
 
-      // Then — the existing project is adopted, not a second one created
       expect(h.taskManager.createCalls).toEqual([]);
       expect(verdict.todoistProjectId).toBe('P9');
     });
 
     it('renames the project when the note name drifts', async () => {
-      // Given — the Todoist project still carries an old name
       const h = setup();
       h.taskManager.projects = [project({ name: 'Old Name' })];
 
-      // When — the lifecycle reconciles
       await h.action.execute(activeInput);
 
-      // Then — the project follows the folder name
       expect(h.taskManager.updateCalls).toEqual([
         { id: 'P1', name: 'Acme Widgets' },
       ]);
     });
 
     it('re-stamps the anchor when it points at a project that no longer exists', async () => {
-      // Given — an anchor pointing at a missing project and a name match
       const h = setup('P-missing');
       h.taskManager.projects = [project({ id: 'P9' })];
 
-      // When — the lifecycle reconciles
       await h.action.execute(activeInput);
 
-      // Then — the anchor is re-stamped onto the name match
       expect(h.vault.writes[0]!.content).toContain('todoist: P9');
     });
 
     it('does nothing when the project note is gone', async () => {
-      // Given — a note that is not in the vault
       const h = setup();
       h.vault.notes.delete(activeNote);
 
-      // When — the lifecycle reconciles
       const verdict = await h.action.execute(activeInput);
 
-      // Then — the note's absence no-ops with a frozen verdict
       expect(h.vault.moveCalls).toEqual([]);
       expect(verdict.frozen).toBe(true);
       expect(verdict.todoistProjectId).toBeNull();
@@ -425,13 +410,10 @@ describe('ReconcileProjectLifecycleAction', () => {
 
   describe('archive merge (folder ⇄ GitHub board ⇄ Todoist)', () => {
     it('adopts the first observation without transitioning', async () => {
-      // Given — no baseline yet
       const h = setup();
 
-      // When — the lifecycle reconciles
       await h.action.execute(activeInput);
 
-      // Then — the baseline is adopted and nothing moves
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
@@ -441,94 +423,68 @@ describe('ReconcileProjectLifecycleAction', () => {
       expect(h.port.closedCalls).toEqual([]);
     });
 
-    it('applies a vault gesture: the folder archived, the board follows', async () => {
-      // Given — a settled active project the user moved to Archief/
-      const h = setup();
-      h.vault.notes.set(archivedNote, note('P1'));
-      h.syncState.baselines.set('Acme Widgets', {
+    it('applies a vault gesture in both directions: the board follows the folder', async () => {
+      const archived = setup();
+      archived.vault.notes.set(archivedNote, note('P1'));
+      archived.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
         archivedAt: null,
       });
-
-      // When — the lifecycle reconciles an archived folder with an open board
-      await h.action.execute({ ...archivedInput, closed: false });
-
-      // Then — the board closes and the baseline settles archived
-      expect(h.port.closedCalls).toEqual([
+      await archived.action.execute({ ...archivedInput, closed: false });
+      expect(archived.port.closedCalls).toEqual([
         { projectNodeId: 'PVT_123', closed: true },
       ]);
-      expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
+      expect(archived.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: true,
         closed: true,
         archivedAt: syncedAt,
       });
-    });
 
-    it('applies a vault gesture back: the folder active, the board reopens', async () => {
-      // Given — a settled archived project the user moved to Projecten/
-      const h = setup();
-      h.taskManager.projects = [project({ isArchived: true })];
-      h.syncState.baselines.set('Acme Widgets', {
+      const active = setup();
+      active.taskManager.projects = [project({ isArchived: true })];
+      active.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
         archivedAt: '',
       });
-
-      // When — the lifecycle reconciles an active folder with a still-closed
-      // board
-      await h.action.execute({ ...activeInput, closed: true });
-
-      // Then — the board reopens
-      expect(h.port.closedCalls).toEqual([
+      await active.action.execute({ ...activeInput, closed: true });
+      expect(active.port.closedCalls).toEqual([
         { projectNodeId: 'PVT_123', closed: false },
       ]);
     });
 
-    it('applies a GitHub gesture: a closed board archives the folder', async () => {
-      // Given — a settled active project whose board just closed
-      const h = setup();
-      h.syncState.baselines.set('Acme Widgets', {
+    it('applies a GitHub gesture in both directions: the folder follows the board', async () => {
+      const archived = setup();
+      archived.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
         archivedAt: null,
       });
-
-      // When — the lifecycle reconciles with closed: true
-      await h.action.execute({ ...activeInput, closed: true });
-
-      // Then — the folder moves to Archief/ and the TaskData records follow
-      expect(h.vault.moveCalls).toEqual([
+      await archived.action.execute({ ...activeInput, closed: true });
+      expect(archived.vault.moveCalls).toEqual([
         { from: 'Projecten/Acme Widgets', to: 'Archief/Acme Widgets' },
       ]);
-      expect([...h.syncState.records.values()][0]!.notePath).toBe(
+      expect([...archived.syncState.records.values()][0]!.notePath).toBe(
         archivedTaskPath,
       );
-    });
 
-    it('applies a GitHub gesture back: a reopened board unarchives the folder', async () => {
-      // Given — a settled archived project whose board just reopened
-      const h = setup();
-      h.vault.notes.set(archivedNote, note('P1'));
-      h.syncState.records.clear();
-      seedRecord(h.syncState, archivedTaskPath);
-      h.syncState.baselines.set('Acme Widgets', {
+      const unarchived = setup();
+      unarchived.vault.notes.set(archivedNote, note('P1'));
+      unarchived.syncState.records.clear();
+      seedRecord(unarchived.syncState, archivedTaskPath);
+      unarchived.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
         archivedAt: '',
       });
-
-      // When — the lifecycle reconciles with closed: false
-      await h.action.execute({ ...archivedInput, closed: false });
-
-      // Then — the folder moves back
-      expect(h.vault.moveCalls).toEqual([
+      await unarchived.action.execute({ ...archivedInput, closed: false });
+      expect(unarchived.vault.moveCalls).toEqual([
         { from: 'Archief/Acme Widgets', to: 'Projecten/Acme Widgets' },
       ]);
     });
 
     it('resolves a conflict in the vault’s favour: the board follows, no folder move', async () => {
-      // Given — both the folder and the board moved
       const h = setup();
       h.vault.notes.set(archivedNote, note('P1'));
       h.syncState.baselines.set('Acme Widgets', {
@@ -537,10 +493,8 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the folder is archived while the board still reads open
       await h.action.execute({ ...archivedInput, closed: false });
 
-      // Then — the vault wins: the board is archived to match, no folder move
       expect(h.port.closedCalls).toEqual([
         { projectNodeId: 'PVT_123', closed: true },
       ]);
@@ -548,7 +502,6 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('does nothing when the observation matches the baseline', async () => {
-      // Given — a settled active project
       const h = setup();
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
@@ -556,16 +509,13 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the lifecycle reconciles
       await h.action.execute(activeInput);
 
-      // Then — nothing moves and the baseline is unchanged
       expect(h.vault.moveCalls).toEqual([]);
       expect(h.port.closedCalls).toEqual([]);
     });
 
     it('leaves the old baseline when the reconciliation throws', async () => {
-      // Given — a settled active project whose board gesture fails to move
       const h = setup();
       h.vault.failMove = true;
       h.syncState.baselines.set('Acme Widgets', {
@@ -574,12 +524,10 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the lifecycle reconciles a closed board
       await expect(
         h.action.execute({ ...activeInput, closed: true }),
       ).rejects.toThrow('move failed');
 
-      // Then — the old baseline survives for the next tick to retry
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
@@ -588,7 +536,6 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('is idempotent: a second pass over the settled state writes nothing', async () => {
-      // Given — a project that just archived
       const h = setup();
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
@@ -597,20 +544,17 @@ describe('ReconcileProjectLifecycleAction', () => {
       });
       await h.action.execute({ ...activeInput, closed: true });
 
-      // When — a second pass over the settled archived state
       h.vault.moveCalls = [];
       h.port.closedCalls = [];
       h.syncState.baselineSets = [];
       await h.action.execute({ ...archivedInput, closed: true });
 
-      // Then — no write happens
       expect(h.vault.moveCalls).toEqual([]);
       expect(h.port.closedCalls).toEqual([]);
       expect(h.syncState.baselineSets).toEqual([]);
     });
 
     it('stamps archivedAt once on the freeze transition and preserves it', async () => {
-      // Given — a settled active project whose board just closed
       const h = setup();
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
@@ -618,17 +562,14 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the archive transition runs
       await h.action.execute({ ...activeInput, closed: true });
 
-      // Then — the transition is stamped with the pass's syncedAt
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: true,
         closed: true,
         archivedAt: syncedAt,
       });
 
-      // And — a settled pass preserves the original stamp, never re-stamping
       h.syncState.baselineSets = [];
       await h.action.execute(archivedInput);
       expect(h.syncState.baselines.get('Acme Widgets')?.archivedAt).toBe(
@@ -638,14 +579,11 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('clears archivedAt when a Todoist unarchive flows back', async () => {
-      // Given — a settled archived project unarchived on the Todoist side
       const h = setupArchived();
       h.taskManager.projects = [project({ isArchived: false })];
 
-      // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
 
-      // Then — the project is active again and the stamp is cleared
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
@@ -654,7 +592,6 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('skips a transition for a project with no stored identity', async () => {
-      // Given — a project with no GitHub identity
       const h = setup();
       h.syncState.identities.clear();
       h.syncState.baselines.set('Acme Widgets', {
@@ -663,71 +600,53 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the board reports closed
       await h.action.execute({ ...activeInput, closed: true });
 
-      // Then — the folder still moves (vault-side) but no board write happens
       expect(h.vault.moveCalls).toHaveLength(1);
       expect(h.port.closedCalls).toEqual([]);
     });
   });
 
   describe('two-way Todoist archive backflow', () => {
-    it('flows a Todoist archive back to the folder and the board', async () => {
-      // Given — a settled active project archived on the Todoist side
-      const h = setup();
-      h.taskManager.projects = [project({ isArchived: true })];
-      h.syncState.baselines.set('Acme Widgets', {
+    it('flows a Todoist archive and unarchive back to the folder and the board', async () => {
+      const archived = setup();
+      archived.taskManager.projects = [project({ isArchived: true })];
+      archived.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
         closed: false,
         archivedAt: null,
       });
-
-      // When — the lifecycle reconciles
-      await h.action.execute(activeInput);
-
-      // Then — the folder moves to Archief/ and the board closes (the cascade)
-      expect(h.vault.moveCalls).toEqual([
+      await archived.action.execute(activeInput);
+      expect(archived.vault.moveCalls).toEqual([
         { from: 'Projecten/Acme Widgets', to: 'Archief/Acme Widgets' },
       ]);
-      expect(h.port.closedCalls).toEqual([
+      expect(archived.port.closedCalls).toEqual([
         { projectNodeId: 'PVT_123', closed: true },
       ]);
-    });
 
-    it('flows a Todoist unarchive back to the folder', async () => {
-      // Given — a settled archived project unarchived on the Todoist side
-      const h = setup();
-      h.vault.notes.set(archivedNote, note('P1'));
-      h.syncState.records.clear();
-      seedRecord(h.syncState, archivedTaskPath);
-      h.syncState.baselines.set('Acme Widgets', {
+      const unarchived = setup();
+      unarchived.vault.notes.set(archivedNote, note('P1'));
+      unarchived.syncState.records.clear();
+      seedRecord(unarchived.syncState, archivedTaskPath);
+      unarchived.syncState.baselines.set('Acme Widgets', {
         locationArchived: true,
         closed: true,
         archivedAt: '',
       });
-
-      // When — the lifecycle reconciles an archived folder with an active
-      // Todoist project
-      await h.action.execute(archivedInput);
-
-      // Then — the folder moves back and the board reopens
-      expect(h.vault.moveCalls).toEqual([
+      await unarchived.action.execute(archivedInput);
+      expect(unarchived.vault.moveCalls).toEqual([
         { from: 'Archief/Acme Widgets', to: 'Projecten/Acme Widgets' },
       ]);
-      expect(h.port.closedCalls).toEqual([
+      expect(unarchived.port.closedCalls).toEqual([
         { projectNodeId: 'PVT_123', closed: false },
       ]);
     });
 
     it('freezes an archived project with a null project id but still polls by id', async () => {
-      // Given — a settled archived project
       const h = setupArchived();
 
-      // When — the lifecycle reconciles
       const verdict = await h.action.execute(archivedInput);
 
-      // Then — the verdict is frozen and the project was fetched by id
       expect(verdict.frozen).toBe(true);
       expect(verdict.todoistProjectId).toBeNull();
       expect(h.taskManager.projects[0]!.id).toBe('P1');
@@ -736,20 +655,16 @@ describe('ReconcileProjectLifecycleAction', () => {
 
   describe('frozen project watch', () => {
     it('does nothing when the repository answers 304', async () => {
-      // Given — an archived project whose repo is quiet
       const h = setupArchived();
       h.port.activity = { changed: false, newestCreatedAt: null, etag: null };
 
-      // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
 
-      // Then — the watch state is untouched and the project stays archived
       expect(h.syncState.watchSets).toEqual([]);
       expect(h.vault.moveCalls).toEqual([]);
     });
 
     it('adopts the newest issue as the cursor on the first watch', async () => {
-      // Given — an archived project watched for the first time
       const h = setupArchived();
       h.port.activity = {
         changed: true,
@@ -757,10 +672,8 @@ describe('ReconcileProjectLifecycleAction', () => {
         etag: 'etag-1',
       };
 
-      // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
 
-      // Then — the cursor is adopted without reactivating
       expect(h.syncState.watchSets).toEqual([
         {
           projectName: 'Acme Widgets',
@@ -771,7 +684,6 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('re-activates the project when a newer issue appears', async () => {
-      // Given — an archived project whose repo gained a newer issue
       const h = setupArchived();
       h.syncState.watches.set('Acme Widgets', {
         etag: 'etag-1',
@@ -783,10 +695,8 @@ describe('ReconcileProjectLifecycleAction', () => {
         etag: 'etag-2',
       };
 
-      // When — the lifecycle reconciles
       const verdict = await h.action.execute(archivedInput);
 
-      // Then — folder back, board reopened, Todoist unarchived, baseline active
       expect(h.vault.moveCalls).toEqual([
         { from: 'Archief/Acme Widgets', to: 'Projecten/Acme Widgets' },
       ]);
@@ -809,7 +719,6 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('refreshes only the etag when the newest issue is not newer', async () => {
-      // Given — an archived project with no newer issue
       const h = setupArchived();
       h.syncState.watches.set('Acme Widgets', {
         etag: 'etag-1',
@@ -821,10 +730,8 @@ describe('ReconcileProjectLifecycleAction', () => {
         etag: 'etag-2',
       };
 
-      // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
 
-      // Then — the etag refreshes and the project stays archived
       expect(h.syncState.watchSets).toEqual([
         {
           projectName: 'Acme Widgets',
@@ -835,19 +742,15 @@ describe('ReconcileProjectLifecycleAction', () => {
     });
 
     it('skips the watch for a project with no stored identity', async () => {
-      // Given — an archived project with no GitHub identity
       const h = setupArchived();
       h.syncState.identities.clear();
 
-      // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
 
-      // Then — no watch read happens
       expect(h.syncState.watchSets).toEqual([]);
     });
 
     it('leaves the watch state untouched when re-activation fails', async () => {
-      // Given — an archived project whose folder move fails on reactivation
       const h = setupArchived();
       h.syncState.watches.set('Acme Widgets', {
         etag: 'etag-1',
@@ -860,12 +763,10 @@ describe('ReconcileProjectLifecycleAction', () => {
       };
       h.vault.failMove = true;
 
-      // When — the lifecycle reconciles
       await expect(h.action.execute(archivedInput)).rejects.toThrow(
         'move failed',
       );
 
-      // Then — the watch state survives for the next tick to retry
       expect(h.syncState.watches.get('Acme Widgets')).toEqual({
         etag: 'etag-1',
         cursor: '2026-09-20T10:00:00Z',
@@ -875,7 +776,6 @@ describe('ReconcileProjectLifecycleAction', () => {
 
   describe('archive lock', () => {
     it('locks unshipped issues when a GitHub gesture archives the project', async () => {
-      // Given — a settled active project whose board closed
       const h = setup();
       h.syncState.baselines.set('Acme Widgets', {
         locationArchived: false,
@@ -883,15 +783,12 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the lifecycle reconciles
       await h.action.execute({ ...activeInput, closed: true });
 
-      // Then — the tracked issue is locked
       expect(h.port.lockedNodeIds).toEqual(['I_kwDOAAAA42']);
     });
 
     it('skips shipped issues when archiving: the vault decides done', async () => {
-      // Given — a project whose only record is in the done lane
       const h = setup();
       h.syncState.records.clear();
       seedRecord(h.syncState, taskPath, { status: 'Shipped' });
@@ -901,27 +798,21 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the lifecycle reconciles an archive
       await h.action.execute({ ...activeInput, closed: true });
 
-      // Then — no issue is locked
       expect(h.port.lockedNodeIds).toEqual([]);
     });
 
     it('does not lock on first-run adoption', async () => {
-      // Given — an archived project seen for the first time
       const h = setup();
       h.vault.notes.set(archivedNote, note('P1'));
 
-      // When — the lifecycle reconciles
       await h.action.execute(archivedInput);
 
-      // Then — adoption never locks
       expect(h.port.lockedNodeIds).toEqual([]);
     });
 
     it('leaves the baseline unwritten when a lock fails, so the next tick retries', async () => {
-      // Given — a project archiving whose issue lock fails
       const h = setup();
       h.port.failLock = true;
       h.syncState.baselines.set('Acme Widgets', {
@@ -930,12 +821,10 @@ describe('ReconcileProjectLifecycleAction', () => {
         archivedAt: null,
       });
 
-      // When — the lifecycle reconciles
       await expect(
         h.action.execute({ ...activeInput, closed: true }),
       ).rejects.toThrow('lock failed');
 
-      // Then — the old baseline survives
       expect(h.syncState.baselines.get('Acme Widgets')).toEqual({
         locationArchived: false,
         closed: false,
@@ -947,86 +836,64 @@ describe('ReconcileProjectLifecycleAction', () => {
   describe('home note rename migration', () => {
     const canonical = 'Projecten/Acme Widgets/_Acme Widgets.md';
 
-    it('renames a _home.md note to the _<project>.md convention', async () => {
-      // Given — a project home note still on the intermediate convention
-      const legacy = 'Projecten/Acme Widgets/_home.md';
-      const h = setupLegacyHome(legacy);
+    it('renames both legacy home-note conventions to the underscore form', async () => {
+      for (const legacy of [
+        'Projecten/Acme Widgets/_home.md',
+        'Projecten/Acme Widgets/Acme Widgets.md',
+      ]) {
+        const h = setupLegacyHome(legacy);
 
-      // When — the lifecycle reconciles
-      await h.action.execute({ ...activeInput, notePath: legacy });
+        await h.action.execute({ ...activeInput, notePath: legacy });
 
-      // Then — the note is renamed to the convention and nothing is clobbered
-      expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
-      expect(h.vault.notes.has(legacy)).toBe(false);
-      expect(h.vault.notes.has(canonical)).toBe(true);
-    });
-
-    it('renames a legacy <name>.md note to the convention', async () => {
-      // Given — the pre-convention note named after its folder
-      const legacy = 'Projecten/Acme Widgets/Acme Widgets.md';
-      const h = setupLegacyHome(legacy);
-
-      // When — the lifecycle reconciles
-      await h.action.execute({ ...activeInput, notePath: legacy });
-
-      // Then — it is renamed to the underscore form
-      expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
-      expect(h.vault.notes.has(legacy)).toBe(false);
+        expect(h.vault.renameCalls, legacy).toEqual([
+          { from: legacy, to: canonical },
+        ]);
+        expect(h.vault.notes.has(legacy), legacy).toBe(false);
+        expect(h.vault.notes.has(canonical), legacy).toBe(true);
+      }
     });
 
     it('skips the rename when the target already exists, without clobbering', async () => {
-      // Given — a legacy note beside an existing canonical file
       const legacy = 'Projecten/Acme Widgets/_home.md';
       const h = setupLegacyHome(legacy);
       h.vault.notes.set(canonical, note('P1'));
 
-      // When — the lifecycle reconciles
       await h.action.execute({ ...activeInput, notePath: legacy });
 
-      // Then — neither file moves and the existing target is untouched
       expect(h.vault.renameCalls).toEqual([]);
       expect(h.vault.notes.has(legacy)).toBe(true);
       expect(h.vault.notes.get(canonical)).toBe(note('P1'));
     });
 
     it('migrates an archived project under Archief/', async () => {
-      // Given — a frozen project still on the intermediate convention
       const legacy = 'Archief/Acme Widgets/_home.md';
       const target = 'Archief/Acme Widgets/_Acme Widgets.md';
       const h = setupLegacyHome(legacy);
 
-      // When — the lifecycle reconciles the archived location
       await h.action.execute({ ...archivedInput, notePath: legacy });
 
-      // Then — the rename lands under Archief/
       expect(h.vault.renameCalls).toEqual([{ from: legacy, to: target }]);
       expect(h.vault.notes.has(target)).toBe(true);
     });
 
     it('stamps the todoist anchor on the renamed file', async () => {
-      // Given — a legacy home note with no anchor and no matching project
       const legacy = 'Projecten/Acme Widgets/_home.md';
       const h = setupLegacyHome(legacy, '');
       h.taskManager.projects = [];
 
-      // When — the lifecycle reconciles
       await h.action.execute({ ...activeInput, notePath: legacy });
 
-      // Then — the anchor is written to the renamed path, not the old one
       expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
       expect(h.vault.notes.get(canonical)).toContain('todoist: P-new');
       expect(h.vault.notes.has(legacy)).toBe(false);
     });
 
     it('leaves a folder-renamed note whose basename drifted alone', async () => {
-      // Given — a note whose folder was renamed but whose filename was not
       const legacy = 'Projecten/Acme Widgets/Old Name.md';
       const h = setupLegacyHome(legacy);
 
-      // When — the lifecycle reconciles
       await h.action.execute({ ...activeInput, notePath: legacy });
 
-      // Then — the unrecognised basename is never renamed
       expect(h.vault.renameCalls).toEqual([]);
       expect(h.vault.notes.has(legacy)).toBe(true);
     });

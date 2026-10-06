@@ -135,15 +135,12 @@ function setup(stored?: ProjectIdentityData) {
   return { action, port, vault, syncState };
 }
 
-describe('EnsureProjectBoardAction', () => {
+describe('PRJ-1 — a vault project gains a board', () => {
   it('creates a board and stores its addressing when the identity has none', async () => {
-    // Given — a vault project with no stored identity
     const h = setup();
 
-    // When — the board is ensured
     await h.action.execute({ projectName: 'Acme Widgets', notePath });
 
-    // Then — a board is created under the viewer and its identity is stored
     expect(h.port.createCalls).toEqual(['Acme Widgets']);
     expect(await h.syncState.getIdentity('Acme Widgets')).toEqual({
       repoUrl: '',
@@ -152,20 +149,16 @@ describe('EnsureProjectBoardAction', () => {
       statusFieldId: 'PVTF_new',
       statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     });
-    // And — the board url is stamped onto the home note as the board anchor
     expect(h.vault.notes.get(notePath)).toContain(
       'board: https://github.com/users/acme/projects/7',
     );
   });
 
   it('is idempotent: an identity that already has a board is left alone', async () => {
-    // Given — a project already carrying a board node id
     const h = setup(identity({ projectNodeId: 'PVT_existing' }));
 
-    // When — the board is ensured
     await h.action.execute({ projectName: 'Acme Widgets', notePath });
 
-    // Then — no board is created and no note is written
     expect(h.port.createCalls).toEqual([]);
     expect(h.vault.writes).toEqual([]);
     expect((await h.syncState.getIdentity('Acme Widgets'))?.projectNodeId).toBe(
@@ -174,7 +167,6 @@ describe('EnsureProjectBoardAction', () => {
   });
 
   it('preserves an attached repository when it fills in the board', async () => {
-    // Given — a project with a repo attached but no board yet
     const h = setup(
       identity({
         repoUrl: 'https://github.com/acme/widgets',
@@ -182,10 +174,8 @@ describe('EnsureProjectBoardAction', () => {
       }),
     );
 
-    // When — the board is ensured
     await h.action.execute({ projectName: 'Acme Widgets', notePath });
 
-    // Then — the repo addressing survives the merge
     expect(await h.syncState.getIdentity('Acme Widgets')).toEqual({
       repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',

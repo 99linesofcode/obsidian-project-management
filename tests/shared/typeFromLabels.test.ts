@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { typeFromLabels } from '../../src/shared/typeFromLabels.js';
 
-describe('typeFromLabels', () => {
+describe('MAT-3 — the type gate reads the type label', () => {
   it('reads the type from a spaced type label', () => {
     expect(typeFromLabels(['type: task', 'bug'])).toBe('task');
   });
@@ -15,9 +15,6 @@ describe('typeFromLabels', () => {
   });
 
   it('never mistakes an arbitrary non-type label for the type', () => {
-    // Given — a user label that is not a type
-    // When — the type is read
-    // Then — it is empty, not 'priority:high'
     expect(typeFromLabels(['priority:high'])).toBe('');
   });
 });

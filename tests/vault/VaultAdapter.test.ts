@@ -64,84 +64,65 @@ function setup() {
   return { vault, registered, changed, renamed };
 }
 
-describe('VaultAdapter.onNoteChanged', () => {
+describe('DISC-1 — the vault port reads and writes notes', () => {
   it('routes a created task note under Projecten through the change callback', () => {
-    // Given — an adapter subscribed to note changes
     const { vault, changed } = setup();
 
-    // When — a task note is created under Projecten
     vault.fire(
       'create',
       new TFile('Projecten/Acme Widgets/taken/42-fix-the-bug.md', 'md'),
     );
 
-    // Then — the change callback receives the created note's path
     expect(changed).toEqual(['Projecten/Acme Widgets/taken/42-fix-the-bug.md']);
   });
 
   it('routes a modified task note under Projecten through the change callback', () => {
-    // Given — an adapter subscribed to note changes
     const { vault, changed } = setup();
 
-    // When — a task note is modified under Projecten
     vault.fire(
       'modify',
       new TFile('Projecten/Acme Widgets/taken/42-fix-the-bug.md', 'md'),
     );
 
-    // Then — the change callback receives the modified note's path
     expect(changed).toEqual(['Projecten/Acme Widgets/taken/42-fix-the-bug.md']);
   });
 
   it('ignores created notes outside Projecten', () => {
-    // Given — an adapter subscribed to note changes
     const { vault, changed } = setup();
 
-    // When — a note outside Projecten is created
     vault.fire('create', new TFile('Notes/random.md', 'md'));
 
-    // Then — the change callback is not invoked
     expect(changed).toEqual([]);
   });
 
   it('ignores created non-markdown files under Projecten', () => {
-    // Given — an adapter subscribed to note changes
     const { vault, changed } = setup();
 
-    // When — a non-markdown file is created under Projecten
     vault.fire(
       'create',
       new TFile('Projecten/Acme Widgets/board.canvas', 'canvas'),
     );
 
-    // Then — the change callback is not invoked
     expect(changed).toEqual([]);
   });
 
   it('registers every subscription for cleanup on unload', () => {
-    // Given — an adapter subscribed to note changes and renames
     const { registered } = setup();
 
-    // When — the subscriptions are registered
-    // Then — the modify, create and rename subscriptions are handed to the
-    // plugin's registerEvent for cleanup
     expect(registered).toHaveLength(3);
   });
 });
 
 describe('VaultAdapter.onNoteRenamed', () => {
   it('routes a renamed task note under Projecten through the rename callback', () => {
-    // Given — an adapter subscribed to note renames
     const { vault, renamed } = setup();
 
-    // When — a task note under Projecten is renamed
     vault.fire(
       'rename',
       new TFile('Projecten/Acme Widgets/taken/42-fix-the-bug.md', 'md'),
       'Projecten/Acme Widgets/taken/42-old.md',
     );
 
-    // Then — the callback receives both the old and the new path
     expect(renamed).toEqual([
       {
         oldPath: 'Projecten/Acme Widgets/taken/42-old.md',
@@ -151,35 +132,28 @@ describe('VaultAdapter.onNoteRenamed', () => {
   });
 
   it('ignores renames outside Projecten', () => {
-    // Given — an adapter subscribed to note renames
     const { vault, renamed } = setup();
 
-    // When — a note outside Projecten is renamed
     vault.fire('rename', new TFile('Notes/random.md', 'md'), 'Notes/old.md');
 
-    // Then — the callback is not invoked
     expect(renamed).toEqual([]);
   });
 
   it('ignores renamed non-markdown files under Projecten', () => {
-    // Given — an adapter subscribed to note renames
     const { vault, renamed } = setup();
 
-    // When — a non-markdown file is renamed under Projecten
     vault.fire(
       'rename',
       new TFile('Projecten/Acme Widgets/board.canvas', 'canvas'),
       'Projecten/Acme Widgets/old.canvas',
     );
 
-    // Then — the callback is not invoked
     expect(renamed).toEqual([]);
   });
 });
 
 describe('VaultAdapter.modifiedTime', () => {
   it('returns the file mtime as ISO 8601 and null for an unknown path', async () => {
-    // Given — a vault holding one note with a known stat mtime
     const file = new TFile(
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
       'md',
@@ -192,10 +166,8 @@ describe('VaultAdapter.modifiedTime', () => {
     const app = { vault } as unknown as App;
     const adapter = new VaultAdapter(app, () => {});
 
-    // When — the note's modified time is read
     const iso = await adapter.modifiedTime(file.path);
 
-    // Then — it is the mtime as ISO 8601, and an absent note is null
     expect(iso).toBe(new Date(1758196800000).toISOString());
     expect(await adapter.modifiedTime('Projecten/missing.md')).toBeNull();
   });
@@ -248,8 +220,6 @@ function moveSetup(paths: string[]) {
 
 describe('VaultAdapter.moveFolder', () => {
   it('moves every file under the prefix, any extension, preserving relative paths', async () => {
-    // Given — a project folder holding markdown, a .base file and an image,
-    // plus a sibling project that must not move
     const { vault, adapter } = moveSetup([
       'Projecten/Acme Widgets/_home.md',
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
@@ -259,10 +229,8 @@ describe('VaultAdapter.moveFolder', () => {
       'Projecten/Other/_home.md',
     ]);
 
-    // When — the project folder is moved to the archive
     await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
 
-    // Then — every file moved, its relative path intact, the sibling untouched
     expect(vault.files.map((file) => file.path).sort()).toEqual([
       'Archief/Acme Widgets/_home.md',
       'Archief/Acme Widgets/board.base',
@@ -274,28 +242,22 @@ describe('VaultAdapter.moveFolder', () => {
   });
 
   it('creates the destination folder chain before renaming', async () => {
-    // Given — a nested task note whose destination folders do not exist
     const { vault, adapter } = moveSetup([
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     ]);
 
-    // When — the project folder is moved to the archive
     await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
 
-    // Then — the whole destination chain was created
     expect(vault.folders.has('Archief')).toBe(true);
     expect(vault.folders.has('Archief/Acme Widgets')).toBe(true);
     expect(vault.folders.has('Archief/Acme Widgets/taken')).toBe(true);
   });
 
   it('is a no-op when no file lives under the prefix', async () => {
-    // Given — a vault with no files under the source prefix
     const { vault, adapter } = moveSetup(['Projecten/Other/_home.md']);
 
-    // When — the missing project folder is moved
     await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
 
-    // Then — nothing is renamed
     expect(vault.renames).toEqual([]);
   });
 });

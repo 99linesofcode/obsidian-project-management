@@ -15,15 +15,12 @@ const context = {
   statusName: 'Building',
 };
 
-describe('TaskNoteParser', () => {
+describe('MAT-1 — a task note parses to the canonical shape', () => {
   it('round-trips a mapped note back to type, status and body', () => {
-    // Given — a note produced by the mapper
     const { content } = TaskNoteMapper.map(task, context);
 
-    // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — the content fields are preserved; no machine id is surfaced
     expect(parsed).toEqual({
       type: 'task',
       status: 'Building',
@@ -33,7 +30,6 @@ describe('TaskNoteParser', () => {
   });
 
   it('ignores a legacy url and id without requiring one', () => {
-    // Given — a note with legacy id and url fields
     const content = [
       '---',
       'id: uuid-42',
@@ -43,10 +39,8 @@ describe('TaskNoteParser', () => {
       'Body.',
     ].join('\n');
 
-    // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — the legacy fields are not surfaced (dt-20) but the note parses
     expect(parsed?.status).toBe('Building');
     expect(parsed?.body).toBe('Body.');
     expect(parsed).not.toHaveProperty('id');
@@ -54,39 +48,30 @@ describe('TaskNoteParser', () => {
   });
 
   it('parses a note with frontmatter but no machine id', () => {
-    // Given — a new-style note carrying no id or url
     const content = ['---', 'status: open', '---', 'Body.'].join('\n');
 
-    // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — it is recognised: a task note needs no machine id
     expect(parsed?.status).toBe('open');
     expect(parsed?.body).toBe('Body.');
   });
 
   it('round-trips a lane name with spaces verbatim', () => {
-    // Given — a note whose card sits in a multi-word lane
     const { content } = TaskNoteMapper.map(task, {
       ...context,
       statusName: 'Shipped',
     });
 
-    // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — the status is the lane name verbatim
     expect(parsed?.status).toBe('Shipped');
   });
 
   it('returns null for content without frontmatter', () => {
-    // Given — a plain note with no frontmatter
     const content = 'Just a note.';
 
-    // When — the note is parsed
     const parsed = TaskNoteParser.parse(content);
 
-    // Then — it is not recognised as a task note
     expect(parsed).toBeNull();
   });
 });

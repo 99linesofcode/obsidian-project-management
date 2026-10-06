@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The scheduler extends Obsidian's Component; mock it so the test runs
-// without the host app. load() triggers onload(), which registers the timer.
 vi.mock('obsidian', () => {
   class Component {
     load(): void {
@@ -20,8 +18,6 @@ import type { SyncQueue } from '../../src/app/SyncQueue.js';
 import type { ProjectNoteData } from '../../src/projects/ProjectNoteData.js';
 import type { VaultPort } from '../../src/vault/VaultPort.js';
 
-// A fake vault that exposes the three subscription callbacks and a canned
-// discovery result, so the scheduler's trigger wiring is observable.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -67,8 +63,6 @@ class FakeVault implements VaultPort {
   }
 }
 
-// A fake queue that records every enqueue, so the scheduler's trigger policies
-// are observable without the real chain.
 class FakeQueue {
   enqueued: string[] = [];
   enqueue(project: string): void {
@@ -94,20 +88,20 @@ function schedulerWith(
   vault: FakeVault,
   queue: FakeQueue,
   debounceMs = 0,
+  capture?: () => Promise<string[]>,
 ): SyncScheduler {
   return new SyncScheduler(
     vault,
     queue as unknown as SyncQueue,
     60_000,
     debounceMs,
+    capture,
   );
 }
 
-describe('SyncScheduler', () => {
+describe('PRB-1 — quiet means cheap, never blind', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // Obsidian runs in a browser where window is the global; the scheduler
-    // uses window.setInterval/setTimeout, so point window at the faked globals.
     vi.stubGlobal('window', globalThis);
   });
 
@@ -116,222 +110,125 @@ describe('SyncScheduler', () => {
     vi.unstubAllGlobals();
   });
 
-  it('enqueues every discovered project on each tick', async () => {
-    // Given — a scheduler wired to two projects on a 60s interval
+  it('enqueues every discovered project, archived ones included, on each tick', async () => {
     const vault = new FakeVault();
     vault.projectNotes = [
       projectNote('Acme Widgets', null),
       projectNote('Other', null),
+      projectNote('Old Project', ''),
     ];
     const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
+    schedulerWith(vault, queue).load();
 
-    // When — one interval elapses
     await vi.advanceTimersByTimeAsync(60_000);
 
-    // Then — every discovered project is enqueued
-    expect(queue.enqueued).toEqual(['Acme Widgets', 'Other']);
+    expect(queue.enqueued).toEqual(['Acme Widgets', 'Other', 'Old Project']);
   });
 
-  it('enqueues archived projects too, so the chain can watch them', async () => {
-    // Given — an archived project note
-    const vault = new FakeVault();
-    vault.projectNotes = [projectNote('Acme Widgets', '')];
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
+  it('derives the project from a note change, ignoring paths outside the vault projects', async () => {
+    const cases = [
+      {
+        name: 'a task note change',
+        fire: (v: FakeVault) =>
+          v.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md'),
+        expected: ['Acme Widgets'],
+      },
+      {
+        name: 'a home-note change with a drifted filename',
+        fire: (v: FakeVault) => v.fireNoteChanged('Projecten/New Name/Old Name.md'),
+        expected: ['New Name'],
+      },
+      {
+        name: 'a path outside Projecten',
+        fire: (v: FakeVault) => v.fireNoteChanged('Notes/random.md'),
+        expected: [],
+      },
+    ];
+    for (const c of cases) {
+      const vault = new FakeVault();
+      const queue = new FakeQueue();
+      schedulerWith(vault, queue).load();
 
-    // When — one interval elapses
-    await vi.advanceTimersByTimeAsync(60_000);
+      c.fire(vault);
+      await vi.advanceTimersByTimeAsync(1);
 
-    // Then — the archived project is enqueued
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
+      expect(queue.enqueued, c.name).toEqual(c.expected);
+    }
   });
 
-  it('derives the project name from a note change and enqueues it', async () => {
-    // Given — a scheduler subscribed to vault note changes
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
+  it('debounces rapid changes, deletions and their mix into one enqueue per project', async () => {
+    const cases = [
+      (v: FakeVault) => {
+        v.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+        v.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+        v.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+      },
+      (v: FakeVault) => {
+        v.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+        v.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+      },
+      (v: FakeVault) => {
+        v.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+        v.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+      },
+    ];
+    for (const fire of cases) {
+      const vault = new FakeVault();
+      const queue = new FakeQueue();
+      schedulerWith(vault, queue, 2000).load();
 
-    // When — a task note under Projecten changes
-    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    await vi.advanceTimersByTimeAsync(1);
+      fire(vault);
+      await vi.advanceTimersByTimeAsync(2000);
 
-    // Then — the derived project is enqueued
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
+      expect(queue.enqueued).toEqual(['Acme Widgets']);
+    }
   });
 
-  it('derives the project name from a home-note change, not its filename', async () => {
-    // Given — a scheduler subscribed to vault note changes
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
+  it('ignores deletions and renames outside Projecten', async () => {
+    for (const fire of [
+      (v: FakeVault) => v.fireNoteDeleted('Notes/random.md'),
+      (v: FakeVault) => v.fireNoteRenamed('Notes/a.md', 'Notes/b.md'),
+    ]) {
+      const vault = new FakeVault();
+      const queue = new FakeQueue();
+      schedulerWith(vault, queue).load();
 
-    // When — a legacy-named home note under a renamed folder changes
-    vault.fireNoteChanged('Projecten/New Name/Old Name.md');
-    await vi.advanceTimersByTimeAsync(1);
+      fire(vault);
+      await vi.advanceTimersByTimeAsync(1);
 
-    // Then — the folder decides the project name; the filename is meaningless
-    expect(queue.enqueued).toEqual(['New Name']);
-  });
-
-  it('ignores note changes outside Projecten', async () => {
-    // Given — a scheduler subscribed to vault note changes
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
-
-    // When — a note outside Projecten changes
-    vault.fireNoteChanged('Notes/random.md');
-    await vi.advanceTimersByTimeAsync(1);
-
-    // Then — nothing is enqueued
-    expect(queue.enqueued).toEqual([]);
-  });
-
-  it('debounces rapid note changes into one enqueue', async () => {
-    // Given — a scheduler with a 2s debounce
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue, 2000);
-    scheduler.load();
-
-    // When — several changes for the same project arrive within the window
-    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    await vi.advanceTimersByTimeAsync(2000);
-
-    // Then — they coalesce into a single enqueue
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
-  });
-
-  it('debounces note deletions per project', async () => {
-    // Given — a scheduler with a 2s debounce
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue, 2000);
-    scheduler.load();
-
-    // When — a task note under Projecten is deleted twice within the window
-    vault.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    vault.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    await vi.advanceTimersByTimeAsync(2000);
-
-    // Then — the project is enqueued once
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
-  });
-
-  it('coalesces a change and a delete for the same project', async () => {
-    // Given — a scheduler with a 2s debounce
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue, 2000);
-    scheduler.load();
-
-    // When — a change and a delete for the same project arrive in the window
-    vault.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    vault.fireNoteDeleted('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
-    await vi.advanceTimersByTimeAsync(2000);
-
-    // Then — the kinds collapse: one enqueue, not two
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
-  });
-
-  it('ignores note deletions outside Projecten', async () => {
-    // Given — a scheduler subscribed to vault note deletions
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
-
-    // When — a note outside Projecten is deleted
-    vault.fireNoteDeleted('Notes/random.md');
-    await vi.advanceTimersByTimeAsync(1);
-
-    // Then — nothing is enqueued
-    expect(queue.enqueued).toEqual([]);
+      expect(queue.enqueued).toEqual([]);
+    }
   });
 
   it('fires a rename immediately, bypassing the debounce', async () => {
-    // Given — a scheduler with a 2s debounce
     const vault = new FakeVault();
     const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue, 2000);
-    scheduler.load();
+    schedulerWith(vault, queue, 2000).load();
 
-    // When — a to-do is renamed
     vault.fireNoteRenamed(
       'Projecten/Acme Widgets/todos/fi.md',
       'Projecten/Acme Widgets/todos/fix-the-bug.md',
     );
     await vi.advanceTimersByTimeAsync(0);
 
-    // Then — it is enqueued without waiting out the debounce window
     expect(queue.enqueued).toEqual(['Acme Widgets']);
   });
 
-  it('ignores renames outside Projecten', async () => {
-    // Given — a scheduler subscribed to vault renames
-    const vault = new FakeVault();
-    const queue = new FakeQueue();
-    const scheduler = schedulerWith(vault, queue);
-    scheduler.load();
-
-    // When — a note outside Projecten is renamed
-    vault.fireNoteRenamed('Notes/a.md', 'Notes/b.md');
-    await vi.advanceTimersByTimeAsync(0);
-
-    // Then — nothing is enqueued
-    expect(queue.enqueued).toEqual([]);
-  });
-
-  it('runs the capture hook before enumerating and enqueues captured names', async () => {
-    // Given — a scheduler with a capture hook that adopts one project
-    const vault = new FakeVault();
-    vault.projectNotes = [projectNote('Acme Widgets', null)];
-    const queue = new FakeQueue();
-    const scheduler = new SyncScheduler(
-      vault,
-      queue as unknown as SyncQueue,
-      60_000,
-      0,
-      async () => ['New Project'],
-    );
-    scheduler.load();
-
-    // When — one interval elapses
+  it('runs the capture hook before enumerating, and survives its failure', async () => {
+    const captured = new FakeVault();
+    captured.projectNotes = [projectNote('Acme Widgets', null)];
+    const capturedQueue = new FakeQueue();
+    schedulerWith(captured, capturedQueue, 0, async () => ['New Project']).load();
     await vi.advanceTimersByTimeAsync(60_000);
+    expect(capturedQueue.enqueued).toEqual(['Acme Widgets', 'New Project']);
 
-    // Then — the captured project is enqueued alongside the discovered ones
-    expect(queue.enqueued).toEqual(['Acme Widgets', 'New Project']);
-  });
-
-  it('still runs the tick when the capture hook fails', async () => {
-    // Given — a scheduler whose capture hook throws
-    const vault = new FakeVault();
-    vault.projectNotes = [projectNote('Acme Widgets', null)];
-    const queue = new FakeQueue();
-    const scheduler = new SyncScheduler(
-      vault,
-      queue as unknown as SyncQueue,
-      60_000,
-      0,
-      async () => {
-        throw new Error('capture failed');
-      },
-    );
-    scheduler.load();
-
-    // When — one interval elapses
+    const failed = new FakeVault();
+    failed.projectNotes = [projectNote('Acme Widgets', null)];
+    const failedQueue = new FakeQueue();
+    schedulerWith(failed, failedQueue, 0, async () => {
+      throw new Error('capture failed');
+    }).load();
     await vi.advanceTimersByTimeAsync(60_000);
-
-    // Then — discovery still enqueues the known projects
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
+    expect(failedQueue.enqueued).toEqual(['Acme Widgets']);
   });
 });

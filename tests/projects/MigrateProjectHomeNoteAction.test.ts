@@ -31,7 +31,7 @@ function harness() {
 
 const canonical = 'Projecten/Acme Widgets/_Acme Widgets.md';
 
-describe('MigrateProjectHomeNoteAction', () => {
+describe('DISC-2 — the home note is renamed to the convention once', () => {
   it('renames a _home.md note to the _<project>.md convention', async () => {
     const h = harness();
     const legacy = 'Projecten/Acme Widgets/_home.md';

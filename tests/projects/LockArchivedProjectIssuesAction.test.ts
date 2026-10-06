@@ -26,7 +26,7 @@ function harness() {
   return { action, syncState, lockedNodeIds };
 }
 
-describe('LockArchivedProjectIssuesAction', () => {
+describe('ARC-1 — archiving locks every unshipped issue', () => {
   it('locks an unshipped issue', async () => {
     const h = harness();
     h.syncState.seed(

@@ -140,9 +140,8 @@ function makeAction(
   );
 }
 
-describe('PromoteCardAction', () => {
+describe('PRO-2 — a card without an issue is promoted', () => {
   it('converts the draft card and materialises the note from the fetched task', async () => {
-    // Given — a port that promotes the card and an empty vault
     const port = new FakePort();
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
@@ -156,18 +155,15 @@ describe('PromoteCardAction', () => {
     syncState.identities.set('Acme Widgets', identity);
     const action = makeAction(port, vault, syncState);
 
-    // When — the action promotes the draft card
     await action.execute({
       itemId: 'PVTI_2',
       repoNodeId: 'R_kgDOAAAA',
       projectName: 'Acme Widgets',
     });
 
-    // Then — the card is converted against the repo
     expect(port.promoted).toEqual([
       { itemId: 'PVTI_2', repoNodeId: 'R_kgDOAAAA' },
     ]);
-    // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toContain(slugify(port.task.title));
   });

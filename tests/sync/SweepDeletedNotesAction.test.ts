@@ -43,7 +43,7 @@ function harness() {
   };
 }
 
-describe('SweepDeletedNotesAction', () => {
+describe('DEL-3 — a partial deletion retries to completion', () => {
   it('sweeps a registry record whose note is gone', async () => {
     const h = harness();
     h.syncState.records.set(

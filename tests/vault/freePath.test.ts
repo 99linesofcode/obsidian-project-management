@@ -46,40 +46,31 @@ class FakeVault implements VaultPort {
   onNoteRenamed(): void {}
 }
 
-describe('freePath', () => {
+describe('MAT-5 — a taken slug gains an ordinal', () => {
   it('returns the base path when it is free', async () => {
-    // Given — an empty vault
     const vault = new FakeVault();
 
-    // When — a free path is requested
     const path = await freePath(vault, 'Projecten/X/todos/fix-the-bug.md');
 
-    // Then — the base path is returned
     expect(path).toBe('Projecten/X/todos/fix-the-bug.md');
   });
 
   it('suffixes -2 when the base path is taken', async () => {
-    // Given — a vault already holding the base path
     const vault = new FakeVault();
     vault.notes.add('Projecten/X/todos/fix-the-bug.md');
 
-    // When — a free path is requested
     const path = await freePath(vault, 'Projecten/X/todos/fix-the-bug.md');
 
-    // Then — the first free suffix is returned
     expect(path).toBe('Projecten/X/todos/fix-the-bug-2.md');
   });
 
   it('walks past taken suffixes', async () => {
-    // Given — a vault holding the base path and its first suffix
     const vault = new FakeVault();
     vault.notes.add('Projecten/X/todos/fix-the-bug.md');
     vault.notes.add('Projecten/X/todos/fix-the-bug-2.md');
 
-    // When — a free path is requested
     const path = await freePath(vault, 'Projecten/X/todos/fix-the-bug.md');
 
-    // Then — the next free suffix is returned
     expect(path).toBe('Projecten/X/todos/fix-the-bug-3.md');
   });
 });

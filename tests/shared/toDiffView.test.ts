@@ -6,13 +6,10 @@ import {
 } from '../../src/shared/toDiffView.js';
 import { taskData } from '../helpers/records.js';
 
-describe('toDiffView', () => {
+describe('SYNC-6 — the diff view is the comparable shape', () => {
   it('replaces the body with the digest of the comparable body', () => {
-    // Given — a live view with a real body
 
-    // When — it is rendered to its diff view
 
-    // Then — the body is the digest
     const live = taskData({ body: 'The bug happens on resize.' });
     expect(toDiffView(live, 'normalized body').body).toBe(
       hash('normalized body'),
@@ -20,11 +17,8 @@ describe('toDiffView', () => {
   });
 
   it('preserves every other field', () => {
-    // Given — a live view
 
-    // When — it is rendered to its diff view
 
-    // Then — everything but the body is carried over
     const live = taskData();
     const diff = toDiffView(live, 'normalized');
     expect(diff.id).toBe(live.id);
@@ -40,22 +34,16 @@ describe('toDiffView', () => {
   });
 
   it('does not mutate the live view', () => {
-    // Given — a live view with a real body
 
-    // When — it is rendered to its diff view
 
-    // Then — the live body is untouched
     const live = taskData({ body: 'real body' });
     toDiffView(live, 'normalized');
     expect(live.body).toBe('real body');
   });
 
   it('digests the body as-is when there is no rendering step', () => {
-    // Given — a live view
 
-    // When — its body is digested without a comparable rendering
 
-    // Then — the digest is of the raw body
     const live = taskData({ body: 'real body' });
     expect(toDiffViewWithBody(live).body).toBe(hash('real body'));
   });

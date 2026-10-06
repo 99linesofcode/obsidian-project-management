@@ -121,18 +121,15 @@ function makeAction(
   return new HandleDeletedNoteAction(syncState, projectManagement, 'Shipped');
 }
 
-describe('HandleDeletedNoteAction', () => {
+describe('DEL-1 — a deleted note closes its issue and drops its record', () => {
   it('deletes the card, closes the issue and removes the record', async () => {
-    // Given — a tracked note with an identity and an open lane
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     seed(syncState);
     const action = makeAction(syncState, projectManagement);
 
-    // When — the note is deleted
     await action.execute({ notePath, projectName });
 
-    // Then — the card is deleted, the issue is closed, and the record is removed
     expect(projectManagement.deleteCardCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
     ]);
@@ -142,34 +139,28 @@ describe('HandleDeletedNoteAction', () => {
   });
 
   it('skips the close when the record already sits in the done lane', async () => {
-    // Given — a tracked note whose base lane is the done lane
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     seed(syncState, 'Shipped');
     const action = makeAction(syncState, projectManagement);
 
-    // When — the note is deleted
     await action.execute({ notePath, projectName });
 
-    // Then — the card still goes and the record is removed, but no state write
     expect(projectManagement.deleteCardCalls).toHaveLength(1);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(syncState.removed).toEqual(['uuid-42']);
   });
 
   it('does nothing for an untracked note', async () => {
-    // Given — no record for the deleted path (an untracked file)
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     const action = makeAction(syncState, projectManagement);
 
-    // When — the note is deleted
     await action.execute({
       notePath: 'Projecten/Acme Widgets/taken/99-untracked.md',
       projectName,
     });
 
-    // Then — nothing is deleted, closed or removed
     expect(projectManagement.deleteCardCalls).toEqual([]);
     expect(projectManagement.stateCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);

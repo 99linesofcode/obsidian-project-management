@@ -139,15 +139,13 @@ function makeAction(
   );
 }
 
-describe('PropagateStatusAction', () => {
+describe('LANE-2 — a lane move follows on every surface', () => {
   it('closes the issue for a done note and refreshes the base lane', async () => {
-    // Given — a synced note whose status the user flipped to done
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
-    // When — the done status is propagated
     await action.execute({
       url,
       statusName: 'Shipped',
@@ -155,7 +153,6 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the issue is closed and the base lane follows
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
     const base = syncState.baseOf('uuid-42', 'github');
     expect(base?.status).toBe('Shipped');
@@ -163,13 +160,11 @@ describe('PropagateStatusAction', () => {
   });
 
   it('reopens the issue for an open note and refreshes the base lane', async () => {
-    // Given — a synced note whose status the user flipped back to open
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     seedBase(syncState, 'Shipped');
     const action = makeAction(projectManagement, syncState);
 
-    // When — the open status is propagated
     await action.execute({
       url,
       statusName: 'Unshaped',
@@ -177,7 +172,6 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the issue is reopened and the base lane follows
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
     const base = syncState.baseOf('uuid-42', 'github');
     expect(base?.status).toBe('Unshaped');
@@ -185,13 +179,11 @@ describe('PropagateStatusAction', () => {
   });
 
   it('skips the issue state write when the lane done-ness is unchanged', async () => {
-    // Given — a record already in an open lane, mirrored to another open lane
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
-    // When — the open lane is propagated
     await action.execute({
       url,
       statusName: 'Building',
@@ -199,19 +191,16 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the issue state is not written (both lanes are open)
     expect(projectManagement.stateCalls).toEqual([]);
   });
 
   it('mirrors the status onto the board when the project has an identity', async () => {
-    // Given — a project with a stored identity and a done note
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     syncState.identities.set(projectName, identity);
     seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
-    // When — the done status is propagated
     await action.execute({
       url,
       statusName: 'Shipped',
@@ -219,20 +208,17 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the board card is set to the done option
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: url, statusOptionId: 'PVTSSF_5' },
     ]);
   });
 
   it('skips the board mirror when the project has no identity', async () => {
-    // Given — a project with no stored identity (board-less)
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     seedBase(syncState, 'Unshaped');
     const action = makeAction(projectManagement, syncState);
 
-    // When — the done status is propagated
     await action.execute({
       url,
       statusName: 'Shipped',
@@ -240,17 +226,14 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the board is left untouched
     expect(projectManagement.boardStatusCalls).toEqual([]);
   });
 
   it('writes the state for an untracked note with no record', async () => {
-    // Given — no registry record for the issue
     const projectManagement = new FakeProjectManagement();
     const syncState = new FakeSyncState();
     const action = makeAction(projectManagement, syncState);
 
-    // When — the done status is propagated
     await action.execute({
       url,
       statusName: 'Shipped',
@@ -258,7 +241,6 @@ describe('PropagateStatusAction', () => {
       projectName,
     });
 
-    // Then — the state is written (no baseline to gate against)
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
   });
 });

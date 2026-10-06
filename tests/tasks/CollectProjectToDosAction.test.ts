@@ -33,7 +33,7 @@ const taskNote = [
 ].join('\n');
 const todoNote = ['---', 'status: open', '---', 'body'].join('\n');
 
-describe('CollectProjectToDosAction', () => {
+describe('TODO-3 — a slice to-do sits top-level in its lane', () => {
   it('collects a checklist-linked to-do with its owning task’s type and lane', async () => {
     const h = harness();
     h.vault.folders.set('Projecten/Acme Widgets/taken', [taskPath]);

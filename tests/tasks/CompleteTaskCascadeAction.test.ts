@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
+import { ToDoNoteParser } from '../../src/vault/ToDoNoteParser.js';
 import type { VaultPort } from '../../src/vault/VaultPort.js';
 
 // Fakes at the vault port: a path-keyed note store recording every write, so
@@ -101,39 +102,32 @@ function makeAction(vault: FakeVault) {
 
 const input = { notePath: taskPath, projectName, syncedAt };
 
-describe('CompleteTaskCascadeAction', () => {
+describe('COM-1 — a done task fans out through the vault', () => {
   it('completes the task checklist line and its open to-do notes', async () => {
-    // Given — a done task with an unchecked line and an open to-do
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(doneLane, `- [ ] [[${todoPath}|Fix]]`));
     vault.notes.set(todoPath, toDoNote('open'));
     const action = makeAction(vault);
 
-    // When — the cascade runs
     await action.execute(input);
 
-    // Then — the line is checked and the to-do is completed
     expect(vault.notes.get(taskPath)).toContain(`- [x] [[${todoPath}|Fix]]`);
     expect(vault.notes.get(todoPath)).toContain('status: completed');
     expect(vault.notes.get(todoPath)).toContain(`completed: ${syncedAt}`);
   });
 
   it('leaves an already-completed to-do untouched', async () => {
-    // Given — a done task whose to-do was already completed
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(doneLane, `- [x] [[${todoPath}|Fix]]`));
     vault.notes.set(todoPath, toDoNote('completed', taskStem, syncedAt));
     const action = makeAction(vault);
 
-    // When — the cascade runs
     await action.execute(input);
 
-    // Then — nothing is written (the gate is the diff)
     expect(vault.written).toEqual([]);
   });
 
   it("does not complete another task's to-do", async () => {
-    // Given — a done task with its own linked to-do and a sibling's to-do
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(doneLane, `- [ ] [[${todoPath}|Fix]]`));
     vault.notes.set(todoPath, toDoNote('open'));
@@ -141,16 +135,13 @@ describe('CompleteTaskCascadeAction', () => {
     vault.notes.set(otherPath, toDoNote('open', '99-other-task'));
     const action = makeAction(vault);
 
-    // When — the cascade runs
     await action.execute(input);
 
-    // Then — only this task's linked to-do completes
     expect(vault.notes.get(todoPath)).toContain('status: completed');
     expect(vault.notes.get(otherPath)).toContain('status: open');
   });
 
   it("checks the task's line in its parent slice", async () => {
-    // Given — a done task nested under a slice with an unchecked line
     const vault = new FakeVault();
     vault.notes.set(
       taskPath,
@@ -159,17 +150,14 @@ describe('CompleteTaskCascadeAction', () => {
     vault.notes.set(slicePath, sliceNote(false));
     const action = makeAction(vault);
 
-    // When — the cascade runs
     await action.execute(input);
 
-    // Then — the slice's line for the task is checked
     expect(vault.written).toEqual([
       { path: slicePath, content: sliceNote(true) },
     ]);
   });
 
   it('reopen unchecks the slice line but never reopens the to-dos', async () => {
-    // Given — an open task whose slice line is checked and whose to-do is done
     const vault = new FakeVault();
     vault.notes.set(
       taskPath,
@@ -179,10 +167,8 @@ describe('CompleteTaskCascadeAction', () => {
     vault.notes.set(todoPath, toDoNote('completed', taskStem, syncedAt));
     const action = makeAction(vault);
 
-    // When — the cascade runs on the reopened task
     await action.execute(input);
 
-    // Then — only the slice line follows; the to-do stays completed
     expect(vault.written).toEqual([
       { path: slicePath, content: sliceNote(false) },
     ]);
@@ -190,32 +176,39 @@ describe('CompleteTaskCascadeAction', () => {
   });
 
   it('writes nothing on a second pass over a settled task', async () => {
-    // Given — a done task already fully cascaded
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(doneLane, `- [x] [[${todoPath}|Fix]]`));
     vault.notes.set(todoPath, toDoNote('completed', taskStem, syncedAt));
     vault.notes.set(taskPath, taskNote(doneLane, `- [x] [[${todoPath}|Fix]]`));
     const action = makeAction(vault);
 
-    // When — the cascade runs twice
     await action.execute(input);
     vault.written = [];
     await action.execute(input);
 
-    // Then — the second pass is a no-op
     expect(vault.written).toEqual([]);
   });
 
   it('no-ops for a task with no parent slice and no to-dos', async () => {
-    // Given — a done top-level task with an empty body
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(doneLane, ''));
     const action = makeAction(vault);
 
-    // When — the cascade runs
     await action.execute(input);
 
-    // Then — there is nothing to project
     expect(vault.written).toEqual([]);
+  });
+
+  it('pairs the completed status with a timestamp, never one without the other', async () => {
+    const vault = new FakeVault();
+    vault.notes.set(taskPath, taskNote(doneLane, `- [ ] [[${todoPath}|Fix]]`));
+    vault.notes.set(todoPath, toDoNote('open'));
+    const action = makeAction(vault);
+
+    await action.execute(input);
+
+    const parsed = ToDoNoteParser.parse(vault.notes.get(todoPath)!);
+    expect(parsed?.status === 'completed').toBe(parsed?.completed !== null);
+    expect(parsed?.completed).toBe(syncedAt);
   });
 });

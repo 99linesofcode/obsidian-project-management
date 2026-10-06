@@ -146,36 +146,29 @@ function identity(): ProjectIdentityData {
   };
 }
 
-describe('PromoteIssueAction', () => {
+describe('PRO-1 — an untyped issue is promoted by hand', () => {
   it('applies the label and materialises the note from the fetched task', async () => {
-    // Given — a port that returns the issue to promote and an empty vault
     const port = new FakePort();
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity());
     const action = makeAction(port, vault, syncState);
 
-    // When — the action promotes the issue
     await action.execute({
       url: port.task.url,
       label: 'type: task',
       projectName: 'Acme Widgets',
     });
 
-    // Then — the label is applied to the issue
     expect(port.addedLabels).toEqual([
       { url: port.task.url, label: 'type: task' },
     ]);
-    // And the note is materialised from the fetched task, not on the next poll
     expect(vault.created).toHaveLength(1);
     expect(vault.created[0]!.path).toContain(slugify(port.task.title));
-    // And the promoted label became the vault-owned type
     expect(vault.created[0]!.content).toContain('type: task');
   });
 
   it('applies the label idempotently even when the issue is already labelled', async () => {
-    // Given — an issue that already carries the type: task label (the modal's
-    // filter would hide it, but a direct promote still runs)
     const port = new FakePort();
     port.task = { ...port.task, labels: ['type: task'] };
     const vault = new FakeVault();
@@ -183,15 +176,12 @@ describe('PromoteIssueAction', () => {
     syncState.identities.set('Acme Widgets', identity());
     const action = makeAction(port, vault, syncState);
 
-    // When — the action promotes the already-labelled issue
     await action.execute({
       url: port.task.url,
       label: 'type: task',
       projectName: 'Acme Widgets',
     });
 
-    // Then — the label is still applied (GitHub labels are idempotent) and the
-    // note is materialised
     expect(port.addedLabels).toEqual([
       { url: port.task.url, label: 'type: task' },
     ]);

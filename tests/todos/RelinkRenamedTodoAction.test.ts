@@ -76,18 +76,15 @@ function toDoNote(): string {
   ).content;
 }
 
-describe('RelinkRenamedTodoAction', () => {
+describe('REN-1 — a rename relinks the checklist', () => {
   it('relinks the parent line when the to-do is renamed by hand', async () => {
-    // Given — a parent line linking the to-do's old path, the note at its new
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
     const action = new RelinkRenamedTodoAction(vault, new FakeSyncState());
 
-    // When — the rename is followed
     await action.execute({ oldPath, newPath, syncedAt });
 
-    // Then — the parent line points at the new path
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
       `- [ ] [[${newPath}|Fix the bug]]`,
     );
@@ -95,21 +92,17 @@ describe('RelinkRenamedTodoAction', () => {
   });
 
   it('does nothing when no line links the old path (the programmatic echo)', async () => {
-    // Given — the checklist sync already rewrote the line to the new path
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${newPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
     const action = new RelinkRenamedTodoAction(vault, new FakeSyncState());
 
-    // When — the rename echo arrives
     await action.execute({ oldPath, newPath, syncedAt });
 
-    // Then — no write happens (the chain settles)
     expect(vault.written).toEqual([]);
   });
 
   it("moves the to-do's registry record to the new path", async () => {
-    // Given — a to-do with a registry record at its old path
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${oldPath}|Fix the bug]]`));
     vault.notes.set(newPath, toDoNote());
@@ -122,10 +115,8 @@ describe('RelinkRenamedTodoAction', () => {
     });
     const action = new RelinkRenamedTodoAction(vault, syncState);
 
-    // When — the rename is followed
     await action.execute({ oldPath, newPath, syncedAt });
 
-    // Then — the record is re-pointed at the new path, its item intact
     const record = await syncState.get('uuid-todo');
     expect(record?.notePath).toBe(newPath);
     expect(syncState.handleOf('uuid-todo', 'todoist')).toBe('T9');

@@ -59,18 +59,15 @@ const identity = {
   statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 
-describe('SyncStateAdapter', () => {
+describe('REG-1 — the registry holds exactly the justified entities', () => {
   it('round-trips an entity under projects.<name>.entities', async () => {
-    // Given — an empty storage
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     const record = entityRecord({ id: 'entity-1', notePath });
 
-    // When — the entity is set then read back
     await adapter.setEntity(record);
     const result = await adapter.getEntity('entity-1');
 
-    // Then — the entity round-trips, nested under its project
     expect(result).toEqual(record);
     expect(container(snapshot())['version']).toBe(3);
     expect(project(snapshot(), 'Acme Widgets')['entities']).toEqual({
@@ -79,16 +76,13 @@ describe('SyncStateAdapter', () => {
   });
 
   it('round-trips a per-surface project cursor', async () => {
-    // Given — an empty storage
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
-    // When — no cursor exists yet, then one is written
     const before = await adapter.getProjectCursor('todoist');
     await adapter.setProjectCursor('todoist', '2026-10-05T10:00:00Z');
     const after = await adapter.getProjectCursor('todoist');
 
-    // Then — it is null before and round-trips after, under a container key
     expect(before).toBeNull();
     expect(after).toBe('2026-10-05T10:00:00Z');
     expect(container(snapshot())['projectCursors']).toEqual({
@@ -118,7 +112,6 @@ describe('SyncStateAdapter', () => {
   });
 
   it('finds a mirror item by a github handle and by a todoist handle', async () => {
-    // Given — a task mirrored to both providers
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(entityRecord({ id: 'entity-1', notePath }));
@@ -131,11 +124,9 @@ describe('SyncStateAdapter', () => {
       base: null,
     });
 
-    // When — the items are looked up per port
     const byGithub = await adapter.findMirrorItem('github', url);
     const byTodoist = await adapter.findMirrorItem('todoist', 'T1');
 
-    // Then — both resolve to the one entity
     expect(byGithub).toEqual({ entityId: 'entity-1', base: null });
     expect(byTodoist).toEqual({ entityId: 'entity-1', base: null });
   });
@@ -172,7 +163,6 @@ describe('SyncStateAdapter', () => {
   });
 
   it('removes an entity and sweeps its mirror items from every port', async () => {
-    // Given — an entity mirrored to both providers
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(entityRecord({ id: 'entity-1', notePath }));
@@ -185,10 +175,8 @@ describe('SyncStateAdapter', () => {
       base: null,
     });
 
-    // When — the entity is removed
     await adapter.removeEntity('entity-1');
 
-    // Then — the entity and both items are gone
     expect(await adapter.getEntity('entity-1')).toBeNull();
     expect(await adapter.findByNotePath(notePath)).toBeNull();
     expect(await adapter.findMirrorItem('github', url)).toBeNull();
@@ -233,7 +221,6 @@ describe('SyncStateAdapter', () => {
   });
 
   it('re-points a claimed handle without evicting the older entity', async () => {
-    // Given — an entity holding a github and a todoist mirror
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(
@@ -248,7 +235,6 @@ describe('SyncStateAdapter', () => {
       base: null,
     });
 
-    // When — a second entity claims the same github handle
     await adapter.setEntity(
       entityRecord({ id: 'newer', notePath: 'Projecten/Acme Widgets/taken/newer.md' }),
     );
@@ -257,8 +243,6 @@ describe('SyncStateAdapter', () => {
       base: null,
     });
 
-    // Then — the older loses the handle but survives, and its OTHER mirror is
-    // untouched (promise 2: no change is ever lost).
     expect((await adapter.findMirrorItem('github', url))?.entityId).toBe(
       'newer',
     );
@@ -335,7 +319,6 @@ describe('SyncStateAdapter', () => {
 
 describe('SyncStateAdapter migration', () => {
   it('migrates a pre-t5 status record into a github-mirrored entity', async () => {
-    // Given — a legacy provider-shaped status record, flat under the container
     const { storage, snapshot } = fakeStorage({
       syncState: {
         [`status.${url}`]: {
@@ -351,10 +334,8 @@ describe('SyncStateAdapter migration', () => {
     });
     const adapter = new SyncStateAdapter(storage);
 
-    // When — the adapter loads (and migrates) the store
     const records = await adapter.listEntities('Acme Widgets');
 
-    // Then — one entity with a github item; the body digest is not re-hashed
     expect(records).toHaveLength(1);
     const record = records[0]!;
     expect(record.notePath).toBe(notePath);
@@ -364,7 +345,6 @@ describe('SyncStateAdapter migration', () => {
     expect(item?.base?.body).toBe('abc123');
     expect(item?.base?.status).toBe('Shipped');
     expect(item?.base?.updatedAt).toBe('2026-09-18T10:00:00Z');
-    // And the legacy key is gone from the container
     expect(container(snapshot())[`status.${url}`]).toBeUndefined();
   });
 
@@ -569,7 +549,6 @@ describe('SyncStateAdapter migration', () => {
   });
 
   it('migrates a v2 entity registry into the port-grouped layout', async () => {
-    // Given — a v2 container: entities with a per-entity mirrors map
     const { storage, snapshot } = fakeStorage({
       syncState: {
         entities: {
@@ -585,10 +564,8 @@ describe('SyncStateAdapter migration', () => {
     });
     const adapter = new SyncStateAdapter(storage);
 
-    // When — the adapter loads the store
     const record = await adapter.getEntity('entity-1');
 
-    // Then — the entity is nested and the mirror is a port item
     expect(record).toEqual({ id: 'entity-1', notePath });
     expect((await adapter.findMirrorItem('github', url))?.entityId).toBe(
       'entity-1',
@@ -613,20 +590,16 @@ describe('SyncStateAdapter migration', () => {
     const first = new SyncStateAdapter(storage);
     await first.listEntities('Acme Widgets');
 
-    // When — the migration runs again, directly and through a fresh adapter
     const changed = migrateV3(container(snapshot()));
     const second = new SyncStateAdapter(storage);
     const records = await second.listEntities('Acme Widgets');
 
-    // Then — it is a no-op and the entity count is unchanged
     expect(changed).toBe(false);
     expect(records).toHaveLength(1);
     expect(container(snapshot())[`status.${url}`]).toBeUndefined();
   });
 
   it('migrates legacy flat root keys into the container, then into v3', async () => {
-    // Given — the pre-t5 shape: records flat at the data.json root, settings
-    // alongside them
     const { storage, snapshot } = fakeStorage({
       githubToken: 'secret',
       [`status.${url}`]: {
@@ -641,11 +614,8 @@ describe('SyncStateAdapter migration', () => {
     });
     const adapter = new SyncStateAdapter(storage);
 
-    // When — the adapter reads (and migrates) the store
     const records = await adapter.listEntities('Acme Widgets');
 
-    // Then — the settings key did not move, the identity survives, and the
-    // status record became a project-nested entity
     const data = snapshot();
     expect(Object.keys(data).sort()).toEqual(['githubToken', 'syncState']);
     expect(data['githubToken']).toBe('secret');
@@ -678,7 +648,6 @@ describe('SyncStateAdapter migration', () => {
   });
 
   it('seeds a fullScanPending marker per project and consumes it once', async () => {
-    // Given — a v3 container written before the parent-tracking marker existed
     const { storage, snapshot } = fakeStorage({
       [SYNC_STATE_KEY]: {
         version: 3,
@@ -687,25 +656,20 @@ describe('SyncStateAdapter migration', () => {
     });
     const adapter = new SyncStateAdapter(storage);
 
-    // Then — an absent marker reads as pending for every known project
     expect(await adapter.isFullScanPending('Acme Widgets')).toBe(true);
     expect(await adapter.isFullScanPending('Other')).toBe(true);
 
-    // When — one project's marker is consumed
     expect(await adapter.consumeFullScan('Acme Widgets')).toBe(true);
 
-    // Then — only that project's marker is spent
     expect(await adapter.isFullScanPending('Acme Widgets')).toBe(false);
     expect(await adapter.isFullScanPending('Other')).toBe(true);
     expect(project(snapshot(), 'Acme Widgets')['fullScanPending']).toBe(false);
     expect(project(snapshot(), 'Other')['fullScanPending']).toBe(true);
 
-    // And — a second consume of the spent project is false
     expect(await adapter.consumeFullScan('Acme Widgets')).toBe(false);
   });
 
   it('respects an existing per-project fullScanPending false', async () => {
-    // Given — a project that already consumed its forced scan
     const { storage, snapshot } = fakeStorage({
       [SYNC_STATE_KEY]: {
         version: 3,
@@ -714,7 +678,6 @@ describe('SyncStateAdapter migration', () => {
     });
     const adapter = new SyncStateAdapter(storage);
 
-    // Then — the marker stays spent
     expect(await adapter.isFullScanPending('Acme Widgets')).toBe(false);
     expect(await adapter.consumeFullScan('Acme Widgets')).toBe(false);
     expect(project(snapshot(), 'Acme Widgets')['fullScanPending']).toBe(false);
@@ -730,8 +693,6 @@ describe('SyncStateAdapter migration', () => {
 
 describe('SyncStateAdapter write serialisation', () => {
   it('serialises interleaved writers so no update is lost', async () => {
-    // Given — a storage that re-parses on every load (like Obsidian's
-    // loadData) and yields on save, widening the interleave window
     let disk: Record<string, unknown> = {};
     const storage: SyncStateStorage = {
       async load() {
@@ -744,7 +705,6 @@ describe('SyncStateAdapter write serialisation', () => {
     };
     const adapter = new SyncStateAdapter(storage);
 
-    // When — two entity writes race
     await Promise.all([
       adapter.setEntity(
         entityRecord({ id: 'e1', notePath: 'Projecten/A/taken/1.md' }),
@@ -754,17 +714,14 @@ describe('SyncStateAdapter write serialisation', () => {
       ),
     ]);
 
-    // Then — both land; the second did not overwrite the first
     const ids = (await adapter.listEntities('A')).map((r) => r.id).sort();
     expect(ids).toEqual(['e1', 'e2']);
   });
 
   it('asks for a rolling backup before overwriting, throttled', async () => {
-    // Given — an adapter over a storage that counts backup requests
     const { storage, backups } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
-    // When — two registry writes land back to back
     await adapter.setEntity(
       entityRecord({ id: 'e1', notePath: 'Projecten/A/taken/1.md' }),
     );
@@ -772,7 +729,6 @@ describe('SyncStateAdapter write serialisation', () => {
       entityRecord({ id: 'e2', notePath: 'Projecten/A/taken/2.md' }),
     );
 
-    // Then — the rolling backup runs at most once per window
     expect(backups()).toBe(1);
   });
 });

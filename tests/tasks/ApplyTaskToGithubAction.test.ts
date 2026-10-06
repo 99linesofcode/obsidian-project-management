@@ -150,15 +150,13 @@ function seedRecord(syncState: FakeSyncState, base: TaskData | null = null) {
   });
 }
 
-describe('ApplyTaskToGithubAction', () => {
+describe('SYNC-1 — a vault change flows outward to GitHub', () => {
   it('writes the issue body and title when they differ', async () => {
-    // Given — a winning vault task whose body and title moved
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered onto GitHub
     await action.execute({
       task: task({ title: 'Fix the widget', body: 'New body.' }),
       current: task({ title: 'Fix the bug', body: 'Old body.' }),
@@ -167,20 +165,17 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the issue is updated with the winning title and body
     expect(port.updateCalls).toEqual([
       { url, title: 'Fix the widget', body: 'New body.' },
     ]);
   });
 
   it('does not write the issue when the body and title already match', async () => {
-    // Given — a winning task identical to the remote
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task(),
       current: task(),
@@ -189,18 +184,15 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — no issue write happens
     expect(port.updateCalls).toEqual([]);
   });
 
   it('closes the issue when the winning task is completed', async () => {
-    // Given — a winning task marked completed, the raw issue still open
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ completedAt: '', status: 'Shipped' }),
       current: task({ completedAt: null }),
@@ -209,18 +201,15 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the issue is closed
     expect(port.stateCalls).toEqual([{ url, state: 'closed' }]);
   });
 
   it('reopens the issue when the winning task is not completed', async () => {
-    // Given — a winning task not completed, the raw issue closed
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ completedAt: null }),
       current: task({ completedAt: '' }),
@@ -229,18 +218,15 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the issue is reopened
     expect(port.stateCalls).toEqual([{ url, state: 'open' }]);
   });
 
   it('moves the board card only when the lane differs', async () => {
-    // Given — a winning task in a different lane than the card
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ status: 'Shipped' }),
       current: task({ status: 'Building' }),
@@ -249,20 +235,17 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the card moves to the winning lane's option
     expect(port.boardStatusCalls).toEqual([
       { issueUrl: url, optionId: 'PVTSSF_5' },
     ]);
   });
 
   it('does not move the card when the lane already matches', async () => {
-    // Given — a winning task in the same lane as the card
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ status: 'Building' }),
       current: task({ status: 'Building' }),
@@ -271,18 +254,15 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the card is left alone
     expect(port.boardStatusCalls).toEqual([]);
   });
 
   it('adds a missing card and places it in the winning lane', async () => {
-    // Given — a tracked issue with no card (the remote lane is empty)
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ status: 'Building' }),
       current: task({ status: '' }),
@@ -291,7 +271,6 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the card is added and placed in the winning lane
     expect(port.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
     ]);
@@ -301,13 +280,11 @@ describe('ApplyTaskToGithubAction', () => {
   });
 
   it('adds a card without a lane when the winning lane is empty', async () => {
-    // Given — a card-less issue whose winning task has no lane
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ status: '' }),
       current: task({ status: '' }),
@@ -316,18 +293,15 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the card is added but no lane is written
     expect(port.addBoardItemCalls).toHaveLength(1);
     expect(port.boardStatusCalls).toEqual([]);
   });
 
   it('skips the board for a project with no stored identity', async () => {
-    // Given — a board-less project
     const syncState = new FakeSyncState();
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ status: 'Shipped' }),
       current: task({ status: 'Building' }),
@@ -336,19 +310,16 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — no board write happens
     expect(port.boardStatusCalls).toEqual([]);
     expect(port.addBoardItemCalls).toEqual([]);
   });
 
   it('keeps the remote title when only the body changed', async () => {
-    // Given — a winning task whose body moved but whose title slug is unchanged
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered
     await action.execute({
       task: task({ title: 'fix the bug', body: 'New body.' }),
       current: task({ title: 'Fix the Bug!', body: 'Old body.' }),
@@ -357,14 +328,12 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the body is pushed with the remote's own title
     expect(port.updateCalls).toEqual([
       { url, title: 'Fix the Bug!', body: 'New body.' },
     ]);
   });
 
   it('advances the base to what the issue now carries, after the write', async () => {
-    // Given — a tracked issue whose vault body moved
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     seedRecord(
@@ -374,7 +343,6 @@ describe('ApplyTaskToGithubAction', () => {
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the winning vault task is rendered
     await action.execute({
       task: task({ body: 'A vault-side edit.', status: 'Building' }),
       current: task({ body: 'Old body.' }),
@@ -383,17 +351,13 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the base is the diff view of the pushed content
     const base = syncState.baseOf('uuid-42', 'github');
     expect(base?.body).toBe(hash(toIssueBody('A vault-side edit.')));
     expect(base?.status).toBe('Building');
-    // And it is a diff view, not the raw body
     expect(base?.body).not.toBe('A vault-side edit.');
   });
 
   it('repairs an old-format base digest without an API write when content matches', async () => {
-    // Given — a record whose base carries a pre-widening 8-char digest while
-    // the live issue and note bodies already agree
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     seedRecord(
@@ -403,7 +367,6 @@ describe('ApplyTaskToGithubAction', () => {
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the identical task is rendered
     await action.execute({
       task: task({ body: 'The bug happens on resize.' }),
       current: task({ body: 'The bug happens on resize.' }),
@@ -412,7 +375,6 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — no API write happens, but the base advances to the new digest
     expect(port.updateCalls).toEqual([]);
     expect(port.stateCalls).toEqual([]);
     const base = syncState.baseOf('uuid-42', 'github');
@@ -421,8 +383,6 @@ describe('ApplyTaskToGithubAction', () => {
   });
 
   it('leaves the base untouched on an equal-state pass with no API write', async () => {
-    // Given — a settled issue whose stored base already carries the winning
-    // task's canonical diff view
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const settled = taskData({
@@ -438,7 +398,6 @@ describe('ApplyTaskToGithubAction', () => {
     const port = new FakeProjectManagement();
     const action = makeAction(syncState, port);
 
-    // When — the identical task is rendered
     await action.execute({
       task: task(),
       current: task(),
@@ -447,8 +406,6 @@ describe('ApplyTaskToGithubAction', () => {
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — no API write happens AND the base is not rewritten: the same
-    // no-op-skip contract ApplyTaskToTodoistAction enforces.
     expect(port.updateCalls).toEqual([]);
     expect(port.stateCalls).toEqual([]);
     expect(port.boardStatusCalls).toEqual([]);
@@ -457,7 +414,6 @@ describe('ApplyTaskToGithubAction', () => {
   });
 
   it('does not advance the base when the write fails', async () => {
-    // Given — a tracked issue whose write will fail
     const syncState = new FakeSyncState();
     syncState.identities.set('Acme Widgets', identity);
     const oldBase = taskData({
@@ -470,7 +426,6 @@ describe('ApplyTaskToGithubAction', () => {
     port.failUpdate = true;
     const action = makeAction(syncState, port);
 
-    // When — the winning task is rendered and the write throws
     await expect(
       action.execute({
         task: task({ body: 'A vault-side edit.' }),
@@ -481,7 +436,40 @@ describe('ApplyTaskToGithubAction', () => {
       }),
     ).rejects.toThrow('boom');
 
-    // Then — the base is untouched: it advances only after a durable write
     expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(hash('old body'));
+  });
+
+  it('never moves the Todoist base when the GitHub mirror is written', async () => {
+    const syncState = new FakeSyncState();
+    syncState.identities.set('Acme Widgets', identity);
+    const todoistBase = taskData({
+      id: 'uuid-42',
+      notePath,
+      title: 'Fix the bug',
+      status: 'Building',
+    });
+    syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+      github: {
+        handle: url,
+        base: taskData({ id: 'uuid-42', notePath, body: hash('old body') }),
+      },
+      todoist: { handle: 'T9', base: todoistBase },
+    });
+    const port = new FakeProjectManagement();
+    const action = makeAction(syncState, port);
+
+    await action.execute({
+      task: task({ body: 'A vault-side edit.', status: 'Building' }),
+      current: task({ body: 'Old body.' }),
+      hasCard: true,
+      projectName: 'Acme Widgets',
+      syncedAt: '2026-09-18T12:00:00Z',
+    });
+
+    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(
+      hash(toIssueBody('A vault-side edit.')),
+    );
+    expect(syncState.baseOf('uuid-42', 'todoist')).toBe(todoistBase);
+    expect(syncState.handleOf('uuid-42', 'todoist')).toBe('T9');
   });
 });

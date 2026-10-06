@@ -9,9 +9,8 @@ const context = {
   repoUrl: 'https://github.com/acme/widgets',
 };
 
-describe('ProjectMapper.fromGithubProject', () => {
+describe('PRJ-4 — a project payload is canonical before the core sees it', () => {
   it('maps a ProjectV2 payload onto the canonical project content', () => {
-    // Given — a GitHub project payload with Status options
     const payload = {
       id: 'PVT_123',
       name: 'Acme Widgets',
@@ -22,10 +21,8 @@ describe('ProjectMapper.fromGithubProject', () => {
       ],
     };
 
-    // When — it is mapped at the boundary
     const project = ProjectMapper.fromGithubProject(payload, context);
 
-    // Then — the canonical content carries the option NAMES, never the ids
     expect(project.name).toBe('Acme Widgets');
     expect(project.archivedAt).toBeNull();
     expect(project.statusOptions).toEqual(['Unshaped', 'Shipped']);
@@ -36,7 +33,6 @@ describe('ProjectMapper.fromGithubProject', () => {
   });
 
   it('stamps an archived project with the reconciled stamp', () => {
-    // Given — a closed board and a known freeze stamp
     const payload = {
       id: 'PVT_123',
       name: 'Acme Widgets',
@@ -44,18 +40,15 @@ describe('ProjectMapper.fromGithubProject', () => {
       statusOptions: [],
     };
 
-    // When — it is mapped
     const project = ProjectMapper.fromGithubProject(payload, {
       ...context,
       archivedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the canonical stamp is the plugin's, not the provider's boolean
     expect(project.archivedAt).toBe('2026-09-18T12:00:00Z');
   });
 
   it('uses the migrated empty stamp when archived before a stamp existed', () => {
-    // Given — a closed board with no known transition time
     const payload = {
       id: 'PVT_123',
       name: 'Acme Widgets',
@@ -63,27 +56,22 @@ describe('ProjectMapper.fromGithubProject', () => {
       statusOptions: [],
     };
 
-    // When — it is mapped
     const project = ProjectMapper.fromGithubProject(payload, context);
 
-    // Then — the migrated convention applies: archived, stamp unknown
     expect(project.archivedAt).toBe('');
   });
 });
 
 describe('ProjectMapper.fromTodoistProject', () => {
   it('maps a Todoist project payload onto the canonical project content', () => {
-    // Given — a Todoist project
     const payload: TodoistProjectData = {
       id: 'P1',
       name: 'Acme Widgets',
       isArchived: false,
     };
 
-    // When — it is mapped at the boundary
     const project = ProjectMapper.fromTodoistProject(payload, context);
 
-    // Then — the name and mirror are carried; Todoist owns no lane vocabulary
     expect(project.name).toBe('Acme Widgets');
     expect(project.archivedAt).toBeNull();
     expect(project.statusOptions).toEqual([]);
@@ -91,7 +79,6 @@ describe('ProjectMapper.fromTodoistProject', () => {
   });
 
   it('carries the provider creation clock as the canonical createdAt', () => {
-    // Given — a Todoist project with its creation clock
     const payload: TodoistProjectData = {
       id: 'P1',
       name: 'Acme Widgets',
@@ -99,32 +86,26 @@ describe('ProjectMapper.fromTodoistProject', () => {
       createdAt: '2026-10-01T08:00:00Z',
     };
 
-    // When — it is mapped
     const project = ProjectMapper.fromTodoistProject(payload, context);
 
-    // Then — the capture cursor's clock rides on the canonical shape
     expect(project.createdAt).toBe('2026-10-01T08:00:00Z');
   });
 
   it('marks an archived Todoist project with the migrated empty stamp', () => {
-    // Given — an archived Todoist project
     const payload: TodoistProjectData = {
       id: 'P1',
       name: 'Acme Widgets',
       isArchived: true,
     };
 
-    // When — it is mapped
     const project = ProjectMapper.fromTodoistProject(payload, context);
 
-    // Then — archived with an unknown transition time
     expect(project.archivedAt).toBe('');
   });
 });
 
 describe('ProjectMapper.fromGithubBoard', () => {
   it('maps a viewer board onto the canonical content with its url and clock', () => {
-    // Given — a ProjectV2 board from the viewer's listing
     const payload = {
       id: 'PVT_9',
       name: 'Fresh Board',
@@ -137,11 +118,8 @@ describe('ProjectMapper.fromGithubBoard', () => {
       ],
     };
 
-    // When — it is mapped at the boundary
     const project = ProjectMapper.fromGithubBoard(payload, context);
 
-    // Then — the board url is the github mirror, the clock is createdAt and
-    // only option NAMES cross
     expect(project.name).toBe('Fresh Board');
     expect(project.mirrors).toEqual({
       github: 'https://github.com/users/acme/projects/9',
@@ -153,7 +131,6 @@ describe('ProjectMapper.fromGithubBoard', () => {
   });
 
   it('marks a closed board with the reconciled archive stamp', () => {
-    // Given — a closed board with a known freeze stamp
     const payload = {
       id: 'PVT_9',
       name: 'Fresh Board',
@@ -163,13 +140,11 @@ describe('ProjectMapper.fromGithubBoard', () => {
       statusOptions: [],
     };
 
-    // When — it is mapped
     const project = ProjectMapper.fromGithubBoard(payload, {
       ...context,
       archivedAt: '2026-09-18T12:00:00Z',
     });
 
-    // Then — the plugin's stamp wins over the provider's boolean
     expect(project.archivedAt).toBe('2026-09-18T12:00:00Z');
     expect(project.createdAt).toBeNull();
   });

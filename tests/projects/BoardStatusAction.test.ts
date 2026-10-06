@@ -111,20 +111,17 @@ function harness() {
   return { action, syncState, projectManagement };
 }
 
-describe('BoardStatusAction', () => {
+describe('LANE-2 — a lane move follows on every surface', () => {
   it('sets the board status to the done option for a done note', async () => {
-    // Given — a project with a stored identity and no record (unknown lane)
     const h = harness();
     h.syncState.identities.set('Acme Widgets', identity);
 
-    // When — the done status is mirrored to the board
     await h.action.execute({
       projectName: 'Acme Widgets',
       url,
       statusName: 'Shipped',
     });
 
-    // Then — the board Status is set to the done option
     expect(h.projectManagement.boardStatusCalls).toEqual([
       {
         projectNodeId: 'PVT_123',
@@ -136,18 +133,15 @@ describe('BoardStatusAction', () => {
   });
 
   it('sets the board status to the first option for an open note', async () => {
-    // Given — a project with a stored identity and no record
     const h = harness();
     h.syncState.identities.set('Acme Widgets', identity);
 
-    // When — the open status is mirrored to the board
     await h.action.execute({
       projectName: 'Acme Widgets',
       url,
       statusName: 'Unshaped',
     });
 
-    // Then — the board Status is set to the first (default) option
     expect(h.projectManagement.boardStatusCalls).toEqual([
       {
         projectNodeId: 'PVT_123',
@@ -159,7 +153,6 @@ describe('BoardStatusAction', () => {
   });
 
   it('skips the board write when the base record already sits in the lane', async () => {
-    // Given — a record whose github base lane is the one being mirrored
     const h = harness();
     h.syncState.identities.set('Acme Widgets', identity);
     h.syncState.seed(entityRecord({ id: 'uuid-42' }), {
@@ -169,29 +162,24 @@ describe('BoardStatusAction', () => {
       },
     });
 
-    // When — the same lane is mirrored
     await h.action.execute({
       projectName: 'Acme Widgets',
       url,
       statusName: 'Building',
     });
 
-    // Then — the card is already in step, so nothing is written
     expect(h.projectManagement.boardStatusCalls).toEqual([]);
   });
 
   it('skips silently when the project has no stored identity', async () => {
-    // Given — a project with no stored identity (board-less)
     const h = harness();
 
-    // When — a status is mirrored to the board
     await h.action.execute({
       projectName: 'Acme Widgets',
       url,
       statusName: 'Shipped',
     });
 
-    // Then — nothing is written to the board
     expect(h.projectManagement.boardStatusCalls).toEqual([]);
   });
 });

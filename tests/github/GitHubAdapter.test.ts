@@ -128,76 +128,58 @@ function issue(number: number) {
   };
 }
 
-describe('GitHubAdapter', () => {
-  it('resolves identities for a user board url', async () => {
-    // Given — a user-scoped board and a transport that resolves it
-    const { transport, bodies } = fakeTransport([
-      repoResponse,
-      userProjectResponse,
-    ]);
-    const adapter = new GitHubAdapter(transport);
-    const data: AttachProjectData = {
-      pm: 'github',
-      repoUrl: 'https://github.com/acme/widgets',
-      boardUrl: 'https://github.com/users/acme/projects/1',
-    };
+describe('ATT-1 — a project attaches by resolving its repo and board identity', () => {
+  it('resolves identities for a user or org board url', async () => {
+    const cases = [
+      {
+        boardUrl: 'https://github.com/users/acme/projects/1',
+        response: userProjectResponse,
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        statusOptions: [
+          { id: 'PVTSSF_1', name: 'Unshaped' },
+          { id: 'PVTSSF_2', name: 'Done' },
+        ],
+        ownerKey: 'user',
+        number: '1',
+      },
+      {
+        boardUrl: 'https://github.com/orgs/acme/projects/2',
+        response: orgProjectResponse,
+        projectNodeId: 'PVT_789',
+        statusFieldId: 'PVTF_101',
+        statusOptions: [{ id: 'PVTSSF_3', name: 'Building' }],
+        ownerKey: 'organization',
+        number: '2',
+      },
+    ];
+    for (const c of cases) {
+      const { transport, bodies } = fakeTransport([repoResponse, c.response]);
+      const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter resolves the identity
-    const result = await adapter.fetchProjectIdentity(data);
+      const result = await adapter.fetchProjectIdentity({
+        pm: 'github',
+        repoUrl: 'https://github.com/acme/widgets',
+        boardUrl: c.boardUrl,
+      });
 
-    // Then — the DTO carries the resolved identities
-    expect(result).toEqual({
-      repoUrl: 'https://github.com/acme/widgets',
-      repoNodeId: 'R_kgDOAAAA',
-      projectNodeId: 'PVT_123',
-      statusFieldId: 'PVTF_456',
-      statusOptions: [
-        { id: 'PVTSSF_1', name: 'Unshaped' },
-        { id: 'PVTSSF_2', name: 'Done' },
-      ],
-    });
-    // And the repo query targeted the bound owner/name
-    expect(bodies[0]).toContain('repository');
-    expect(bodies[0]).toContain('"owner":"acme"');
-    expect(bodies[0]).toContain('"name":"widgets"');
-    // And the project query targeted the user login and project number
-    expect(bodies[1]).toContain('user');
-    expect(bodies[1]).toContain('"login":"acme"');
-    expect(bodies[1]).toContain('"number":1');
-  });
-
-  it('resolves identities for an org board url', async () => {
-    // Given — an org-scoped board and a transport that resolves it
-    const { transport, bodies } = fakeTransport([
-      repoResponse,
-      orgProjectResponse,
-    ]);
-    const adapter = new GitHubAdapter(transport);
-    const data: AttachProjectData = {
-      pm: 'github',
-      repoUrl: 'https://github.com/acme/widgets',
-      boardUrl: 'https://github.com/orgs/acme/projects/2',
-    };
-
-    // When — the adapter resolves the identity
-    const result = await adapter.fetchProjectIdentity(data);
-
-    // Then — the DTO carries the resolved identities
-    expect(result).toEqual({
-      repoUrl: 'https://github.com/acme/widgets',
-      repoNodeId: 'R_kgDOAAAA',
-      projectNodeId: 'PVT_789',
-      statusFieldId: 'PVTF_101',
-      statusOptions: [{ id: 'PVTSSF_3', name: 'Building' }],
-    });
-    // And the project query targeted the organization login and number
-    expect(bodies[1]).toContain('organization');
-    expect(bodies[1]).toContain('"login":"acme"');
-    expect(bodies[1]).toContain('"number":2');
+      expect(result, c.boardUrl).toEqual({
+        repoUrl: 'https://github.com/acme/widgets',
+        repoNodeId: 'R_kgDOAAAA',
+        projectNodeId: c.projectNodeId,
+        statusFieldId: c.statusFieldId,
+        statusOptions: c.statusOptions,
+      });
+      expect(bodies[0]).toContain('repository');
+      expect(bodies[0]).toContain('"owner":"acme"');
+      expect(bodies[0]).toContain('"name":"widgets"');
+      expect(bodies[1]).toContain(c.ownerKey);
+      expect(bodies[1]).toContain('"login":"acme"');
+      expect(bodies[1]).toContain(`"number":${c.number}`);
+    }
   });
 
   it('maps a raw response onto the identity DTO', async () => {
-    // Given — a transport returning a raw GraphQL payload
     const { transport } = fakeTransport([repoResponse, userProjectResponse]);
     const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
@@ -206,10 +188,8 @@ describe('GitHubAdapter', () => {
       boardUrl: 'https://github.com/users/acme/projects/1',
     };
 
-    // When — the adapter resolves the identity
     const result = await adapter.fetchProjectIdentity(data);
 
-    // Then — only the fields the core needs are surfaced, in DTO shape
     expect(result).not.toBeNull();
     expect(result!.statusFieldId).toBe('PVTF_456');
     expect(result!.statusOptions).toHaveLength(2);
@@ -220,7 +200,6 @@ describe('GitHubAdapter', () => {
   });
 
   it('throws when the project has no Status field', async () => {
-    // Given — a project whose fields contain no Status single-select
     const noStatus = {
       status: 200,
       json: {
@@ -237,7 +216,6 @@ describe('GitHubAdapter', () => {
       },
     };
 
-    // When — the adapter resolves the identity
     const { transport } = fakeTransport([repoResponse, noStatus]);
     const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
@@ -246,12 +224,13 @@ describe('GitHubAdapter', () => {
       boardUrl: 'https://github.com/users/acme/projects/1',
     };
 
-    // Then — it fails with a clear error
     await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/Status/);
   });
 
+});
+
+describe('PRJ-4 — a project payload is canonical at the boundary', () => {
   it('maps a ProjectV2 node onto the canonical ProjectData', async () => {
-    // Given — a transport returning the project content node
     const contentResponse = {
       status: 200,
       json: {
@@ -279,15 +258,12 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([contentResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter reads the canonical project
     const project = await adapter.fetchProject(
       'https://github.com/acme/widgets',
       'PVT_123',
       'Shipped',
     );
 
-    // Then — the content is canonical (option names, not ids) and the raw
-    // ProjectV2 shape never crosses the port
     expect(project.name).toBe('Acme Widgets');
     expect(project.statusOptions).toEqual(['Unshaped', 'Shipped']);
     expect(project.doneLane).toBe('Shipped');
@@ -300,18 +276,15 @@ describe('GitHubAdapter', () => {
   });
 
   it('resolves a board-only identity without a repository (repo attach deferred)', async () => {
-    // Given — a board url and no repo url, with only the board response queued
     const { transport, bodies } = fakeTransport([userProjectResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter resolves the identity
     const result = await adapter.fetchProjectIdentity({
       pm: 'github',
       repoUrl: '',
       boardUrl: 'https://github.com/users/acme/projects/1',
     });
 
-    // Then — the board is resolved and the repo addressing stays empty
     expect(result).toEqual({
       repoUrl: '',
       repoNodeId: '',
@@ -322,13 +295,14 @@ describe('GitHubAdapter', () => {
         { id: 'PVTSSF_2', name: 'Done' },
       ],
     });
-    // And — no repository query was made: only the board query ran
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('user');
   });
 
+});
+
+describe('PRJ-1 — a vault project gains a board', () => {
   it('creates a board under the token viewer and returns its addressing', async () => {
-    // Given — a viewer and a created project with a default Status field
     const viewerResponse = {
       status: 200,
       json: { data: { viewer: { id: 'U_kgDOAAAA' } } },
@@ -361,10 +335,8 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter creates the board
     const board = await adapter.createProject('New Project');
 
-    // Then — the addressing is returned and the owner is the viewer
     expect(board).toEqual({
       projectNodeId: 'PVT_9',
       boardUrl: 'https://github.com/users/acme/projects/9',
@@ -378,7 +350,6 @@ describe('GitHubAdapter', () => {
   });
 
   it('caches the viewer id across board creations', async () => {
-    // Given — one viewer response and two created projects
     const viewerResponse = {
       status: 200,
       json: { data: { viewer: { id: 'U_kgDOAAAA' } } },
@@ -400,18 +371,15 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — two boards are created
     await adapter.createProject('One');
     await adapter.createProject('Two');
 
-    // Then — the viewer is queried once and reused
     expect(bodies.filter((body) => body.includes('viewer'))).toHaveLength(1);
     expect(bodies[1]).toContain('"ownerId":"U_kgDOAAAA"');
     expect(bodies[2]).toContain('"ownerId":"U_kgDOAAAA"');
   });
 
   it('lists the viewer boards as canonical ProjectData', async () => {
-    // Given — a viewer listing carrying one board
     const listResponse = {
       status: 200,
       json: {
@@ -444,11 +412,8 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([listResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the boards are listed
     const boards = await adapter.fetchViewerProjects();
 
-    // Then — the listing is canonical: the board url is the mirror, the clock
-    // is createdAt and the Status vocabulary carries NAMES
     expect(boards).toHaveLength(1);
     expect(boards[0]!.name).toBe('Fresh Board');
     expect(boards[0]!.mirrors).toEqual({
@@ -459,63 +424,54 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('ViewerProjects');
   });
 
-  it('creates an issue with the vault-owned type as a type label', async () => {
-    // Given — a transport that returns the created issue
-    const created = {
-      status: 201,
-      json: {
-        html_url: 'https://github.com/acme/widgets/issues/50',
-        node_id: 'I_kwDOAAAA50',
+});
+
+describe('MAT-3 — only typed issues are adopted', () => {
+  it('renders the vault-owned type as a type label, and omits it when empty', async () => {
+    const cases = [
+      {
+        type: 'bug',
+        title: 'Fix the bug',
+        body: 'The bug.',
+        url: 'https://github.com/acme/widgets/issues/50',
+        nodeId: 'I_kwDOAAAA50',
+        expectLabel: true,
       },
-    };
-    const { transport, bodies, paths } = fakeTransport([created]);
-    const adapter = new GitHubAdapter(transport);
-
-    // When — the adapter creates the issue
-    const handle = await adapter.createIssue(
-      'https://github.com/acme/widgets',
-      { title: 'Fix the bug', body: 'The bug.', type: 'bug' },
-    );
-
-    // Then — the REST create targeted the repo and rendered the type label
-    expect(handle).toEqual({
-      url: 'https://github.com/acme/widgets/issues/50',
-      nodeId: 'I_kwDOAAAA50',
-    });
-    expect(paths[0]).toBe('/repos/acme/widgets/issues');
-    expect(bodies[0]).toContain('"title":"Fix the bug"');
-    expect(bodies[0]).toContain('"labels":["type: bug"]');
-  });
-
-  it('omits the label when the vault-owned type is empty', async () => {
-    // Given — a transport that returns the created issue
-    const created = {
-      status: 201,
-      json: {
-        html_url: 'https://github.com/acme/widgets/issues/51',
-        node_id: 'I_kwDOAAAA51',
+      {
+        type: '',
+        title: 'Untyped',
+        body: '',
+        url: 'https://github.com/acme/widgets/issues/51',
+        nodeId: 'I_kwDOAAAA51',
+        expectLabel: false,
       },
-    };
-    const { transport, bodies } = fakeTransport([created]);
-    const adapter = new GitHubAdapter(transport);
+    ];
+    for (const c of cases) {
+      const { transport, bodies, paths } = fakeTransport([
+        { status: 201, json: { html_url: c.url, node_id: c.nodeId } },
+      ]);
+      const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter creates an untyped issue
-    await adapter.createIssue('https://github.com/acme/widgets', {
-      title: 'Untyped',
-      body: '',
-      type: '',
-    });
+      const handle = await adapter.createIssue(
+        'https://github.com/acme/widgets',
+        { title: c.title, body: c.body, type: c.type },
+      );
 
-    // Then — no label is sent
-    expect(bodies[0]).not.toContain('labels');
+      expect(handle, c.title).toEqual({ url: c.url, nodeId: c.nodeId });
+      expect(paths[0]).toBe('/repos/acme/widgets/issues');
+      expect(bodies[0]).toContain(`"title":${JSON.stringify(c.title)}`);
+      if (c.expectLabel) {
+        expect(bodies[0]).toContain(`"labels":["type: ${c.type}"]`);
+      } else {
+        expect(bodies[0]).not.toContain('labels');
+      }
+    }
   });
 
   it('throws when issue creation fails', async () => {
-    // Given — a transport that rejects the create
     const { transport } = fakeTransport([{ status: 422, json: {} }]);
     const adapter = new GitHubAdapter(transport);
 
-    // When/Then — the failure surfaces so the caller leaves no mirror state
     await expect(
       adapter.createIssue('https://github.com/acme/widgets', {
         title: 'Fix the bug',
@@ -526,7 +482,6 @@ describe('GitHubAdapter', () => {
   });
 
   it('keeps issues carrying any type label — task, bug, chore, slice', async () => {
-    // Given — a REST response mixing every type label with an untyped issue
     const issuesResponse = {
       status: 200,
       json: [
@@ -585,12 +540,10 @@ describe('GitHubAdapter', () => {
     const { transport, paths } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the tracked issues
     const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — every typed issue is surfaced, mapped onto GithubTaskData
     expect(result.map((task) => task.url)).toEqual([
       'https://github.com/acme/widgets/issues/42',
       'https://github.com/acme/widgets/issues/43',
@@ -609,19 +562,15 @@ describe('GitHubAdapter', () => {
       labels: ['type: task', 'bug'],
       parentUrl: null,
     });
-    // And the untyped issue is filtered out
     expect(
       result.some((task) => task.url.endsWith('/issues/46')),
     ).toBe(false);
-    // And the REST path targeted the bound repo's first page
     expect(paths[0]).toBe(
       '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
     );
   });
 
   it('treats the legacy no-space type label as typed', async () => {
-    // Given — a REST response with an issue labelled type:task (no space),
-    // which predates the spaced convention but still names a type
     const issuesResponse = {
       status: 200,
       json: [
@@ -640,19 +589,16 @@ describe('GitHubAdapter', () => {
     const { transport } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the tracked issues
     const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — the issue is surfaced, since any type: label marks it tracked
     expect(result.map((task) => task.url)).toEqual([
       'https://github.com/acme/widgets/issues/42',
     ]);
   });
 
   it('concatenates every page of tracked issues', async () => {
-    // Given — a first page at the per_page cap and a short second page
     const firstPage = Array.from({ length: 100 }, (_, index) =>
       issue(index + 1),
     );
@@ -663,24 +609,23 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the tracked issues
     const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — both pages are concatenated in order
     expect(result.map((task) => Number(task.url.split('/').pop()))).toEqual(
       Array.from({ length: 102 }, (_, index) => index + 1),
     );
-    // And the adapter walked the pages until the short one
     expect(paths).toEqual([
       '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
       '/repos/acme/widgets/issues?state=all&per_page=100&page=2',
     ]);
   });
 
+});
+
+describe('PRB-2 — a change the board clock cannot express is still seen', () => {
   it('reads the newest issue activity through a conditional request', async () => {
-    // Given — a REST response with a PR and two issues, newest first
     const issuesResponse = {
       status: 200,
       json: [
@@ -697,19 +642,16 @@ describe('GitHubAdapter', () => {
     const { transport, paths, etags } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter reads the latest activity with a stored etag
     const result = await adapter.fetchLatestIssueActivity(
       'https://github.com/acme/widgets',
       'W/"old"',
     );
 
-    // Then — the newest non-PR issue's created_at is surfaced with the new etag
     expect(result).toEqual({
       changed: true,
       newestCreatedAt: '2026-09-19T10:00:00Z',
       etag: 'W/"abc"',
     });
-    // And the conditional read targeted the newest issues and carried the etag
     expect(paths[0]).toBe(
       '/repos/acme/widgets/issues?state=all&sort=created&direction=desc&per_page=10',
     );
@@ -717,17 +659,14 @@ describe('GitHubAdapter', () => {
   });
 
   it('reports no change on a 304 without reading the body', async () => {
-    // Given — a conditional read that answers 304
     const { transport } = fakeTransport([{ status: 304, json: {} }]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter reads the latest activity
     const result = await adapter.fetchLatestIssueActivity(
       'https://github.com/acme/widgets',
       'W/"abc"',
     );
 
-    // Then — nothing changed and no cursor is surfaced
     expect(result).toEqual({
       changed: false,
       newestCreatedAt: null,
@@ -735,54 +674,41 @@ describe('GitHubAdapter', () => {
     });
   });
 
-  it('reports a change with no cursor when only pull requests are newest', async () => {
-    // Given — a REST response whose newest entries are all pull requests
-    const issuesResponse = {
-      status: 200,
-      json: [
-        { number: 50, created_at: '2026-09-20T10:00:00Z', pull_request: {} },
-        { number: 49, created_at: '2026-09-19T10:00:00Z', pull_request: {} },
-      ],
-      etag: 'W/"abc"',
-    };
-    const { transport } = fakeTransport([issuesResponse]);
-    const adapter = new GitHubAdapter(transport);
+  it('reports a change with no cursor when no issue can supply one', async () => {
+    const cases = [
+      {
+        name: 'only pull requests are newest',
+        response: {
+          status: 200,
+          json: [
+            { number: 50, created_at: '2026-09-20T10:00:00Z', pull_request: {} },
+            { number: 49, created_at: '2026-09-19T10:00:00Z', pull_request: {} },
+          ],
+          etag: 'W/"abc"',
+        },
+      },
+      {
+        name: 'the repository has no issues',
+        response: { status: 200, json: [], etag: 'W/"abc"' },
+      },
+    ];
+    for (const { name, response } of cases) {
+      const { transport } = fakeTransport([response]);
+      const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter reads the latest activity
-    const result = await adapter.fetchLatestIssueActivity(
-      'https://github.com/acme/widgets',
-    );
+      const result = await adapter.fetchLatestIssueActivity(
+        'https://github.com/acme/widgets',
+      );
 
-    // Then — the repo changed but there is no issue cursor
-    expect(result).toEqual({
-      changed: true,
-      newestCreatedAt: null,
-      etag: 'W/"abc"',
-    });
-  });
-
-  it('reports a change with no cursor when the repository has no issues', async () => {
-    // Given — an empty REST response
-    const { transport } = fakeTransport([
-      { status: 200, json: [], etag: 'W/"abc"' },
-    ]);
-    const adapter = new GitHubAdapter(transport);
-
-    // When — the adapter reads the latest activity
-    const result = await adapter.fetchLatestIssueActivity(
-      'https://github.com/acme/widgets',
-    );
-
-    // Then — the repo changed but there is no issue cursor
-    expect(result).toEqual({
-      changed: true,
-      newestCreatedAt: null,
-      etag: 'W/"abc"',
-    });
+      expect(result, name).toEqual({
+        changed: true,
+        newestCreatedAt: null,
+        etag: 'W/"abc"',
+      });
+    }
   });
 
   it('maps a closed issue to a closed task state', async () => {
-    // Given — a REST response with a closed task issue
     const issuesResponse = {
       status: 200,
       json: [
@@ -801,17 +727,17 @@ describe('GitHubAdapter', () => {
     const { transport } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the tracked issues
     const result = await adapter.fetchTrackedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — the state is closed
     expect(result[0]!.state).toBe('closed');
   });
 
+});
+
+describe('SYNC-1 — issue content is written only when it differs', () => {
   it('fetches a single task by its issue url', async () => {
-    // Given — a REST response for one issue
     const issueResponse = {
       status: 200,
       json: {
@@ -828,12 +754,10 @@ describe('GitHubAdapter', () => {
     const { transport, paths } = fakeTransport([issueResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the task by url
     const result = await adapter.fetchTask(
       'https://github.com/acme/widgets/issues/42',
     );
 
-    // Then — the issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       nodeId: 'I_kwDOAAAA42',
@@ -846,12 +770,10 @@ describe('GitHubAdapter', () => {
       labels: ['type: task'],
       parentUrl: null,
     });
-    // And the REST path targeted the bound repo and issue number
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
   });
 
   it('updates a task and returns the updated issue', async () => {
-    // Given — a REST response for the updated issue
     const updatedResponse = {
       status: 200,
       json: {
@@ -868,7 +790,6 @@ describe('GitHubAdapter', () => {
     const { transport, paths, bodies } = fakeTransport([updatedResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter updates the task
     const result = await adapter.updateTask(
       'https://github.com/acme/widgets/issues/42',
       {
@@ -877,7 +798,6 @@ describe('GitHubAdapter', () => {
       },
     );
 
-    // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       nodeId: 'I_kwDOAAAA42',
@@ -890,7 +810,6 @@ describe('GitHubAdapter', () => {
       labels: ['type: task'],
       parentUrl: null,
     });
-    // And the PATCH targeted the bound repo and issue number with the input
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
     expect(bodies[0]).toBe(
       JSON.stringify({
@@ -901,7 +820,6 @@ describe('GitHubAdapter', () => {
   });
 
   it('sets a task state and returns the updated issue', async () => {
-    // Given — a REST response for the closed issue
     const closedResponse = {
       status: 200,
       json: {
@@ -918,13 +836,11 @@ describe('GitHubAdapter', () => {
     const { transport, paths, bodies } = fakeTransport([closedResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter sets the task state to closed
     const result = await adapter.setTaskState(
       'https://github.com/acme/widgets/issues/42',
       'closed',
     );
 
-    // Then — the updated issue is mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/42',
       nodeId: 'I_kwDOAAAA42',
@@ -937,13 +853,14 @@ describe('GitHubAdapter', () => {
       labels: ['type: task'],
       parentUrl: null,
     });
-    // And the PATCH targeted the bound repo and issue number with the state
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
     expect(bodies[0]).toBe(JSON.stringify({ state: 'closed' }));
   });
 
+});
+
+describe('LANE-2 — board items carry their lane', () => {
   it('maps board items onto the DTO, distinguishing issues from draft cards', async () => {
-    // Given — a GraphQL board items response with an issue and a draft card
     const boardResponse = {
       status: 200,
       json: {
@@ -977,10 +894,8 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([boardResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the board items
     const result = await adapter.fetchBoardItems('PVT_123');
 
-    // Then — the issue and draft card are mapped onto the DTO
     expect(result).toEqual([
       {
         itemId: 'PVTI_1',
@@ -997,14 +912,11 @@ describe('GitHubAdapter', () => {
         updatedAt: null,
       },
     ]);
-    // And the query targeted the project node id
     expect(bodies[0]).toContain('BoardItems');
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
   it('maps draft card title and body onto the board item DTO', async () => {
-    // Given — a GraphQL board items response with a draft card carrying a
-    // title and body
     const boardResponse = {
       status: 200,
       json: {
@@ -1027,10 +939,8 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([boardResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the board items
     const result = await adapter.fetchBoardItems('PVT_123');
 
-    // Then — the draft title and body are surfaced on the DTO
     expect(result).toEqual([
       {
         itemId: 'PVTI_2',
@@ -1040,12 +950,10 @@ describe('GitHubAdapter', () => {
         updatedAt: null,
       },
     ]);
-    // And the query asks for the draft content
     expect(bodies[0]).toContain('DraftIssue');
   });
 
   it('fetches the whole project detail in one query', async () => {
-    // Given — a GraphQL response carrying the repo's issues and the board
     const detailResponse = {
       status: 200,
       json: {
@@ -1104,19 +1012,15 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([detailResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the project detail
     const result = await adapter.fetchProjectDetail(
       'https://github.com/acme/widgets',
       'PVT_123',
     );
 
-    // Then — one POST carries both connections
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('ProjectDetail');
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
-    // And the query asks for the sub-issue parent relation
     expect(bodies[0]).toContain('parent { url }');
-    // And the typed issue is mapped, the untyped one filtered out
     expect(result.issues).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/42',
@@ -1131,7 +1035,6 @@ describe('GitHubAdapter', () => {
         parentUrl: 'https://github.com/acme/widgets/issues/40',
       },
     ]);
-    // And the board card comes along with its lane
     expect(result.cards).toEqual([
       {
         itemId: 'PVTI_1',
@@ -1144,7 +1047,6 @@ describe('GitHubAdapter', () => {
   });
 
   it('maps a closed GraphQL issue to a closed task state', async () => {
-    // Given — a GraphQL response with a closed typed issue
     const detailResponse = {
       status: 200,
       json: {
@@ -1172,19 +1074,18 @@ describe('GitHubAdapter', () => {
     const { transport } = fakeTransport([detailResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter fetches the project detail
     const result = await adapter.fetchProjectDetail(
       'https://github.com/acme/widgets',
       'PVT_123',
     );
 
-    // Then — the state is closed
     expect(result.issues[0]!.state).toBe('closed');
   });
 
+});
+
+describe('PRO-2 — a card without an issue is promoted', () => {
   it('promotes a draft card to an issue and fetches the full task', async () => {
-    // Given — a transport that converts the draft card and then returns the
-    // new issue via REST
     const mutationResponse = {
       status: 200,
       json: {
@@ -1217,11 +1118,8 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter promotes the draft card
     const result = await adapter.promoteCard('PVTI_2', 'R_kgDOAAAA');
 
-    // Then — the mutation targeted the item and repository, and the new issue
-    // is fetched in full and mapped onto GithubTaskData
     expect(result).toEqual({
       url: 'https://github.com/acme/widgets/issues/50',
       nodeId: 'I_kwDOAAAA50',
@@ -1240,8 +1138,10 @@ describe('GitHubAdapter', () => {
     expect(paths[0]).toBe('/repos/acme/widgets/issues/50');
   });
 
+});
+
+describe('LANE-2 — a lane move is written to the board', () => {
   it('sets a board item status via updateProjectV2ItemFieldValue', async () => {
-    // Given — a board containing the issue and a transport for the two calls
     const boardResponse = {
       status: 200,
       json: {
@@ -1273,7 +1173,6 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter sets the board status to the done option
     await adapter.setBoardStatus(
       'PVT_123',
       'PVTF_456',
@@ -1281,7 +1180,6 @@ describe('GitHubAdapter', () => {
       'PVTSSF_3',
     );
 
-    // Then — the item id is resolved from the board and the field value is updated
     expect(bodies[1]).toContain('SetBoardStatus');
     expect(bodies[1]).toContain('"itemId":"PVTI_1"');
     expect(bodies[1]).toContain('"fieldId":"PVTF_456"');
@@ -1289,7 +1187,6 @@ describe('GitHubAdapter', () => {
   });
 
   it('adds an issue to the board via addProjectV2ItemById', async () => {
-    // Given — a REST issue response and a transport for the two calls
     const issueResponse = {
       status: 200,
       json: {
@@ -1313,20 +1210,17 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter adds the issue to the board
     await adapter.addBoardItem(
       'PVT_123',
       'https://github.com/acme/widgets/issues/42',
     );
 
-    // Then — the issue's node id is resolved from the REST response and added
     expect(bodies[0]).toContain('AddBoardItem');
     expect(bodies[0]).toContain('"contentId":"I_kwDOAAAA42"');
     expect(bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
   it('deletes the issue card via deleteProjectV2Item', async () => {
-    // Given — a board containing the issue and a transport for the two calls
     const boardResponse = {
       status: 200,
       json: {
@@ -1358,20 +1252,17 @@ describe('GitHubAdapter', () => {
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter deletes the issue's card
     await adapter.deleteCard(
       'PVT_123',
       'https://github.com/acme/widgets/issues/42',
     );
 
-    // Then — the item id is resolved from the board and deleted
     expect(bodies[1]).toContain('DeleteBoardItem');
     expect(bodies[1]).toContain('"itemId":"PVTI_1"');
     expect(bodies[1]).toContain('"projectId":"PVT_123"');
   });
 
   it('treats a card-less issue as a no-op on delete', async () => {
-    // Given — a board with no card for the issue
     const boardResponse = {
       status: 200,
       json: { data: { node: { items: { nodes: [] } } } },
@@ -1379,20 +1270,19 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([boardResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter deletes the issue's card
     await adapter.deleteCard(
       'PVT_123',
       'https://github.com/acme/widgets/issues/42',
     );
 
-    // Then — only the board read ran; no mutation was posted
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('BoardItems');
   });
 
+});
+
+describe('PRO-1 — only untyped issues are promotion candidates', () => {
   it('lists open issues that carry no type label', async () => {
-    // Given — a REST response mixing typed issues (task, slice, bug, chore)
-    // with an unlabeled one
     const issuesResponse = {
       status: 200,
       json: [
@@ -1451,12 +1341,10 @@ describe('GitHubAdapter', () => {
     const { transport, paths } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter lists unpromoted issues
     const result = await adapter.fetchUnpromotedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — only the unlabeled issue is surfaced, mapped onto GithubTaskData
     expect(result).toEqual([
       {
         url: 'https://github.com/acme/widgets/issues/46',
@@ -1471,12 +1359,10 @@ describe('GitHubAdapter', () => {
         parentUrl: null,
       },
     ]);
-    // And the REST path targeted the bound repo with open issues
     expect(paths[0]).toBe('/repos/acme/widgets/issues?state=open&per_page=100');
   });
 
   it('excludes issues carrying any type label from the unpromoted list', async () => {
-    // Given — a REST response with one issue per type label
     const issuesResponse = {
       status: 200,
       json: [
@@ -1525,97 +1411,67 @@ describe('GitHubAdapter', () => {
     const { transport } = fakeTransport([issuesResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter lists unpromoted issues
     const result = await adapter.fetchUnpromotedIssues(
       'https://github.com/acme/widgets',
     );
 
-    // Then — none are surfaced; every typed issue is already tracked
     expect(result).toEqual([]);
   });
 
   it('adds a label to an issue via the labels endpoint', async () => {
-    // Given — a transport that accepts the label POST
     const labelsResponse = { status: 200, json: [{ name: 'type: task' }] };
     const { transport, paths, bodies } = fakeTransport([labelsResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter adds the label to the issue
     await adapter.addLabel(
       'https://github.com/acme/widgets/issues/42',
       'type: task',
     );
 
-    // Then — the POST targeted the bound repo, issue and labels endpoint
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
     expect(bodies[0]).toBe(JSON.stringify({ labels: ['type: task'] }));
   });
 
-  it('reports an invalid repo url clearly instead of a TypeError', async () => {
-    // Given — an adapter and an empty repo url
-    const { transport } = fakeTransport([]);
-    const adapter = new GitHubAdapter(transport);
+});
 
-    // When — a repo-scoped call is made with the empty url
-    // Then — it fails with a clear error, not a raw TypeError
-    await expect(adapter.fetchTrackedIssues('')).rejects.toThrow(
+describe('adapter — a malformed url fails clearly', () => {
+  it('reports an invalid repo or board url clearly instead of a TypeError', async () => {
+    const repo = new GitHubAdapter(fakeTransport([]).transport);
+    await expect(repo.fetchTrackedIssues('')).rejects.toThrow(
       /invalid repo url/,
     );
+
+    const board = new GitHubAdapter(fakeTransport([]).transport);
+    await expect(
+      board.fetchProjectIdentity({
+        pm: 'github',
+        repoUrl: 'https://github.com/acme/widgets',
+        boardUrl: '',
+      }),
+    ).rejects.toThrow(/invalid board url/);
   });
 
-  it('reports an invalid board url clearly instead of a TypeError', async () => {
-    // Given — an adapter and an empty board url
-    const { transport } = fakeTransport([]);
-    const adapter = new GitHubAdapter(transport);
-    const data: AttachProjectData = {
-      pm: 'github',
-      repoUrl: 'https://github.com/acme/widgets',
-      boardUrl: '',
-    };
+});
 
-    // When — the identity is resolved with the empty board url
-    // Then — it fails with a clear error, not a raw TypeError
-    await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(
-      /invalid board url/,
-    );
-  });
+describe('ARC-1 — archiving closes the board', () => {
+  it('closes and reopens a project via updateProjectV2', async () => {
+    for (const closed of [true, false]) {
+      const mutationResponse = {
+        status: 200,
+        json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
+      };
+      const { transport, bodies } = fakeTransport([mutationResponse]);
+      const adapter = new GitHubAdapter(transport);
 
-  it('closes a project via updateProjectV2', async () => {
-    // Given — a transport that accepts the project mutation
-    const mutationResponse = {
-      status: 200,
-      json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
-    };
-    const { transport, bodies } = fakeTransport([mutationResponse]);
-    const adapter = new GitHubAdapter(transport);
+      await adapter.setProjectClosed('PVT_123', closed);
 
-    // When — the adapter closes the project
-    await adapter.setProjectClosed('PVT_123', true);
-
-    // Then — the mutation targets the project and the closed flag
-    expect(bodies[0]).toContain('SetProjectClosed');
-    expect(bodies[0]).toContain('"projectId":"PVT_123"');
-    expect(bodies[0]).toContain('"closed":true');
-  });
-
-  it('reopens a project via updateProjectV2', async () => {
-    // Given — a transport that accepts the project mutation
-    const mutationResponse = {
-      status: 200,
-      json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
-    };
-    const { transport, bodies } = fakeTransport([mutationResponse]);
-    const adapter = new GitHubAdapter(transport);
-
-    // When — the adapter reopens the project
-    await adapter.setProjectClosed('PVT_123', false);
-
-    // Then — the mutation carries the open flag
-    expect(bodies[0]).toContain('"closed":false');
+      expect(bodies[0], `closed=${closed}`).toContain('SetProjectClosed');
+      expect(bodies[0]).toContain('"projectId":"PVT_123"');
+      expect(bodies[0]).toContain(`"closed":${closed}`);
+    }
   });
 
   it('locks an issue conversation via lockLockable', async () => {
-    // Given — a transport that accepts the lock mutation
     const mutationResponse = {
       status: 200,
       json: {
@@ -1625,19 +1481,18 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([mutationResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter locks the issue
     await adapter.lockIssue('I_kwDOAAAA42');
 
-    // Then — the mutation targets the issue, and omits lockReason because the
-    // archived case is not one of the enum's reasons
     expect(bodies[0]).toContain('lockLockable');
     expect(bodies[0]).toContain('lockableId: $nodeId');
     expect(bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
     expect(bodies[0]).not.toContain('lockReason');
   });
 
+});
+
+describe('PRB-1 — a quiet board is probed cheaply', () => {
   it('probes every project in one aliased query, keyed by node id', async () => {
-    // Given — a transport returning one aliased node field per project
     const fleetResponse = {
       status: 200,
       json: {
@@ -1658,10 +1513,8 @@ describe('GitHubAdapter', () => {
     const { transport, bodies } = fakeTransport([fleetResponse]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter probes both projects
     const result = await adapter.fetchProjectStates(['PVT_1', 'PVT_2']);
 
-    // Then — one POST carries an aliased node field per id, no connections
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('FleetState');
     expect(bodies[0]).toContain('p0: node(id: $id0)');
@@ -1669,7 +1522,6 @@ describe('GitHubAdapter', () => {
     expect(bodies[0]).toContain('ProjectV2');
     expect(bodies[0]).toContain('"id0":"PVT_1"');
     expect(bodies[0]).toContain('"id1":"PVT_2"');
-    // And the map is keyed by node id, carrying the lightweight state
     expect([...result.keys()]).toEqual(['PVT_1', 'PVT_2']);
     expect(result.get('PVT_1')).toEqual({
       projectId: 'PVT_1',
@@ -1684,56 +1536,46 @@ describe('GitHubAdapter', () => {
   });
 
   it('issues no request when probing an empty project list', async () => {
-    // Given — an adapter with no queued responses
     const { transport, bodies } = fakeTransport([]);
     const adapter = new GitHubAdapter(transport);
 
-    // When — the probe has no projects to ask about
     const result = await adapter.fetchProjectStates([]);
 
-    // Then — no request is made and the map is empty
     expect(result.size).toBe(0);
     expect(bodies).toHaveLength(0);
   });
 
-  it('skips a missing node so a deleted project does not crash the probe', async () => {
-    // Given — a response where one project no longer resolves
-    const fleetResponse = {
-      status: 200,
-      json: {
-        data: {
-          p0: null,
-          p1: {
-            id: 'PVT_2',
-            updatedAt: '2026-09-18T11:00:00Z',
-            closed: false,
+  it('skips a missing or invalid node rather than failing the probe', async () => {
+    const cases = [
+      {
+        name: 'a deleted project resolves to null',
+        json: {
+          data: {
+            p0: null,
+            p1: {
+              id: 'PVT_2',
+              updatedAt: '2026-09-18T11:00:00Z',
+              closed: false,
+            },
           },
         },
+        ids: ['PVT_1', 'PVT_2'],
+        expected: ['PVT_2'],
       },
-    };
-    const { transport } = fakeTransport([fleetResponse]);
-    const adapter = new GitHubAdapter(transport);
+      {
+        name: 'an unusable node shape is dropped',
+        json: { data: { p0: { id: 'PVT_1' } } },
+        ids: ['PVT_1'],
+        expected: [],
+      },
+    ];
+    for (const { name, json, ids, expected } of cases) {
+      const { transport } = fakeTransport([{ status: 200, json }]);
+      const adapter = new GitHubAdapter(transport);
 
-    // When — the adapter probes both projects
-    const result = await adapter.fetchProjectStates(['PVT_1', 'PVT_2']);
+      const result = await adapter.fetchProjectStates(ids);
 
-    // Then — only the resolvable project is surfaced
-    expect([...result.keys()]).toEqual(['PVT_2']);
-  });
-
-  it('skips an invalid node shape rather than failing the probe', async () => {
-    // Given — a node missing the state fields the probe needs
-    const fleetResponse = {
-      status: 200,
-      json: { data: { p0: { id: 'PVT_1' } } },
-    };
-    const { transport } = fakeTransport([fleetResponse]);
-    const adapter = new GitHubAdapter(transport);
-
-    // When — the adapter probes the project
-    const result = await adapter.fetchProjectStates(['PVT_1']);
-
-    // Then — the unusable node is dropped
-    expect(result.size).toBe(0);
+      expect([...result.keys()], name).toEqual(expected);
+    }
   });
 });
