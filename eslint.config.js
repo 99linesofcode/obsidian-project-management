@@ -13,6 +13,8 @@ import boundaries from 'eslint-plugin-boundaries';
 // root at src/main.ts is classified by the file descriptor in the settings
 // block below, not by an element pattern.
 const ELEMENT_PATTERNS = [
+  { type: 'core', pattern: 'src/core/**' },
+  { type: 'infrastructure', pattern: 'src/infrastructure/**' },
   { type: 'shared', pattern: 'src/shared/**' },
   { type: 'github', pattern: 'src/github/**' },
   { type: 'todoist', pattern: 'src/todoist/**' },
@@ -33,6 +35,10 @@ const ALL_ELEMENT_TYPES = [
 // the element types its module may import; every other edge is a violation.
 //
 // WHY these edges and no others:
+// - core is the inner block: the capability ports, canonical DTOs and the pure
+//   merge import nothing, so no outer block can leak in (the dependency rule).
+// - infrastructure is the middle block of driven adapters; it may import core
+//   only, never the driving side or a sibling block.
 // - shared imports nothing. It is the kernel: the ports and their DTOs live
 //   here precisely so no provider's shape leaks into neutral ground.
 // - github/todoist never import each other. A mirror's module may not depend
@@ -46,6 +52,7 @@ const ALL_ELEMENT_TYPES = [
 const MATRIX = {
   app: [
     'app',
+    'core',
     'shared',
     'github',
     'todoist',
@@ -56,6 +63,8 @@ const MATRIX = {
     'projects',
     'sync',
   ],
+  core: [],
+  infrastructure: ['core'],
   shared: [],
   github: ['shared', 'tasks', 'todos', 'vault', 'projects', 'sync'],
   todoist: [
@@ -83,8 +92,8 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
     ? { disallow: { to: { element: { types: { anyOf: ALL_ELEMENT_TYPES } } } } }
     : { allow: { to: { element: { types: { anyOf: allowed } } } } }),
   message:
-    type === 'shared'
-      ? 'the shared kernel imports no module; move the neutral shape into shared'
+    allowed.length === 0
+      ? `the ${type} block imports no module; move the neutral shape into ${type}`
       : `the ${type} module may not import that element`,
 }));
 
@@ -165,6 +174,8 @@ const compositionRootPolicies = [
           types: {
             anyOf: [
               'app',
+              'core',
+              'infrastructure',
               'shared',
               'vault',
               'registry',

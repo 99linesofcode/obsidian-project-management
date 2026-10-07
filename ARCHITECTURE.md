@@ -22,6 +22,8 @@ axis is carried by file-name role suffixes (`Action`, `Adapter`, `Port`,
 ```
 obsidian-project-management/
 ├── src/
+│   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action
+│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake today)
 │   ├── app/          # driving side: plugin lifecycle, scheduler, queue, commands, modals, settings
 │   ├── github/       # code-host provider: adapter, mapper, sync half, writer
 │   ├── todoist/      # task-manager provider: adapter, mapper, sync half, writers, absorbers
@@ -49,6 +51,14 @@ Pure calculations live in `shared/` as one-function files or pure classes
 scheduler, the queue, timers — belong to `app/` and make no business
 decisions. Persistence is owned by the registry adapter; nothing else touches
 `data.json`.
+
+**The multi-adapter core.** `core/` is the inner block: the capability ports,
+the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and
+the generic mirror-sync action. `infrastructure/` holds the driven adapters
+that implement those ports, one namespace per vendor. The composition root
+wires them. The existing `shared/`, provider and orchestration modules are the
+current chain, unchanged by the skeleton; the two shapes coexist while the
+real adapters are migrated.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
 or concept exists. Modules split when they outgrow grasp, not before.
@@ -105,6 +115,8 @@ provider actions. A provider's name never appears in the chain.
 | `src/tasks/`    | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
 | `src/todos/`    | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
 | `src/shared/`   | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
+| `src/core/`     | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and the generic mirror-sync action                                                        | TypeScript                   | in-process       |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter today                                                                                                                              | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -141,6 +153,50 @@ The API tokens are not settings and not a port: they live in Obsidian's
 SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
 composition root reads at adapter construction and the settings tab sets and
 clears. `data.json` is secret-free.
+
+### The multi-adapter core (walking skeleton)
+
+The `core/` block is the target shape of ADR-001, proven end to end on one thin
+path (the `Status` field) with the plugin's runtime behaviour unchanged. It
+consists of the port layer and the pure core:
+
+- **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
+  `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
+  `completion`, `Status`, `label`), and the optional `CapturePort`,
+  `CompleteFetchPort`, `TimestampedPort`. An adapter implements only the groups
+  it declares; an undeclared optional port is absent, so a capability the
+  adapter lacks has no interface to call. `TaskSurfacePort` carries one generic
+  write entry, `applyField`, that dispatches a canonical field to the
+  adapter's own representation; the completion fact is a separate canonical
+  field from the `Status` representation.
+- **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
+  `SideObservation`, `Delta` and `MergeResult` — one canonical shape per
+  concept, owned by the core. The merge diffs canonical fields only.
+- **The pure N-way merge** (`mergeField`). Sides plus exactly one origin role;
+  a delta per side against its own baseline; the F02 ladder (decisive
+  timestamp → completion over a stale open → origin tie-break); delete proof (a
+  verified-complete fetch plus a synced baseline); the origin's absence as a
+  delete delta (NWM-27); the origin's edit time trusted by default (NWM-28).
+  No I/O, no clocks.
+- **The descriptor and registrar.** Each adapter exports a typed descriptor
+  (application id, capabilities, per-field representations, secret keys,
+  settings rows). The composition root assembles a plain list and passes it to
+  the pure `registerAdapters`, which validates per F01 (known capabilities, all
+  required fields, the in-scope minimum surface, a unique lowercase application
+  id) and returns the accepted adapters as a map, each exposing only the ports
+  its descriptor declares.
+- **The generic mirror-sync action** (`MirrorSyncAction`). It names no
+  provider: it collects each capable mirror's observation against its own
+  baseline, calls the single merge, and fans the reconciled value out through
+  the one generic write entry.
+- **The origin/mirror model.** The vault is the origin — a side distinguished
+  by its role, supplying the tie-break, its edit time trusted, its absence a
+  delete — and needs no descriptor. A connection produces a mirror side. The
+  vault adapter and the application adapters are structural peers under
+  `infrastructure/`.
+- **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
+  registered at the composition root. It is inert unless a project names its
+  application id, so the plugin behaves exactly as before.
 
 ## 4. Data Stores
 
@@ -217,18 +273,22 @@ over HTTPS.
 - **Mechanical gates** (and what each makes impossible):
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
     are the `src/` module folders plus the src root (the composition root);
-    `shared/` imports from no module; provider modules never import each
-    other; neutral modules consume the kernel and the ports that live in it,
-    never a provider adapter directly; the composition root wires everything.
-    An unlisted import edge fails the lint, so the dependency graph stays
-    acyclic and the kernel stays neutral.
+    `core/` is the inner block and imports no module; `infrastructure/` may
+    import `core/` only; `shared/` imports from no module; provider modules
+    never import each other; neutral modules consume the kernel and the ports
+    that live in it, never a provider adapter directly; the composition root
+    wires everything. An unlisted import edge fails the lint, so the dependency
+    graph stays acyclic and the inner blocks stay neutral.
   - **`boundaries/no-unknown-files`** and **`no-unknown-dependencies`** —
     every source file must belong to an element and every local import must
-    resolve to one, so a new top-level module cannot slip in unclassified.
+    resolve to one, so a new top-level module (including `core/` and
+    `infrastructure/`) cannot slip in unclassified.
   - **`pnpm run lint:boundaries`** — a vocabulary grep: provider names
     (`GitHub`, `Github`, `Todoist`) may appear only in their own provider
     module and the composition root, so shared and cross-cutting vocabulary
-    stays neutral.
+    stays neutral. The grep is strengthened with a case-insensitive pass scoped
+    to `core/` and `infrastructure/` (a future per-vendor adapter folder is
+    exempt), so a provider name in the core fails the gate.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
     compile error.
   - **`pnpm test`** — behavioral tests per module, including the sync chain's
@@ -257,6 +317,12 @@ over HTTPS.
 canonical read. The developer manual records the remaining code-vs-brief
 discrepancies.
 
+The multi-adapter core (`core/` + `infrastructure/`) is a walking skeleton:
+the shape is built and proven on the `Status` field through the conformance
+adapter, but no real adapter is migrated. Moving the GitHub and Todoist
+providers onto the capability ports, and the vault onto the origin side, are
+later slices; the existing chain is unchanged.
+
 ## 10. Project Identification
 
 Project Name: obsidian-project-management
@@ -265,7 +331,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-07
+Date of Last Update: 2026-10-08
 
 ## 11. Glossary / Acronyms
 
@@ -309,11 +375,11 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
   mirror the tree: `tests/<module>/…`.
 - **Entry point**: `src/main.ts` — above the modules, never inside one; the
   composition root.
-- **Dependency matrix**: `shared/` imports from no module; the provider
-  modules (`github`, `todoist`) never import each other; neutral modules
-  consume the kernel and the ports that live in it, never a provider adapter
-  directly; the composition root wires everything; no circular module
-  dependencies.
+- **Dependency matrix**: `core/` imports no module; `infrastructure/` imports
+  `core/` only; `shared/` imports from no module; the provider modules
+  (`github`, `todoist`) never import each other; neutral modules consume the
+  kernel and the ports that live in it, never a provider adapter directly; the
+  composition root wires everything; no circular module dependencies.
 - **Provider neutrality**: provider names appear only in provider modules and
   the composition root; shared and cross-cutting vocabulary is neutral (a
   provider name is a value argument, never a namespace key). Enforced by the

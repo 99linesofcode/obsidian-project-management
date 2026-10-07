@@ -58,6 +58,11 @@ import {
 } from './todoist/TodoistAdapter.js';
 import { PromoteToTaskCommand } from './app/commands/PromoteToTaskCommand.js';
 import { PromoteCardToIssueCommand } from './app/commands/PromoteCardToIssueCommand.js';
+import { AdapterRegistration } from './core/data/AdapterRegistration.js';
+import type { RegistrationResult } from './core/data/RegistrationResult.js';
+import { registerAdapters } from './core/registerAdapters.js';
+import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
+import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
 
 async function request(
   token: string,
@@ -117,6 +122,7 @@ function composePlugin(
   captureRemoteProjects: CaptureRemoteProjectsAction;
   seedArtifacts: SeedVaultArtifactsAction;
   seedTypeLabels: SeedTypeLabelsAction;
+  adapters: RegistrationResult;
 } {
   const transport = transportFromSecret(
     secrets,
@@ -321,6 +327,12 @@ function composePlugin(
     captureRemoteProjects,
     seedArtifacts,
     seedTypeLabels,
+    adapters: registerAdapters([
+      new AdapterRegistration(
+        conformanceDescriptor('conformance'),
+        new ConformanceMirrorAdapter(),
+      ),
+    ]),
   };
 }
 
@@ -331,6 +343,7 @@ export default class ProjectManagementPlugin extends Plugin {
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
   seedTypeLabels!: SeedTypeLabelsAction;
+  adapters!: RegistrationResult;
 
   override async onload(): Promise<void> {
     const raw = await loadDataSafely(
@@ -360,9 +373,11 @@ export default class ProjectManagementPlugin extends Plugin {
       captureRemoteProjects,
       seedArtifacts,
       seedTypeLabels,
+      adapters,
     } = composePlugin(this, syncState, this.secrets);
     this.seedArtifacts = seedArtifacts;
     this.seedTypeLabels = seedTypeLabels;
+    this.adapters = adapters;
     await seedArtifacts.execute();
     this.addChild(scheduler);
 
