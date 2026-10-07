@@ -43,7 +43,7 @@ export class VaultOriginAdapter implements OriginPort {
   async applyField(write: CanonicalFieldWrite): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(write.handle);
     if (!(file instanceof TFile)) {
-      return;
+      throw new Error(`origin note not found: ${write.handle}`);
     }
 
     if (write.field === 'title') {
@@ -52,7 +52,13 @@ export class VaultOriginAdapter implements OriginPort {
     }
 
     const content = await this.app.vault.read(file);
-    await this.app.vault.modify(file, writeIntoNote(content, write));
+    const updated = writeIntoNote(content, write);
+    if (updated === content) {
+      throw new Error(
+        `origin note cannot accept ${write.field}: ${write.handle}`,
+      );
+    }
+    await this.app.vault.modify(file, updated);
   }
 
   async trash(handle: string): Promise<void> {

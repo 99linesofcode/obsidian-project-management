@@ -178,6 +178,35 @@ describe('VaultOriginAdapter — the origin write (F02 NWM-3)', () => {
     expect(vault.content(NOTE_PATH)).toContain('status: Done');
     expect(vault.content(NOTE_PATH)).toContain('Body text');
   });
+
+  it('fails when the note is missing instead of reporting a durable write', async () => {
+    const { adapter } = setup();
+
+    await expect(
+      adapter.applyField(
+        new CanonicalFieldWrite({
+          handle: 'Projecten/Acme/taken/gone.md',
+          field: 'Status',
+          value: 'Done',
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('fails when the note has no frontmatter instead of skipping silently', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, 'Body text', MTIME);
+
+    await expect(
+      adapter.applyField(
+        new CanonicalFieldWrite({
+          handle: NOTE_PATH,
+          field: 'Status',
+          value: 'Done',
+        }),
+      ),
+    ).rejects.toThrow();
+  });
 });
 
 describe('VaultOriginAdapter — the origin rename (F02 NWM-3)', () => {
