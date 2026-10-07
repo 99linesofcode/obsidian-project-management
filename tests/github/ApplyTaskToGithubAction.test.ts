@@ -3,6 +3,7 @@ import { ApplyTaskToGithubAction } from '../../src/github/ApplyTaskToGithubActio
 import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
@@ -35,13 +36,11 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return issue({ url, state });
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    optionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({ issueUrl, optionId });
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.boardStatusCalls.push({
+      issueUrl: status.issueUrl,
+      optionId: status.statusOptionId,
+    });
   }
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     this.addBoardItemCalls.push({ projectNodeId, issueUrl });

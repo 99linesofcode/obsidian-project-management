@@ -1,5 +1,6 @@
 import type { AttachProjectData } from './AttachProjectData.js';
 import type { BoardItemData } from './BoardItemData.js';
+import type { BoardStatusData } from './BoardStatusData.js';
 import type { CodeHostTaskData } from './CodeHostTaskData.js';
 import type { CreateIssueData } from './CreateIssueData.js';
 import type { IssueHandleData } from './IssueHandleData.js';
@@ -107,12 +108,7 @@ export interface ProjectManagementPort {
   ): Promise<CodeHostTaskData>;
   setTaskState(url: string, state: 'open' | 'closed'): Promise<CodeHostTaskData>;
   fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]>;
-  setBoardStatus(
-    projectNodeId: string,
-    statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void>;
+  setBoardStatus(status: BoardStatusData): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
   // Removes the issue's card from the project's board. An issue with no card is
   // a no-op, so a sweep can call it unconditionally.

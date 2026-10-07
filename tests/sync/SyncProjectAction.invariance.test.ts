@@ -26,6 +26,7 @@ import { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
 import { hash } from '../../src/shared/hash.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
@@ -167,17 +168,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchBoardItems(): Promise<BoardItemData[]> {
     return this.detail.cards;
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void> {
-    this.mutations.push(`setBoardStatus:${issueUrl}:${statusOptionId}`);
-    const card = this.detail.cards.find(
-      (candidate) => candidate.issueUrl === issueUrl,
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.mutations.push(
+      `setBoardStatus:${status.issueUrl}:${status.statusOptionId}`,
     );
-    const name = this.optionNames[statusOptionId];
+    const card = this.detail.cards.find(
+      (candidate) => candidate.issueUrl === status.issueUrl,
+    );
+    const name = this.optionNames[status.statusOptionId];
     if (card && name !== undefined) {
       card.statusOptionName = name;
     }

@@ -1,7 +1,7 @@
 import { isRecord } from '../shared/isRecord.js';
 import { projectFromNotePath } from '../projects/projectFromNotePath.js';
 import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { WatchStateData } from '../shared/WatchStateData.js';
 import type {
   EntityRecord,
@@ -927,7 +927,7 @@ export class SyncStateAdapter implements SyncStatePort {
   }
 
   private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {
-    return {
+    return new ProjectIdentityData({
       repoUrl: typeof raw.repoUrl === 'string' ? raw.repoUrl : '',
       repoNodeId: typeof raw.repoNodeId === 'string' ? raw.repoNodeId : '',
       projectNodeId:
@@ -943,7 +943,7 @@ export class SyncStateAdapter implements SyncStatePort {
             )
             .map((o) => ({ id: o.id, name: o.name }))
         : [],
-    };
+    });
   }
 }
 

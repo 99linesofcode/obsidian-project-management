@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PropagateStatusAction } from '../../src/tasks/PropagateStatusAction.js';
 import { BoardStatusAction } from '../../src/projects/BoardStatusAction.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
@@ -20,13 +21,11 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return issue({ url, state });
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({ issueUrl, statusOptionId });
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.boardStatusCalls.push({
+      issueUrl: status.issueUrl,
+      statusOptionId: status.statusOptionId,
+    });
   }
   async fetchProjectIdentity(): Promise<null> {
     return null;

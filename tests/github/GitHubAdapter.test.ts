@@ -4,6 +4,7 @@ import {
   type Transport,
 } from '../../src/github/GitHubAdapter.js';
 import type { AttachProjectData } from '../../src/shared/AttachProjectData.js';
+import { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 
 // A fake transport at the boundary: returns canned responses in call order
 // and records the request bodies/paths, so the adapter's mapping is what's
@@ -1325,10 +1326,12 @@ describe('LANE-2 — a lane move is written to the board', () => {
     const adapter = new GitHubAdapter(transport);
 
     await adapter.setBoardStatus(
-      'PVT_123',
-      'PVTF_456',
-      'https://github.com/acme/widgets/issues/42',
-      'PVTSSF_3',
+      new BoardStatusData({
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        issueUrl: 'https://github.com/acme/widgets/issues/42',
+        statusOptionId: 'PVTSSF_3',
+      }),
     );
 
     expect(bodies[1]).toContain('SetBoardStatus');

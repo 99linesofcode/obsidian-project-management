@@ -1,4 +1,4 @@
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
@@ -42,13 +42,13 @@ export class AttachProjectAction {
     if (choice.kind === 'create') {
       // No board yet: discovery resolves the repository alone and never writes.
       // The sync chain's ensure-board step creates the board on the next pass.
-      return {
+      return new ProjectIdentityData({
         repoUrl: data.repoUrl,
         repoNodeId,
         projectNodeId: '',
         statusFieldId: '',
         statusOptions: [],
-      };
+      });
     }
 
     const identity = await this.port.fetchProjectIdentity({

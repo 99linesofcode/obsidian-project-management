@@ -1,4 +1,5 @@
 import { boardOptionIDByName } from './boardOptionIDByName.js';
+import { BoardStatusData } from '../shared/BoardStatusData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
@@ -48,10 +49,12 @@ export class BoardStatusAction {
     }
 
     await this.projectManagement.setBoardStatus(
-      identity.projectNodeId,
-      identity.statusFieldId,
-      input.url,
-      optionId,
+      new BoardStatusData({
+        projectNodeId: identity.projectNodeId,
+        statusFieldId: identity.statusFieldId,
+        issueUrl: input.url,
+        statusOptionId: optionId,
+      }),
     );
   }
 }

@@ -1,4 +1,5 @@
 import type { BoardItemData } from '../shared/BoardItemData.js';
+import { BoardStatusData } from '../shared/BoardStatusData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
 import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { TaskData } from '../shared/TaskData.js';
@@ -715,10 +716,12 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     // caller, so this write cannot fail on an unknown option.
     if (laneOptionId !== undefined) {
       await this.projectManagement.setBoardStatus(
-        identity.projectNodeId,
-        identity.statusFieldId,
-        handle.url,
-        laneOptionId,
+        new BoardStatusData({
+          projectNodeId: identity.projectNodeId,
+          statusFieldId: identity.statusFieldId,
+          issueUrl: handle.url,
+          statusOptionId: laneOptionId,
+        }),
       );
     }
   }

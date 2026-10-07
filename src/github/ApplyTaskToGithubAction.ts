@@ -1,4 +1,5 @@
 import { TaskData } from '../shared/TaskData.js';
+import { BoardStatusData } from '../shared/BoardStatusData.js';
 import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { boardOptionIDByName } from '../projects/boardOptionIDByName.js';
 import { toIssueBody } from '../vault/Checklist.js';
@@ -98,10 +99,12 @@ export class ApplyTaskToGithubAction {
     statusName: string,
   ): Promise<void> {
     await this.projectManagement.setBoardStatus(
-      identity.projectNodeId,
-      identity.statusFieldId,
-      url,
-      boardOptionIDByName(identity.statusOptions, statusName),
+      new BoardStatusData({
+        projectNodeId: identity.projectNodeId,
+        statusFieldId: identity.statusFieldId,
+        issueUrl: url,
+        statusOptionId: boardOptionIDByName(identity.statusOptions, statusName),
+      }),
     );
   }
 

@@ -2,13 +2,14 @@ import { isRecord } from '../shared/isRecord.js';
 import { DEFAULT_LABEL_COLOR } from '../shared/labels.js';
 import type { AttachProjectData } from '../shared/AttachProjectData.js';
 import type { BoardItemData } from '../shared/BoardItemData.js';
+import { BoardStatusData } from '../shared/BoardStatusData.js';
 import type { CreateIssueData } from '../shared/CreateIssueData.js';
 import type { IssueHandleData } from '../shared/IssueHandleData.js';
 import type { ProjectBoardData } from '../shared/ProjectBoardData.js';
 import type { ProjectData } from '../shared/ProjectData.js';
-import type {
+import {
   ProjectIdentityData,
-  ProjectStatusOption,
+  type ProjectStatusOption,
 } from '../shared/ProjectIdentityData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ProjectDetailData } from '../shared/ProjectDetailData.js';
@@ -457,13 +458,13 @@ export class GitHubAdapter implements ProjectManagementPort {
         : await this.fetchRepoNodeId(this.parseRepoUrl(data.repoUrl));
     const project = await this.fetchProjectByBoard(board);
 
-    return {
+    return new ProjectIdentityData({
       repoUrl: data.repoUrl,
       repoNodeId,
       projectNodeId: project.id,
       statusFieldId: project.statusFieldId,
       statusOptions: project.statusOptions,
-    };
+    });
   }
 
   // The repository's node id and its linked boards, in one read. The
@@ -1092,22 +1093,19 @@ export class GitHubAdapter implements ProjectManagementPort {
       .filter((item): item is BoardItemData => item !== null);
   }
 
-  async setBoardStatus(
-    projectNodeId: string,
-    statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void> {
-    const items = await this.fetchBoardItems(projectNodeId);
-    const item = items.find((candidate) => candidate.issueUrl === issueUrl);
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    const items = await this.fetchBoardItems(status.projectNodeId);
+    const item = items.find(
+      (candidate) => candidate.issueUrl === status.issueUrl,
+    );
     if (!item) {
-      throw new Error(`GitHubAdapter: no board item for ${issueUrl}`);
+      throw new Error(`GitHubAdapter: no board item for ${status.issueUrl}`);
     }
     await this.postQuery(SET_BOARD_STATUS_MUTATION, {
-      projectId: projectNodeId,
+      projectId: status.projectNodeId,
       itemId: item.itemId,
-      fieldId: statusFieldId,
-      optionId: statusOptionId,
+      fieldId: status.statusFieldId,
+      optionId: status.statusOptionId,
     });
   }
 

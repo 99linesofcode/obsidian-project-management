@@ -2,7 +2,7 @@ import { ProjectMapper } from './ProjectMapper.js';
 import { projectHomePath } from '../shared/projectHomePath.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import type { ProjectData } from '../shared/ProjectData.js';
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
@@ -267,13 +267,13 @@ export class CaptureRemoteProjectsAction {
 // capture records the project so the lifecycle's board leg (PRJ-1) can fill in
 // the addressing on the next pass.
 function emptyIdentity(): ProjectIdentityData {
-  return {
+  return new ProjectIdentityData({
     repoUrl: '',
     repoNodeId: '',
     projectNodeId: '',
     statusFieldId: '',
     statusOptions: [],
-  };
+  });
 }
 
 // The newest provider creation clock among a listing, or null when none carry

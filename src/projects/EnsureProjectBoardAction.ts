@@ -1,5 +1,5 @@
 import type { ProjectBoardData } from '../shared/ProjectBoardData.js';
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { RepoBoardData } from '../shared/RepoBoardData.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
@@ -67,13 +67,13 @@ export class EnsureProjectBoardAction {
           )
         : await this.adopt(choice.board, repoUrl);
 
-    const merged: ProjectIdentityData = {
+    const merged = new ProjectIdentityData({
       repoUrl,
       repoNodeId,
       projectNodeId: board.projectNodeId,
       statusFieldId: board.statusFieldId,
       statusOptions: board.statusOptions,
-    };
+    });
     await this.syncState.setIdentity(input.projectName, merged);
   }
 
