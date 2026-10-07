@@ -18,9 +18,11 @@ export interface DiscoveryResult {
 }
 
 // UC: discover the vault's synced projects at startup. Enumerates the vault's
-// project notes, attaches each github one to resolve its identities, skips
-// providers this plugin does not handle, and collects (rather than aborts on)
-// any note that fails to attach.
+// project notes, attaches each github connection to resolve its identities,
+// skips the task-manager connections (the lifecycle owns their anchor), and
+// collects (rather than aborts on) any connection that fails to attach. The
+// validation errors a note's connections carried are surfaced alongside the
+// attach errors.
 export class DiscoverProjectsAction {
   constructor(
     private readonly vault: VaultPort,
@@ -34,19 +36,22 @@ export class DiscoverProjectsAction {
     const errors: unknown[] = [];
 
     for (const note of notes) {
-      try {
-        const identity = await this.attachProject.execute({
-          pm: note.pm,
-          repoUrl: note.url,
-        });
-        if (identity) {
+      errors.push(...note.connectionErrors);
+      for (const connection of Object.values(note.connections)) {
+        if (connection.tool !== 'github') {
+          continue;
+        }
+        try {
+          const identity = await this.attachProject.execute({
+            repoUrl: connection.project,
+          });
           projects.push({
             projectName: note.projectName,
-            identity: { ...identity, repoUrl: note.url },
+            identity: { ...identity, repoUrl: connection.project },
           });
+        } catch (error) {
+          errors.push(error);
         }
-      } catch (error) {
-        errors.push(error);
       }
     }
 

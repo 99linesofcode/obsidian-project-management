@@ -144,8 +144,8 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
     path: 'Projecten/Acme Widgets/_home.md',
     projectName: 'Acme Widgets',
     archivedAt: null,
-    pm: 'github',
-    url: repoUrl,
+    connections: { github: { tool: 'github', project: repoUrl } },
+    connectionErrors: [],
     ...overrides,
   };
 }
@@ -174,9 +174,13 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('skips project notes for providers this plugin does not handle', async () => {
+  it('recognizes a task-manager connection without resolving a code-host identity', async () => {
     const vault = new FakeVault();
-    vault.notes = [githubNote({ pm: 'linear' })];
+    vault.notes = [
+      githubNote({
+        connections: { todoist: { tool: 'todoist', project: 'P1' } },
+      }),
+    ];
     const port = new FakePort();
     const action = makeAction(port, vault);
 
@@ -186,13 +190,59 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     expect(result.errors).toEqual([]);
   });
 
+  it('discovers a note carrying both a github and a todoist connection', async () => {
+    const vault = new FakeVault();
+    vault.notes = [
+      githubNote({
+        connections: {
+          github: { tool: 'github', project: repoUrl },
+          todoist: { tool: 'todoist', project: 'P1' },
+        },
+      }),
+    ];
+    const port = new FakePort();
+    port.repoBoardsByUrl.set(repoUrl, {
+      repoNodeId: 'R_kgDOAAAA',
+      boards: [board('widgets')],
+    });
+    port.result = identity;
+    const action = makeAction(port, vault);
+
+    const result = await action.execute();
+
+    expect(result.projects).toEqual([
+      { projectName: 'Acme Widgets', identity },
+    ]);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('surfaces the validation errors a note carried', async () => {
+    const vault = new FakeVault();
+    const validationError = new Error('connection "work" repeats the "github" tool');
+    vault.notes = [githubNote({ connectionErrors: [validationError] })];
+    const port = new FakePort();
+    port.repoBoardsByUrl.set(repoUrl, {
+      repoNodeId: 'R_kgDOAAAA',
+      boards: [board('widgets')],
+    });
+    port.result = identity;
+    const action = makeAction(port, vault);
+
+    const result = await action.execute();
+
+    expect(result.projects).toEqual([
+      { projectName: 'Acme Widgets', identity },
+    ]);
+    expect(result.errors).toEqual([validationError]);
+  });
+
   it('collects the error for a github note missing its repo url and still discovers the rest', async () => {
     const vault = new FakeVault();
     vault.notes = [
       githubNote({
         path: 'Projecten/Broken/_home.md',
         projectName: 'Broken',
-        url: '',
+        connections: { github: { tool: 'github', project: '' } },
       }),
       githubNote(),
     ];
@@ -219,7 +269,12 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
       githubNote({
         path: 'Projecten/Ambiguous/_home.md',
         projectName: 'Ambiguous',
-        url: 'https://github.com/acme/ambiguous',
+        connections: {
+          github: {
+            tool: 'github',
+            project: 'https://github.com/acme/ambiguous',
+          },
+        },
       }),
       githubNote(),
     ];

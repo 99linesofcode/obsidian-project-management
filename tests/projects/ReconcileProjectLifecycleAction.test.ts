@@ -264,6 +264,20 @@ function note(anchor?: string): string {
   return lines.join('\n');
 }
 
+// A note carrying the connection envelope: the todoist anchor lives in the
+// connection's project value, not the legacy `todoist` property.
+function connectionNote(anchor: string): string {
+  return [
+    '---',
+    'connections:',
+    '  todoist:',
+    '    tool: todoist',
+    `    project: ${anchor}`,
+    '---',
+    '# Acme Widgets',
+  ].join('\n');
+}
+
 function project(
   overrides: Partial<TodoistProjectData> = {},
 ): TodoistProjectData {
@@ -375,6 +389,17 @@ describe('ARC-2 — any side can start the freeze', () => {
       expect(h.syncState.todoistSets).toHaveLength(1);
       expect(verdict.remoteProjectId).toBe('P-new');
       expect(verdict.frozen).toBe(false);
+    });
+
+    it('resolves the project from the todoist connection anchor', async () => {
+      const h = setup();
+      h.vault.notes.set(activeNote, connectionNote('P1'));
+
+      const verdict = await h.action.execute(activeInput);
+
+      expect(h.taskManager.createCalls).toEqual([]);
+      expect(verdict.remoteProjectId).toBe('P1');
+      expect(h.vault.writes).toEqual([]);
     });
 
     it('resolves by name before creating, so no duplicate is made', async () => {

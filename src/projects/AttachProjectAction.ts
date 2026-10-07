@@ -7,27 +7,23 @@ import { repoNameFromUrl } from './repoNameFromUrl.js';
 // The discovery input: one identifier per connection — the repository url. The
 // board is no longer configured; it is derived from the repo.
 export interface AttachProjectInput {
-  pm: string;
   repoUrl: string;
 }
 
-// UC1: attach a project. Resolves a project note's sync frontmatter to its
-// code-host identities from the repository alone. Skips providers this plugin
-// does not handle; a note claiming pm: github without a repo url is a config
-// error. The board is derived by the same ladder the sync chain uses: no board
-// yet resolves the repo alone (the chain's ensure-board step creates it), one
-// board is adopted, several adopt the one titled with the repo name, and
-// several with no title match is a discovery error the user resolves once.
+// UC1: attach a project. Resolves a project note's code-host connection to its
+// identities from the repository alone. A github connection without a repo url
+// is a config error. The board is derived by the same ladder the sync chain
+// uses: no board yet resolves the repo alone (the chain's ensure-board step
+// creates it), one board is adopted, several adopt the one titled with the repo
+// name, and several with no title match is a discovery error the user resolves
+// once.
 export class AttachProjectAction {
   constructor(private readonly port: ProjectManagementPort) {}
 
-  async execute(data: AttachProjectInput): Promise<ProjectIdentityData | null> {
-    if (data.pm !== 'github') {
-      return null;
-    }
+  async execute(data: AttachProjectInput): Promise<ProjectIdentityData> {
     if (!data.repoUrl) {
       throw new DomainError(
-        'AttachProjectAction: repoUrl is required on a note claiming pm: github',
+        'AttachProjectAction: repoUrl is required on a github connection',
       );
     }
 

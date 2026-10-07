@@ -18,12 +18,13 @@ described behavior can be traced.
 ### What the plugin is
 
 The vault is the origin of truth. A project is a folder under `Projecten/`
-(or `Archief/` when archived); a task is a note under its `taken/` folder; a
-to-do is a note under its `todos/` folder. GitHub (a repository plus a Projects
-v2 board) and Todoist are **mirrors**: they hold copies of the vault's title,
-body, status and completion, and the plugin keeps them honest. Identity is a
-vault-owned uuid held in the registry (`data.json`'s `syncState` container);
-filenames and frontmatter carry no machine id.
+(or `Archief/` when archived) whose home note declares a non-empty
+`connections` map — one entry per tool, `{ tool, project }`; a task is a note
+under its `taken/` folder; a to-do is a note under its `todos/` folder. GitHub
+(a repository plus a Projects v2 board) and Todoist are **mirrors**: they hold
+copies of the vault's title, body, status and completion, and the plugin keeps
+them honest. Identity is a vault-owned uuid held in the registry (`data.json`'s
+`syncState` container); filenames and frontmatter carry no machine id.
 
 ### The five core promises
 
@@ -89,6 +90,9 @@ The actions and infrastructure:
   creation-clock cursor.
 - **EnsureProjectBoardAction** — creates (or adopts) the code-host board for a
   vault-born project (PRJ-1).
+- **MigrateProjectConnectionsAction** — on load, rewrites a project note's
+  legacy `pm`/`url`/`board`/`todoist` frontmatter into the `connections` map
+  (github from `url`, todoist from `todoist`), stripping all four in one save.
 - **ReconcileProjectLifecycleAction** — one freeze verdict across folder,
   board and Todoist project; the archive stamp and the reactivation watch.
 - **ProjectMapper** — the pure boundary mapping of provider project payloads
@@ -142,6 +146,8 @@ one-paragraph summary and the scenario IDs precede each.
 
 ### 2.1 The pass
 
+On load, `MigrateProjectConnectionsAction` rewrites the legacy project
+frontmatter to the connection envelope before discovery reads any note.
 `SyncScheduler.tick` first runs `CaptureRemoteProjectsAction` (remote-born
 projects into the vault, PRJ-2/PRJ-3), then enumerates the vault's project
 notes and enqueues each project name; `SyncQueue` runs them one at a time.
@@ -175,7 +181,7 @@ sequenceDiagram
   Sched->>Q: enqueue(projectName) per note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes() to resolve
-  alt pm-note missing
+  alt project note missing
     SP-->>Q: no-op
   end
 ```

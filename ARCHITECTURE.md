@@ -55,9 +55,10 @@ or concept exists. Modules split when they outgrow grasp, not before.
 
 ## 2. High-Level System Diagram
 
-The vault is the origin of truth. Project notes and task/to-do notes are the
-system of record; the code host (a repository plus a Projects v2 board) and the
-task manager are mirrors the plugin keeps honest. A serialized sync pass reads
+The vault is the origin of truth. Project notes (a home note declaring a
+non-empty `connections` map) and task/to-do notes are the system of record; the
+code host (a repository plus a Projects v2 board) and the task manager are
+mirrors the plugin keeps honest. A serialized sync pass reads
 the vault, reconciles it against each mirror through a three-way diff, and
 writes the winner back to whichever side is behind. The registry in `data.json`
 is the memory that makes the diff possible: it holds each entity's identity and
@@ -98,8 +99,8 @@ provider actions. A provider's name never appears in the chain.
 | `src/sync/` | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep | TypeScript | in-process |
 | `src/github/` | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer) | GraphQL + REST | the code host |
 | `src/todoist/` | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers | REST v1 | the task manager |
-| `src/vault/` | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`) | host vault API | the vault |
-| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper | TypeScript | in-process |
+| `src/vault/` | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec) | host vault API | the vault |
+| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture, connection migration and the project mapper | TypeScript | in-process |
 | `src/registry/` | The `SyncStatePort` adapter, its schema and its migration chain | `data.json` | the vault |
 | `src/tasks/` | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation | TypeScript | in-process |
 | `src/todos/` | Checklist ⇄ to-do note consistency in both directions | TypeScript | the vault |

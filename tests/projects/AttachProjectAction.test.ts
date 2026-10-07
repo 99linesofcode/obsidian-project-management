@@ -113,7 +113,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     port.identities.set(linked.boardUrl, identity);
     const action = new AttachProjectAction(port);
 
-    const result = await action.execute({ pm: 'github', repoUrl });
+    const result = await action.execute({ repoUrl });
 
     expect(port.identityCalls).toEqual([
       { pm: 'github', repoUrl, boardUrl: linked.boardUrl },
@@ -126,7 +126,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     port.repoBoards = { repoNodeId: 'R_kgDOAAAA', boards: [] };
     const action = new AttachProjectAction(port);
 
-    const result = await action.execute({ pm: 'github', repoUrl });
+    const result = await action.execute({ repoUrl });
 
     expect(result).toEqual({
       repoUrl,
@@ -148,7 +148,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     port.identities.set(match.boardUrl, identity);
     const action = new AttachProjectAction(port);
 
-    const result = await action.execute({ pm: 'github', repoUrl });
+    const result = await action.execute({ repoUrl });
 
     expect(port.identityCalls).toEqual([
       { pm: 'github', repoUrl, boardUrl: match.boardUrl },
@@ -164,29 +164,17 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     };
     const action = new AttachProjectAction(port);
 
-    await expect(action.execute({ pm: 'github', repoUrl })).rejects.toThrow(
+    await expect(action.execute({ repoUrl })).rejects.toThrow(
       /several boards/,
     );
     expect(port.identityCalls).toEqual([]);
   });
 
-  it('returns null for a non-github provider without calling the port', async () => {
+  it('throws a domain error when a github connection is missing its repo url', async () => {
     const port = new FakePort();
     const action = new AttachProjectAction(port);
 
-    const result = await action.execute({ pm: 'linear', repoUrl });
-
-    expect(result).toBeNull();
-    expect(port.identityCalls).toEqual([]);
-  });
-
-  it('throws a domain error when a github note is missing its repo url', async () => {
-    const port = new FakePort();
-    const action = new AttachProjectAction(port);
-
-    await expect(action.execute({ pm: 'github', repoUrl: '' })).rejects.toThrow(
-      /repoUrl/,
-    );
+    await expect(action.execute({ repoUrl: '' })).rejects.toThrow(/repoUrl/);
     expect(port.identityCalls).toEqual([]);
   });
 });

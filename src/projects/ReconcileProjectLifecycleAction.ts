@@ -1,5 +1,6 @@
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
+import { parseConnectionsBlock } from '../vault/parseConnectionsBlock.js';
 import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
 import { ProjectData } from '../shared/ProjectData.js';
 import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
@@ -333,7 +334,7 @@ export class ReconcileProjectLifecycleAction {
     notePath: string,
     noteContent: string,
   ): Promise<RemoteProjectData | null> {
-    const anchor = splitFrontmatter(noteContent)?.fields.get('todoist') ?? '';
+    const anchor = todoistAnchor(noteContent);
     let project =
       anchor === '' ? null : await this.taskManager.fetchProject(anchor);
     if (!project) {
@@ -506,4 +507,24 @@ export class ReconcileProjectLifecycleAction {
       archivedAt: canonical.archivedAt,
     };
   }
+}
+
+// The task-manager anchor for a note: the todoist connection's project value
+// when the note carries the connection envelope, falling back to the legacy
+// `todoist` property for a note the migration has not reached yet.
+function todoistAnchor(content: string): string {
+  const lines = content.split('\n');
+  if (lines[0] === '---') {
+    const closing = lines.indexOf('---', 1);
+    if (closing !== -1) {
+      const connections = parseConnectionsBlock(lines.slice(1, closing));
+      const todoist = Object.values(connections).find(
+        (connection) => connection.tool === 'todoist',
+      );
+      if (todoist !== undefined && todoist.project !== '') {
+        return todoist.project;
+      }
+    }
+  }
+  return splitFrontmatter(content)?.fields.get('todoist') ?? '';
 }

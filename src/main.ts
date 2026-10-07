@@ -18,6 +18,7 @@ import { SeedTypeLabelsAction } from './app/SeedTypeLabelsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
+import { MigrateProjectConnectionsAction } from './projects/MigrateProjectConnectionsAction.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
 import { ApplyTaskToGithubAction } from './github/ApplyTaskToGithubAction.js';
 import { ApplyTaskToTodoistAction } from './todoist/ApplyTaskToTodoistAction.js';
@@ -128,6 +129,7 @@ function composePlugin(
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
   captureRemoteProjects: CaptureRemoteProjectsAction;
+  migrateProjectConnections: MigrateProjectConnectionsAction;
   seedArtifacts: SeedVaultArtifactsAction;
   seedTypeLabels: SeedTypeLabelsAction;
 } {
@@ -143,6 +145,9 @@ function composePlugin(
   // action only writes when a configured path is genuinely absent, so it is
   // safe on every init and the settings tab reuses it to scaffold on demand.
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
+  // Migrates the legacy pm/url/board/todoist frontmatter to the connection
+  // envelope before discovery reads any note.
+  const migrateProjectConnections = new MigrateProjectConnectionsAction(vault);
 
   const github = new GitHubAdapter(transport);
   // Seeds the configured type-label vocabulary onto an arbitrary repository,
@@ -344,6 +349,7 @@ function composePlugin(
     scheduler,
     discoverProjects,
     captureRemoteProjects,
+    migrateProjectConnections,
     seedArtifacts,
     seedTypeLabels,
   };
@@ -408,6 +414,7 @@ export default class ProjectManagementPlugin extends Plugin {
       scheduler,
       discoverProjects,
       captureRemoteProjects,
+      migrateProjectConnections,
       seedArtifacts,
       seedTypeLabels,
     } = composePlugin(this, syncState, this.secrets);
@@ -417,6 +424,10 @@ export default class ProjectManagementPlugin extends Plugin {
     // created: a fresh vault gets all six at their configured paths, and an
     // existing file is never overwritten.
     await seedArtifacts.execute();
+    // Migrate the legacy project frontmatter to the connection envelope before
+    // discovery reads any note, so a pre-envelope vault is discovered in the
+    // same startup.
+    await migrateProjectConnections.execute();
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {

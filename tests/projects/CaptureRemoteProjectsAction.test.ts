@@ -326,8 +326,8 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
           path: 'Projecten/New Project/_New Project.md',
           projectName: 'New Project',
           archivedAt: null,
-          pm: 'github',
-          url: '',
+          connections: {},
+          connectionErrors: [],
         },
       ];
       h.vault.notes.set(
@@ -440,8 +440,8 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         path: 'Projecten/New Project/_New Project.md',
         projectName: 'New Project',
         archivedAt: null,
-        pm: 'github',
-        url: '',
+        connections: {},
+        connectionErrors: [],
       },
     ];
 
