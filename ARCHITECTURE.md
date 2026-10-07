@@ -23,7 +23,7 @@ axis is carried by file-name role suffixes (`Action`, `Adapter`, `Port`,
 obsidian-project-management/
 ├── src/
 │   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action
-│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake today)
+│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake and the vault origin adapter)
 │   ├── app/          # driving side: plugin lifecycle, scheduler, queue, commands, modals, settings
 │   ├── github/       # code-host provider: adapter, mapper, sync half, writer
 │   ├── todoist/      # task-manager provider: adapter, mapper, sync half, writers, absorbers
@@ -102,21 +102,21 @@ provider actions. A provider's name never appears in the chain.
 
 ## 3. Core Components
 
-| Component       | Responsibility                                                                                                                                                                                                                       | Technology                   | Target           |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ---------------- |
-| `src/main.ts`   | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                          | host plugin API              | the vault        |
-| `src/app/`      | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions | host plugin API, `Component` | the vault        |
-| `src/sync/`     | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                          | TypeScript                   | in-process       |
-| `src/github/`   | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer)                                                                          | GraphQL + REST               | the code host    |
-| `src/todoist/`  | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers                                                                                     | REST v1                      | the task manager |
-| `src/vault/`    | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                           | host vault API               | the vault        |
-| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper                                                                                                                                   | TypeScript                   | in-process       |
-| `src/registry/` | The `SyncStatePort` adapter and its schema                                                                                                                                                                                           | `data.json`                  | the vault        |
-| `src/tasks/`    | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
-| `src/todos/`    | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
-| `src/shared/`   | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
-| `src/core/`     | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and the generic mirror-sync action                                                        | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter today                                                                                                                              | TypeScript                   | external tools   |
+| Component             | Responsibility                                                                                                                                                                                                                       | Technology                   | Target           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ---------------- |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                          | host plugin API              | the vault        |
+| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions | host plugin API, `Component` | the vault        |
+| `src/sync/`           | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                          | TypeScript                   | in-process       |
+| `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer)                                                                          | GraphQL + REST               | the code host    |
+| `src/todoist/`        | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers                                                                                     | REST v1                      | the task manager |
+| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                           | host vault API               | the vault        |
+| `src/projects/`       | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper                                                                                                                                   | TypeScript                   | in-process       |
+| `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                           | `data.json`                  | the vault        |
+| `src/tasks/`          | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
+| `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
+| `src/shared/`         | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
+| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and the generic mirror-sync action                                                       | TypeScript                   | in-process       |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter and the vault origin adapter                                                                                                              | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -170,8 +170,9 @@ consists of the port layer and the pure core:
   adapter's own representation; the completion fact is a separate canonical
   field from the `Status` representation.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
-  `SideObservation`, `Delta` and `MergeResult` — one canonical shape per
-  concept, owned by the core. The merge diffs canonical fields only.
+  `SideObservation`, `OriginObservation`, `Delta` and `MergeResult` — one
+  canonical shape per concept, owned by the core. The merge diffs canonical
+  fields only.
 - **The pure N-way merge** (`mergeField`). Sides plus exactly one origin role;
   a delta per side against its own baseline; the F02 ladder (decisive
   timestamp → completion over a stale open → origin tie-break); delete proof (a
@@ -188,12 +189,24 @@ consists of the port layer and the pure core:
 - **The generic mirror-sync action** (`MirrorSyncAction`). It names no
   provider: it collects each capable mirror's observation against its own
   baseline, calls the single merge, and fans the reconciled value out through
-  the one generic write entry.
+  the one generic write entry. It also writes the reconciled value back to the
+  origin (or trashes the note on a delete), and advances the baseline of every
+  side written or already matching — a skipped write advances too; a failed
+  write advances nothing (NWM-17).
+- **The origin port** (`OriginPort`). The core's need for the origin: observe a
+  note's field as a canonical value plus its edit time, trusted by default
+  (NWM-28); apply a canonical field write to the note; trash the note (never a
+  permanent delete). It is separate from the capability ports: the origin is a
+  role, not an application, and gets no descriptor.
 - **The origin/mirror model.** The vault is the origin — a side distinguished
   by its role, supplying the tie-break, its edit time trusted, its absence a
   delete — and needs no descriptor. A connection produces a mirror side. The
   vault adapter and the application adapters are structural peers under
   `infrastructure/`.
+- **The vault origin adapter** (`infrastructure/vault/VaultOriginAdapter`)
+  implements `OriginPort` over the host vault API: it reads a task note into
+  the canonical fields, writes a reconciled value back, and trashes the note.
+  It is an infrastructure peer, not a capability adapter.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
