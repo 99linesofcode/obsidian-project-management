@@ -1,27 +1,12 @@
 import { DataTransferObject } from './DataTransferObject.js';
 
-// The fields a TaskData is built from. Named so a construction site reads as a
-// record rather than a row of positional slots — an empty mirror map or type is
-// explicit, not a mystery argument.
-export interface TaskDataInit {
-  id: string;
-  notePath: string;
-  mirrors: Record<string, string>;
-  title: string;
-  body: string;
-  status: string;
-  completedAt: string | null;
-  type: string;
-  parent: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-}
-
 // The canonical task: one provider-neutral shape for a code-host issue, a task-manager
 // task and a vault task note. Identity and provenance link the representations;
 // the content fields are the shape the diff compares. Provider transport DTOs
 // provider DTOs are mapped onto this at the boundary by the
-// mappers; the core never sees a provider shape.
+// mappers; the core never sees a provider shape. Named so a construction site
+// reads as a record rather than a row of positional slots — an empty mirror map
+// or type is explicit, not a mystery argument.
 export class TaskData extends DataTransferObject {
   id: string; // uuid — vault-owned, assigned at creation
   notePath: string; // mutable location; renames are a field update
@@ -35,7 +20,9 @@ export class TaskData extends DataTransferObject {
   createdAt: string | null;
   updatedAt: string | null;
 
-  constructor(init: TaskDataInit) {
+  // The init is the task's data fields; the DTO behavior (canonical/snapshotHash)
+  // is not part of construction, so it is excluded from the class's own type.
+  constructor(init: Omit<TaskData, keyof DataTransferObject>) {
     super();
     this.id = init.id;
     this.notePath = init.notePath;
