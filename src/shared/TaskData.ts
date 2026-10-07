@@ -1,12 +1,12 @@
 import { DataTransferObject } from './DataTransferObject.js';
 
-// The canonical task: one provider-neutral shape for a code-host issue, a task-manager
-// task and a vault task note. Identity and provenance link the representations;
-// the content fields are the shape the diff compares. Provider transport DTOs
-// provider DTOs are mapped onto this at the boundary by the
-// mappers; the core never sees a provider shape. Named so a construction site
-// reads as a record rather than a row of positional slots — an empty mirror map
-// or type is explicit, not a mystery argument.
+// The canonical task: one provider-neutral shape for a code-host issue, a
+// task-manager task and a vault task note. Identity and provenance link the
+// representations; the content fields are the shape the diff compares. Provider
+// transport DTOs are mapped onto this at the boundary by the mappers; the core
+// never sees a provider shape. Named so a construction site reads as a record
+// rather than a row of positional slots — an empty mirror map or type is
+// explicit, not a mystery argument.
 export class TaskData extends DataTransferObject {
   id: string; // uuid — vault-owned, assigned at creation
   notePath: string; // mutable location; renames are a field update

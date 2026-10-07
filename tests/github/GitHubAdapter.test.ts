@@ -1751,7 +1751,7 @@ describe('SEED — repository labels are listed and created', () => {
     );
 
     expect(labels).toEqual(['type: task', 'bug']);
-    expect(paths[0]).toBe('/repos/acme/widgets/labels?per_page=100');
+    expect(paths[0]).toBe('/repos/acme/widgets/labels?per_page=100&page=1');
   });
 
   it('creates a repository label with the given color', async () => {

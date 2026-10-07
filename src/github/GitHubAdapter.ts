@@ -299,6 +299,8 @@ const VIEWER_QUERY = `
 // The repository's linked boards (the derivation ladder's listing) plus the
 // repository node id, in one read. The ladder keys on the repo name; adoption
 // re-resolves field ids through the identity read, so the listing stays cheap.
+// Capped at 100 boards: a repository with more is a follow-up pagination
+// concern, not a silent truncation the ladder can act on.
 const REPO_BOARDS_QUERY = `
   query RepoBoards($owner: String!, $name: String!) {
     repository(owner: $owner, name: $name) {
@@ -609,24 +611,36 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   // The repository's existing label names, for the seed action's skip check.
+  // Paginated: a repo with more than 100 labels would otherwise hide the tail,
+  // and the seed action would try to create an existing label (a 422).
   async listRepoLabels(repoUrl: string): Promise<string[]> {
     const repo = this.parseRepoUrl(repoUrl);
-    const path = `/repos/${repo.owner}/${repo.name}/labels?per_page=100`;
-    const response = await this.transport.get(path);
-    if (response.status !== 200) {
-      throw new Error(
-        `GitHubAdapter: REST request failed with status ${response.status}`,
+    const names: string[] = [];
+    for (let page = 1; ; page++) {
+      const path = `/repos/${repo.owner}/${repo.name}/labels?per_page=100&page=${page}`;
+      const response = await this.transport.get(path);
+      if (response.status !== 200) {
+        throw new Error(
+          `GitHubAdapter: REST request failed with status ${response.status}`,
+        );
+      }
+      if (!Array.isArray(response.json)) {
+        throw new Error('GitHubAdapter: unexpected REST response shape');
+      }
+      names.push(
+        ...response.json
+          .filter(isRecord)
+          .filter(
+            (label): label is { name: string } =>
+              typeof label.name === 'string',
+          )
+          .map((label) => label.name),
       );
+      if (response.json.length < 100) {
+        break;
+      }
     }
-    if (!Array.isArray(response.json)) {
-      throw new Error('GitHubAdapter: unexpected REST response shape');
-    }
-    return response.json
-      .filter(isRecord)
-      .filter(
-        (label): label is { name: string } => typeof label.name === 'string',
-      )
-      .map((label) => label.name);
+    return names;
   }
 
   // Creates one label on the repository. The seed action calls it only for
@@ -1477,9 +1491,12 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private parseRepoUrl(url: string): RepoParts {
+    // The port accepts the `owner/name` shorthand the settings input invites;
+    // the provider expands it here, so no neutral action carries the host.
+    const normalized = url.includes('://') ? url : `https://github.com/${url}`;
     let path: string[];
     try {
-      path = this.pathSegments(url);
+      path = this.pathSegments(normalized);
     } catch {
       throw new Error(`GitHubAdapter: invalid repo url ${url}`);
     }

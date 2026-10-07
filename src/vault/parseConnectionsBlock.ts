@@ -1,60 +1,78 @@
 import type { ConnectionData } from '../shared/ConnectionData.js';
 
 // Parses the `connections` block from a note's frontmatter lines (the lines
-// between the `---` delimiters). The block is the canonical nested map the
-// migration writes:
+// between the delimiters). The block is the canonical nested map:
 //
 //   connections:
 //     <slug>:
 //       tool: <tool>
 //       project: <project>
 //
-// A note without the block yields an empty map. Only the canonical block form
-// is read; an inline value is ignored, because the migration always writes the
-// block and the metadata cache is the reader for hand-authored notes.
+// A note without the block yields an empty map. The parser tolerates tabs and
+// any consistent indentation (a hand-authored note may use four spaces), and
+// strips surrounding quotes from a value, so a quoted project round-trips.
 export function parseConnectionsBlock(
   frontmatterLines: string[],
 ): Record<string, ConnectionData> {
   const connections: Record<string, ConnectionData> = {};
   let currentSlug: string | null = null;
   let inBlock = false;
+  let slugIndent = -1;
 
-  for (const line of frontmatterLines) {
-    if (line.startsWith('connections:')) {
-      inBlock = true;
-      currentSlug = null;
-      continue;
-    }
+  for (const rawLine of frontmatterLines) {
+    const line = rawLine.replace(/\t/g, '  ');
     if (!inBlock) {
+      if (line.trimEnd() === 'connections:') {
+        inBlock = true;
+      }
       continue;
     }
-    if (!line.startsWith(' ')) {
-      break;
+    if (line.trim() === '') {
+      continue;
     }
     const indent = line.length - line.trimStart().length;
+    if (indent === 0) {
+      break;
+    }
     const trimmed = line.trim();
-    if (indent === 2 && trimmed.endsWith(':')) {
-      currentSlug = trimmed.slice(0, -1);
-      connections[currentSlug] = { tool: '', project: '' };
+    if (slugIndent === -1) {
+      slugIndent = indent;
+    }
+    if (indent <= slugIndent) {
+      if (!trimmed.endsWith(':')) {
+        continue;
+      }
+      const slug = unquote(trimmed.slice(0, -1).trim());
+      currentSlug = slug;
+      connections[slug] = { tool: '', project: '' };
       continue;
     }
-    if (indent === 4 && currentSlug !== null) {
-      const entry = connections[currentSlug];
-      if (entry === undefined) {
-        continue;
-      }
-      const colon = trimmed.indexOf(':');
-      if (colon <= 0) {
-        continue;
-      }
-      const key = trimmed.slice(0, colon).trim();
-      const value = trimmed.slice(colon + 1).trim();
-      if (key === 'tool') {
-        entry.tool = value;
-      } else if (key === 'project') {
-        entry.project = value;
-      }
+    if (currentSlug === null) {
+      continue;
+    }
+    const colon = trimmed.indexOf(':');
+    if (colon <= 0) {
+      continue;
+    }
+    const key = trimmed.slice(0, colon).trim();
+    const value = unquote(trimmed.slice(colon + 1).trim());
+    if (key === 'tool') {
+      connections[currentSlug]!.tool = value;
+    } else if (key === 'project') {
+      connections[currentSlug]!.project = value;
     }
   }
   return connections;
+}
+
+function unquote(value: string): string {
+  if (value.length < 2) {
+    return value;
+  }
+  const first = value[0];
+  const last = value[value.length - 1];
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+    return value.slice(1, -1);
+  }
+  return value;
 }

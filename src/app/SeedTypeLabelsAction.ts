@@ -12,28 +12,19 @@ export class SeedTypeLabelsAction {
   constructor(private readonly port: ProjectManagementPort) {}
 
   async execute(repoInput: string, labels: string[]): Promise<void> {
-    const repoUrl = normalizeRepoUrl(repoInput);
-    if (repoUrl === '') {
+    // The port accepts either a full repository url or the `owner/name`
+    // shorthand; the provider expands it at the boundary.
+    const repo = repoInput.trim();
+    if (repo === '') {
       return;
     }
-    const existing = new Set(await this.port.listRepoLabels(repoUrl));
+    const existing = new Set(await this.port.listRepoLabels(repo));
     for (const label of labels) {
       const name = label.trim();
       if (name === '' || existing.has(name)) {
         continue;
       }
-      await this.port.createRepoLabel(repoUrl, name, DEFAULT_LABEL_COLOR);
+      await this.port.createRepoLabel(repo, name, DEFAULT_LABEL_COLOR);
     }
   }
-}
-
-// Accepts either a full repository url or the shorthand `owner/name` the
-// settings input invites. The port addresses repositories by url, so the
-// shorthand is expanded here (the settings surface is provider-aware).
-function normalizeRepoUrl(input: string): string {
-  const trimmed = input.trim();
-  if (trimmed === '') {
-    return '';
-  }
-  return trimmed.includes('://') ? trimmed : `https://github.com/${trimmed}`;
 }

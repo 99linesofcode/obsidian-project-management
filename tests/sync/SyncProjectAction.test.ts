@@ -322,10 +322,14 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
           h.lifecycle.fail = true;
         },
         assert: (h) => {
+          // The lifecycle failure leaves the project unfrozen (the archive
+          // signal is the fallback), so both halves still run: each half knows
+          // its own connection's project.
           expect(h.events).toEqual([
             'lifecycle',
             'renames',
             'sweep',
+            'todoist',
           ]);
         },
       },

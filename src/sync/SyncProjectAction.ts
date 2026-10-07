@@ -18,6 +18,7 @@ import type {
   SyncHalfFactory,
 } from './SyncHalves.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
+import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 
 // THE CHAIN: one work item kind — a project folder name — and one entry point.
@@ -44,6 +45,9 @@ import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 // code host half in the same pass.
 export class SyncProjectAction {
   private readonly sweepDeletedNotes: SweepDeletedNotesAction;
+  // The errors the isolated steps collected this run, so the driving side can
+  // surface them (an ambiguous board, a failed half) instead of only logging.
+  private stepErrors: unknown[] = [];
 
   constructor(
     private readonly vault: VaultPort,
@@ -63,6 +67,8 @@ export class SyncProjectAction {
     // PRJ-1's board leg. Optional so a chain assembled before the
     // project-propagation wave still constructs.
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
+    // Re-keys a renamed connection's registry port before the halves run.
+    private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -71,14 +77,28 @@ export class SyncProjectAction {
     );
   }
 
-  async execute(project: string): Promise<void> {
+  async execute(project: string): Promise<unknown[]> {
+    this.stepErrors = [];
     const syncedAt = new Date().toISOString();
 
     // Resolve project — a stale work item no-ops. The note's absence is not
     // a synced fact, so a missing pm-note never propagates a deletion.
     const note = await this.resolveProject(project);
     if (!note) {
-      return;
+      return this.stepErrors;
+    }
+
+    // Re-key a renamed connection's registry port before any half reads it, so
+    // a slug rename never disconnects the connection. A port with no matching
+    // connection is left in place and logged.
+    if (this.rekeyRenamedConnections) {
+      const warnings = await this.rekeyRenamedConnections.execute({
+        projectName: project,
+        connections: note.connections,
+      });
+      for (const warning of warnings) {
+        console.warn(warning);
+      }
     }
 
     // Ensure the code host board exists (PRJ-1). Runs before the probe so a
@@ -120,8 +140,6 @@ export class SyncProjectAction {
     const halves = Object.entries(note.connections)
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
-    const boardSlug =
-      halves.find((half) => half.requiresBoard)?.connectionSlug ?? null;
 
     await this.step('code host half', () =>
       this.runBoardHalves(
@@ -141,23 +159,30 @@ export class SyncProjectAction {
       this.runVaultConsistency(project, syncedAt),
     );
 
-    // Task manager halves — gated by the freeze verdict and by the lifecycle
-    // having resolved a task manager. A frozen project accepts no task writes
-    // but stays observed; a failed lifecycle leaves the remote project unknown,
-    // so no task write runs against it.
-    if (!verdict.frozen && verdict.remoteProjectId !== null) {
+    // Task manager halves — gated by the freeze verdict only. Each half carries
+    // its own connection's project id, so a lifecycle that resolved only the
+    // first connection (or none) never starves the others.
+    if (!verdict.frozen) {
       await this.step('task manager half', () =>
         this.runTaskHalves(project, note.connections, halves, syncedAt),
       );
     }
 
-    // Deletions last.
-    await this.step('deletions', () =>
-      this.sweepDeletedNotes.execute({
-        projectName: project,
-        connectionSlug: boardSlug,
-      }),
-    );
+    // Deletions last, once per code-host connection: a project with two github
+    // connections sweeps both, so neither connection's issues are orphaned.
+    await this.step('deletions', async () => {
+      for (const half of halves) {
+        if (!half.requiresBoard) {
+          continue;
+        }
+        await this.sweepDeletedNotes.execute({
+          projectName: project,
+          connectionSlug: half.connectionSlug,
+        });
+      }
+    });
+
+    return this.stepErrors;
   }
 
   private async resolveProject(
@@ -232,10 +257,11 @@ export class SyncProjectAction {
     // The board's updatedAt is the probe gate, but a sub-issue relation moves
     // nothing on the board. A project carrying a one-shot marker forces exactly
     // one parent-aware fetch. The marker is PEEKED here and CONSUMED only after
-    // the fetch succeeds, so a failed or interrupted half does not spend the
-    // scan and the next tick retries it.
+    // every board half succeeds, so a failed or interrupted half does not spend
+    // the scan and the next tick retries it.
     const fullScanPending = await this.syncState.isFullScanPending(project);
     const includeBoard = boardState.updatedAt !== lastUpdate || fullScanPending;
+    let failed = false;
     for (const half of halves) {
       if (!half.requiresBoard) {
         continue;
@@ -247,17 +273,22 @@ export class SyncProjectAction {
           includeBoard,
           connections,
         });
-        await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
-        if (fullScanPending) {
-          await this.syncState.consumeFullScan(project);
-        }
       } catch (error) {
         // A failed half must not advance the stored update, so the next tick
         // sees the same updatedAt and retries the fetch.
+        failed = true;
         console.error(
           `SyncProjectAction: code host half failed for ${project}`,
           error,
         );
+      }
+    }
+    // The update and the one-shot marker advance once, after every board half
+    // has run, so a two-board project does not write the update twice.
+    if (!failed) {
+      await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
+      if (fullScanPending) {
+        await this.syncState.consumeFullScan(project);
       }
     }
   }
@@ -334,6 +365,7 @@ export class SyncProjectAction {
       await run();
     } catch (error) {
       console.error(`SyncProjectAction: ${name} failed`, error);
+      this.stepErrors.push(error);
     }
   }
 }

@@ -37,7 +37,7 @@ export class SeedVaultArtifactsAction {
   }
 
   private async seed(artifact: SeedArtifact): Promise<void> {
-    const path = this.settings[artifact.settingKey].trim();
+    const path = (this.settings[artifact.settingKey] ?? '').trim();
     if (path === '') {
       return;
     }

@@ -35,7 +35,7 @@ import type {
   ConnectionSyncHalf,
   ConnectionSyncInput,
 } from '../sync/SyncHalves.js';
-import type { ConnectionData } from '../shared/ConnectionData.js';
+import { connectionSlugForTool } from '../shared/connectionSlugForTool.js';
 
 // One tracked issue resolved to its vault note and registry record: the issue
 // carries the type label and the title, the note carries the lane (its status)
@@ -99,7 +99,10 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
   }
 
   async execute(input: ConnectionSyncInput): Promise<void> {
-    const githubConnectionSlug = this.githubSlug(input.connections);
+    const githubConnectionSlug = connectionSlugForTool(
+      input.connections,
+      'github',
+    );
     try {
       // The pass's ONE Todoist snapshot: the completed-since window plus the
       // active set, fetched once and shared by every absorber and the
@@ -169,19 +172,6 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
       // A Todoist failure must never break the GitHub half.
       console.error('SyncTodoistTasksAction: Todoist half failed', error);
     }
-  }
-
-  // The project's code-host connection slug, when it has one. A remote lane
-  // drag propagates onto that connection's issue and board card.
-  private githubSlug(
-    connections: Record<string, ConnectionData>,
-  ): string | null {
-    for (const [slug, connection] of Object.entries(connections)) {
-      if (connection.tool === 'github') {
-        return slug;
-      }
-    }
-    return null;
   }
 
   // The vault's tracked tasks projected onto their twins in TWO PHASES. A

@@ -39,6 +39,7 @@ import { PromoteCardAction } from './tasks/PromoteCardAction.js';
 import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
 import { PropagateTodoistDeletionsAction } from './todoist/PropagateTodoistDeletionsAction.js';
 import { ReconcileProjectLifecycleAction } from './projects/ReconcileProjectLifecycleAction.js';
+import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
 import { RelinkRenamedTodoAction } from './todoist/RelinkRenamedTodoAction.js';
 import { RelocateTaskStatusAction } from './tasks/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
@@ -182,7 +183,6 @@ function composePlugin(
   const discoverProjects = new DiscoverProjectsAction(
     vault,
     new AttachProjectAction(github),
-    syncState,
   );
   const probeProjects = new ProbeProjectsAction(github, syncState);
 
@@ -343,8 +343,13 @@ function composePlugin(
     mirrorTodoStatus,
     handleDeletedNote,
     ensureProjectBoard,
+    new RekeyRenamedConnectionsAction(syncState),
   );
-  const queue = new SyncQueue(syncProject);
+  const queue = new SyncQueue(syncProject, (project, errors) => {
+    new Notice(
+      `Project "${project}": ${errors.length} sync step(s) failed; see the console`,
+    );
+  });
   const scheduler = new SyncScheduler(
     vault,
     queue,
@@ -450,7 +455,7 @@ export default class ProjectManagementPlugin extends Plugin {
     captureRemoteProjects: CaptureRemoteProjectsAction,
   ): Promise<void> {
     try {
-      const { projects, errors, warnings } = await discoverProjects.execute();
+      const { projects, errors } = await discoverProjects.execute();
       for (const project of projects) {
         await syncState.setIdentity(
           project.projectName,
@@ -462,11 +467,6 @@ export default class ProjectManagementPlugin extends Plugin {
       if (errors.length > 0) {
         new Notice(
           `Project discovery: ${errors.length} project(s) could not be attached`,
-        );
-      }
-      if (warnings.length > 0) {
-        new Notice(
-          `Project discovery: ${warnings.length} connection(s) no longer have a matching connection`,
         );
       }
       // Capture remote-born projects AFTER discovery, so a just-created vault

@@ -393,7 +393,7 @@ describe('ARC-2 — any side can start the freeze', () => {
 
       expect(h.taskManager.createCalls).toEqual(['Acme Widgets']);
       expect(h.vault.writes).toHaveLength(1);
-      expect(h.vault.writes[0]!.content).toContain('project: P-new');
+      expect(h.vault.writes[0]!.content).toContain('project: "P-new"');
       expect(h.syncState.todoistSets).toHaveLength(1);
       expect(verdict.remoteProjectId).toBe('P-new');
       expect(verdict.frozen).toBe(false);
@@ -437,7 +437,7 @@ describe('ARC-2 — any side can start the freeze', () => {
 
       await h.action.execute(activeInput);
 
-      expect(h.vault.writes[0]!.content).toContain('project: P9');
+      expect(h.vault.writes[0]!.content).toContain('project: "P9"');
     });
 
     it('re-stamps the connection project, not a legacy property, for an envelope note', async () => {
@@ -448,7 +448,7 @@ describe('ARC-2 — any side can start the freeze', () => {
       await h.action.execute(activeInput);
 
       const content = h.vault.writes[0]!.content;
-      expect(content).toContain('project: P9');
+      expect(content).toContain('project: "P9"');
       expect(content).not.toContain('todoist: P9');
     });
 
@@ -940,7 +940,7 @@ describe('ARC-2 — any side can start the freeze', () => {
       await h.action.execute({ ...activeInput, notePath: legacy });
 
       expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
-      expect(h.vault.notes.get(canonical)).toContain('project: P-new');
+      expect(h.vault.notes.get(canonical)).toContain('project: "P-new"');
       expect(h.vault.notes.has(legacy)).toBe(false);
     });
 

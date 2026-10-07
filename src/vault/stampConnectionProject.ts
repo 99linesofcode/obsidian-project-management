@@ -1,4 +1,5 @@
 import type { VaultPort } from '../shared/VaultPort.js';
+import { frontmatterLines } from './frontmatterLines.js';
 import { parseConnectionsBlock } from './parseConnectionsBlock.js';
 import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 import { stripConnectionsBlock } from './stripConnectionsBlock.js';
@@ -15,14 +16,11 @@ export async function stampConnectionProject(
   project: string,
 ): Promise<void> {
   const lines = content.split('\n');
-  if (lines[0] !== '---') {
+  const frontmatter = frontmatterLines(content);
+  if (frontmatter === null) {
     return;
   }
   const closing = lines.indexOf('---', 1);
-  if (closing === -1) {
-    return;
-  }
-  const frontmatter = lines.slice(1, closing);
   const connections = parseConnectionsBlock(frontmatter);
   const connection = connections[slug];
   if (connection === undefined) {

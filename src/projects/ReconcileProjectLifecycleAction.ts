@@ -1,7 +1,7 @@
 import { stampConnectionProject } from '../vault/stampConnectionProject.js';
-import { parseConnectionsBlock } from '../vault/parseConnectionsBlock.js';
+import { connectionsOf } from '../vault/connectionsOf.js';
 import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
-import type { ConnectionData } from '../shared/ConnectionData.js';
+import { connectionSlugForTool } from '../shared/connectionSlugForTool.js';
 import { ProjectData } from '../shared/ProjectData.js';
 import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { RemoteProjectData } from '../shared/RemoteProjectData.js';
@@ -77,12 +77,19 @@ export class ReconcileProjectLifecycleAction {
       };
     }
 
-    // The task-manager connection slug the bookkeeping is keyed under, resolved
-    // once from the note's anchor (the envelope slug, or 'todoist' for a legacy
-    // note).
-    const todoistSlug = todoistAnchor(note.content)?.slug ?? 'todoist';
+    // The task-manager connection slug the archive/bookkeeping reconciliation
+    // is keyed under. WHY the first task-manager connection: the lifecycle
+    // reconciles ONE remote project's archive state; a project with two
+    // task-manager connections reconciles the first here, while the per-
+    // connection task halves sync both. A second connection's archive state is
+    // a known limitation, not a silent one.
+    const anchor = taskManagerAnchor(note.content);
+    const todoistSlug = anchor?.slug ?? 'todoist';
+    // The provider value comes from the connection's own tool, never a literal
+    // in this neutral module.
+    const taskManagerProvider = anchor?.tool ?? 'todoist';
     // The code-host connection slug the identity is keyed under.
-    const githubSlug = githubConnectionSlug(note.content);
+    const githubSlug = codeHostConnectionSlug(note.content);
 
     // Migrate the home note to the _<project>.md convention before any write in
     // this pass, so the todoist-anchor stamping below lands on the renamed file
@@ -157,6 +164,7 @@ export class ReconcileProjectLifecycleAction {
           input.projectName,
           input.syncedAt,
           todoistSlug,
+          taskManagerProvider,
           project.id,
         );
       }
@@ -198,6 +206,7 @@ export class ReconcileProjectLifecycleAction {
           input.syncedAt,
           project,
           todoistSlug,
+          taskManagerProvider,
           githubSlug,
         );
         if (reactivated) {
@@ -240,7 +249,7 @@ export class ReconcileProjectLifecycleAction {
     if (archived && !baseline.locationArchived) {
       await this.lockArchivedProjectIssues.execute({
         projectName: input.projectName,
-        connectionSlug: githubConnectionSlug(note.content),
+        connectionSlug: codeHostConnectionSlug(note.content),
       });
     }
 
@@ -253,6 +262,7 @@ export class ReconcileProjectLifecycleAction {
         input.syncedAt,
         project,
         todoistSlug,
+        taskManagerProvider,
         githubSlug,
       );
       if (reactivated) {
@@ -354,7 +364,7 @@ export class ReconcileProjectLifecycleAction {
     notePath: string,
     noteContent: string,
   ): Promise<RemoteProjectData | null> {
-    const anchor = todoistAnchor(noteContent);
+    const anchor = taskManagerAnchor(noteContent);
     if (anchor === null) {
       return null;
     }
@@ -384,6 +394,7 @@ export class ReconcileProjectLifecycleAction {
     projectName: string,
     syncedAt: string,
     connectionSlug: string | null,
+    provider: string,
     projectId: string,
   ): Promise<void> {
     if (connectionSlug === null) {
@@ -392,7 +403,7 @@ export class ReconcileProjectLifecycleAction {
     const state = await this.syncState.getPortState(projectName, connectionSlug);
     if (!state) {
       await this.syncState.setPortState(projectName, connectionSlug, {
-        provider: 'todoist',
+        provider,
         project: projectId,
         lastPoll: syncedAt,
         lanes: {},
@@ -455,6 +466,7 @@ export class ReconcileProjectLifecycleAction {
     syncedAt: string,
     project: RemoteProjectData | null,
     connectionSlug: string | null,
+    provider: string,
     githubSlug: string | null,
   ): Promise<boolean> {
     const identity =
@@ -491,6 +503,7 @@ export class ReconcileProjectLifecycleAction {
         syncedAt,
         project,
         connectionSlug,
+        provider,
         githubSlug,
       );
       await this.syncState.setWatchState(projectName, {
@@ -515,6 +528,7 @@ export class ReconcileProjectLifecycleAction {
     syncedAt: string,
     project: RemoteProjectData | null,
     connectionSlug: string | null,
+    provider: string,
     githubSlug: string | null,
   ): Promise<void> {
     await this.moveFolder(projectName, false, '');
@@ -535,6 +549,7 @@ export class ReconcileProjectLifecycleAction {
       projectName,
       syncedAt,
       connectionSlug,
+      provider,
       project?.id ?? '',
     );
   }
@@ -560,41 +575,24 @@ export class ReconcileProjectLifecycleAction {
   }
 }
 
-// The task-manager anchor for a note: the todoist connection's slug and project
-// value from the connection envelope.
+// The task-manager anchor for a note: the connection's slug, project value and
+// tool from the connection envelope.
 interface TaskManagerAnchor {
   slug: string;
   project: string;
+  tool: string;
 }
 
-function todoistAnchor(content: string): TaskManagerAnchor | null {
+function taskManagerAnchor(content: string): TaskManagerAnchor | null {
   for (const [slug, connection] of Object.entries(connectionsOf(content))) {
     if (connection.tool === 'todoist' && connection.project !== '') {
-      return { slug, project: connection.project };
+      return { slug, project: connection.project, tool: connection.tool };
     }
   }
   return null;
 }
 
 // The note's code-host connection slug, or null when it has none.
-function githubConnectionSlug(content: string): string | null {
-  for (const [slug, connection] of Object.entries(connectionsOf(content))) {
-    if (connection.tool === 'github') {
-      return slug;
-    }
-  }
-  return null;
-}
-
-// The note's connection envelope, or an empty map when it has none.
-function connectionsOf(content: string): Record<string, ConnectionData> {
-  const lines = content.split('\n');
-  if (lines[0] !== '---') {
-    return {};
-  }
-  const closing = lines.indexOf('---', 1);
-  if (closing === -1) {
-    return {};
-  }
-  return parseConnectionsBlock(lines.slice(1, closing));
+function codeHostConnectionSlug(content: string): string | null {
+  return connectionSlugForTool(connectionsOf(content), 'github');
 }

@@ -135,6 +135,11 @@ The actions and infrastructure:
   gated on the base lane.
 - **PromoteIssueAction / PromoteCardAction** — the explicit user escape hatch
   past the type-label gate.
+- **SeedVaultArtifactsAction** — seeds the six vault-owned artifacts (three note
+  templates, three Bases files) create-if-missing, on init and on demand from
+  the settings tab.
+- **SeedTypeLabelsAction** — applies the configured type-label vocabulary to a
+  repository, create-if-missing, driven by the settings tab's seed button.
 
 ---
 

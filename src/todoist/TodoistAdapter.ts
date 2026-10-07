@@ -52,10 +52,18 @@ export function createTodoistTransport(token: string): TodoistTransport {
       throw: false,
     });
     const text = response.text;
-    return {
-      status: response.status,
-      json: text.length > 0 ? JSON.parse(text) : null,
-    };
+    // A non-JSON error body (an HTML gateway page) must not throw a
+    // SyntaxError: the adapter's status-based error handling needs the status,
+    // so an unparseable body falls back to null.
+    let json: unknown = null;
+    if (text.length > 0) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+    }
+    return { status: response.status, json };
   };
   return {
     get: (path) => request('GET', path),

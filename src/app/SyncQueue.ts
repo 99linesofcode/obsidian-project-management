@@ -12,7 +12,12 @@ export class SyncQueue {
   private draining = false;
   private idleResolvers: Array<() => void> = [];
 
-  constructor(private readonly syncProject: SyncProjectAction) {}
+  constructor(
+    private readonly syncProject: SyncProjectAction,
+    // Surfaces the errors the chain's isolated steps collected, so a user sees
+    // an ambiguous board or a failed half instead of only a console line.
+    private readonly onErrors?: (project: string, errors: unknown[]) => void,
+  ) {}
 
   enqueue(project: string): void {
     // A pending item absorbs the duplicate; a running one is not pending, so
@@ -42,7 +47,10 @@ export class SyncQueue {
       while (this.pending.length > 0) {
         const project = this.pending.shift() as string;
         try {
-          await this.syncProject.execute(project);
+          const errors = await this.syncProject.execute(project);
+          if (errors.length > 0) {
+            this.onErrors?.(project, errors);
+          }
         } catch {
           // A failed run must not poison the queue: the next item still runs.
         }

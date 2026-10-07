@@ -97,10 +97,12 @@ describe('SEED — the type-label vocabulary is applied to a repository', () => 
 
     await action.execute('acme/widgets', labels);
 
-    expect(port.listCalls).toEqual(['https://github.com/acme/widgets']);
+    // The provider expands the shorthand at the boundary; the action passes it
+    // through unchanged.
+    expect(port.listCalls).toEqual(['acme/widgets']);
     expect(port.createCalls).toEqual([
       {
-        repoUrl: 'https://github.com/acme/widgets',
+        repoUrl: 'acme/widgets',
         name: 'type: bug',
         color: 'ededed',
       },
