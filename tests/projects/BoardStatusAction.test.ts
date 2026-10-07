@@ -126,6 +126,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Shipped',
     });
@@ -146,6 +147,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Unshaped',
     });
@@ -172,6 +174,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Building',
     });
@@ -184,6 +187,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Shipped',
     });

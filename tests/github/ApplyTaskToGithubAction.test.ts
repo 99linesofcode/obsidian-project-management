@@ -173,6 +173,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ title: 'Fix the bug', body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -192,6 +193,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task(),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -209,6 +211,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ completedAt: null }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -226,6 +229,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ completedAt: '' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -243,6 +247,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: 'Building' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -262,6 +267,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: 'Building' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -279,6 +285,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: '' }),
       hasCard: false,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -301,6 +308,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: '' }),
       hasCard: false,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -318,6 +326,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: 'Building' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -336,6 +345,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ title: 'Fix the Bug!', body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -359,6 +369,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -383,6 +394,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ body: 'The bug happens on resize.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -414,6 +426,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task(),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -443,6 +456,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
         current: task({ body: 'Old body.' }),
         hasCard: true,
         projectName: 'Acme Widgets',
+        connectionSlug: 'github',
         syncedAt: '2026-09-18T12:00:00Z',
       }),
     ).rejects.toThrow('boom');
@@ -474,6 +488,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 

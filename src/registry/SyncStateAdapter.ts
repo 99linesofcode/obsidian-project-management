@@ -748,8 +748,71 @@ export class SyncStateAdapter implements SyncStatePort {
       const node = ensureProjectNode(ensureProjects(container), projectName);
       const port = ensurePortNode(node, portId);
       port.provider = state.provider;
+      port.project = state.project;
       port.lastPoll = state.lastPoll;
       port.lanes = state.lanes;
+      await this.persist();
+    });
+  }
+
+  async listPortStates(
+    projectName: string,
+  ): Promise<Array<{ slug: string; state: PortState }>> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(readProjectsMap(container), projectName);
+      if (node === null) {
+        return [];
+      }
+      const result: Array<{ slug: string; state: PortState }> = [];
+      for (const [slug, raw] of Object.entries(portsMap(node))) {
+        if (isRecord(raw)) {
+          result.push({ slug, state: mapPortState(raw, slug) });
+        }
+      }
+      return result;
+    });
+  }
+
+  // Moves a project's whole port (state and mirror items) from one slug to
+  // another in ONE persist. The handle and reverse indexes are re-keyed in
+  // step, so a renamed connection's mirrors stay resolvable.
+  async rekeyPortState(
+    projectName: string,
+    fromSlug: string,
+    toSlug: string,
+  ): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      this.assertWritable();
+      if (fromSlug === toSlug) {
+        return;
+      }
+      const node = projectNode(readProjectsMap(container), projectName);
+      if (node === null) {
+        return;
+      }
+      const ports = portsMap(node);
+      const raw = ports[fromSlug];
+      if (!isRecord(raw)) {
+        return;
+      }
+      ports[toSlug] = raw;
+      delete ports[fromSlug];
+
+      const indexes = this.indexes!;
+      const handles = indexes.byHandle.get(fromSlug);
+      if (handles !== undefined) {
+        indexes.byHandle.delete(fromSlug);
+        indexes.byHandle.set(toSlug, handles);
+      }
+      for (const refs of indexes.itemsByEntity.values()) {
+        for (const ref of refs) {
+          if (ref.project === projectName && ref.portId === fromSlug) {
+            ref.portId = toSlug;
+          }
+        }
+      }
       await this.persist();
     });
   }

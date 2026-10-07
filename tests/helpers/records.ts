@@ -49,6 +49,7 @@ export function mirrorItem(
 export function portState(overrides: Partial<PortState> = {}): PortState {
   return {
     provider: overrides.provider ?? 'todoist',
+    project: overrides.project ?? '',
     lastPoll: overrides.lastPoll ?? null,
     lanes: overrides.lanes ?? {},
   };

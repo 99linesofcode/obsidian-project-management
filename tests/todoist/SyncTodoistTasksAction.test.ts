@@ -375,6 +375,8 @@ function buildAction(
 ): { action: SyncTodoistTasksAction; events: string[] } {
   const events: string[] = [];
   const action = new SyncTodoistTasksAction(
+    'todoist',
+    projectId,
     taskManager,
     projectManagement,
     vault,
@@ -428,7 +430,7 @@ function composedHarness() {
   return { action, events, vault, syncState, projectManagement, taskManager, writer };
 }
 
-const input = { projectName, projectId, syncedAt };
+const input = { projectName, syncedAt, includeBoard: false, connections: { github: { tool: 'github', project: 'https://github.com/acme/widgets' } } };
 
 describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('absorbs remote changes and captures before projecting, deletions last', async () => {
@@ -1010,6 +1012,7 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     // Pass 1 — the GitHub half sees the parent relation and pulls it into the
     // child's affiliation
     const githubAction = new SyncGithubTasksAction(
+      'github',
       projectManagement,
       syncState,
       vault,
@@ -1024,7 +1027,7 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       new VerdictResolver('Shipped'),
       'Shipped',
     );
-    await githubAction.execute({ projectName, syncedAt, includeBoard: true });
+    await githubAction.execute({ projectName, syncedAt, includeBoard: true, connections: {} });
 
     expect(vault.notes.get(childPath)).toContain(
       'affiliation: ["[[_Acme Widgets]]", "[[the-parent]]"]',
@@ -1117,6 +1120,8 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('swallows a step failure so the GitHub half is never affected', async () => {
     const events: string[] = [];
     const action = new SyncTodoistTasksAction(
+      'todoist',
+      projectId,
       new FakeTaskManager(),
       new FakeProjectManagement(),
       new FakeVault(),

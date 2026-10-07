@@ -1,5 +1,6 @@
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
+import { stampConnectionProject } from '../vault/stampConnectionProject.js';
 import { parseConnectionsBlock } from '../vault/parseConnectionsBlock.js';
 import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
 import { ProjectData } from '../shared/ProjectData.js';
@@ -77,6 +78,11 @@ export class ReconcileProjectLifecycleAction {
       };
     }
 
+    // The task-manager connection slug the bookkeeping is keyed under, resolved
+    // once from the note's anchor (the envelope slug, or 'todoist' for a legacy
+    // note).
+    const todoistSlug = todoistAnchor(note.content)?.slug ?? 'todoist';
+
     // Migrate the home note to the _<project>.md convention before any write in
     // this pass, so the todoist-anchor stamping below lands on the renamed file
     // and every later step works from the new path. The vault's own
@@ -143,7 +149,12 @@ export class ReconcileProjectLifecycleAction {
         this.baselineFrom(canonical, input.closed ?? input.locationArchived),
       );
       if (!input.locationArchived && project !== null) {
-        await this.ensureRemoteBookkeeping(input.projectName, input.syncedAt);
+        await this.ensureRemoteBookkeeping(
+          input.projectName,
+          input.syncedAt,
+          todoistSlug,
+          project.id,
+        );
       }
       return {
         remoteProjectId: input.locationArchived ? null : (project?.id ?? null),
@@ -182,6 +193,7 @@ export class ReconcileProjectLifecycleAction {
           input.projectName,
           input.syncedAt,
           project,
+          todoistSlug,
         );
         if (reactivated) {
           return await this.reactivatedVerdict(
@@ -223,6 +235,7 @@ export class ReconcileProjectLifecycleAction {
     if (archived && !baseline.locationArchived) {
       await this.lockArchivedProjectIssues.execute({
         projectName: input.projectName,
+        connectionSlug: githubConnectionSlug(note.content),
       });
     }
 
@@ -234,6 +247,7 @@ export class ReconcileProjectLifecycleAction {
         input.projectName,
         input.syncedAt,
         project,
+        todoistSlug,
       );
       if (reactivated) {
         return await this.reactivatedVerdict(
@@ -335,8 +349,16 @@ export class ReconcileProjectLifecycleAction {
     noteContent: string,
   ): Promise<RemoteProjectData | null> {
     const anchor = todoistAnchor(noteContent);
+    // A note carrying the connection envelope but no task-manager connection
+    // has no remote project to reconcile. A legacy note (no envelope) keeps the
+    // create-on-first-sight behavior.
+    if (anchor === null && hasConnectionsBlock(noteContent)) {
+      return null;
+    }
     let project =
-      anchor === '' ? null : await this.taskManager.fetchProject(anchor);
+      anchor === null || anchor.project === ''
+        ? null
+        : await this.taskManager.fetchProject(anchor.project);
     if (!project) {
       const projects = await this.taskManager.fetchProjects();
       project =
@@ -344,12 +366,36 @@ export class ReconcileProjectLifecycleAction {
         (await this.taskManager.createProject(projectName));
     }
 
-    if (anchor !== project.id) {
+    if (anchor === null) {
+      // No anchor at all: the legacy `todoist` property is the only anchor
+      // home, and first sight stamps it.
       await stampFrontmatterField(
         this.vault,
         notePath,
         noteContent,
         'todoist',
+        project.id,
+      );
+    } else if (anchor.legacy) {
+      // A note the migration has not reached: the legacy `todoist` property is
+      // the anchor home. Only a moved anchor is re-stamped.
+      if (anchor.project !== project.id) {
+        await stampFrontmatterField(
+          this.vault,
+          notePath,
+          noteContent,
+          'todoist',
+          project.id,
+        );
+      }
+    } else if (anchor.project !== project.id) {
+      // The connection envelope is the anchor home: a re-anchor re-keys the
+      // connection's project value, never a legacy property.
+      await stampConnectionProject(
+        this.vault,
+        notePath,
+        noteContent,
+        anchor.slug,
         project.id,
       );
     }
@@ -359,11 +405,17 @@ export class ReconcileProjectLifecycleAction {
   private async ensureRemoteBookkeeping(
     projectName: string,
     syncedAt: string,
+    connectionSlug: string | null,
+    projectId: string,
   ): Promise<void> {
-    const state = await this.syncState.getPortState(projectName, 'todoist');
+    if (connectionSlug === null) {
+      return;
+    }
+    const state = await this.syncState.getPortState(projectName, connectionSlug);
     if (!state) {
-      await this.syncState.setPortState(projectName, 'todoist', {
+      await this.syncState.setPortState(projectName, connectionSlug, {
         provider: 'todoist',
+        project: projectId,
         lastPoll: syncedAt,
         lanes: {},
       });
@@ -424,6 +476,7 @@ export class ReconcileProjectLifecycleAction {
     projectName: string,
     syncedAt: string,
     project: RemoteProjectData | null,
+    connectionSlug: string | null,
   ): Promise<boolean> {
     const identity = await this.syncState.getIdentity(projectName);
     if (!identity?.repoUrl) {
@@ -451,7 +504,7 @@ export class ReconcileProjectLifecycleAction {
       activity.newestCreatedAt !== null &&
       activity.newestCreatedAt > watch.cursor
     ) {
-      await this.reactivate(projectName, syncedAt, project);
+      await this.reactivate(projectName, syncedAt, project, connectionSlug);
       await this.syncState.setWatchState(projectName, {
         etag: null,
         cursor: null,
@@ -473,6 +526,7 @@ export class ReconcileProjectLifecycleAction {
     projectName: string,
     syncedAt: string,
     project: RemoteProjectData | null,
+    connectionSlug: string | null,
   ): Promise<void> {
     await this.moveFolder(projectName, false, '');
     const identity = await this.syncState.getIdentity(projectName);
@@ -485,7 +539,12 @@ export class ReconcileProjectLifecycleAction {
     if (project?.isArchived) {
       await this.taskManager.setProjectArchived(project.id, false);
     }
-    await this.ensureRemoteBookkeeping(projectName, syncedAt);
+    await this.ensureRemoteBookkeeping(
+      projectName,
+      syncedAt,
+      connectionSlug,
+      project?.id ?? '',
+    );
   }
   // The verdict a reactivated project returns: settle the baseline to active so
   // the next tick reads a settled active project. This tick still returns
@@ -509,22 +568,66 @@ export class ReconcileProjectLifecycleAction {
   }
 }
 
-// The task-manager anchor for a note: the todoist connection's project value
-// when the note carries the connection envelope, falling back to the legacy
-// `todoist` property for a note the migration has not reached yet.
-function todoistAnchor(content: string): string {
+// The task-manager anchor for a note: the todoist connection's slug and project
+// value when the note carries the connection envelope, falling back to the
+// legacy `todoist` property (slug 'todoist', legacy true) for a note the
+// migration has not reached yet.
+interface TaskManagerAnchor {
+  slug: string;
+  project: string;
+  legacy: boolean;
+}
+
+function todoistAnchor(content: string): TaskManagerAnchor | null {
   const lines = content.split('\n');
   if (lines[0] === '---') {
     const closing = lines.indexOf('---', 1);
     if (closing !== -1) {
       const connections = parseConnectionsBlock(lines.slice(1, closing));
-      const todoist = Object.values(connections).find(
-        (connection) => connection.tool === 'todoist',
-      );
-      if (todoist !== undefined && todoist.project !== '') {
-        return todoist.project;
+      for (const [slug, connection] of Object.entries(connections)) {
+        if (connection.tool === 'todoist' && connection.project !== '') {
+          return { slug, project: connection.project, legacy: false };
+        }
       }
     }
   }
-  return splitFrontmatter(content)?.fields.get('todoist') ?? '';
+  const legacy = splitFrontmatter(content)?.fields.get('todoist') ?? '';
+  return legacy === '' ? null : { slug: 'todoist', project: legacy, legacy: true };
+}
+
+// Whether the note declares a non-empty connection envelope. A note with the
+// envelope but no task-manager connection has no remote project to reconcile.
+function hasConnectionsBlock(content: string): boolean {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return false;
+  }
+  const closing = lines.indexOf('---', 1);
+  if (closing === -1) {
+    return false;
+  }
+  return Object.keys(parseConnectionsBlock(lines.slice(1, closing))).length > 0;
+}
+
+// The note's code-host connection slug, or null when it has none. A legacy
+// note (no connection envelope) uses the default code-host slug.
+function githubConnectionSlug(content: string): string | null {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return null;
+  }
+  const closing = lines.indexOf('---', 1);
+  if (closing === -1) {
+    return null;
+  }
+  const connections = parseConnectionsBlock(lines.slice(1, closing));
+  if (Object.keys(connections).length === 0) {
+    return 'github';
+  }
+  for (const [slug, connection] of Object.entries(connections)) {
+    if (connection.tool === 'github') {
+      return slug;
+    }
+  }
+  return null;
 }

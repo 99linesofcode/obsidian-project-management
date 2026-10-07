@@ -220,6 +220,8 @@ function setup() {
   ): Promise<void> =>
     action.execute({
       projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
       syncedAt,
       snapshot: {
         active: taskManager.active,
@@ -287,7 +289,13 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
 
     expect(vault.writes[0]!.content).toContain('status: Building');
     expect(propagateStatus.calls).toEqual([
-      { url: choreUrl, statusName: 'Building', notePath: taskPath, projectName },
+      {
+        url: choreUrl,
+        statusName: 'Building',
+        notePath: taskPath,
+        projectName,
+        connectionSlug: 'github',
+      },
     ]);
     expect(syncState.baseOf('uuid-task', 'todoist')?.status).toBe('Building');
   });

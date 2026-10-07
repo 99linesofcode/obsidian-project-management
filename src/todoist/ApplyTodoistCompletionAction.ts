@@ -12,6 +12,8 @@ import type { ApplyTaskToVaultAction } from '../tasks/ApplyTaskToVaultAction.js'
 
 export interface ApplyTodoistCompletionInput {
   projectName: string;
+  // The connection whose mirror this pass advances.
+  connectionSlug: string;
   syncedAt: string;
   // The pass's shared Todoist snapshot. The half fetched the active and
   // completed sets once; this absorber never lists the project itself.
@@ -49,7 +51,7 @@ export class ApplyTodoistCompletionAction {
   async execute(input: ApplyTodoistCompletionInput): Promise<void> {
     const portState = await this.syncState.getPortState(
       input.projectName,
-      'todoist',
+      input.connectionSlug,
     );
 
     // The pass's snapshot was fetched upstream, before any vault write or
@@ -60,7 +62,11 @@ export class ApplyTodoistCompletionAction {
     // The project's todoist items, joined to their hub entities: an item's
     // entityId is the hub reference now that the entity no longer carries the
     // handle.
-    const entries = await todoistEntries(this.syncState, input.projectName);
+    const entries = await todoistEntries(
+      this.syncState,
+      input.connectionSlug,
+      input.projectName,
+    );
     const byHandle = new Map<
       string,
       { record: EntityRecord; base: TaskData | null }
@@ -101,11 +107,16 @@ export class ApplyTodoistCompletionAction {
       await this.applyReopen(entry.record, handle, entry.base, twin, input);
     }
 
-    await this.syncState.setPortState(input.projectName, 'todoist', {
-      provider: 'todoist',
-      lastPoll: input.syncedAt,
-      lanes: portState?.lanes ?? {},
-    });
+    await this.syncState.setPortState(
+      input.projectName,
+      input.connectionSlug,
+      {
+        provider: 'todoist',
+        project: portState?.project ?? '',
+        lastPoll: input.syncedAt,
+        lanes: portState?.lanes ?? {},
+      },
+    );
   }
 
 
@@ -137,7 +148,7 @@ export class ApplyTodoistCompletionAction {
           withToDoStatus(note.content, 'completed', input.syncedAt),
         );
       }
-      await this.stampBase(record, handle, base, input.projectName, {
+      await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
         title: task.content,
         status: 'completed',
         completedAt: stamp,
@@ -157,6 +168,7 @@ export class ApplyTodoistCompletionAction {
         task: withCompletion(current, this.doneOptionName, stamp),
         current,
         projectName: input.projectName,
+        connectionSlug: input.connectionSlug,
         syncedAt: input.syncedAt,
         // A push leaves the github base to the GitHub writer: this completion
         // is a Todoist fact, not a GitHub one, so the issue's base must not
@@ -165,7 +177,7 @@ export class ApplyTodoistCompletionAction {
         record,
       });
     }
-    await this.stampBase(record, handle, base, input.projectName, {
+    await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
       title: current.title,
       status: this.doneOptionName,
       completedAt: stamp,
@@ -199,7 +211,7 @@ export class ApplyTodoistCompletionAction {
           withToDoStatus(note.content, 'open', null),
         );
       }
-      await this.stampBase(record, handle, base, input.projectName, {
+      await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
         title: twin.content,
         status: 'open',
         completedAt: null,
@@ -228,12 +240,13 @@ export class ApplyTodoistCompletionAction {
         task: withReopen(current, defaultLane),
         current,
         projectName: input.projectName,
+        connectionSlug: input.connectionSlug,
         syncedAt: input.syncedAt,
         origin: 'push',
         record,
       });
     }
-    await this.stampBase(record, handle, base, input.projectName, {
+    await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
       title: current.title,
       status: defaultLane,
       completedAt: null,
@@ -247,6 +260,7 @@ export class ApplyTodoistCompletionAction {
     handle: string,
     base: TaskData | null,
     projectName: string,
+    connectionSlug: string,
     shape: { title: string; status: string; completedAt: string | null },
   ): Promise<void> {
     const id = record.id;
@@ -265,7 +279,7 @@ export class ApplyTodoistCompletionAction {
         updatedAt: base?.updatedAt ?? null,
       }),
     );
-    await this.syncState.setMirrorItem(projectName, 'todoist', handle, {
+    await this.syncState.setMirrorItem(projectName, connectionSlug, handle, {
       entityId: id,
       base: view,
     });

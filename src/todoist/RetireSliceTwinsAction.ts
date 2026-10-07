@@ -4,6 +4,8 @@ import type { TodoistTaskData } from './TodoistTaskData.js';
 
 export interface RetireSliceTwinsInput {
   projectName: string;
+  // The connection whose mirror this pass advances.
+  connectionSlug: string;
   // The twin ids of the project's slice items, resolved by the caller.
   sliceHandles: string[];
   // The pass's active Todoist set, so a slice's children can be flattened.
@@ -32,7 +34,11 @@ export class RetireSliceTwinsAction {
       await this.taskManager.deleteTask(twin);
       // Drop the stale mirror item so no later pass resolves the retired
       // handle and the capture path can never re-anchor the deleted twin.
-      await this.syncState.removeMirrorItem(input.projectName, 'todoist', twin);
+      await this.syncState.removeMirrorItem(
+        input.projectName,
+        input.connectionSlug,
+        twin,
+      );
     }
   }
 }

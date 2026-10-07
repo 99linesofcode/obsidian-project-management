@@ -21,6 +21,8 @@ export interface ApplyTaskToGithubInput {
   // backfilled; a missing card is added.
   hasCard: boolean;
   projectName: string;
+  // The connection whose mirror this write advances.
+  connectionSlug: string;
   syncedAt: string;
 }
 
@@ -90,7 +92,13 @@ export class ApplyTaskToGithubAction {
     // from GitHub. The asymmetry is absorbed by advanceBase below, which stores
     // the winning task's parent as the base — so a vault-side affiliation change
     // does not re-read as a fresh remote change on the next pass.
-    await this.advanceBase(input.projectName, url, task, current);
+    await this.advanceBase(
+      input.projectName,
+      input.connectionSlug,
+      url,
+      task,
+      current,
+    );
   }
 
   private async setBoardStatus(
@@ -118,11 +126,12 @@ export class ApplyTaskToGithubAction {
   // (vault-link-free) issue body — the same form the next diff reads.
   private async advanceBase(
     projectName: string,
+    connectionSlug: string,
     url: string,
     task: TaskData,
     current: TaskData,
   ): Promise<void> {
-    const item = await this.syncState.findMirrorItem('github', url);
+    const item = await this.syncState.findMirrorItem(connectionSlug, url);
     if (item === null) {
       return;
     }
@@ -158,7 +167,7 @@ export class ApplyTaskToGithubAction {
     if (item.base !== null && item.base.canonical() === base.canonical()) {
       return;
     }
-    await this.syncState.setMirrorItem(projectName, 'github', url, {
+    await this.syncState.setMirrorItem(projectName, connectionSlug, url, {
       entityId: record.id,
       base,
     });

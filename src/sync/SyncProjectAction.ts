@@ -1,5 +1,6 @@
 import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
+import type { ConnectionData } from '../shared/ConnectionData.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
@@ -14,8 +15,8 @@ import type {
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type {
-  CodeHostSyncHalf,
-  TaskManagerSyncHalf,
+  ConnectionSyncHalf,
+  SyncHalfFactory,
 } from './SyncHalves.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
@@ -51,11 +52,14 @@ export class SyncProjectAction {
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
-    private readonly codeHostHalf: CodeHostSyncHalf,
+    // Builds one sync half per connection declared in the note. The chain
+    // derives the half list from the note's connections, so a project with two
+    // task-manager connections runs that half twice — each with its own adapter
+    // and port state.
+    private readonly halfFactory: SyncHalfFactory,
     private readonly completeTaskCascade: CompleteTaskCascadeAction,
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
-    private readonly taskManagerHalf: TaskManagerSyncHalf,
     handleDeletedNote: HandleDeletedNoteAction,
     // The frontmatter cleanup. Optional so a chain assembled before the
     // identity layer (and the tests that pin the older halves) still
@@ -115,8 +119,25 @@ export class SyncProjectAction {
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
     );
 
+    // The half list is derived from the note's connections: one half per
+    // connection, each bound to its own adapter and port state. Board halves
+    // run before task halves so a board-side change is visible to the task
+    // projection in the same pass.
+    const halves = Object.entries(note.connections)
+      .map(([slug, connection]) => this.halfFactory.create(slug, connection))
+      .filter((half): half is ConnectionSyncHalf => half !== null);
+    const boardSlug =
+      halves.find((half) => half.requiresBoard)?.connectionSlug ?? null;
+
     await this.step('code host half', () =>
-      this.runCodeHostHalf(project, boardState, verdict, syncedAt),
+      this.runBoardHalves(
+        project,
+        note.connections,
+        halves,
+        boardState,
+        verdict,
+        syncedAt,
+      ),
     );
 
     // Vault consistency — checklist ↔ to-do. Retained as its own step
@@ -126,22 +147,22 @@ export class SyncProjectAction {
       this.runVaultConsistency(project, syncedAt),
     );
 
-    // Task manager half — gated by the freeze verdict. The lifecycle resolved
-    // the remote project id; a frozen project accepts no task writes but stays
-    // observed.
+    // Task manager halves — gated by the freeze verdict and by the lifecycle
+    // having resolved a task manager. A frozen project accepts no task writes
+    // but stays observed; a failed lifecycle leaves the remote project unknown,
+    // so no task write runs against it.
     if (!verdict.frozen && verdict.remoteProjectId !== null) {
       await this.step('task manager half', () =>
-        this.taskManagerHalf.execute({
-          projectName: project,
-          projectId: verdict.remoteProjectId!,
-          syncedAt,
-        }),
+        this.runTaskHalves(project, note.connections, halves, syncedAt),
       );
     }
 
     // Deletions last.
     await this.step('deletions', () =>
-      this.sweepDeletedNotes.execute({ projectName: project }),
+      this.sweepDeletedNotes.execute({
+        projectName: project,
+        connectionSlug: boardSlug,
+      }),
     );
   }
 
@@ -192,14 +213,17 @@ export class SyncProjectAction {
     }
   }
 
-  private async runCodeHostHalf(
+  // Runs every board half (the code-host connections). A project without a
+  // probed code-host state has no board to sweep; a frozen project (archived)
+  // accepts no task writes.
+  private async runBoardHalves(
     project: string,
+    connections: Record<string, ConnectionData>,
+    halves: ConnectionSyncHalf[],
     boardState: ProjectStateData | undefined,
     verdict: ProjectLifecycleVerdict,
     syncedAt: string,
   ): Promise<void> {
-    // A project without a probed code-host state has no board to sweep; a
-    // frozen project (archived) accepts no task writes.
     if (!boardState || verdict.frozen) {
       return;
     }
@@ -212,22 +236,52 @@ export class SyncProjectAction {
     // scan and the next tick retries it.
     const fullScanPending = await this.syncState.isFullScanPending(project);
     const includeBoard = boardState.updatedAt !== lastUpdate || fullScanPending;
-    try {
-      await this.codeHostHalf.execute({
-        projectName: project,
-        syncedAt,
-        includeBoard,
-      });
-      await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
-      if (fullScanPending) {
-        await this.syncState.consumeFullScan(project);
+    for (const half of halves) {
+      if (!half.requiresBoard) {
+        continue;
       }
-    } catch (error) {
-      // A failed half must not advance the stored update, so the next tick
-      // sees the same updatedAt and retries the fetch.
-      console.error(
-        `SyncProjectAction: code host half failed for ${project}`,
-        error,
+      try {
+        await half.execute({
+          projectName: project,
+          syncedAt,
+          includeBoard,
+          connections,
+        });
+        await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
+        if (fullScanPending) {
+          await this.syncState.consumeFullScan(project);
+        }
+      } catch (error) {
+        // A failed half must not advance the stored update, so the next tick
+        // sees the same updatedAt and retries the fetch.
+        console.error(
+          `SyncProjectAction: code host half failed for ${project}`,
+          error,
+        );
+      }
+    }
+  }
+
+  // Runs every task-manager half. The freeze gate is the caller's; each half
+  // carries its own connection's project id, so no lifecycle verdict is needed
+  // to address the remote.
+  private async runTaskHalves(
+    project: string,
+    connections: Record<string, ConnectionData>,
+    halves: ConnectionSyncHalf[],
+    syncedAt: string,
+  ): Promise<void> {
+    for (const half of halves) {
+      if (half.requiresBoard) {
+        continue;
+      }
+      await this.step(`task half ${half.connectionSlug}`, () =>
+        half.execute({
+          projectName: project,
+          syncedAt,
+          includeBoard: false,
+          connections,
+        }),
       );
     }
   }

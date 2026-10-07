@@ -262,6 +262,7 @@ export class FakeSyncState implements SyncStatePort {
       ? null
       : {
           provider: 'todoist',
+          project: '',
           lastPoll: legacy.lastCompletedPoll,
           lanes: legacy.sections,
         };
@@ -282,6 +283,45 @@ export class FakeSyncState implements SyncStatePort {
       this.todoistSets.push({ projectName, state: legacy });
     }
     this.portStateSets.push({ projectName, portId, state });
+  }
+
+  async listPortStates(
+    projectName: string,
+  ): Promise<Array<{ slug: string; state: PortState }>> {
+    const prefix = `${projectName}\u0000`;
+    const result: Array<{ slug: string; state: PortState }> = [];
+    for (const [key, state] of this.portStates) {
+      if (key.startsWith(prefix)) {
+        result.push({ slug: key.slice(prefix.length), state });
+      }
+    }
+    return result;
+  }
+
+  async rekeyPortState(
+    projectName: string,
+    fromSlug: string,
+    toSlug: string,
+  ): Promise<void> {
+    if (fromSlug === toSlug) {
+      return;
+    }
+    const state = this.portStates.get(portKey(projectName, fromSlug));
+    if (state === undefined) {
+      return;
+    }
+    this.portStates.delete(portKey(projectName, fromSlug));
+    this.portStates.set(portKey(projectName, toSlug), state);
+    // The legacy todoist view is a pre-v3 convenience keyed by project, not
+    // slug; a re-key away from 'todoist' clears it.
+    if (fromSlug === 'todoist') {
+      this.todoistProjects.delete(projectName);
+    }
+    const items = this.items.get(fromSlug);
+    if (items !== undefined) {
+      this.items.delete(fromSlug);
+      this.items.set(toSlug, items);
+    }
   }
 
   async setIdentity(

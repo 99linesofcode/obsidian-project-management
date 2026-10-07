@@ -12,8 +12,7 @@ import type {
 } from '../../src/projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
-import type { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
-import type { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
+import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
@@ -131,6 +130,7 @@ function projectNote(
     archivedAt,
     connections: {
       github: { tool: 'github', project: 'https://github.com/acme/widgets' },
+      todoist: { tool: 'todoist', project: 'P1' },
     },
     connectionErrors: [],
   };
@@ -203,7 +203,7 @@ function harness(options: HarnessOptions = {}) {
     execute: async () => {
       events.push('todoist');
     },
-  } as unknown as SyncTodoistTasksAction;
+  };
   const handleDeleted = {
     execute: async (input: { notePath: string }) => {
       events.push(`delete:${input.notePath}`);
@@ -218,17 +218,38 @@ function harness(options: HarnessOptions = {}) {
       } as unknown as EnsureProjectBoardAction)
     : undefined;
 
+  const halfFactory: SyncHalfFactory = {
+    create: (slug, connection) => {
+      if (connection.tool === 'github') {
+        return {
+          connectionSlug: slug,
+          requiresBoard: true,
+          execute: (input) => sweep.execute(input),
+        };
+      }
+      if (connection.tool === 'todoist') {
+        return {
+          connectionSlug: slug,
+          requiresBoard: false,
+          execute: async () => {
+            await todoist.execute();
+          },
+        };
+      }
+      return null;
+    },
+  };
+
   const action = new SyncProjectAction(
     vault,
     syncState,
     probe as unknown as ProbeProjectsAction,
     lifecycle as unknown as ReconcileProjectLifecycleAction,
     renames,
-    sweep as unknown as SyncGithubTasksAction,
+    halfFactory,
     cascade,
     checklist,
     mirrorStatus,
-    todoist,
     handleDeleted,
     cleanup,
     ensureBoard,

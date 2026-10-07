@@ -126,8 +126,8 @@ class FakeVault implements VaultPort {
   async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async findProjectNotes(): Promise<never> {
-    throw new Error('not used in this test');
+  async findProjectNotes(): Promise<[]> {
+    return [];
   }
   async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
@@ -149,6 +149,7 @@ function makeAction(
     port,
     syncState,
     new CreateTaskNoteAction(vault, syncState, ''),
+    vault,
   );
 }
 

@@ -31,14 +31,11 @@ import type { ApplyTodoistRemoteChangesAction } from './ApplyTodoistRemoteChange
 import type { CaptureTodoistCreationsAction } from './CaptureTodoistCreationsAction.js';
 import type { EnsureTodoistSectionsAction } from './EnsureTodoistSectionsAction.js';
 import type { PropagateTodoistDeletionsAction } from './PropagateTodoistDeletionsAction.js';
-import type { TaskManagerSyncHalf } from '../sync/SyncHalves.js';
-
-export interface SyncTodoistTasksInput {
-  projectName: string;
-  // The resolved Todoist project id from the chain's lifecycle verdict.
-  projectId: string;
-  syncedAt: string;
-}
+import type {
+  ConnectionSyncHalf,
+  ConnectionSyncInput,
+} from '../sync/SyncHalves.js';
+import type { ConnectionData } from '../shared/ConnectionData.js';
 
 // One tracked issue resolved to its vault note and registry record: the issue
 // carries the type label and the title, the note carries the lane (its status)
@@ -73,12 +70,17 @@ interface ProjectionItem {
 // from the record. All diffing operates on diff views (body = digest, type
 // excluded — the vault-owned type never rides a Todoist base); base storage is
 // a diff view.
-export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
+export class SyncTodoistTasksAction implements ConnectionSyncHalf {
+  readonly requiresBoard = false;
   private readonly verdictResolver: VerdictResolver;
   private readonly retireSliceTwins: RetireSliceTwinsAction;
   private readonly collectProjectToDos: CollectProjectToDosAction;
 
   constructor(
+    readonly connectionSlug: string,
+    // The remote project this connection's adapter is bound to, from the
+    // connection's `project` value.
+    private readonly projectId: string,
     private readonly taskManager: TaskManagerPort,
     private readonly projectManagement: ProjectManagementPort,
     private readonly vault: VaultPort,
@@ -96,7 +98,8 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
     this.collectProjectToDos = new CollectProjectToDosAction(vault);
   }
 
-  async execute(input: SyncTodoistTasksInput): Promise<void> {
+  async execute(input: ConnectionSyncInput): Promise<void> {
+    const githubConnectionSlug = this.githubSlug(input.connections);
     try {
       // The pass's ONE Todoist snapshot: the completed-since window plus the
       // active set, fetched once and shared by every absorber and the
@@ -106,15 +109,15 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
       // vault are left untouched and the window retries next tick.
       const portState = await this.syncState.getPortState(
         input.projectName,
-        'todoist',
+        this.connectionSlug,
       );
       const since = portState?.lastPoll || input.syncedAt;
       const snapshot = {
         completed: await this.taskManager.fetchCompletedTasks(
-          input.projectId,
+          this.projectId,
           since,
         ),
-        active: await this.taskManager.fetchActiveTasks(input.projectId),
+        active: await this.taskManager.fetchActiveTasks(this.projectId),
       };
 
       // Remote -> vault first: a remote change is never clobbered by a
@@ -123,16 +126,20 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
       // window from the stored cursor, which ApplyTodoistCompletion advances.
       await this.applyTodoistRemoteChanges.execute({
         projectName: input.projectName,
+        connectionSlug: this.connectionSlug,
+        githubConnectionSlug,
         syncedAt: input.syncedAt,
         snapshot,
       });
       await this.captureTodoistCreations.execute({
         projectName: input.projectName,
+        connectionSlug: this.connectionSlug,
         syncedAt: input.syncedAt,
         snapshot,
       });
       await this.applyTodoistCompletion.execute({
         projectName: input.projectName,
+        connectionSlug: this.connectionSlug,
         syncedAt: input.syncedAt,
         snapshot,
       });
@@ -146,17 +153,33 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
       const { twinIdByNotePath, sections } = await this.projectTasks(
         input,
         active,
+        githubConnectionSlug,
       );
       await this.projectToDos(input, active, twinIdByNotePath, sections);
 
       // Deletions last.
       await this.propagateTodoistDeletions.execute({
         projectName: input.projectName,
+        connectionSlug: this.connectionSlug,
+        githubConnectionSlug,
       });
     } catch (error) {
       // A Todoist failure must never break the GitHub half.
       console.error('SyncTodoistTasksAction: Todoist half failed', error);
     }
+  }
+
+  // The project's code-host connection slug, when it has one. A remote lane
+  // drag propagates onto that connection's issue and board card.
+  private githubSlug(
+    connections: Record<string, ConnectionData>,
+  ): string | null {
+    for (const [slug, connection] of Object.entries(connections)) {
+      if (connection.tool === 'github') {
+        return slug;
+      }
+    }
+    return null;
   }
 
   // The vault's tracked tasks projected onto their twins in TWO PHASES. A
@@ -168,8 +191,9 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
   // projectToDos hangs each to-do off it, and the lane map places a top-level
   // to-do whose parent is a slice.
   private async projectTasks(
-    input: SyncTodoistTasksInput,
+    input: ConnectionSyncInput,
     active: TodoistTaskData[],
+    githubConnectionSlug: string | null,
   ): Promise<{ twinIdByNotePath: Map<string, string>; sections: Record<string, string> }> {
     const taskTwinIdByNotePath = new Map<string, string>();
     const identity = await this.syncState.getIdentity(input.projectName);
@@ -180,22 +204,27 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
 
     const portState = await this.syncState.getPortState(
       input.projectName,
-      'todoist',
+      this.connectionSlug,
     );
     const storedSections = portState?.lanes ?? {};
     const sections = await this.ensureSections.execute({
-      projectId: input.projectId,
+      projectId: this.projectId,
       laneNames: identity.statusOptions.map((option) => option.name),
       stored: storedSections,
     });
     // Only rewrite the bookkeeping when the lane map actually moved, so a
     // settled project performs no write at all.
     if (!portState || !sameSections(sections, storedSections)) {
-      await this.syncState.setPortState(input.projectName, 'todoist', {
-        provider: 'todoist',
-        lastPoll: portState?.lastPoll ?? input.syncedAt,
-        lanes: sections,
-      });
+      await this.syncState.setPortState(
+        input.projectName,
+        this.connectionSlug,
+        {
+          provider: 'todoist',
+          project: this.projectId,
+          lastPoll: portState?.lastPoll ?? input.syncedAt,
+          lanes: sections,
+        },
+      );
     }
 
     const issues = (
@@ -206,7 +235,13 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
 
     const items: ProjectionItem[] = [];
     for (const issue of issues) {
-      const mirror = await this.syncState.findMirrorItem('github', issue.url);
+      const mirror =
+        githubConnectionSlug === null
+          ? null
+          : await this.syncState.findMirrorItem(
+              githubConnectionSlug,
+              issue.url,
+            );
       const record =
         mirror === null
           ? null
@@ -249,6 +284,7 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
     // deletion to subtasks).
     await this.retireSliceTwins.execute({
       projectName: input.projectName,
+      connectionSlug: this.connectionSlug,
       sliceHandles: items
         .filter((item) => item.type === 'slice')
         .map((item) => item.handle)
@@ -355,7 +391,7 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
     placement: { sectionId: string | null; parentId: string | null },
     activeById: Map<string, TodoistTaskData>,
     sections: Record<string, string>,
-    input: SyncTodoistTasksInput,
+    input: ConnectionSyncInput,
   ): Promise<string> {
     const handle = item.handle;
     const current = handle === null ? null : (activeById.get(handle) ?? null);
@@ -386,11 +422,12 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
       current,
       record: item.record,
       handle,
-      projectId: input.projectId,
+      projectId: this.projectId,
       sectionId: placement.sectionId,
       parentId: placement.parentId,
       labels: [item.type],
       notePath: item.notePath,
+      connectionSlug: this.connectionSlug,
       syncedAt: input.syncedAt,
     });
   }
@@ -402,7 +439,7 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
   // to-do whose parent twin cannot exist is an orphan owned by the
   // vault-consistency pass: it is skipped, never created top-level.
   private async projectToDos(
-    input: SyncTodoistTasksInput,
+    input: ConnectionSyncInput,
     active: TodoistTaskData[],
     taskTwinIdByNotePath: Map<string, string>,
     sections: Record<string, string>,
@@ -509,7 +546,7 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
     placement: { parentId: string | null; sectionId: string | null },
     activeById: Map<string, TodoistTaskData>,
     todoistByEntity: Map<string, { handle: string; base: TaskData | null }>,
-    input: SyncTodoistTasksInput,
+    input: ConnectionSyncInput,
   ): Promise<string> {
     const parsed = ToDoNoteParser.parse(item.noteContent);
     const record = await this.syncState.findByNotePath(item.notePath);
@@ -523,11 +560,12 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
       current,
       record,
       handle,
-      projectId: input.projectId,
+      projectId: this.projectId,
       parentId: placement.parentId,
       sectionId: placement.sectionId,
       projectName: input.projectName,
       notePath: item.notePath,
+      connectionSlug: this.connectionSlug,
       syncedAt: input.syncedAt,
     });
   }
@@ -649,6 +687,7 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
     const result = new Map<string, { handle: string; base: TaskData | null }>();
     for (const { handle, record, base } of await todoistEntries(
       this.syncState,
+      this.connectionSlug,
       projectName,
     )) {
       result.set(record.id, { handle, base });
@@ -675,7 +714,8 @@ export class SyncTodoistTasksAction implements TaskManagerSyncHalf {
       return null;
     }
     return (
-      (await this.syncState.findMirrorItem('todoist', twinId))?.entityId ?? null
+      (await this.syncState.findMirrorItem(this.connectionSlug, twinId))
+        ?.entityId ?? null
     );
   }
 }

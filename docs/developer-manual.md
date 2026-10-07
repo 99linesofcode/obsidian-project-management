@@ -833,7 +833,11 @@ promise-chain mutex, so a command racing a sync pass cannot interleave a
 load-modify-save. The first load runs the one-shot migration chain (legacy
 flat root into the `syncState` container, then the v2 entity registry, then
 the v3 project-nested port-grouped layout, then the per-project full-scan
-seed), builds the in-memory indexes, and caches the container. The container
+seed), builds the in-memory indexes, and caches the container. Ports are keyed
+by the note's connection slug (not the provider name), so a project can hold
+two connections of the same tool; discovery re-keys a renamed connection's
+port in lockstep (`rekeyPortState`), and a slug that disappears with no
+matching connection is left in place with a collected warning. The container
 also carries the per-surface project-capture cursors (`projectCursors`, keyed
 by `todoist`/`github`) beside the projects; setting a cursor to its current
 value is a no-op, so a quiet tick writes nothing (SYNC-8). Every write persists

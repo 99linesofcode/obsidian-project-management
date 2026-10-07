@@ -151,12 +151,14 @@ into the store and stripped on first load.
   machine id.
 - **`data.json`** — the plugin's data file and the registry. One `syncState`
   container (schema version 3) holding `entities` (uuid → note path),
-  `projects.<name>.ports.<portId>.items.<handle>` (each mirror's last-synced
-  base, a diff view whose body is a digest), `ports` (provider, last poll,
-  lane names), project identities, watch state, the per-project
-  `fullScanPending` marker, and the per-surface `projectCursors`. Written only
-  through `SyncStateAdapter`, behind a serialization mutex it shares with the
-  settings save.
+  `projects.<name>.ports.<connectionSlug>.items.<handle>` (each mirror's
+  last-synced base, a diff view whose body is a digest), `ports` (provider,
+  project, last poll, lane names), project identities, watch state, the
+  per-project `fullScanPending` marker, and the per-surface `projectCursors`.
+  Ports are keyed by the note's connection slug, so a project can hold two
+  connections of the same tool; a slug rename re-keys the port in lockstep.
+  Written only through `SyncStateAdapter`, behind a serialization mutex it
+  shares with the settings save.
 - **`main.js`** — the built bundle; never authored.
 
 No other persistent store. The mirrors hold copies, never authority.

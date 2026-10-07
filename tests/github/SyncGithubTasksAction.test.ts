@@ -309,6 +309,7 @@ function makeAction(
     new CompleteTaskCascadeAction(vault, doneLane),
   );
   return new SyncGithubTasksAction(
+    'github',
     projectManagement,
     syncState,
     vault,
@@ -319,7 +320,7 @@ function makeAction(
   );
 }
 
-const input = { projectName, syncedAt, includeBoard: true };
+const input = { projectName, syncedAt, includeBoard: true, connections: {} };
 
 describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('materialises a new typed issue and anchors a matching uuid', async () => {

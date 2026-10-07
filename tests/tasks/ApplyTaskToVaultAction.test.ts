@@ -121,6 +121,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task(),
       current: null,
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -145,6 +146,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: retitled,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -166,6 +168,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -185,6 +188,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -204,6 +208,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task(),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'push',
     });
@@ -249,6 +254,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -291,6 +297,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -335,6 +342,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: done,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -368,6 +376,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task({ body: '- [x] Fix the bug' }),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -395,6 +404,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -415,6 +425,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task({ parent: 'slice-uuid' }),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -445,6 +456,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -472,6 +484,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task({ body: 'A vault-side edit.' }),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'push',
     });

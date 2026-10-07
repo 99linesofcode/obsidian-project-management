@@ -9,6 +9,7 @@ import type {
   RepositoryBoardsData,
 } from '../../src/shared/RepoBoardData.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
+import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 // Fakes at the ports: the vault returns the project notes discovery finds, and
 // the project management port serves a canned board listing. The discovery
@@ -150,8 +151,16 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
   };
 }
 
-function makeAction(port: FakePort, vault: FakeVault): DiscoverProjectsAction {
-  return new DiscoverProjectsAction(vault, new AttachProjectAction(port));
+function makeAction(
+  port: FakePort,
+  vault: FakeVault,
+  syncState: FakeSyncState = new FakeSyncState(),
+): DiscoverProjectsAction {
+  return new DiscoverProjectsAction(
+    vault,
+    new AttachProjectAction(port),
+    syncState,
+  );
 }
 
 describe('DISC-1 — a project folder is discovered from its home note', () => {
@@ -297,5 +306,59 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     ]);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toBeInstanceOf(Error);
+  });
+});
+
+describe('DISC-2 — a renamed connection re-keys its registry port', () => {
+  it('moves the port state to the new slug and drops the old key', async () => {
+    const vault = new FakeVault();
+    vault.notes = [
+      githubNote({
+        connections: {
+          'todoist-work': { tool: 'todoist', project: 'P1' },
+        },
+      }),
+    ];
+    const syncState = new FakeSyncState();
+    await syncState.setPortState('Acme Widgets', 'todoist', {
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: { Unshaped: 'S1' },
+    });
+    const action = makeAction(new FakePort(), vault, syncState);
+
+    const result = await action.execute();
+
+    expect(await syncState.getPortState('Acme Widgets', 'todoist')).toBeNull();
+    expect(
+      await syncState.getPortState('Acme Widgets', 'todoist-work'),
+    ).toEqual({
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: { Unshaped: 'S1' },
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('leaves a disappeared slug in place and surfaces a warning', async () => {
+    const vault = new FakeVault();
+    vault.notes = [githubNote()];
+    const syncState = new FakeSyncState();
+    await syncState.setPortState('Acme Widgets', 'todoist-old', {
+      provider: 'todoist',
+      project: 'P9',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: {},
+    });
+    const action = makeAction(new FakePort(), vault, syncState);
+
+    const result = await action.execute();
+
+    expect(
+      await syncState.getPortState('Acme Widgets', 'todoist-old'),
+    ).not.toBeNull();
+    expect(result.warnings).toHaveLength(1);
   });
 });

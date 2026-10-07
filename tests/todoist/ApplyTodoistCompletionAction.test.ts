@@ -188,6 +188,7 @@ function setup() {
   ): Promise<void> =>
     action.execute({
       projectName,
+      connectionSlug: 'todoist',
       syncedAt,
       snapshot: {
         active: taskManager.active,

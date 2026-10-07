@@ -47,6 +47,7 @@ import { RelocateTaskStatusAction } from './tasks/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
 import { SyncGithubTasksAction } from './github/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
+import type { SyncHalfFactory } from './sync/SyncHalves.js';
 import { SyncTodoistTasksAction } from './todoist/SyncTodoistTasksAction.js';
 import { VerdictResolver } from './shared/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
@@ -191,18 +192,10 @@ function composePlugin(
     plugin.settings.taskTemplatePath,
     completeTaskCascade,
   );
-  const syncGithubTasks = new SyncGithubTasksAction(
-    github,
-    syncState,
-    vault,
-    applyTaskToGithub,
-    applyTaskToVault,
-    new VerdictResolver(plugin.settings.doneOptionName),
-    plugin.settings.doneOptionName,
-  );
   const discoverProjects = new DiscoverProjectsAction(
     vault,
     new AttachProjectAction(github),
+    syncState,
   );
   const probeProjects = new ProbeProjectsAction(github, syncState);
 
@@ -287,6 +280,7 @@ function composePlugin(
     github,
     syncState,
     createTaskNote,
+    vault,
   );
   const promoteToTask = new PromoteToTaskCommand(
     () => plugin.projectNames,
@@ -296,7 +290,12 @@ function composePlugin(
   );
   promoteToTask.register(plugin);
 
-  const promoteCard = new PromoteCardAction(github, syncState, createTaskNote);
+  const promoteCard = new PromoteCardAction(
+    github,
+    syncState,
+    createTaskNote,
+    vault,
+  );
   const promoteCardToIssue = new PromoteCardToIssueCommand(
     () => plugin.projectNames,
     syncState,
@@ -307,19 +306,45 @@ function composePlugin(
 
   // t4: the chain composes the rebuilt halves; the queue serialises every
   // project; the scheduler is discovery + timing policies only.
-  const syncTodoistTasks = new SyncTodoistTasksAction(
-    todoist,
-    github,
-    vault,
-    syncState,
-    new EnsureTodoistSectionsAction(todoist),
-    applyTaskToTodoist,
-    applyTodoistRemoteChanges,
-    captureTodoistCreations,
-    applyTodoistCompletion,
-    propagateTodoistDeletions,
-    plugin.settings.doneOptionName,
-  );
+  //
+  // The half factory builds ONE half per connection declared in a note, each
+  // bound to its own adapter and port state. A project with two task-manager
+  // connections therefore runs the task-manager half twice, once per
+  // connection, with that connection's project id.
+  const halfFactory: SyncHalfFactory = {
+    create: (slug, connection) => {
+      if (connection.tool === 'github') {
+        return new SyncGithubTasksAction(
+          slug,
+          github,
+          syncState,
+          vault,
+          applyTaskToGithub,
+          applyTaskToVault,
+          new VerdictResolver(plugin.settings.doneOptionName),
+          plugin.settings.doneOptionName,
+        );
+      }
+      if (connection.tool === 'todoist') {
+        return new SyncTodoistTasksAction(
+          slug,
+          connection.project,
+          todoist,
+          github,
+          vault,
+          syncState,
+          new EnsureTodoistSectionsAction(todoist),
+          applyTaskToTodoist,
+          applyTodoistRemoteChanges,
+          captureTodoistCreations,
+          applyTodoistCompletion,
+          propagateTodoistDeletions,
+          plugin.settings.doneOptionName,
+        );
+      }
+      return null;
+    },
+  };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
   const syncProject = new SyncProjectAction(
     vault,
@@ -327,11 +352,10 @@ function composePlugin(
     probeProjects,
     reconcileProjectLifecycle,
     detectNoteRenames,
-    syncGithubTasks,
+    halfFactory,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
-    syncTodoistTasks,
     handleDeletedNote,
     cleanupNoteFrontmatter,
     ensureProjectBoard,
@@ -452,7 +476,7 @@ export default class ProjectManagementPlugin extends Plugin {
     captureRemoteProjects: CaptureRemoteProjectsAction,
   ): Promise<void> {
     try {
-      const { projects, errors } = await discoverProjects.execute();
+      const { projects, errors, warnings } = await discoverProjects.execute();
       for (const project of projects) {
         await syncState.setIdentity(project.projectName, project.identity);
       }
@@ -460,6 +484,11 @@ export default class ProjectManagementPlugin extends Plugin {
       if (errors.length > 0) {
         new Notice(
           `Project discovery: ${errors.length} project(s) could not be attached`,
+        );
+      }
+      if (warnings.length > 0) {
+        new Notice(
+          `Project discovery: ${warnings.length} connection(s) no longer have a matching connection`,
         );
       }
       // Capture remote-born projects AFTER discovery, so a just-created vault

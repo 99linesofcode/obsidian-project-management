@@ -24,9 +24,12 @@ export interface MirrorItem {
 // names a concrete service — `provider` is the dedicated field identifying
 // the concrete service ('todoist', 'github', a future app), and `lanes` is the
 // generic term for board columns/sections. A provider name is a VALUE
-// argument, never a namespace key.
+// argument, never a namespace key; the port is keyed by the connection slug.
+// `project` is the connection's opaque project value, stored so a slug rename
+// can match the old port to the new connection by tool + project.
 export interface PortState {
   provider: string;
+  project: string;
   lastPoll: string | null;
   lanes: Record<string, string>;
 }
@@ -48,38 +51,54 @@ export interface SyncStatePort {
   removeEntity(id: string): Promise<void>;
   listEntities(projectName: string): Promise<EntityRecord[]>;
 
-  findMirrorItem(portId: string, handle: string): Promise<MirrorItem | null>;
+  findMirrorItem(
+    connectionSlug: string,
+    handle: string,
+  ): Promise<MirrorItem | null>;
   // The one item an entity holds in a port, or null. An entity has at most one
   // mirror per port, so this resolves without the caller scanning the project's
   // items.
   findMirrorItemByEntity(
-    portId: string,
+    connectionSlug: string,
     entityId: string,
   ): Promise<{ handle: string; item: MirrorItem } | null>;
   setMirrorItem(
     projectName: string,
-    portId: string,
+    connectionSlug: string,
     handle: string,
     item: MirrorItem,
   ): Promise<void>;
   removeMirrorItem(
     projectName: string,
-    portId: string,
+    connectionSlug: string,
     handle: string,
   ): Promise<void>;
   listMirrorItems(
     projectName: string,
-    portId: string,
+    connectionSlug: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>>;
 
   getPortState(
     projectName: string,
-    portId: string,
+    connectionSlug: string,
   ): Promise<PortState | null>;
   setPortState(
     projectName: string,
-    portId: string,
+    connectionSlug: string,
     state: PortState,
+  ): Promise<void>;
+  // Every port a project holds, so discovery can detect a slug rename (a port
+  // whose tool + project now lives under a different slug) and a slug that
+  // disappeared.
+  listPortStates(
+    projectName: string,
+  ): Promise<Array<{ slug: string; state: PortState }>>;
+  // Moves a project's whole port (state and mirror items) from one slug to
+  // another in ONE write. A rename is a re-key, never a disconnect.
+  rekeyPortState(
+    projectName: string,
+    fromSlug: string,
+    toSlug: string,
   ): Promise<void>;
 
   setIdentity(

@@ -3,6 +3,7 @@ import type { VaultPort } from '../shared/VaultPort.js';
 import { parseConnectionsBlock } from '../vault/parseConnectionsBlock.js';
 import { projectNameFromPath } from '../vault/projectNameFromPath.js';
 import { renderConnectionsBlock } from '../vault/renderConnectionsBlock.js';
+import { stripConnectionsBlock } from '../vault/stripConnectionsBlock.js';
 
 // The legacy top-level properties the connection envelope replaces. `pm` and
 // `board` contribute no connection (the board is derived from the repo since
@@ -110,27 +111,6 @@ function hasTool(
   return Object.values(connections).some(
     (connection) => connection.tool === tool,
   );
-}
-
-// Removes the existing `connections:` block (its key and every indented line)
-// so the rebuilt block replaces it rather than duplicating it.
-function stripConnectionsBlock(lines: string[]): string[] {
-  const kept: string[] = [];
-  let inBlock = false;
-  for (const line of lines) {
-    if (line.startsWith('connections:')) {
-      inBlock = true;
-      continue;
-    }
-    if (inBlock) {
-      if (line.startsWith(' ')) {
-        continue;
-      }
-      inBlock = false;
-    }
-    kept.push(line);
-  }
-  return kept;
 }
 
 function isLegacyLine(line: string): boolean {
