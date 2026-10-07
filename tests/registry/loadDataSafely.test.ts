@@ -24,14 +24,12 @@ describe('REG-4 — a crash during a write never resets the registry', () => {
   it('starts empty for a missing file without quarantining', async () => {
     const spy = quarantineSpy();
 
-
     expect(await loadDataSafely(async () => null, spy.quarantine)).toEqual({});
     expect(spy.calls()).toBe(0);
   });
 
   it('quarantines a null read when the file exists on disk', async () => {
     const spy = quarantineSpy();
-
 
     expect(
       await loadDataSafely(
@@ -46,7 +44,6 @@ describe('REG-4 — a crash during a write never resets the registry', () => {
   it('quarantines an unreadable file instead of silently resetting it', async () => {
     const spy = quarantineSpy();
 
-
     expect(
       await loadDataSafely(async () => {
         throw new SyntaxError('Unexpected end of JSON input');
@@ -58,7 +55,6 @@ describe('REG-4 — a crash during a write never resets the registry', () => {
   it('quarantines a non-object root instead of silently resetting it', async () => {
     const spy = quarantineSpy();
 
-
     expect(
       await loadDataSafely(async () => 'not-an-object', spy.quarantine),
     ).toEqual({});
@@ -69,7 +65,6 @@ describe('REG-4 — a crash during a write never resets the registry', () => {
     const failing = async () => {
       throw new Error('rename failed');
     };
-
 
     await expect(
       loadDataSafely(async () => {

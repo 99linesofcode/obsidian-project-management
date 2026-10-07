@@ -146,7 +146,10 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
 
     for (const issue of issues) {
       const card = cardByUrl.get(issue.url) ?? null;
-      const item = await this.syncState.findMirrorItem(this.connectionSlug, issue.url);
+      const item = await this.syncState.findMirrorItem(
+        this.connectionSlug,
+        issue.url,
+      );
       const record =
         item === null ? null : await this.syncState.getEntity(item.entityId);
       if (record === null) {
@@ -435,7 +438,10 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     if (issue.parentUrl === null || issue.parentUrl === '') {
       return null;
     }
-    const item = await this.syncState.findMirrorItem(this.connectionSlug, issue.parentUrl);
+    const item = await this.syncState.findMirrorItem(
+      this.connectionSlug,
+      issue.parentUrl,
+    );
     if (item === null) {
       return null;
     }
@@ -524,10 +530,15 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     }
     if (base !== null && base.type === '') {
       base.type = vault.type !== '' ? vault.type : issueType;
-      await this.syncState.setMirrorItem(projectName, this.connectionSlug, issue.url, {
-        entityId: record.id,
-        base,
-      });
+      await this.syncState.setMirrorItem(
+        projectName,
+        this.connectionSlug,
+        issue.url,
+        {
+          entityId: record.id,
+          base,
+        },
+      );
     }
     return base;
   }
@@ -537,7 +548,10 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
   // so a newly tracked issue is never starved by the probe gate.
   private async hasVaultDrift(projectName: string): Promise<boolean> {
     const prefix = `Projecten/${projectName}/`;
-    const entries = await this.syncState.listMirrorItems(projectName, this.connectionSlug);
+    const entries = await this.syncState.listMirrorItems(
+      projectName,
+      this.connectionSlug,
+    );
     const records: Array<{ record: EntityRecord; base: TaskData | null }> = [];
     for (const entry of entries) {
       const record = await this.syncState.getEntity(entry.item.entityId);
@@ -717,10 +731,15 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     // body digest — the same form the next pass's diff reads.
     vault.id = record.id;
     const base = toDiffView(vault, body);
-    await this.syncState.setMirrorItem(input.projectName, this.connectionSlug, handle.url, {
-      entityId: record.id,
-      base,
-    });
+    await this.syncState.setMirrorItem(
+      input.projectName,
+      this.connectionSlug,
+      handle.url,
+      {
+        entityId: record.id,
+        base,
+      },
+    );
     await this.syncState.removeMirrorItem(
       input.projectName,
       this.connectionSlug,
@@ -881,11 +900,13 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     projectName: string,
     entityId: string,
   ): Promise<boolean> {
-    const items = await this.syncState.listMirrorItems(projectName, this.connectionSlug);
+    const items = await this.syncState.listMirrorItems(
+      projectName,
+      this.connectionSlug,
+    );
     return items.some(
       ({ handle, item }) =>
         item.entityId === entityId && !isPendingCreationHandle(handle),
     );
   }
 }
-

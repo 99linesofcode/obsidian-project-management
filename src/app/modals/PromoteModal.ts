@@ -67,10 +67,7 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
 
   // The event is part of the FuzzySuggestModal contract but unused here; the
   // pick only needs the chosen issue.
-  onChooseItem(
-    item: PromoteSuggestion,
-    _evt: ChooseEvent,
-  ): void {
+  onChooseItem(item: PromoteSuggestion, _evt: ChooseEvent): void {
     void this.promote.execute({
       url: item.task.url,
       label: 'type: task',

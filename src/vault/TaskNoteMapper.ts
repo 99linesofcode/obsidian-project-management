@@ -104,10 +104,7 @@ function affiliationValue(context: TaskNoteContext): string {
 
 // The `created` value: the vault's own stamp when the note has one, otherwise
 // the sync date — never a bare empty field on a new note.
-function createdValue(
-  task: TaskNoteSource,
-  context: TaskNoteContext,
-): string {
+function createdValue(task: TaskNoteSource, context: TaskNoteContext): string {
   if (task.createdAt !== null && task.createdAt !== '') {
     return task.createdAt;
   }

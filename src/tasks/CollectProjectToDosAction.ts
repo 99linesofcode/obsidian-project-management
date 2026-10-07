@@ -77,7 +77,10 @@ export class CollectProjectToDosAction {
           taskNotePath: taskPath,
           taskType: taskParsed?.type ?? '',
           taskLane: taskParsed?.status ?? '',
-          parentStem: parentStemFromAffiliation(parsed.affiliation, projectName),
+          parentStem: parentStemFromAffiliation(
+            parsed.affiliation,
+            projectName,
+          ),
         });
       }
     }

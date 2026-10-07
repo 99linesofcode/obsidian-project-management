@@ -60,7 +60,6 @@ describe('MAT-1 — a vault task maps to the canonical shape', () => {
   });
 
   it('returns null for a note that is not a task note', () => {
-
     const task = VaultTaskMapper.parseTask('Just a note.', notePath, context);
 
     expect(task).toBeNull();

@@ -92,19 +92,19 @@ provider actions. A provider's name never appears in the chain.
 
 ## 3. Core Components
 
-| Component | Responsibility | Technology | Target |
-|---|---|---|---|
-| `src/main.ts` | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture | host plugin API | the vault |
-| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions | host plugin API, `Component` | the vault |
-| `src/sync/` | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep | TypeScript | in-process |
-| `src/github/` | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer) | GraphQL + REST | the code host |
-| `src/todoist/` | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers | REST v1 | the task manager |
-| `src/vault/` | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec) | host vault API | the vault |
-| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper | TypeScript | in-process |
-| `src/registry/` | The `SyncStatePort` adapter and its schema | `data.json` | the vault |
-| `src/tasks/` | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation | TypeScript | in-process |
-| `src/todos/` | Checklist ⇄ to-do note consistency in both directions | TypeScript | the vault |
-| `src/shared/` | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers | TypeScript | in-process |
+| Component       | Responsibility                                                                                                                                                                                                                       | Technology                   | Target           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ---------------- |
+| `src/main.ts`   | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                          | host plugin API              | the vault        |
+| `src/app/`      | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions | host plugin API, `Component` | the vault        |
+| `src/sync/`     | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                          | TypeScript                   | in-process       |
+| `src/github/`   | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer)                                                                          | GraphQL + REST               | the code host    |
+| `src/todoist/`  | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers                                                                                     | REST v1                      | the task manager |
+| `src/vault/`    | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                           | host vault API               | the vault        |
+| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper                                                                                                                                   | TypeScript                   | in-process       |
+| `src/registry/` | The `SyncStatePort` adapter and its schema                                                                                                                                                                                           | `data.json`                  | the vault        |
+| `src/tasks/`    | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
+| `src/todos/`    | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
+| `src/shared/`   | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
 
 ### Ports & adapters
 

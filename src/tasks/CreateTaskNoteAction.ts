@@ -86,5 +86,4 @@ export class CreateTaskNoteAction {
 
   // The template note's content, or null when it does not exist — render
   // falls back to the built-in frontmatter.
-
 }

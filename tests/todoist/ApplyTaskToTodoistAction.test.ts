@@ -209,7 +209,9 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
       expect(h.taskManager.ensureLabelCalls).toEqual(['task']);
       expect(h.vault.writes).toEqual([]);
       expect(h.syncState.handleOf('uuid-42', 'todoist')).toBe('T1');
-      expect(h.syncState.baseOf('uuid-42', 'todoist')?.title).toBe('Fix the bug');
+      expect(h.syncState.baseOf('uuid-42', 'todoist')?.title).toBe(
+        'Fix the bug',
+      );
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.status).toBe('Building');
       expect(h.syncState.handleOf('uuid-42', 'github')).toBe(url);
       expect(id).toBe('T1');
@@ -344,7 +346,15 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
           expected: [{ id: 'T9', to: { parentId: 'T-parent' } }],
         },
       ];
-      for (const { name, seeded, task: t, current, sectionId, parentId, expected } of cases) {
+      for (const {
+        name,
+        seeded,
+        task: t,
+        current,
+        sectionId,
+        parentId,
+        expected,
+      } of cases) {
         const h = setup();
         seedRecord(h.syncState, 'T9', seeded);
 
@@ -466,13 +476,8 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
       h.syncState.seed(entityRecord({ id: 'task-uuid', notePath }), {
         todoist: { handle: 'T9' },
       });
-      h.syncState.seed(
-        entityRecord({ id: 'todo-uuid', notePath: todoPath }),
-      );
-      h.vault.notes.set(
-        todoPath,
-        '---\nid: todo-uuid\nstatus: open\n---\n',
-      );
+      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }));
+      h.vault.notes.set(todoPath, '---\nid: todo-uuid\nstatus: open\n---\n');
 
       const id = await h.action.executeToDo({
         todo: todo(),
@@ -578,9 +583,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
 
     it('creates a top-level to-do in its lane section when it has no parent twin', async () => {
       const h = setup();
-      h.syncState.seed(
-        entityRecord({ id: 'todo-uuid', notePath: todoPath }),
-      );
+      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }));
 
       const id = await h.action.executeToDo({
         todo: todo(),

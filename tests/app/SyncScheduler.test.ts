@@ -136,7 +136,8 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
       },
       {
         name: 'a home-note change with a drifted filename',
-        fire: (v: FakeVault) => v.fireNoteChanged('Projecten/New Name/Old Name.md'),
+        fire: (v: FakeVault) =>
+          v.fireNoteChanged('Projecten/New Name/Old Name.md'),
         expected: ['New Name'],
       },
       {
@@ -219,7 +220,9 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
     const captured = new FakeVault();
     captured.projectNotes = [projectNote('Acme Widgets', null)];
     const capturedQueue = new FakeQueue();
-    schedulerWith(captured, capturedQueue, 0, async () => ['New Project']).load();
+    schedulerWith(captured, capturedQueue, 0, async () => [
+      'New Project',
+    ]).load();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(capturedQueue.enqueued).toEqual(['Acme Widgets', 'New Project']);
 

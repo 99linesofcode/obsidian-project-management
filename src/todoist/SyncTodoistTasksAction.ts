@@ -186,7 +186,10 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
     input: ConnectionSyncInput,
     active: TodoistTaskData[],
     githubConnectionSlug: string | null,
-  ): Promise<{ twinIdByNotePath: Map<string, string>; sections: Record<string, string> }> {
+  ): Promise<{
+    twinIdByNotePath: Map<string, string>;
+    sections: Record<string, string>;
+  }> {
     const taskTwinIdByNotePath = new Map<string, string>();
     const identity =
       githubConnectionSlug === null
@@ -348,8 +351,6 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
     return { twinIdByNotePath: taskTwinIdByNotePath, sections };
   }
 
-
-
   // The nearest ancestor that materializes in Todoist, walking the affiliation
   // parent chain. A slice does not materialize, so the walk continues past it;
   // a chain that reaches a slice (or a root, or an untracked ancestor) yields
@@ -400,7 +401,12 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
     // A missing twin is a membership gap the writer must fill; only a present
     // twin whose remote moved (the absorber's pull) is left to the absorber.
     if (current !== null && handle !== null && base !== null) {
-      const remote = this.remoteView(current, item.record, sections, parentUuid);
+      const remote = this.remoteView(
+        current,
+        item.record,
+        sections,
+        parentUuid,
+      );
       const vaultDiff = todoistDiffView(vault);
       const remoteDiff = todoistDiffView(remote);
       const verdicts = this.verdictResolver.diff(vaultDiff, remoteDiff, base);
@@ -675,8 +681,6 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
     };
   }
 
-
-
   // The project's todoist items keyed by hub entity, so a record's handle and
   // base resolve without the entity carrying them.
   private async todoistItems(
@@ -717,4 +721,3 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
     );
   }
 }
-

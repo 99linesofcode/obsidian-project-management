@@ -196,9 +196,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       entityRecord({ id: 'b', notePath: 'Projecten/Other/taken/b.md' }),
     );
 
-    expect((await adapter.listEntities('Acme Widgets')).map((r) => r.id)).toEqual(
-      ['a'],
-    );
+    expect(
+      (await adapter.listEntities('Acme Widgets')).map((r) => r.id),
+    ).toEqual(['a']);
     expect((await adapter.listEntities('Other')).map((r) => r.id)).toEqual([
       'b',
     ]);
@@ -209,10 +209,16 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(
-      entityRecord({ id: 'entity-1', notePath: 'Projecten/Acme Widgets/taken/old.md' }),
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Acme Widgets/taken/old.md',
+      }),
     );
     await adapter.setEntity(
-      entityRecord({ id: 'entity-1', notePath: 'Projecten/Acme Widgets/taken/new.md' }),
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Acme Widgets/taken/new.md',
+      }),
     );
 
     expect(
@@ -227,7 +233,10 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(
-      entityRecord({ id: 'older', notePath: 'Projecten/Acme Widgets/taken/older.md' }),
+      entityRecord({
+        id: 'older',
+        notePath: 'Projecten/Acme Widgets/taken/older.md',
+      }),
     );
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'older',
@@ -239,7 +248,10 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
 
     await adapter.setEntity(
-      entityRecord({ id: 'newer', notePath: 'Projecten/Acme Widgets/taken/newer.md' }),
+      entityRecord({
+        id: 'newer',
+        notePath: 'Projecten/Acme Widgets/taken/newer.md',
+      }),
     );
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'newer',
@@ -271,7 +283,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       cursor: '2026-09-18T10:00:00Z',
     });
 
-    expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(identity);
+    expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(
+      identity,
+    );
     expect(await adapter.getLastProjectUpdate('Acme Widgets')).toBe(
       '2026-09-18T10:00:00Z',
     );
@@ -311,7 +325,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
 
     await adapter.setPortState('Acme Widgets', 'todoist', state);
 
-    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toEqual(state);
+    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toEqual(
+      state,
+    );
     expect(await adapter.getPortState('Acme Widgets', 'github')).toBeNull();
     const ports = project(snapshot(), 'Acme Widgets')['ports'] as Record<
       string,
@@ -414,7 +430,6 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
   });
 });
 
-
 describe('SyncStateAdapter write serialisation', () => {
   it('serialises interleaved writers so no update is lost', async () => {
     let disk: Record<string, unknown> = {};
@@ -495,7 +510,10 @@ describe('F6 — a container from a newer plugin version is read-only', () => {
 
     await expect(
       adapter.setEntity(
-        entityRecord({ id: 'e2', notePath: 'Projecten/Acme Widgets/taken/2.md' }),
+        entityRecord({
+          id: 'e2',
+          notePath: 'Projecten/Acme Widgets/taken/2.md',
+        }),
       ),
     ).rejects.toThrow(/newer plugin version/);
     await expect(
@@ -531,7 +549,10 @@ describe('F7 — settings and registry writes share one chain', () => {
 
     await Promise.all([
       adapter.setEntity(
-        entityRecord({ id: 'e2', notePath: 'Projecten/Acme Widgets/taken/2.md' }),
+        entityRecord({
+          id: 'e2',
+          notePath: 'Projecten/Acme Widgets/taken/2.md',
+        }),
       ),
       adapter.mutateRoot((root) => ({ ...root, githubToken: 'tok' })),
     ]);

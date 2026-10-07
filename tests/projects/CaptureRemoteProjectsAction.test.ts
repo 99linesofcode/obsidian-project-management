@@ -259,7 +259,14 @@ function setup() {
     syncState,
     ['Unshaped'],
   );
-  return { action, ensureBoard, vault, syncState, taskManager, projectManagement };
+  return {
+    action,
+    ensureBoard,
+    vault,
+    syncState,
+    taskManager,
+    projectManagement,
+  };
 }
 
 const cursor = '2026-09-30T00:00:00Z';
@@ -312,7 +319,9 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
 
       expect(captured).toEqual(['New Project']);
       expect(errors).toEqual([]);
-      expect(h.vault.created).toEqual(['Projecten/New Project/_New Project.md']);
+      expect(h.vault.created).toEqual([
+        'Projecten/New Project/_New Project.md',
+      ]);
       expect(h.vault.notes.get('Projecten/Old Project/_Old Project.md')).toBe(
         undefined,
       );
@@ -459,7 +468,9 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         ...identityFor('9'),
         repoUrl,
       });
-      expect(h.vault.notes.has('Projecten/Old Board/_Old Board.md')).toBe(false);
+      expect(h.vault.notes.has('Projecten/Old Board/_Old Board.md')).toBe(
+        false,
+      );
     });
 
     it('collects an error and captures nothing when the board links no repository', async () => {
@@ -580,7 +591,9 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       // project carries only the github connection it was captured with.
       expect(h.taskManager.createCalls).toEqual([]);
       expect(h.vault.notes.get(homePath)).toBe(GITHUB_HOME);
-      expect((await h.syncState.getIdentity('New Board', 'github'))?.repoUrl).toBe(repoUrl);
+      expect(
+        (await h.syncState.getIdentity('New Board', 'github'))?.repoUrl,
+      ).toBe(repoUrl);
     });
   });
 
@@ -637,7 +650,10 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       statusOptions: [],
     });
     h.projectManagement.repoBoards = { repoNodeId: 'R_kgDOAAAA', boards: [] };
-    await h.ensureBoard.execute({ projectName: 'New Project', connectionSlug: 'github' });
+    await h.ensureBoard.execute({
+      projectName: 'New Project',
+      connectionSlug: 'github',
+    });
 
     const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
     expect(home).toBe(TODOIST_HOME);
@@ -700,10 +716,7 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
     ];
     // The home note exists but discovery does not list it, so the vault-links
     // dedup misses it and materializeVaultProject early-returns.
-    h.vault.notes.set(
-      'Projecten/New Project/_New Project.md',
-      TODOIST_HOME,
-    );
+    h.vault.notes.set('Projecten/New Project/_New Project.md', TODOIST_HOME);
 
     const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:00:00Z',
@@ -721,9 +734,7 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
     h.taskManager.projects = [
       todoistProject({ createdAt: '2026-10-01T00:00:00Z' }),
     ];
-    h.projectManagement.boards = [
-      board('Old Board', '2026-10-01T00:00:00Z'),
-    ];
+    h.projectManagement.boards = [board('Old Board', '2026-10-01T00:00:00Z')];
 
     const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:00:00Z',

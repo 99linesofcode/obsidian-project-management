@@ -27,7 +27,6 @@ describe('MAT-5 — a task renders as a note', () => {
   });
 
   it('writes the sync frontmatter and no machine id or url', () => {
-
     const { content } = TaskNoteMapper.map(task, context);
 
     expect(content).toBe(
@@ -81,7 +80,6 @@ describe('TaskNoteMapper.render', () => {
   ].join('\n');
 
   it('renders the template frontmatter, filling the sync fields', () => {
-
     const { content } = TaskNoteMapper.render(template, task, context);
 
     expect(content).toBe(
@@ -131,9 +129,10 @@ describe('TaskNoteMapper.render', () => {
   it('falls back to the built-in frontmatter when the template is unusable', () => {
     const fallback = TaskNoteMapper.map(task, context).content;
     for (const template of [null, 'no frontmatter here']) {
-      expect(TaskNoteMapper.render(template, task, context).content, String(template)).toBe(
-        fallback,
-      );
+      expect(
+        TaskNoteMapper.render(template, task, context).content,
+        String(template),
+      ).toBe(fallback);
     }
   });
 });

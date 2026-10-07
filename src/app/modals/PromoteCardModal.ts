@@ -78,10 +78,7 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
 
   // The event is part of the FuzzySuggestModal contract but unused here; the
   // pick only needs the chosen card.
-  onChooseItem(
-    item: PromoteCardSuggestion,
-    _evt: ChooseEvent,
-  ): void {
+  onChooseItem(item: PromoteCardSuggestion, _evt: ChooseEvent): void {
     void this.promote.execute({
       itemId: item.item.itemId,
       repoNodeId: item.repoNodeId,

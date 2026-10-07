@@ -28,7 +28,9 @@ export class AttachProjectAction {
     }
 
     const repoName = repoNameFromUrl(data.repoUrl);
-    const { repoNodeId, boards } = await this.port.fetchRepoBoards(data.repoUrl);
+    const { repoNodeId, boards } = await this.port.fetchRepoBoards(
+      data.repoUrl,
+    );
     const choice = deriveBoardChoice(repoName, boards);
     if (choice.kind === 'ambiguous') {
       throw new DomainError(

@@ -336,20 +336,14 @@ export class ApplyTaskToTodoistAction {
       input.connectionSlug,
       desired.parentId,
     );
-    await this.writeBase(
-      input.connectionSlug,
-      record,
-      input.notePath,
-      handle,
-      {
-        title: desired.content,
-        status: desired.lane ?? '',
-        completedAt: desired.isCompleted ? (input.task.completedAt ?? '') : null,
-        parent,
-        createdAt: input.task.createdAt,
-        updatedAt: input.task.updatedAt,
-      },
-    );
+    await this.writeBase(input.connectionSlug, record, input.notePath, handle, {
+      title: desired.content,
+      status: desired.lane ?? '',
+      completedAt: desired.isCompleted ? (input.task.completedAt ?? '') : null,
+      parent,
+      createdAt: input.task.createdAt,
+      updatedAt: input.task.updatedAt,
+    });
   }
 
   private async advanceToDoBase(
@@ -369,22 +363,16 @@ export class ApplyTaskToTodoistAction {
       input.connectionSlug,
       desired.parentId,
     );
-    await this.writeBase(
-      input.connectionSlug,
-      record,
-      input.notePath,
-      handle,
-      {
-        title: desired.content,
-        // A to-do is always a subtask: it inherits its parent's section, so its
-        // status carries the to-do vocabulary (open/completed), not a lane.
-        status: desired.isCompleted ? 'completed' : 'open',
-        completedAt: desired.isCompleted ? (input.todo.completedAt ?? '') : null,
-        parent,
-        createdAt: input.todo.createdAt,
-        updatedAt: input.todo.updatedAt,
-      },
-    );
+    await this.writeBase(input.connectionSlug, record, input.notePath, handle, {
+      title: desired.content,
+      // A to-do is always a subtask: it inherits its parent's section, so its
+      // status carries the to-do vocabulary (open/completed), not a lane.
+      status: desired.isCompleted ? 'completed' : 'open',
+      completedAt: desired.isCompleted ? (input.todo.completedAt ?? '') : null,
+      parent,
+      createdAt: input.todo.createdAt,
+      updatedAt: input.todo.updatedAt,
+    });
   }
 
   // Persists the todoist mirror item, creating the hub entity when the writer
@@ -447,11 +435,11 @@ export class ApplyTaskToTodoistAction {
       return null;
     }
     return (
-      (await this.syncState.findMirrorItem(connectionSlug, handle))?.base ?? null
+      (await this.syncState.findMirrorItem(connectionSlug, handle))?.base ??
+      null
     );
   }
 }
-
 
 // Whether the twin already carries the desired shape. A null desired section
 // or parent means the field is not controlled here (a subtask inherits its

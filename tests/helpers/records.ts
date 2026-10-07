@@ -12,7 +12,8 @@ import type {
 export function taskData(overrides: Partial<TaskData> = {}): TaskData {
   return new TaskData({
     id: overrides.id ?? 'task-uuid',
-    notePath: overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    notePath:
+      overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     mirrors: overrides.mirrors ?? {},
     title: overrides.title ?? 'Fix the bug',
     body: overrides.body ?? '',

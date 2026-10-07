@@ -66,7 +66,10 @@ function toDoNotePath(input: ToDoNoteInput): string {
 // The affiliation list: the project first, then the parent task, then the
 // parent to-do when nested — each as a quoted wikilink.
 function affiliationValue(input: ToDoNoteInput): string {
-  const links = [projectAffiliationLink(input.projectName), `[[${input.taskLink}]]`];
+  const links = [
+    projectAffiliationLink(input.projectName),
+    `[[${input.taskLink}]]`,
+  ];
   if (input.parentTodoLink !== undefined) {
     links.push(`[[${input.parentTodoLink}]]`);
   }

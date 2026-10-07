@@ -27,7 +27,6 @@ describe('DISC-2 — frontmatter is split from the body', () => {
   });
 
   it('returns null when there is no frontmatter block', () => {
-
     const split = splitFrontmatter('Just a note.');
 
     expect(split).toBeNull();

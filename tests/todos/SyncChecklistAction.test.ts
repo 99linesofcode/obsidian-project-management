@@ -283,7 +283,12 @@ describe('TODO-2 — checklist state mirrors to the to-do', () => {
 
   it('leaves an already-correct to-do alone, suffix tolerated', async () => {
     const cases = [
-      { name: 'exact slug', path: todoPath, line: todoPath, title: 'Fix the bug' },
+      {
+        name: 'exact slug',
+        path: todoPath,
+        line: todoPath,
+        title: 'Fix the bug',
+      },
       {
         name: 'collision suffix',
         path: 'Projecten/Acme Widgets/todos/test-2.md',
@@ -425,10 +430,7 @@ describe('SYNC-8 — a settled checklist pass writes nothing', () => {
       {
         name: 'bare-link relink',
         prepare: (v) => {
-          v.notes.set(
-            taskPath,
-            taskNote('- [ ] [[fix-the-bug|Fix the bug]]'),
-          );
+          v.notes.set(taskPath, taskNote('- [ ] [[fix-the-bug|Fix the bug]]'));
           v.notes.set(todoPath, openTodo());
         },
         expectedCreated: 0,
@@ -437,10 +439,7 @@ describe('SYNC-8 — a settled checklist pass writes nothing', () => {
       {
         name: 'bare-link re-promotion',
         prepare: (v) => {
-          v.notes.set(
-            taskPath,
-            taskNote('- [ ] [[fix-the-bug|Fix the bug]]'),
-          );
+          v.notes.set(taskPath, taskNote('- [ ] [[fix-the-bug|Fix the bug]]'));
         },
         expectedCreated: 1,
         expectedWritten: 1,

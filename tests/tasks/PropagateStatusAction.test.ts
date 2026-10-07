@@ -166,7 +166,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
       notePath,
       projectName,
       connectionSlug: 'github',
-      });
+    });
 
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
     const base = syncState.baseOf('uuid-42', 'github');
@@ -186,7 +186,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
       notePath,
       projectName,
       connectionSlug: 'github',
-      });
+    });
 
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'open' }]);
     const base = syncState.baseOf('uuid-42', 'github');
@@ -206,7 +206,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
       notePath,
       projectName,
       connectionSlug: 'github',
-      });
+    });
 
     expect(projectManagement.stateCalls).toEqual([]);
   });
@@ -224,7 +224,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
       notePath,
       projectName,
       connectionSlug: 'github',
-      });
+    });
 
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: url, statusOptionId: 'PVTSSF_5' },
@@ -243,7 +243,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
       notePath,
       projectName,
       connectionSlug: 'github',
-      });
+    });
 
     expect(projectManagement.boardStatusCalls).toEqual([]);
   });
@@ -259,7 +259,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
       notePath,
       projectName,
       connectionSlug: 'github',
-      });
+    });
 
     expect(projectManagement.stateCalls).toEqual([{ url, state: 'closed' }]);
   });

@@ -73,10 +73,7 @@ export class RelinkRenamedTodoAction {
   // Moves the to-do's registry record to the new path. The record is keyed by
   // its uuid, so this is a notePath update, not a re-key; the mirror handles
   // and base travel with it.
-  private async moveRecord(
-    oldPath: string,
-    newPath: string,
-  ): Promise<void> {
+  private async moveRecord(oldPath: string, newPath: string): Promise<void> {
     const record = await this.syncState.findByNotePath(oldPath);
     if (record) {
       await this.syncState.setEntity({ ...record, notePath: newPath });

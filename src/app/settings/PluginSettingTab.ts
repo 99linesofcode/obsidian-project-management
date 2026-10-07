@@ -69,7 +69,9 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     for (const row of this.rows()) {
-      const setting = new Setting(containerEl).setName(row.name).setDesc(row.desc);
+      const setting = new Setting(containerEl)
+        .setName(row.name)
+        .setDesc(row.desc);
       row.populate(setting, row.desc, () => this.display());
     }
   }

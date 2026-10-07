@@ -324,7 +324,9 @@ function emptyIdentity(): ProjectIdentityData {
 
 // The newest provider creation clock among a listing, or null when none carry
 // one. ISO strings sort lexicographically, so a plain max is correct.
-function newestCreatedAt(clocks: Array<string | null | undefined>): string | null {
+function newestCreatedAt(
+  clocks: Array<string | null | undefined>,
+): string | null {
   let newest: string | null = null;
   for (const clock of clocks) {
     if (clock === null || clock === undefined) {

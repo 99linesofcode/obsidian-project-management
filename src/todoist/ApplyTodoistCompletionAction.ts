@@ -110,19 +110,13 @@ export class ApplyTodoistCompletionAction {
       await this.applyReopen(entry.record, handle, entry.base, twin, input);
     }
 
-    await this.syncState.setPortState(
-      input.projectName,
-      input.connectionSlug,
-      {
-        provider: 'todoist',
-        project: portState?.project ?? '',
-        lastPoll: input.syncedAt,
-        lanes: portState?.lanes ?? {},
-      },
-    );
+    await this.syncState.setPortState(input.projectName, input.connectionSlug, {
+      provider: 'todoist',
+      project: portState?.project ?? '',
+      lastPoll: input.syncedAt,
+      lanes: portState?.lanes ?? {},
+    });
   }
-
-
 
   // Completes a note the remote closed, then stamps the twin's base. A note
   // already completed is left alone (only the base moves). A task twin routes
@@ -151,11 +145,18 @@ export class ApplyTodoistCompletionAction {
           withToDoStatus(note.content, 'completed', input.syncedAt),
         );
       }
-      await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
-        title: task.content,
-        status: 'completed',
-        completedAt: stamp,
-      });
+      await this.stampBase(
+        record,
+        handle,
+        base,
+        input.projectName,
+        input.connectionSlug,
+        {
+          title: task.content,
+          status: 'completed',
+          completedAt: stamp,
+        },
+      );
       return;
     }
 
@@ -166,7 +167,10 @@ export class ApplyTodoistCompletionAction {
     if (!current) {
       return;
     }
-    if (current.completedAt === null && current.status !== this.doneOptionName) {
+    if (
+      current.completedAt === null &&
+      current.status !== this.doneOptionName
+    ) {
       await this.applyToVault.execute({
         task: withCompletion(current, this.doneOptionName, stamp),
         current,
@@ -180,11 +184,18 @@ export class ApplyTodoistCompletionAction {
         record,
       });
     }
-    await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
-      title: current.title,
-      status: this.doneOptionName,
-      completedAt: stamp,
-    });
+    await this.stampBase(
+      record,
+      handle,
+      base,
+      input.projectName,
+      input.connectionSlug,
+      {
+        title: current.title,
+        status: this.doneOptionName,
+        completedAt: stamp,
+      },
+    );
   }
 
   // Reopens a note the remote reopened, clearing the completion stamp, then
@@ -214,11 +225,18 @@ export class ApplyTodoistCompletionAction {
           withToDoStatus(note.content, 'open', null),
         );
       }
-      await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
-        title: twin.content,
-        status: 'open',
-        completedAt: null,
-      });
+      await this.stampBase(
+        record,
+        handle,
+        base,
+        input.projectName,
+        input.connectionSlug,
+        {
+          title: twin.content,
+          status: 'open',
+          completedAt: null,
+        },
+      );
       return;
     }
 
@@ -255,11 +273,18 @@ export class ApplyTodoistCompletionAction {
         record,
       });
     }
-    await this.stampBase(record, handle, base, input.projectName, input.connectionSlug, {
-      title: current.title,
-      status: defaultLane,
-      completedAt: null,
-    });
+    await this.stampBase(
+      record,
+      handle,
+      base,
+      input.projectName,
+      input.connectionSlug,
+      {
+        title: current.title,
+        status: defaultLane,
+        completedAt: null,
+      },
+    );
   }
 
   // Writes the todoist mirror item's base as a diff view. The base is what the
@@ -334,7 +359,6 @@ function withReopen(current: TaskData, defaultLane: string): TaskData {
     updatedAt: current.updatedAt,
   });
 }
-
 
 // A to-do note lives at Projecten/<project>/todos/<file>.md.
 function isToDoPath(notePath: string, projectName: string): boolean {

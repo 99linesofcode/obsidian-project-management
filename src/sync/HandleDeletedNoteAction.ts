@@ -74,6 +74,8 @@ export class HandleDeletedNoteAction {
       connectionSlug,
       entityId,
     );
-    return found === null ? null : { handle: found.handle, base: found.item.base };
+    return found === null
+      ? null
+      : { handle: found.handle, base: found.item.base };
   }
 }

@@ -69,10 +69,7 @@ export class FakeSyncState implements SyncStatePort {
 
   // Seeds an entity plus its port items in one call, so a test names the
   // mirrors it cares about without hand-building the port nesting.
-  seed(
-    record: EntityRecord,
-    mirrors: Record<string, SeededMirror> = {},
-  ): void {
+  seed(record: EntityRecord, mirrors: Record<string, SeededMirror> = {}): void {
     this.records.set(record.id, record);
     for (const [portId, mirror] of Object.entries(mirrors)) {
       this.put(portId, mirror.handle, {
@@ -95,7 +92,9 @@ export class FakeSyncState implements SyncStatePort {
   // The last-synced base an entity holds in a port, or null.
   baseOf(entityId: string, portId: string): TaskData | null {
     const handle = this.handleOf(entityId, portId);
-    return handle === null ? null : (this.items.get(portId)?.get(handle)?.base ?? null);
+    return handle === null
+      ? null
+      : (this.items.get(portId)?.get(handle)?.base ?? null);
   }
 
   // The port ids an entity has items in.

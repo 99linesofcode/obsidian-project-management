@@ -276,11 +276,7 @@ function composePlugin(
   );
   promoteToTask.register(plugin);
 
-  const promoteCard = new PromoteCardAction(
-    github,
-    syncState,
-    createTaskNote,
-  );
+  const promoteCard = new PromoteCardAction(github, syncState, createTaskNote);
   const promoteCardToIssue = new PromoteCardToIssueCommand(
     () => plugin.projectNames,
     syncState,

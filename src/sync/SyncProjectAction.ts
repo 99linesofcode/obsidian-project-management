@@ -13,10 +13,7 @@ import type {
 } from '../projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
-import type {
-  ConnectionSyncHalf,
-  SyncHalfFactory,
-} from './SyncHalves.js';
+import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
@@ -127,7 +124,12 @@ export class SyncProjectAction {
     // Lifecycle — one freeze verdict for both halves. A failure leaves the
     // project frozen for this tick so no task write runs against an unknown
     // state; the next tick retries.
-    const verdict = await this.runLifecycle(project, note, boardState, syncedAt);
+    const verdict = await this.runLifecycle(
+      project,
+      note,
+      boardState,
+      syncedAt,
+    );
 
     await this.step('renames', () =>
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
@@ -357,8 +359,6 @@ export class SyncProjectAction {
       );
     }
   }
-
-
 
   private async step(name: string, run: () => Promise<void>): Promise<void> {
     try {

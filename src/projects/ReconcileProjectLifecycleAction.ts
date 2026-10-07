@@ -293,8 +293,6 @@ export class ReconcileProjectLifecycleAction {
     };
   }
 
-
-
   // The reconciled archive stamp: null while active; syncedAt on a genuine
   // active -> archived transition; the preserved baseline stamp when the project
   // was already archived (so a settled pass never re-stamps); '' when the
@@ -400,7 +398,10 @@ export class ReconcileProjectLifecycleAction {
     if (connectionSlug === null) {
       return;
     }
-    const state = await this.syncState.getPortState(projectName, connectionSlug);
+    const state = await this.syncState.getPortState(
+      projectName,
+      connectionSlug,
+    );
     if (!state) {
       await this.syncState.setPortState(projectName, connectionSlug, {
         provider,
@@ -451,8 +452,6 @@ export class ReconcileProjectLifecycleAction {
       }
     }
   }
-
-
 
   // The repository watch for a frozen project: a cheap conditional read asks
   // whether the newest issue changed (304 costs nothing). The first watch

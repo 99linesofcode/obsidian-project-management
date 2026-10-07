@@ -309,11 +309,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
           h.probe.fail = true;
         },
         assert: (h) => {
-          expect(h.events).toEqual([
-            'lifecycle',
-            'renames',
-            'todoist',
-          ]);
+          expect(h.events).toEqual(['lifecycle', 'renames', 'todoist']);
         },
       },
       {

@@ -42,7 +42,9 @@ export function stringOrNull(value: unknown): string | null {
 }
 
 // The projects map of a container, created on demand.
-export function readProjectsMap(container: Record<string, unknown>): Record<string, unknown> {
+export function readProjectsMap(
+  container: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(container[PROJECTS_KEY]) ? container[PROJECTS_KEY] : {};
 }
 
@@ -73,7 +75,9 @@ export function ensureProjectNode(
   return projects[name] as Record<string, unknown>;
 }
 
-export function entityMap(node: Record<string, unknown>): Record<string, unknown> {
+export function entityMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(node[ENTITIES_KEY]) ? node[ENTITIES_KEY] : {};
 }
 
@@ -86,7 +90,9 @@ export function ensureEntityMap(
   return node[ENTITIES_KEY] as Record<string, unknown>;
 }
 
-export function portsMap(node: Record<string, unknown>): Record<string, unknown> {
+export function portsMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(node[PORTS_KEY]) ? node[PORTS_KEY] : {};
 }
 
@@ -130,7 +136,9 @@ export function ensurePortNode(
   return ports[portId] as Record<string, unknown>;
 }
 
-export function itemsMap(port: Record<string, unknown>): Record<string, unknown> {
+export function itemsMap(
+  port: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(port[ITEMS_KEY]) ? port[ITEMS_KEY] : {};
 }
 

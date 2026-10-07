@@ -729,10 +729,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
   it('does not advance the cursor when an apply fails, and retries next pass', async () => {
     const h = harness();
     h.github.detail.issues[0]!.body = '- [ ] Old text';
-    seedRecord(
-      h.syncState,
-      githubBase({ body: hash('- [ ] Old text') }),
-    );
+    seedRecord(h.syncState, githubBase({ body: hash('- [ ] Old text') }));
     let failNext = true;
     const original = h.github.updateTask.bind(h.github);
     h.github.updateTask = async (...args: Parameters<typeof original>) => {
@@ -1195,10 +1192,13 @@ describe('SyncProjectAction forced full scan', () => {
       updatedAt: UPDATED_AT,
       type: 'task',
     });
-    h.syncState.seed(entityRecord({ id: 'uuid-parent', notePath: PARENT_PATH }), {
-      github: { handle: PARENT_URL, base: parentBase },
-      todoist: { handle: PARENT_TWIN, base: parentBase },
-    });
+    h.syncState.seed(
+      entityRecord({ id: 'uuid-parent', notePath: PARENT_PATH }),
+      {
+        github: { handle: PARENT_URL, base: parentBase },
+        todoist: { handle: PARENT_TWIN, base: parentBase },
+      },
+    );
     h.todoist.active.push(
       todoistTask({
         id: PARENT_TWIN,

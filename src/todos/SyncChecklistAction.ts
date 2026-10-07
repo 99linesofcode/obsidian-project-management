@@ -63,8 +63,6 @@ export class SyncChecklistAction {
     await this.removeDropped(input, taskLink, items);
   }
 
-
-
   // Every unlinked item gets its own to-do at the next free slug; the item
   // then carries the link so the rewrite below writes it into the line.
   private async promoteUnlinked(

@@ -236,7 +236,6 @@ export class ApplyTaskToVaultAction {
   // The template note's content, or null when it does not exist — render
   // falls back to the built-in frontmatter.
 
-
   // The note path a title move should land at. A file keeps its name when only
   // its content moved: filenames carry zero identity weight, and legacy
   // `<remoteId>-slug` names must survive untouched (the no-mass-rename rule).
@@ -333,7 +332,10 @@ export class ApplyTaskToVaultAction {
   // lifecycle on the next pass.
   private async linkedBody(body: string, projectName: string): Promise<string> {
     const bySlug = await this.todoPathsBySlug(projectName);
-    return withChecklistLinks(body, (text) => bySlug.get(slugify(text)) ?? null);
+    return withChecklistLinks(
+      body,
+      (text) => bySlug.get(slugify(text)) ?? null,
+    );
   }
 
   // The project's to-do paths keyed by filename stem. Only notes that parse as
@@ -391,4 +393,3 @@ export class ApplyTaskToVaultAction {
     }
   }
 }
-

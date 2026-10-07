@@ -211,9 +211,9 @@ describe('MAT-4 — a hand-made Todoist task is captured', () => {
 
     await run();
 
-    expect(vault.notes.get('Projecten/Acme Widgets/taken/buy-milk.md')).toContain(
-      'status: Unshaped',
-    );
+    expect(
+      vault.notes.get('Projecten/Acme Widgets/taken/buy-milk.md'),
+    ).toContain('status: Unshaped');
   });
 
   it("captures a subtask under a slice's twin as a slice-affiliated draft", async () => {
@@ -271,8 +271,19 @@ describe('MAT-4 — a hand-made Todoist task is captured', () => {
     vault.notes.set(taskPath, taskNote('Body.', 'TASK'));
     anchored(syncState, 'task-uuid', taskPath, 'TASK');
     taskManager.completed = [
-      todoistTask({ id: 'T1', content: 'Already done', isCompleted: true, completedAt: syncedAt }),
-      todoistTask({ id: 'T2', content: 'Done too', parentId: 'TASK', isCompleted: true, completedAt: syncedAt }),
+      todoistTask({
+        id: 'T1',
+        content: 'Already done',
+        isCompleted: true,
+        completedAt: syncedAt,
+      }),
+      todoistTask({
+        id: 'T2',
+        content: 'Done too',
+        parentId: 'TASK',
+        isCompleted: true,
+        completedAt: syncedAt,
+      }),
     ];
 
     await run();

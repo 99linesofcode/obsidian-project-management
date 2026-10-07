@@ -153,10 +153,7 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
   };
 }
 
-function makeAction(
-  port: FakePort,
-  vault: FakeVault,
-): DiscoverProjectsAction {
+function makeAction(port: FakePort, vault: FakeVault): DiscoverProjectsAction {
   return new DiscoverProjectsAction(vault, new AttachProjectAction(port));
 }
 
@@ -224,7 +221,9 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
 
   it('surfaces the validation errors a note carried', async () => {
     const vault = new FakeVault();
-    const validationError = new Error('connection "work" repeats the "github" tool');
+    const validationError = new Error(
+      'connection "work" repeats the "github" tool',
+    );
     vault.notes = [githubNote({ connectionErrors: [validationError] })];
     const port = new FakePort();
     port.repoBoardsByUrl.set(repoUrl, {

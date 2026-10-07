@@ -580,7 +580,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = {
       issues: [issueA],
-      cards: [{ itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url, updatedAt: null }],
+      cards: [
+        { itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url, updatedAt: null },
+      ],
     };
     const action = makeAction(vault, syncState, projectManagement);
 

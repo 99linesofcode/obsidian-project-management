@@ -505,7 +505,10 @@ export class SyncStateAdapter implements SyncStatePort {
       // strand under the old project and the handle index never desyncs.
       if (previousProject !== undefined && previousProject !== project) {
         relocateItems(container, indexes, record.id, previousProject, project);
-        const oldNode = projectNode(readProjectsMap(container), previousProject);
+        const oldNode = projectNode(
+          readProjectsMap(container),
+          previousProject,
+        );
         if (oldNode !== null) {
           const oldEntities = entityMap(oldNode);
           if (oldEntities[record.id] !== undefined) {
@@ -630,7 +633,10 @@ export class SyncStateAdapter implements SyncStatePort {
       if (typeof port.provider !== 'string' || port.provider === '') {
         port.provider = portId;
       }
-      ensureItemsMap(port)[handle] = { entityId: item.entityId, base: item.base };
+      ensureItemsMap(port)[handle] = {
+        entityId: item.entityId,
+        base: item.base,
+      };
 
       let handles = indexes.byHandle.get(portId);
       if (handles === undefined) {
@@ -829,7 +835,8 @@ export class SyncStateAdapter implements SyncStatePort {
     return this.queue(async () => {
       const container = await this.loadContainer();
       const node = projectNode(readProjectsMap(container), projectName);
-      const raw = node === null ? undefined : identitiesMap(node)[connectionSlug];
+      const raw =
+        node === null ? undefined : identitiesMap(node)[connectionSlug];
       return isRecord(raw) ? this.mapIdentity(raw) : null;
     });
   }
@@ -866,8 +873,10 @@ export class SyncStateAdapter implements SyncStatePort {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      ensureProjectNode(ensureProjects(container), projectName).lastProjectUpdate =
-        iso;
+      ensureProjectNode(
+        ensureProjects(container),
+        projectName,
+      ).lastProjectUpdate = iso;
       await this.persist();
     });
   }
@@ -1023,4 +1032,3 @@ export class SyncStateAdapter implements SyncStatePort {
     });
   }
 }
-

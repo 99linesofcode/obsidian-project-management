@@ -224,7 +224,6 @@ describe('ATT-1 — a project attaches by resolving its repo and board identity'
 
     await expect(adapter.fetchProjectIdentity(data)).rejects.toThrow(/Status/);
   });
-
 });
 
 describe('PRJ-4 — a project payload is canonical at the boundary', () => {
@@ -295,7 +294,6 @@ describe('PRJ-4 — a project payload is canonical at the boundary', () => {
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('user');
   });
-
 });
 
 describe('PRJ-1 — the board is derived from the repository', () => {
@@ -455,9 +453,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
                     ],
                   },
                   repositories: {
-                    nodes: [
-                      { url: 'https://github.com/acme/widgets' },
-                    ],
+                    nodes: [{ url: 'https://github.com/acme/widgets' }],
                   },
                 },
               ],
@@ -478,12 +474,9 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     });
     expect(boards[0]!.project.createdAt).toBe('2026-10-02T09:00:00Z');
     expect(boards[0]!.project.statusOptions).toEqual(['Unshaped']);
-    expect(boards[0]!.repoUrls).toEqual([
-      'https://github.com/acme/widgets',
-    ]);
+    expect(boards[0]!.repoUrls).toEqual(['https://github.com/acme/widgets']);
     expect(bodies[0]).toContain('ViewerProjects');
   });
-
 });
 
 describe('MAT-3 — only typed issues are adopted', () => {
@@ -718,9 +711,7 @@ describe('MAT-3 — only typed issues are adopted', () => {
       labels: ['type: task', 'bug'],
       parentUrl: null,
     });
-    expect(
-      result.some((task) => task.url.endsWith('/issues/46')),
-    ).toBe(false);
+    expect(result.some((task) => task.url.endsWith('/issues/46'))).toBe(false);
     expect(paths[0]).toBe(
       '/repos/acme/widgets/issues?state=all&per_page=100&page=1',
     );
@@ -777,7 +768,6 @@ describe('MAT-3 — only typed issues are adopted', () => {
       '/repos/acme/widgets/issues?state=all&per_page=100&page=2',
     ]);
   });
-
 });
 
 describe('PRB-2 — a change the board clock cannot express is still seen', () => {
@@ -837,8 +827,16 @@ describe('PRB-2 — a change the board clock cannot express is still seen', () =
         response: {
           status: 200,
           json: [
-            { number: 50, created_at: '2026-09-20T10:00:00Z', pull_request: {} },
-            { number: 49, created_at: '2026-09-19T10:00:00Z', pull_request: {} },
+            {
+              number: 50,
+              created_at: '2026-09-20T10:00:00Z',
+              pull_request: {},
+            },
+            {
+              number: 49,
+              created_at: '2026-09-19T10:00:00Z',
+              pull_request: {},
+            },
           ],
           etag: 'W/"abc"',
         },
@@ -889,7 +887,6 @@ describe('PRB-2 — a change the board clock cannot express is still seen', () =
 
     expect(result[0]!.state).toBe('closed');
   });
-
 });
 
 describe('SYNC-1 — issue content is written only when it differs', () => {
@@ -1012,7 +1009,6 @@ describe('SYNC-1 — issue content is written only when it differs', () => {
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42');
     expect(bodies[0]).toBe(JSON.stringify({ state: 'closed' }));
   });
-
 });
 
 describe('LANE-2 — board items carry their lane', () => {
@@ -1237,7 +1233,6 @@ describe('LANE-2 — board items carry their lane', () => {
 
     expect(result.issues[0]!.state).toBe('closed');
   });
-
 });
 
 describe('PRO-2 — a card without an issue is promoted', () => {
@@ -1293,7 +1288,6 @@ describe('PRO-2 — a card without an issue is promoted', () => {
     expect(bodies[0]).toContain('"repositoryId":"R_kgDOAAAA"');
     expect(paths[0]).toBe('/repos/acme/widgets/issues/50');
   });
-
 });
 
 describe('LANE-2 — a lane move is written to the board', () => {
@@ -1436,7 +1430,6 @@ describe('LANE-2 — a lane move is written to the board', () => {
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain('BoardItems');
   });
-
 });
 
 describe('PRO-1 — only untyped issues are promotion candidates', () => {
@@ -1589,7 +1582,6 @@ describe('PRO-1 — only untyped issues are promotion candidates', () => {
     expect(paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
     expect(bodies[0]).toBe(JSON.stringify({ labels: ['type: task'] }));
   });
-
 });
 
 describe('adapter — a malformed url fails clearly', () => {
@@ -1607,7 +1599,6 @@ describe('adapter — a malformed url fails clearly', () => {
       }),
     ).rejects.toThrow(/invalid board url/);
   });
-
 });
 
 describe('ARC-1 — archiving closes the board', () => {
@@ -1645,7 +1636,6 @@ describe('ARC-1 — archiving closes the board', () => {
     expect(bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
     expect(bodies[0]).not.toContain('lockReason');
   });
-
 });
 
 describe('PRB-1 — a quiet board is probed cheaply', () => {

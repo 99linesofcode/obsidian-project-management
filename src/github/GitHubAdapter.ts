@@ -581,7 +581,10 @@ export class GitHubAdapter implements ProjectManagementPort {
     projectNodeId: string,
     repositoryId: string,
   ): Promise<void> {
-    await this.postQuery(LINK_BOARD_MUTATION, { projectId: projectNodeId, repositoryId });
+    await this.postQuery(LINK_BOARD_MUTATION, {
+      projectId: projectNodeId,
+      repositoryId,
+    });
   }
 
   private async createStatusField(

@@ -198,8 +198,6 @@ export class ApplyTodoistRemoteChangesAction {
     }
   }
 
-
-
   private async applyVerdict(
     record: EntityRecord,
     handle: string,
@@ -224,7 +222,8 @@ export class ApplyTodoistRemoteChangesAction {
     // The lane the twin actually sits in. A completed twin never reaches here
     // (the completion action owns it), so the lane is its section.
     const remoteLane = laneControlled
-      ? (laneForSection(context.sections, twin.sectionId) ?? context.defaultLane)
+      ? (laneForSection(context.sections, twin.sectionId) ??
+        context.defaultLane)
       : null;
     const remoteParent = parentUuid(context, twin.parentId);
 
@@ -232,7 +231,8 @@ export class ApplyTodoistRemoteChangesAction {
     // the canonical encoding for "lane not controlled" (a to-do or a subtask);
     // a null parent is a top-level item.
     const baseContent = base?.title ?? '';
-    const baseLane = base?.status === undefined || base.status === '' ? null : base.status;
+    const baseLane =
+      base?.status === undefined || base.status === '' ? null : base.status;
     const baseParent = base?.parent ?? null;
 
     const contentChanged = twin.content !== baseContent;
@@ -245,7 +245,11 @@ export class ApplyTodoistRemoteChangesAction {
     const parentChanged = remoteParent !== baseParent;
 
     const vaultLane = laneControlled ? fields.status : null;
-    const vaultParent = parentUuidFromAffiliation(fields.affiliation, context, isTask);
+    const vaultParent = parentUuidFromAffiliation(
+      fields.affiliation,
+      context,
+      isTask,
+    );
     const localContentChanged =
       slugify(baseContent) !== normalizedStem(record.notePath);
     const localLaneChanged = baseLane !== null && vaultLane !== baseLane;
@@ -442,7 +446,10 @@ export class ApplyTodoistRemoteChangesAction {
 
 // The entity uuid a parent twin id names, or null for a top-level item. Used so
 // the canonical base's parent is a uuid on both sides.
-function parentUuid(context: VerdictContext, twinId: string | null): string | null {
+function parentUuid(
+  context: VerdictContext,
+  twinId: string | null,
+): string | null {
   if (twinId === null) {
     return null;
   }
@@ -509,8 +516,6 @@ function readVaultFields(content: string): VaultFields | null {
   };
 }
 
-
 function isTaskPath(path: string, projectName: string): boolean {
   return path.startsWith(`Projecten/${projectName}/taken/`);
 }
-

@@ -74,11 +74,7 @@ export interface ProjectManagementPort {
   listRepoLabels(repoUrl: string): Promise<string[]>;
   // Creates one label on the repository with the given color. The seed action
   // calls it only for labels the listing did not already carry.
-  createRepoLabel(
-    repoUrl: string,
-    name: string,
-    color: string,
-  ): Promise<void>;
+  createRepoLabel(repoUrl: string, name: string, color: string): Promise<void>;
   // The viewer's boards, mapped onto canonical ProjectData at the boundary
   // (PRJ-3). The board's url rides on mirrors.github and its creation clock on
   // createdAt, so the capture cursor never sees a raw provider shape. The
@@ -122,7 +118,10 @@ export interface ProjectManagementPort {
     url: string,
     input: { title: string; body: string },
   ): Promise<CodeHostTaskData>;
-  setTaskState(url: string, state: 'open' | 'closed'): Promise<CodeHostTaskData>;
+  setTaskState(
+    url: string,
+    state: 'open' | 'closed',
+  ): Promise<CodeHostTaskData>;
   fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]>;
   setBoardStatus(status: BoardStatusData): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;

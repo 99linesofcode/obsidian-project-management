@@ -253,7 +253,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       title: 'fix the bug',
       parent: 'uuid-task',
     });
-    taskManager.active = [todoistTask({ id: 'T2', content: 'Fix the widget', parentId: 'T1' })];
+    taskManager.active = [
+      todoistTask({ id: 'T2', content: 'Fix the widget', parentId: 'T1' }),
+    ];
 
     await run();
 
@@ -269,7 +271,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
-    taskManager.active = [todoistTask({ id: 'T1', content: 'Chore 1 renamed' })];
+    taskManager.active = [
+      todoistTask({ id: 'T1', content: 'Chore 1 renamed' }),
+    ];
 
     await run();
 
@@ -283,7 +287,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
-    taskManager.active = [todoistTask({ id: 'T1', content: 'Chore 1', sectionId: 'S2' })];
+    taskManager.active = [
+      todoistTask({ id: 'T1', content: 'Chore 1', sectionId: 'S2' }),
+    ];
 
     await run();
 
@@ -373,7 +379,12 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       parent: 'uuid-slice',
     });
     taskManager.active = [
-      todoistTask({ id: 'T1', content: 'Chore 1', parentId: 'SLICE', sectionId: 'S2' }),
+      todoistTask({
+        id: 'T1',
+        content: 'Chore 1',
+        parentId: 'SLICE',
+        sectionId: 'S2',
+      }),
     ];
 
     await run();
@@ -386,7 +397,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     const taskPath = 'Projecten/Acme Widgets/taken/42-chore-1.md';
     vault.notes.set(taskPath, taskNote('Unshaped', ['[[Acme Widgets]]']));
     seedRecord(syncState, 'uuid-task', taskPath, 'T1', { status: 'Unshaped' });
-    taskManager.active = [todoistTask({ id: 'T1', content: 'Chore 1', sectionId: 'S2' })];
+    taskManager.active = [
+      todoistTask({ id: 'T1', content: 'Chore 1', sectionId: 'S2' }),
+    ];
     await run();
     vault.writes = [];
 

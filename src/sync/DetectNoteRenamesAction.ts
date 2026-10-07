@@ -37,9 +37,10 @@ export class DetectNoteRenamesAction {
     }
     const currentSet = new Set(currentPaths);
 
-    const records = (await this.syncState.listEntities(input.projectName)).filter(
-      (record) =>
-        record.notePath.startsWith(`Projecten/${input.projectName}/`),
+    const records = (
+      await this.syncState.listEntities(input.projectName)
+    ).filter((record) =>
+      record.notePath.startsWith(`Projecten/${input.projectName}/`),
     );
     const trackedPaths = new Set(records.map((record) => record.notePath));
 
@@ -62,7 +63,9 @@ export class DetectNoteRenamesAction {
       }
       // The same-stem untracked note, consumed so one note cannot absorb two
       // records.
-      const newPath = untrackedByStem.get(normalizedStem(record.notePath))?.shift();
+      const newPath = untrackedByStem
+        .get(normalizedStem(record.notePath))
+        ?.shift();
       if (newPath === undefined) {
         continue;
       }
@@ -71,4 +74,3 @@ export class DetectNoteRenamesAction {
     }
   }
 }
-

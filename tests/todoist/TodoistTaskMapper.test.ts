@@ -20,7 +20,6 @@ const section: TodoistSectionData = {
 
 describe('MAT-4 — a Todoist task maps to the canonical shape', () => {
   it('parses a task, its section and parent onto the canonical task', () => {
-
     const parsed = TodoistTaskMapper.parseTask(task, section, null);
 
     expect(parsed.id).toBe('');
@@ -34,7 +33,6 @@ describe('MAT-4 — a Todoist task maps to the canonical shape', () => {
   });
 
   it('maps the provider clocks: updatedAt is not dropped, addedAt is createdAt', () => {
-
     const parsed = TodoistTaskMapper.parseTask(task, section, null);
 
     expect(parsed.updatedAt).toBe('2026-09-18T10:00:00Z');
@@ -57,7 +55,6 @@ describe('MAT-4 — a Todoist task maps to the canonical shape', () => {
   });
 
   it('reads a subtask parent from the task record', () => {
-
     const parsed = TodoistTaskMapper.parseTask(
       { ...task, parentId: 'T0' },
       null,

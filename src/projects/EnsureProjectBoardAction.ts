@@ -109,8 +109,7 @@ export class EnsureProjectBoardAction {
   private async findOrphanBoard(repoName: string): Promise<string | null> {
     const boards = await this.projectManagement.fetchViewerProjects();
     const orphan = boards.find(
-      (board) =>
-        board.project.name === repoName && board.repoUrls.length === 0,
+      (board) => board.project.name === repoName && board.repoUrls.length === 0,
     );
     const url = orphan?.project.mirrors.github ?? '';
     return url === '' ? null : url;

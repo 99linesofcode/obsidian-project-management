@@ -46,11 +46,9 @@ overwritten, and the settings tab can scaffold a missing one on demand.
 
 A project is a **folder** under `Projecten/` containing one home note that
 declares a non-empty `connections` map. By convention the note is named after
-the folder with an underscore prefix:
+the folder with an underscore prefix — `Projecten/My Project/_My Project.md`:
 
-```markdown
-<!-- Projecten/My Project/_My Project.md -->
----
+```yaml
 connections:
   github:
     tool: github
@@ -58,10 +56,9 @@ connections:
   todoist:
     tool: todoist
     project: P123456
----
+```
 
 Everything about this project lives in this folder.
-```
 
 Each key under `connections` is a **connection slug** you choose; `tool` selects
 the adapter and `project` is the opaque value that tool interprets (a repository
@@ -81,21 +78,19 @@ archives the project; moving it back restores it.
 ### Create a task
 
 A task note is any note whose frontmatter carries `type`, `status` and an
-`affiliation` linking it to its project:
+`affiliation` linking it to its project — for example
+`Projecten/My Project/taken/Write the README.md`:
 
-```markdown
-<!-- Projecten/My Project/taken/Write the README.md -->
----
+```yaml
 categories: [taken]
 type: task
 status: Backlog
-affiliation: "[[My Project]]"
+affiliation: '[[My Project]]'
 created: 2026-10-06
 synced: 2026-10-06T09:30:00
----
+```
 
 Everything this task needs to say. This body becomes the issue body.
-```
 
 - `type` is the content kind: `task`, `slice` (a sub-task nested under another
   note) or `bug`.
@@ -107,15 +102,15 @@ Everything this task needs to say. This body becomes the issue body.
 ### Create a todo
 
 A todo note is smaller: frontmatter with a `status` field makes it a todo,
-`affiliation` attaches it to a project:
+`affiliation` attaches it to a project — for example
+`Projecten/My Project/todos/Call the printer.md`:
+
+```yaml
+status: open
+affiliation: '[[My Project]]'
+```
 
 ```markdown
-<!-- Projecten/My Project/todos/Call the printer.md -->
----
-status: open
-affiliation: "[[My Project]]"
----
-
 - [ ] order toner
 - [ ] confirm delivery date
 ```

@@ -179,9 +179,9 @@ export function runSyncStateConformance(
         await port.removeMirrorItem(PROJECT_A, 'github', PENDING);
 
         expect(await port.findMirrorItem('github', PENDING)).toBeNull();
-        expect((await port.findMirrorItemByEntity('github', 'e1'))?.handle).toBe(
-          GH2,
-        );
+        expect(
+          (await port.findMirrorItemByEntity('github', 'e1'))?.handle,
+        ).toBe(GH2);
       });
     });
 
@@ -252,13 +252,17 @@ export function runSyncStateConformance(
 
     describe('fullScanPending per-project semantics', () => {
       it('reads each seeded project as pending', async () => {
-        const port = harness.create({ pendingProjects: [PROJECT_A, PROJECT_B] });
+        const port = harness.create({
+          pendingProjects: [PROJECT_A, PROJECT_B],
+        });
         expect(await port.isFullScanPending(PROJECT_A)).toBe(true);
         expect(await port.isFullScanPending(PROJECT_B)).toBe(true);
       });
 
       it('consumes only the named project, once', async () => {
-        const port = harness.create({ pendingProjects: [PROJECT_A, PROJECT_B] });
+        const port = harness.create({
+          pendingProjects: [PROJECT_A, PROJECT_B],
+        });
         expect(await port.consumeFullScan(PROJECT_A)).toBe(true);
         expect(await port.isFullScanPending(PROJECT_A)).toBe(false);
         expect(await port.isFullScanPending(PROJECT_B)).toBe(true);
@@ -272,5 +276,4 @@ export function runSyncStateConformance(
       });
     });
   });
-
 }

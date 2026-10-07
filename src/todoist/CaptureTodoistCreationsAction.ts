@@ -155,8 +155,6 @@ export class CaptureTodoistCreationsAction {
     }
   }
 
-
-
   // A captured draft task note: affiliated to the project, or to the slice it
   // was created under. The status is the lane its section maps to.
   private async createCapturedTask(
@@ -181,7 +179,14 @@ export class CaptureTodoistCreationsAction {
     // The lane is controlled only for a top-level task (a subtask inherits its
     // parent's section, dt-02).
     const lane = hasLanes && item.parentId === null ? statusName : null;
-    await this.stampCreation(path, item, lane, input.syncedAt, input.projectName, input.connectionSlug);
+    await this.stampCreation(
+      path,
+      item,
+      lane,
+      input.syncedAt,
+      input.projectName,
+      input.connectionSlug,
+    );
     return path;
   }
 
@@ -238,7 +243,14 @@ export class CaptureTodoistCreationsAction {
       path,
     );
     // A to-do is a subtask: its lane is inherited, so it is never controlled.
-    await this.stampCreation(path, item, null, input.syncedAt, input.projectName, input.connectionSlug);
+    await this.stampCreation(
+      path,
+      item,
+      null,
+      input.syncedAt,
+      input.projectName,
+      input.connectionSlug,
+    );
     return path;
   }
 
@@ -297,7 +309,7 @@ export class CaptureTodoistCreationsAction {
         title: item.content,
         body: '',
         status: lane ?? '',
-        completedAt: item.isCompleted ? (item.completedAt || syncedAt) : null,
+        completedAt: item.isCompleted ? item.completedAt || syncedAt : null,
         type: '',
         parent: parent,
         createdAt: item.addedAt || null,
@@ -327,8 +339,6 @@ export class CaptureTodoistCreationsAction {
     }
     return laneForSection(sections, item.sectionId) ?? defaultLane ?? '';
   }
-
-
 }
 
 // A twin id's item, de-duplicated; later entries win.
