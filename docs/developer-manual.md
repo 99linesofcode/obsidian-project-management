@@ -89,7 +89,7 @@ The actions and infrastructure:
   vault (PRJ-2 task manager, PRJ-3 code host), guarded by a per-surface
   creation-clock cursor. The home note is born with the captured surface's
   connection (a todoist connection, or a github connection from the board's
-  single linked repository); the legacy properties are never written.
+  single linked repository).
 - **EnsureProjectBoardAction** — derives the code-host board for a vault-born
   project from its repository (PRJ-1): adopt a linked board, prefer the one
   titled with the repo name, or create one; an unlinked same-name viewer board
@@ -112,8 +112,6 @@ The actions and infrastructure:
   plugin version.
 - **GitHubAdapter / TodoistAdapter / VaultAdapter** — the infrastructure
   implementations of `ProjectManagementPort`, `TaskManagerPort` and `VaultPort`.
-- **CleanupNoteFrontmatterAction** — strips the legacy `id:`/`url:`/`todoist:`
-  frontmatter from task and to-do notes at chain start.
 - **DetectNoteRenamesAction** — recovers a rename the plugin did not observe
   by pairing a vanished record with a same-stem note.
 - **HandleDeletedNoteAction** — a deleted note's GitHub side: remove the card,
@@ -151,7 +149,7 @@ On load, `SyncScheduler.tick` first runs `CaptureRemoteProjectsAction`
 (remote-born projects into the vault, PRJ-2/PRJ-3), then enumerates the vault's
 project notes and enqueues each project name; `SyncQueue` runs them one at a
 time. `SyncProjectAction.execute` re-resolves the project (a stale work item
-no-ops), strips legacy frontmatter, ensures a code-host board exists for each
+no-ops), ensures a code-host board exists for each
 active github connection (PRJ-1), probes the project's remote state, reconciles
 the lifecycle into one freeze verdict, recovers renames, runs the GitHub half
 per connection (gated by the probe, the `fullScanPending` marker and the outward
@@ -190,13 +188,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant Clean as CleanupNoteFrontmatterAction
   participant Ens as EnsureProjectBoardAction
   participant Probe as ProbeProjectsAction
   participant Life as ReconcileProjectLifecycleAction
   participant Ren as DetectNoteRenamesAction
 
-  SP->>Clean: execute(project)
   alt active (not archived)
     loop each github connection
       SP->>Ens: execute(project, connectionSlug), derive the board from the repo
@@ -748,8 +744,7 @@ projects adopts none of them. The capture materializes a `Projecten/<name>/`
 folder with a `_<name>.md` home note declaring the captured surface's
 connection, plus a registry identity: a task-manager-born project declares a
 todoist connection; a board-born project declares a github connection whose
-`project` is the board's single linked repository. The legacy top-level
-properties are never written.
+`project` is the board's single linked repository.
 
 Dedup reads each existing home note's `connections` map: a remote project whose
 name, todoist project id or repository url is already declared is handled, not
@@ -1224,7 +1219,7 @@ The tree is module-first; each module owns one surface of the system.
 - The chain and the halves: `src/sync/` (`SyncProjectAction`, `SyncHalves`,
   `ProbeProjectsAction`).
 - The registry: `src/registry/` (`SyncStateAdapter`, `SyncStateSchema`,
-  `SyncStateMigrations`, `loadDataSafely`).
+  `loadDataSafely`).
 - The code host: `src/github/` (`SyncGithubTasksAction`, `GitHubAdapter`,
   `GithubTaskMapper`, `ApplyTaskToGithubAction`).
 - The task manager: `src/todoist/` (`SyncTodoistTasksAction`, `TodoistAdapter`,

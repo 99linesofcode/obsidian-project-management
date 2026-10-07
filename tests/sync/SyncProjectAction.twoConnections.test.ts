@@ -10,7 +10,6 @@ import { CaptureTodoistCreationsAction } from '../../src/todoist/CaptureTodoistC
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAction.js';
-import { CleanupNoteFrontmatterAction } from '../../src/sync/CleanupNoteFrontmatterAction.js';
 import { EnsureTodoistSectionsAction } from '../../src/todoist/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
@@ -43,6 +42,7 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
+import { projectNoteFromCache } from '../../src/vault/projectNoteFromCache.js';
 
 const DONE_LANE = 'Shipped';
 const PROJECT = 'Acme Widgets';
@@ -256,17 +256,35 @@ function taskNote(): string {
 }
 
 function projectNote(): ProjectNoteData {
-  return {
-    path: `Projecten/${PROJECT}/_${PROJECT}.md`,
-    projectName: PROJECT,
-    archivedAt: null,
+  const note = projectNoteFromCache(`Projecten/${PROJECT}/_${PROJECT}.md`, {
     connections: {
       github: { tool: 'github', project: 'https://github.com/acme/widgets' },
       'todoist-work': { tool: 'todoist', project: WORK_PROJECT },
       'todoist-personal': { tool: 'todoist', project: PERSONAL_PROJECT },
     },
-    connectionErrors: [],
-  };
+  });
+  if (note === null) {
+    throw new Error('the two-connection project note did not parse');
+  }
+  return note;
+}
+
+function projectNoteContent(): string {
+  return [
+    '---',
+    'connections:',
+    '  github:',
+    '    tool: github',
+    '    project: https://github.com/acme/widgets',
+    '  todoist-work:',
+    '    tool: todoist',
+    `    project: ${WORK_PROJECT}`,
+    '  todoist-personal:',
+    '    tool: todoist',
+    `    project: ${PERSONAL_PROJECT}`,
+    '---',
+    '',
+  ].join('\n');
 }
 
 function githubBase(): TaskData {
@@ -298,7 +316,7 @@ function harness(): Harness {
   const todoist = new FakeTaskManager();
 
   vault.projectNotes = [projectNote()];
-  vault.notes.set(`Projecten/${PROJECT}/_${PROJECT}.md`, '---\n---\n');
+  vault.notes.set(`Projecten/${PROJECT}/_${PROJECT}.md`, projectNoteContent());
   vault.notes.set(NOTE_PATH, taskNote());
 
   syncState.seed(entityRecord({ id: ENTITY_ID, notePath: NOTE_PATH }), {
@@ -482,7 +500,6 @@ function harness(): Harness {
     new SyncChecklistAction(vault, ''),
     new MirrorTodoStatusAction(vault),
     new HandleDeletedNoteAction(syncState, github, DONE_LANE),
-    new CleanupNoteFrontmatterAction(vault),
   );
 
   return {

@@ -60,28 +60,6 @@ describe('settings are secret-free', () => {
     expect(DEFAULT_SETTINGS).not.toHaveProperty('githubToken');
     expect(DEFAULT_SETTINGS).not.toHaveProperty('todoistToken');
   });
-
-  it('drops legacy token fields from the loaded settings', () => {
-    const settings = settingsFromData({
-      githubToken: 'ghp_x',
-      todoistToken: 'td_y',
-    });
-
-    expect(settings).not.toHaveProperty('githubToken');
-    expect(settings).not.toHaveProperty('todoistToken');
-  });
-
-  it('never writes legacy token fields back into data.json', () => {
-    const settings = settingsFromData({ githubToken: 'ghp_x' });
-
-    const merged = mergeSettingsIntoData(
-      { githubToken: 'ghp_x', todoistToken: 'td_y' },
-      settings,
-    );
-
-    expect(merged).not.toHaveProperty('githubToken');
-    expect(merged).not.toHaveProperty('todoistToken');
-  });
 });
 
 describe('the board scaffolding vocabularies round-trip', () => {

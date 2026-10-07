@@ -7,13 +7,12 @@ import type { MirrorItem, PortState } from '../shared/SyncStatePort.js';
 // the schema has exactly one definition.
 
 // The sync state lives under its own top-level key, so the plugin's settings
-// (which merge the data.json root) never absorb a `status.*`/`todoistItem.*`
-// key. Before t5 the records were flat at the root; `migrateLegacyState` moves
-// them under this key once, on load.
+// (which merge the data.json root) never absorb a registry record.
 export const SYNC_STATE_KEY = 'syncState';
 
-// The registry version marker. The layout below is v3; a container without it
-// is migrated once and marked.
+// The registry version marker. A container without it (or with an older one) is
+// reset on load rather than migrated: under the alpha ruling the registry is
+// disposable and the vault re-syncs from scratch.
 export const VERSION = 3;
 
 export const ENTITIES_KEY = 'entities';

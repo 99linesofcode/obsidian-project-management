@@ -68,7 +68,6 @@ function settings(
 const TASK_TEMPLATE = [
   '---',
   'affiliation: []',
-  'url:',
   'status:',
   'synced:',
   'created: {{date}}',

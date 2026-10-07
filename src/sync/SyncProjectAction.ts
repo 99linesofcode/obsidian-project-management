@@ -4,7 +4,6 @@ import type { ConnectionData } from '../shared/ConnectionData.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
-import type { CleanupNoteFrontmatterAction } from './CleanupNoteFrontmatterAction.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../todos/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from './ProbeProjectsAction.js';
@@ -61,12 +60,8 @@ export class SyncProjectAction {
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     handleDeletedNote: HandleDeletedNoteAction,
-    // The frontmatter cleanup. Optional so a chain assembled before the
-    // identity layer (and the tests that pin the older halves) still
-    // constructs.
-    private readonly cleanupNoteFrontmatter?: CleanupNoteFrontmatterAction,
-    // PRJ-1's board leg. Optional for the same reason as the cleanup: a chain
-    // assembled before the project-propagation wave still constructs.
+    // PRJ-1's board leg. Optional so a chain assembled before the
+    // project-propagation wave still constructs.
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
@@ -84,15 +79,6 @@ export class SyncProjectAction {
     const note = await this.resolveProject(project);
     if (!note) {
       return;
-    }
-
-    // Strip the legacy machine-id frontmatter fields, before any half reads
-    // notes. Best-effort: a malformed note is skipped, and a failure here must
-    // not block the halves.
-    if (this.cleanupNoteFrontmatter) {
-      await this.step('cleanup frontmatter', () =>
-        this.cleanupNoteFrontmatter!.execute({ projectName: project }),
-      );
     }
 
     // Ensure the code host board exists (PRJ-1). Runs before the probe so a

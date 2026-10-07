@@ -191,7 +191,6 @@ export class CaptureRemoteProjectsAction {
         continue;
       }
       const identity = await this.projectManagement.fetchProjectIdentity({
-        pm: 'github',
         repoUrl,
         boardUrl,
       });

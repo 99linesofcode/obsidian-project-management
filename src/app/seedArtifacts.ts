@@ -36,7 +36,6 @@ export interface SeedArtifact {
 // matches the hand-authored templates this seed replaces.
 const TASK_TEMPLATE = `---
 affiliation: []
-url:
 status:
 synced:
 created: {{date}}

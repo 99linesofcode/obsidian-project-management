@@ -31,12 +31,6 @@ import {
   readProjectsMap,
   str,
 } from './SyncStateSchema.js';
-import {
-  migrateEntities,
-  migrateLegacyState,
-  migrateV3,
-  seedFullScanMarkers,
-} from './SyncStateMigrations.js';
 
 // The storage the adapter persists through. main.ts binds the plugin's
 // loadData/saveData so records live in the plugin's data.json.
@@ -56,11 +50,6 @@ const BACKUP_MIN_INTERVAL_MS = 60_000;
 
 // Re-exported so the plugin's existing importers keep one entry point.
 export { SYNC_STATE_KEY } from './SyncStateSchema.js';
-export {
-  migrateEntities,
-  migrateLegacyState,
-  migrateV3,
-} from './SyncStateMigrations.js';
 
 // One port item's location, tracked so `removeEntity` can sweep an entity's
 // mirrors without scanning every project.
@@ -389,54 +378,37 @@ export class SyncStateAdapter implements SyncStatePort {
     });
   }
 
-  // The namespaced container, running the chained one-shot migration on first
-  // sight: legacy flat root -> container -> v2 entities -> v3 port-grouped. The
-  // migrated container and its indexes are cached; every later read and write
-  // goes through the cache, so concurrent ops share one object.
+  // The namespaced container. The container and its indexes are cached; every
+  // later read and write goes through the cache, so concurrent ops share one
+  // object. A container written by an OLDER schema is reset rather than
+  // migrated: under the alpha ruling the registry is disposable and the vault
+  // re-syncs from scratch.
   private async loadContainer(): Promise<Record<string, unknown>> {
     if (this.container !== null) {
       return this.container;
     }
     const data = await this.storage.load();
-    if (migrateLegacyState(data)) {
-      await this.storage.save(data);
-    }
     const container = isRecord(data[SYNC_STATE_KEY])
       ? data[SYNC_STATE_KEY]
       : {};
     if (!isRecord(data[SYNC_STATE_KEY])) {
       data[SYNC_STATE_KEY] = container;
     }
-    let changed = false;
     const version = container.version;
     if (typeof version === 'number' && version > VERSION) {
-      // A NEWER container is never re-migrated: its schema is not ours to
-      // rewrite, and a downgrade would corrupt it. Leave it byte-for-byte and
-      // note it. Reads still serve whatever the newer layout holds; writes are
-      // refused below so the newer layout is never persisted in the old shape.
+      // A NEWER container is never rewritten: its schema is not ours, and a
+      // downgrade would corrupt it. Leave it byte-for-byte and note it. Reads
+      // still serve whatever the newer layout holds; writes are refused below
+      // so the newer layout is never persisted in the old shape.
       this.readOnly = true;
       console.warn(
         `SyncStateAdapter: registry version ${version} is newer than supported ${VERSION}; leaving it untouched`,
       );
-    } else {
-      // Version-dispatched: v1 -> v2 -> v3 only for an unversioned or older
-      // container. Both functions also refuse a current/newer container, so a
-      // stray legacy key on a current store cannot strand a v2 entities map.
-      if (migrateEntities(container)) {
-        changed = true;
+    } else if (version !== VERSION) {
+      for (const key of Object.keys(container)) {
+        delete container[key];
       }
-      if (migrateV3(container)) {
-        changed = true;
-      }
-      // A store predating parent tracking carries no per-project marker;
-      // absent = pending. Seed every known project so EACH gets exactly one
-      // parent-aware fetch (PRB-3), and fold away the legacy container-level
-      // flag.
-      if (seedFullScanMarkers(container)) {
-        changed = true;
-      }
-    }
-    if (changed) {
+      container.version = VERSION;
       await this.maybeBackup();
       data[SYNC_STATE_KEY] = container;
       await this.storage.save(data);

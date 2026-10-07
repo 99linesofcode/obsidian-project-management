@@ -119,7 +119,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     const result = await action.execute({ repoUrl });
 
     expect(port.identityCalls).toEqual([
-      { pm: 'github', repoUrl, boardUrl: linked.boardUrl },
+      { repoUrl, boardUrl: linked.boardUrl },
     ]);
     expect(result).toBe(identity);
   });
@@ -154,7 +154,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     const result = await action.execute({ repoUrl });
 
     expect(port.identityCalls).toEqual([
-      { pm: 'github', repoUrl, boardUrl: match.boardUrl },
+      { repoUrl, boardUrl: match.boardUrl },
     ]);
     expect(result).toBe(identity);
   });

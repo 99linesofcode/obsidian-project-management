@@ -159,7 +159,6 @@ describe('ATT-1 — a project attaches by resolving its repo and board identity'
       const adapter = new GitHubAdapter(transport);
 
       const result = await adapter.fetchProjectIdentity({
-        pm: 'github',
         repoUrl: 'https://github.com/acme/widgets',
         boardUrl: c.boardUrl,
       });
@@ -184,7 +183,6 @@ describe('ATT-1 — a project attaches by resolving its repo and board identity'
     const { transport } = fakeTransport([repoResponse, userProjectResponse]);
     const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
-      pm: 'github',
       repoUrl: 'https://github.com/acme/widgets',
       boardUrl: 'https://github.com/users/acme/projects/1',
     };
@@ -220,7 +218,6 @@ describe('ATT-1 — a project attaches by resolving its repo and board identity'
     const { transport } = fakeTransport([repoResponse, noStatus]);
     const adapter = new GitHubAdapter(transport);
     const data: AttachProjectData = {
-      pm: 'github',
       repoUrl: 'https://github.com/acme/widgets',
       boardUrl: 'https://github.com/users/acme/projects/1',
     };
@@ -281,7 +278,6 @@ describe('PRJ-4 — a project payload is canonical at the boundary', () => {
     const adapter = new GitHubAdapter(transport);
 
     const result = await adapter.fetchProjectIdentity({
-      pm: 'github',
       repoUrl: '',
       boardUrl: 'https://github.com/users/acme/projects/1',
     });
@@ -1606,7 +1602,6 @@ describe('adapter — a malformed url fails clearly', () => {
     const board = new GitHubAdapter(fakeTransport([]).transport);
     await expect(
       board.fetchProjectIdentity({
-        pm: 'github',
         repoUrl: 'https://github.com/acme/widgets',
         boardUrl: '',
       }),

@@ -259,9 +259,15 @@ const archivedTaskPath = 'Archief/Acme Widgets/taken/42-fix-the-bug.md';
 const issueUrl = 'https://github.com/acme/widgets/issues/42';
 
 function note(anchor?: string): string {
-  const lines = ['---', 'pm: github'];
+  const lines = [
+    '---',
+    'connections:',
+    '  github:',
+    '    tool: github',
+    '    project: https://github.com/acme/widgets',
+  ];
   if (anchor !== undefined) {
-    lines.push(`todoist: ${anchor}`);
+    lines.push('  todoist:', '    tool: todoist', `    project: ${anchor}`);
   }
   lines.push('---', '# Acme Widgets');
   return lines.join('\n');
@@ -380,15 +386,14 @@ function setupLegacyHome(homePath: string, anchor = 'P1') {
 describe('ARC-2 — any side can start the freeze', () => {
   describe('Todoist project resolution', () => {
     it('creates and stamps the project on first sight', async () => {
-      const h = setup('');
-      h.vault.notes.set(activeNote, note());
+      const h = setup('P-missing');
       h.taskManager.projects = [];
 
       const verdict = await h.action.execute(activeInput);
 
       expect(h.taskManager.createCalls).toEqual(['Acme Widgets']);
       expect(h.vault.writes).toHaveLength(1);
-      expect(h.vault.writes[0]!.content).toContain('todoist: P-new');
+      expect(h.vault.writes[0]!.content).toContain('project: P-new');
       expect(h.syncState.todoistSets).toHaveLength(1);
       expect(verdict.remoteProjectId).toBe('P-new');
       expect(verdict.frozen).toBe(false);
@@ -406,8 +411,7 @@ describe('ARC-2 — any side can start the freeze', () => {
     });
 
     it('resolves by name before creating, so no duplicate is made', async () => {
-      const h = setup('');
-      h.vault.notes.set(activeNote, note());
+      const h = setup('P-missing');
       h.taskManager.projects = [project({ id: 'P9' })];
 
       const verdict = await h.action.execute(activeInput);
@@ -433,7 +437,7 @@ describe('ARC-2 — any side can start the freeze', () => {
 
       await h.action.execute(activeInput);
 
-      expect(h.vault.writes[0]!.content).toContain('todoist: P9');
+      expect(h.vault.writes[0]!.content).toContain('project: P9');
     });
 
     it('re-stamps the connection project, not a legacy property, for an envelope note', async () => {
@@ -928,15 +932,15 @@ describe('ARC-2 — any side can start the freeze', () => {
       expect(h.vault.notes.has(target)).toBe(true);
     });
 
-    it('stamps the todoist anchor on the renamed file', async () => {
+    it('stamps the connection project on the renamed file', async () => {
       const legacy = 'Projecten/Acme Widgets/_home.md';
-      const h = setupLegacyHome(legacy, '');
+      const h = setupLegacyHome(legacy, 'P-missing');
       h.taskManager.projects = [];
 
       await h.action.execute({ ...activeInput, notePath: legacy });
 
       expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
-      expect(h.vault.notes.get(canonical)).toContain('todoist: P-new');
+      expect(h.vault.notes.get(canonical)).toContain('project: P-new');
       expect(h.vault.notes.has(legacy)).toBe(false);
     });
 

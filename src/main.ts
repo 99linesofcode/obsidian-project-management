@@ -10,7 +10,6 @@ import {
   TODOIST_TOKEN_KEY,
   type SecretStore,
 } from './app/settings/SecretStorageAdapter.js';
-import { migrateLegacyTokens } from './app/settings/migrateLegacyTokens.js';
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
 import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
 import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
@@ -18,7 +17,6 @@ import { SeedTypeLabelsAction } from './app/SeedTypeLabelsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
-import { MigrateProjectConnectionsAction } from './projects/MigrateProjectConnectionsAction.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
 import { ApplyTaskToGithubAction } from './github/ApplyTaskToGithubAction.js';
 import { ApplyTaskToTodoistAction } from './todoist/ApplyTaskToTodoistAction.js';
@@ -31,7 +29,6 @@ import { CaptureRemoteProjectsAction } from './projects/CaptureRemoteProjectsAct
 import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
-import { CleanupNoteFrontmatterAction } from './sync/CleanupNoteFrontmatterAction.js';
 import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
 import { EnsureTodoistSectionsAction } from './todoist/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
@@ -52,10 +49,7 @@ import { SyncTodoistTasksAction } from './todoist/SyncTodoistTasksAction.js';
 import { VerdictResolver } from './shared/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
 import { VaultAdapter } from './vault/VaultAdapter.js';
-import {
-  SyncStateAdapter,
-  migrateLegacyState,
-} from './registry/SyncStateAdapter.js';
+import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
 import { loadDataSafely } from './registry/loadDataSafely.js';
 import {
   TodoistAdapter,
@@ -130,7 +124,6 @@ function composePlugin(
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
   captureRemoteProjects: CaptureRemoteProjectsAction;
-  migrateProjectConnections: MigrateProjectConnectionsAction;
   seedArtifacts: SeedVaultArtifactsAction;
   seedTypeLabels: SeedTypeLabelsAction;
 } {
@@ -146,17 +139,11 @@ function composePlugin(
   // action only writes when a configured path is genuinely absent, so it is
   // safe on every init and the settings tab reuses it to scaffold on demand.
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
-  // Migrates the legacy pm/url/board/todoist frontmatter to the connection
-  // envelope before discovery reads any note.
-  const migrateProjectConnections = new MigrateProjectConnectionsAction(vault);
 
   const github = new GitHubAdapter(transport);
   // Seeds the configured type-label vocabulary onto an arbitrary repository,
   // driven by the settings tab's label-seed button.
   const seedTypeLabels = new SeedTypeLabelsAction(github);
-  // The frontmatter cleanup runs at the chain start, per project, before any
-  // half reads notes: it strips the legacy `id:`/`url:` fields (dt-20).
-  const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
   const createTaskNote = new CreateTaskNoteAction(
     vault,
     syncState,
@@ -355,7 +342,6 @@ function composePlugin(
     syncChecklist,
     mirrorTodoStatus,
     handleDeletedNote,
-    cleanupNoteFrontmatter,
     ensureProjectBoard,
   );
   const queue = new SyncQueue(syncProject);
@@ -379,7 +365,6 @@ function composePlugin(
     scheduler,
     discoverProjects,
     captureRemoteProjects,
-    migrateProjectConnections,
     seedArtifacts,
     seedTypeLabels,
   };
@@ -403,25 +388,13 @@ export default class ProjectManagementPlugin extends Plugin {
 
   override async onload(): Promise<void> {
     // Read the root through the safe loader: a corrupt data.json is quarantined
-    // rather than silently reset (REG-4). The legacy flat sync-state keys are
-    // then migrated under their own top-level key before the settings merge, so
-    // the plugin's settings never absorb a `status.*`/`todoistItem.*` record
-    // (the pre-t5 shared-root wrinkle).
+    // rather than silently reset (REG-4).
     const raw = await loadDataSafely(
       () => this.loadData(),
       () => this.quarantineDataFile(),
       () => this.dataFileExists(),
     );
-    if (migrateLegacyState(raw)) {
-      await this.saveData(raw);
-    }
-    // Move the legacy plaintext tokens into SecretStorage before any adapter is
-    // built, then strip them from the root so they cannot round-trip. A profile
-    // that never set a token is left untouched (no secret write, no save).
     const secrets = new SecretStorageAdapter(this.app.secretStorage);
-    if (migrateLegacyTokens(raw, secrets)) {
-      await this.saveData(raw);
-    }
     this.secrets = secrets;
     // The registry container is stripped out of the settings merge: a stale
     // registry snapshot in settings would be written back over every registry
@@ -444,7 +417,6 @@ export default class ProjectManagementPlugin extends Plugin {
       scheduler,
       discoverProjects,
       captureRemoteProjects,
-      migrateProjectConnections,
       seedArtifacts,
       seedTypeLabels,
     } = composePlugin(this, syncState, this.secrets);
@@ -454,10 +426,6 @@ export default class ProjectManagementPlugin extends Plugin {
     // created: a fresh vault gets all six at their configured paths, and an
     // existing file is never overwritten.
     await seedArtifacts.execute();
-    // Migrate the legacy project frontmatter to the connection envelope before
-    // discovery reads any note, so a pre-envelope vault is discovered in the
-    // same startup.
-    await migrateProjectConnections.execute();
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {

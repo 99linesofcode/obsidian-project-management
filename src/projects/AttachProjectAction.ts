@@ -48,7 +48,6 @@ export class AttachProjectAction {
     }
 
     const identity = await this.port.fetchProjectIdentity({
-      pm: 'github',
       repoUrl: data.repoUrl,
       boardUrl: choice.board.boardUrl,
     });

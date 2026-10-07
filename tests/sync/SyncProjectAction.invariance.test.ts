@@ -10,7 +10,6 @@ import { CaptureTodoistCreationsAction } from '../../src/todoist/CaptureTodoistC
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { CreateTaskNoteAction } from '../../src/tasks/CreateTaskNoteAction.js';
 import { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAction.js';
-import { CleanupNoteFrontmatterAction } from '../../src/sync/CleanupNoteFrontmatterAction.js';
 import { EnsureTodoistSectionsAction } from '../../src/todoist/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
@@ -475,11 +474,11 @@ function harness(): Harness {
   ];
   vault.notes.set(
     'Projecten/Acme Widgets/_Acme Widgets.md',
-    '---\npm: github\ntodoist: P1\n---\n',
+    '---\nconnections:\n  github:\n    tool: github\n    project: https://github.com/acme/widgets\n  todoist:\n    tool: todoist\n    project: P1\n---\n',
   );
   vault.notes.set(
     'Archief/Old Project/_Old Project.md',
-    '---\npm: github\ntodoist: P2\n---\n',
+    '---\nconnections:\n  github:\n    tool: github\n    project: https://github.com/acme/old\n  todoist:\n    tool: todoist\n    project: P2\n---\n',
   );
   vault.notes.set(NOTE_PATH, taskNote());
   vault.notes.set(TODO_PATH, toDoNote());
@@ -640,7 +639,6 @@ function harness(): Harness {
     github,
     DONE_LANE,
   );
-  const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
   const chain = new SyncProjectAction(
     vault,
     syncState,
@@ -652,7 +650,6 @@ function harness(): Harness {
     syncChecklist,
     mirrorTodoStatus,
     handleDeletedNote,
-    cleanupNoteFrontmatter,
   );
 
   return { chain, vault, syncState, github, todoist };
@@ -710,13 +707,11 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     await h.chain.execute('Acme Widgets');
     await h.chain.execute('Old Project');
     const afterFirst = fingerprint(h.syncState);
-    // The first pass genuinely reconciled: it materialised the Todoist twins
-    // (and stamped the vault anchors), so the second-pass assertion is not
-    // vacuous.
+    // The first pass genuinely reconciled: it materialised the Todoist twins,
+    // so the second-pass assertion is not vacuous.
     expect(h.todoist.mutations.some((m) => m.startsWith('createTask:'))).toBe(
       true,
     );
-    expect(h.vault.mutations.some((m) => m.startsWith('write:'))).toBe(true);
 
     h.vault.mutations = [];
     h.github.mutations = [];

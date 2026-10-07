@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../src/sync/SyncProjectAction.js';
 import type { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAction.js';
-import type { CleanupNoteFrontmatterAction } from '../../src/sync/CleanupNoteFrontmatterAction.js';
 import type { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
@@ -173,11 +172,6 @@ function harness(options: HarnessOptions = {}) {
   lifecycle.frozen =
     (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
     (options.state?.closed ?? false);
-  const cleanup = {
-    execute: async () => {
-      events.push('cleanup');
-    },
-  } as unknown as CleanupNoteFrontmatterAction;
   const renames = {
     execute: async () => {
       events.push('renames');
@@ -251,7 +245,6 @@ function harness(options: HarnessOptions = {}) {
     checklist,
     mirrorStatus,
     handleDeleted,
-    cleanup,
     ensureBoard,
   );
 
@@ -265,7 +258,7 @@ const openState: ProjectStateData = {
 };
 
 describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
-  it('runs the frontmatter cleanup first, then the steps in order', async () => {
+  it('runs the steps in order', async () => {
     const h = harness({
       state: openState,
       taken: ['Projecten/Acme Widgets/taken/42-fix-the-bug.md'],
@@ -275,7 +268,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
-      'cleanup',
       'lifecycle',
       'renames',
       'sweep',
@@ -318,7 +310,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
         },
         assert: (h) => {
           expect(h.events).toEqual([
-            'cleanup',
             'lifecycle',
             'renames',
             'todoist',
@@ -332,7 +323,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
         },
         assert: (h) => {
           expect(h.events).toEqual([
-            'cleanup',
             'lifecycle',
             'renames',
             'sweep',
@@ -372,7 +362,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
 
       await h.action.execute('Acme Widgets');
 
-      expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
+      expect(h.events).toEqual(['lifecycle', 'renames']);
     }
   });
 
@@ -381,7 +371,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'todoist']);
+    expect(h.events).toEqual(['lifecycle', 'renames', 'todoist']);
   });
 
   it('sweeps only a gone active-project note, last, after the Todoist half', async () => {
@@ -391,7 +381,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     });
     await gone.action.execute('Acme Widgets');
     expect(gone.events).toEqual([
-      'cleanup',
       'lifecycle',
       'renames',
       'sweep',
@@ -504,8 +493,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events.slice(0, 3)).toEqual([
-      'cleanup',
+    expect(h.events.slice(0, 2)).toEqual([
       'ensureBoard:Acme Widgets',
       'lifecycle',
     ]);

@@ -12,22 +12,8 @@ import { taskData } from './records.js';
 // that keeps them honest.
 export interface SyncStateConformanceHarness {
   // A fresh port over empty state. `pendingProjects` models a store whose
-  // projects predate the per-project forced-scan marker (absent = pending).
+  // projects carry the per-project forced-scan marker.
   create(options?: { pendingProjects?: string[] }): SyncStatePort;
-  // Storage/migration capabilities. Present only for the storage-backed
-  // adapter; the fake has no persisted container to migrate, so the migration
-  // cases are registered only when this is provided.
-  migration?: SyncStateMigrationHarness;
-}
-
-export interface SyncStateMigrationHarness {
-  // Builds a port over a storage seeded with a raw data.json root and exposes
-  // the persisted root/container after the adapter has run its migration.
-  createFromRoot(raw: Record<string, unknown>): {
-    port: SyncStatePort;
-    root(): Record<string, unknown>;
-    container(): Record<string, unknown>;
-  };
 }
 
 const PROJECT_A = 'Project A';
@@ -287,111 +273,4 @@ export function runSyncStateConformance(
     });
   });
 
-  if (harness.migration !== undefined) {
-    const migration = harness.migration;
-    describe(`${label} — migration contract`, () => {
-      it('folds a legacy flat root into a version-marked v3 container', async () => {
-        const { port, container } = migration.createFromRoot({
-          [`status.${GH}`]: {
-            url: GH,
-            remoteId: 1,
-            notePath: PATH_A,
-            lastSyncedBodyHash: 'abc123',
-            lastSyncedStatus: 'Shipped',
-            lastSyncedTitle: 'One',
-          },
-        });
-
-        const records = await port.listEntities(PROJECT_A);
-
-        expect(records).toHaveLength(1);
-        expect(container().version).toBe(3);
-        expect(container()[`status.${GH}`]).toBeUndefined();
-      });
-
-      it('normalizes a legacy archive node to the canonical shape', async () => {
-        const { port, container } = migration.createFromRoot({
-          [`archiveBaseline.${PROJECT_A}`]: {
-            locationArchived: true,
-            closed: true,
-          },
-          [`archiveBaseline.${PROJECT_B}`]: {
-            locationArchived: false,
-            closed: false,
-          },
-        });
-
-        // Any read runs the one-shot migration on first load.
-        await port.listEntities(PROJECT_A);
-
-        const projects = container()['projects'] as Record<
-          string,
-          Record<string, unknown>
-        >;
-        expect(projects[PROJECT_A]!['archive']).toEqual({
-          locationArchived: true,
-          closed: true,
-          archivedAt: '',
-        });
-        expect(projects[PROJECT_B]!['archive']).toEqual({
-          locationArchived: false,
-          closed: false,
-          archivedAt: null,
-        });
-      });
-
-      it('does not re-run the migration chain on an already-current container', async () => {
-        const { port, container } = migration.createFromRoot({
-          syncState: {
-            version: 3,
-            projects: {
-              [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-            },
-          },
-        });
-
-        expect(await port.getEntity('e1')).not.toBeNull();
-        expect(container().version).toBe(3);
-        // No v2 `entities` map is stranded at the container root.
-        expect(container()['entities']).toBeUndefined();
-      });
-
-      it('never re-migrates a newer container and leaves it untouched', async () => {
-        const { port, container } = migration.createFromRoot({
-          syncState: {
-            version: 4,
-            projects: {
-              [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-            },
-            futureField: { kept: true },
-          },
-        });
-
-        expect(await port.getEntity('e1')).not.toBeNull();
-        expect(container().version).toBe(4);
-        expect(container()['futureField']).toEqual({ kept: true });
-        // A newer container is not rewritten at all: no per-project markers.
-        expect(container()['projects']).toEqual({
-          [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-        });
-      });
-
-      it('does not strand v2 entities on a current container with stray legacy keys', async () => {
-        const { port, container } = migration.createFromRoot({
-          syncState: {
-            version: 3,
-            projects: {
-              [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-            },
-            [`status.${GH}`]: { url: GH, notePath: PATH_A },
-          },
-        });
-
-        expect(await port.getEntity('e1')).not.toBeNull();
-        // migrateEntities never ran, so no v2 `entities` map was created.
-        expect(container()['entities']).toBeUndefined();
-        expect(container().version).toBe(3);
-      });
-    });
-  }
 }

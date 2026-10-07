@@ -1,8 +1,7 @@
-import { splitFrontmatter } from '../vault/splitFrontmatter.js';
-import { stampFrontmatterField } from '../vault/stampFrontmatterField.js';
 import { stampConnectionProject } from '../vault/stampConnectionProject.js';
 import { parseConnectionsBlock } from '../vault/parseConnectionsBlock.js';
 import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
+import type { ConnectionData } from '../shared/ConnectionData.js';
 import { ProjectData } from '../shared/ProjectData.js';
 import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import type { RemoteProjectData } from '../shared/RemoteProjectData.js';
@@ -347,25 +346,19 @@ export class ReconcileProjectLifecycleAction {
   }
 
   // The remote project for a note: the anchored one, a name match, or a fresh
-  // project. Stamps the anchor when the note has none or it points at a project
-  // that no longer exists and a name match took over. Returns null when the
-  // provider is unavailable.
+  // project. Stamps the anchor when it points at a project that no longer exists
+  // and a name match took over. Returns null when the note has no task-manager
+  // connection.
   private async resolveRemoteProject(
     projectName: string,
     notePath: string,
     noteContent: string,
   ): Promise<RemoteProjectData | null> {
     const anchor = todoistAnchor(noteContent);
-    // A note carrying the connection envelope but no task-manager connection
-    // has no remote project to reconcile. A legacy note (no envelope) keeps the
-    // create-on-first-sight behavior.
-    if (anchor === null && hasConnectionsBlock(noteContent)) {
+    if (anchor === null) {
       return null;
     }
-    let project =
-      anchor === null || anchor.project === ''
-        ? null
-        : await this.taskManager.fetchProject(anchor.project);
+    let project = await this.taskManager.fetchProject(anchor.project);
     if (!project) {
       const projects = await this.taskManager.fetchProjects();
       project =
@@ -373,31 +366,9 @@ export class ReconcileProjectLifecycleAction {
         (await this.taskManager.createProject(projectName));
     }
 
-    if (anchor === null) {
-      // No anchor at all: the legacy `todoist` property is the only anchor
-      // home, and first sight stamps it.
-      await stampFrontmatterField(
-        this.vault,
-        notePath,
-        noteContent,
-        'todoist',
-        project.id,
-      );
-    } else if (anchor.legacy) {
-      // A note the migration has not reached: the legacy `todoist` property is
-      // the anchor home. Only a moved anchor is re-stamped.
-      if (anchor.project !== project.id) {
-        await stampFrontmatterField(
-          this.vault,
-          notePath,
-          noteContent,
-          'todoist',
-          project.id,
-        );
-      }
-    } else if (anchor.project !== project.id) {
+    if (anchor.project !== project.id) {
       // The connection envelope is the anchor home: a re-anchor re-keys the
-      // connection's project value, never a legacy property.
+      // connection's project value.
       await stampConnectionProject(
         this.vault,
         notePath,
@@ -590,65 +561,40 @@ export class ReconcileProjectLifecycleAction {
 }
 
 // The task-manager anchor for a note: the todoist connection's slug and project
-// value when the note carries the connection envelope, falling back to the
-// legacy `todoist` property (slug 'todoist', legacy true) for a note the
-// migration has not reached yet.
+// value from the connection envelope.
 interface TaskManagerAnchor {
   slug: string;
   project: string;
-  legacy: boolean;
 }
 
 function todoistAnchor(content: string): TaskManagerAnchor | null {
-  const lines = content.split('\n');
-  if (lines[0] === '---') {
-    const closing = lines.indexOf('---', 1);
-    if (closing !== -1) {
-      const connections = parseConnectionsBlock(lines.slice(1, closing));
-      for (const [slug, connection] of Object.entries(connections)) {
-        if (connection.tool === 'todoist' && connection.project !== '') {
-          return { slug, project: connection.project, legacy: false };
-        }
-      }
+  for (const [slug, connection] of Object.entries(connectionsOf(content))) {
+    if (connection.tool === 'todoist' && connection.project !== '') {
+      return { slug, project: connection.project };
     }
   }
-  const legacy = splitFrontmatter(content)?.fields.get('todoist') ?? '';
-  return legacy === '' ? null : { slug: 'todoist', project: legacy, legacy: true };
+  return null;
 }
 
-// Whether the note declares a non-empty connection envelope. A note with the
-// envelope but no task-manager connection has no remote project to reconcile.
-function hasConnectionsBlock(content: string): boolean {
-  const lines = content.split('\n');
-  if (lines[0] !== '---') {
-    return false;
-  }
-  const closing = lines.indexOf('---', 1);
-  if (closing === -1) {
-    return false;
-  }
-  return Object.keys(parseConnectionsBlock(lines.slice(1, closing))).length > 0;
-}
-
-// The note's code-host connection slug, or null when it has none. A legacy
-// note (no connection envelope) uses the default code-host slug.
+// The note's code-host connection slug, or null when it has none.
 function githubConnectionSlug(content: string): string | null {
-  const lines = content.split('\n');
-  if (lines[0] !== '---') {
-    return null;
-  }
-  const closing = lines.indexOf('---', 1);
-  if (closing === -1) {
-    return null;
-  }
-  const connections = parseConnectionsBlock(lines.slice(1, closing));
-  if (Object.keys(connections).length === 0) {
-    return 'github';
-  }
-  for (const [slug, connection] of Object.entries(connections)) {
+  for (const [slug, connection] of Object.entries(connectionsOf(content))) {
     if (connection.tool === 'github') {
       return slug;
     }
   }
   return null;
+}
+
+// The note's connection envelope, or an empty map when it has none.
+function connectionsOf(content: string): Record<string, ConnectionData> {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return {};
+  }
+  const closing = lines.indexOf('---', 1);
+  if (closing === -1) {
+    return {};
+  }
+  return parseConnectionsBlock(lines.slice(1, closing));
 }
