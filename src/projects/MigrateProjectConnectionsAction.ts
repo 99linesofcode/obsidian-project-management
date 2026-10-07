@@ -12,21 +12,25 @@ import { stripConnectionsBlock } from '../vault/stripConnectionsBlock.js';
 const LEGACY_PROPERTIES = ['pm', 'url', 'board', 'todoist'] as const;
 
 // UC: migrate a vault's project notes to the connection envelope on load. For
-// every project home note under Projecten/ carrying any legacy property, build
-// the `connections` map from `url` (github) and `todoist` (todoist), strip all
-// four legacy properties, and write both in ONE save. Idempotent: a note with
-// no legacy property is untouched, and a note already carrying `connections`
-// keeps its entries (only the missing ones are added from the legacy values).
-// Silent: a clean migration emits no notice.
+// every project home note under Projecten/ or Archief/ carrying any legacy
+// property, build the `connections` map from `url` (github) and `todoist`
+// (todoist), strip all four legacy properties, and write both in ONE save.
+// Archived projects are migrated too: they are not discovered, but they must
+// not carry dead properties. Idempotent: a note with no legacy property is
+// untouched, and a note already carrying `connections` keeps its entries (only
+// the missing ones are added from the legacy values). Silent: a clean migration
+// emits no notice.
 export class MigrateProjectConnectionsAction {
   constructor(private readonly vault: VaultPort) {}
 
   async execute(): Promise<void> {
-    for (const path of await this.vault.listNotesInFolder('Projecten')) {
-      if (projectNameFromPath(path) === null) {
-        continue;
+    for (const folder of ['Projecten', 'Archief']) {
+      for (const path of await this.vault.listNotesInFolder(folder)) {
+        if (projectNameFromPath(path) === null) {
+          continue;
+        }
+        await this.migrate(path);
       }
-      await this.migrate(path);
     }
   }
 

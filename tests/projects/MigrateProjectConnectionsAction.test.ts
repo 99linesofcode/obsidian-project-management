@@ -98,6 +98,27 @@ describe('MIG-1 — the legacy frontmatter migrates to the connection envelope',
     expect(vault.notes.get(OPM_PATH)).toBe(OPM_MIGRATED);
   });
 
+  it('migrates an archived project note under Archief/', async () => {
+    const path = 'Archief/Obsidian Project Management/_Obsidian Project Management.md';
+    const { action, vault } = setup([[path, OPM_NOTE]]);
+
+    await action.execute();
+
+    expect(vault.writes).toEqual([{ path, content: OPM_MIGRATED }]);
+  });
+
+  it('is idempotent for an archived project note', async () => {
+    const path = 'Archief/Obsidian Project Management/_Obsidian Project Management.md';
+    const { action, vault } = setup([[path, OPM_NOTE]]);
+    await action.execute();
+    vault.writes = [];
+
+    await action.execute();
+
+    expect(vault.writes).toEqual([]);
+    expect(vault.notes.get(path)).toBe(OPM_MIGRATED);
+  });
+
   it('normalizes a partial state: legacy stripped, existing connections preserved, missing entries added', async () => {
     const partial = [
       '---',
