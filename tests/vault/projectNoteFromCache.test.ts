@@ -43,8 +43,6 @@ describe('DISC-1 — the project note is read from the cache', () => {
       ['Projecten/Acme Widgets/_home.md', { connections: 'nope' }],
       ['Projecten/Acme Widgets/sub/note.md', { connections: { github } }],
       ['Projecten/loose.md', { connections: { github } }],
-      // A note carrying only the legacy properties is not a project note until
-      // the migration rewrites it.
       [
         'Projecten/Acme Widgets/_home.md',
         { pm: 'github', url: 'https://github.com/acme/widgets' },

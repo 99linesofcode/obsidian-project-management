@@ -45,8 +45,6 @@ import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 const DONE_LANE = 'Shipped';
 
-// A vault fake that records every mutator, so a second pass's writes are
-// observable. Notes are path-keyed; the project notes are the discovery surface.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -101,8 +99,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   detail: ProjectDetailData = { issues: [], cards: [] };
   states = new Map<string, ProjectStateData>();
   mutations: string[] = [];
-  // The board's option-id → lane-name map, so a status write-through lands the
-  // card in the lane the real API would place it in.
   optionNames: Record<string, string> = {};
   private nextCardId = 1;
 
@@ -145,8 +141,6 @@ class FakeProjectManagement implements ProjectManagementPort {
     input: { title: string; body: string },
   ): Promise<GithubTaskData> {
     this.mutations.push(`updateTask:${url}`);
-    // Model the real write: the fetched detail must reflect the edit, or a
-    // later pass would re-fetch the stale body and never settle.
     const found = this.detail.issues.find((issue) => issue.url === url);
     if (found) {
       found.title = input.title;
@@ -182,8 +176,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async addBoardItem(_projectNodeId: string, issueUrl: string): Promise<void> {
     this.mutations.push(`addBoardItem:${issueUrl}`);
-    // Model the real add: the card lands on the board with no lane yet; the
-    // caller's follow-up setBoardStatus places it.
     this.detail.cards.push({
       itemId: `C${this.nextCardId++}`,
       type: 'ISSUE',
@@ -344,8 +336,6 @@ class FakeTaskManager implements TaskManagerPort {
     if (task) {
       task.isCompleted = completed;
       task.completedAt = completed ? UPDATED_AT : null;
-      // Model the real API: a completed task leaves the active set and is only
-      // visible through the completed-since window.
       this.active = this.active.filter((candidate) => candidate.id !== id);
       this.completed = this.completed.filter(
         (candidate) => candidate.id !== id,
@@ -354,16 +344,10 @@ class FakeTaskManager implements TaskManagerPort {
     }
     this.mutations.push(`setTaskCompleted:${id}:${completed}`);
   }
-  // Models the completed-since window advancing past a completion: the API
-  // returns only completions newer than the cursor, so an aged completion drops
-  // out of the fetched set while the twin stays completed on Todoist.
   expireCompleted(): void {
     this.completed = [];
   }
   async deleteTask(id: string): Promise<void> {
-    // Model the real API: deleting a task removes it and cascades to its
-    // subtasks, and a deleted task is gone from BOTH the active and the
-    // completed-since sets (otherwise a capture pass would re-anchor it).
     const doomed = new Set<string>();
     const visit = (taskId: string): void => {
       if (doomed.has(taskId)) return;
@@ -430,8 +414,6 @@ function projectNote(
   };
 }
 
-// The canonical base the harness seeds for the tracked issue: the diff view the
-// first pass compares against.
 function githubBase(overrides: Partial<TaskData> = {}): TaskData {
   return taskData({
     id: ENTITY_ID,
@@ -445,7 +427,6 @@ function githubBase(overrides: Partial<TaskData> = {}): TaskData {
   });
 }
 
-// Seeds (or replaces) the tracked issue's registry record.
 function seedRecord(syncState: FakeSyncState, base: TaskData): void {
   syncState.seed(entityRecord({ id: ENTITY_ID, notePath: base.notePath }), {
     github: { handle: ISSUE_URL, base },
@@ -466,8 +447,6 @@ function harness(): Harness {
   const github = new FakeProjectManagement();
   const todoist = new FakeTaskManager();
 
-  // The active project: pm-note, a task note with a checklist, and the to-do the
-  // checklist links.
   vault.projectNotes = [
     projectNote('Acme Widgets', null),
     projectNote('Old Project', ''),
@@ -655,11 +634,6 @@ function harness(): Harness {
   return { chain, vault, syncState, github, todoist };
 }
 
-// A stable fingerprint of the whole sync state — the registry plus every
-// project-level namespace — so the two runs can be compared without depending
-// on Map iteration order. The completed-since cursor is excluded: it is the
-// window watermark and legitimately advances to syncedAt on every pass, so it
-// is bookkeeping, not a reconciliation write. Everything else must be identical.
 function fingerprint(state: FakeSyncState): string {
   const sorted = <T>(entries: Iterable<[string, T]>) =>
     [...entries].sort(([a], [b]) => a.localeCompare(b));
@@ -683,9 +657,6 @@ function fingerprint(state: FakeSyncState): string {
   );
 }
 
-// A GitHub-side external change: the probe's project updatedAt advances so the
-// chain's board gate re-opens and the GitHub half re-fetches. Bumping the issues
-// too keeps the fetched detail consistent with the probe.
 const NEXT_AT = '2026-09-18T12:00:00Z';
 
 function touch(h: Harness, updatedAt = NEXT_AT): void {
@@ -695,8 +666,6 @@ function touch(h: Harness, updatedAt = NEXT_AT): void {
   }
 }
 
-// The ids the harness's first settle pass mints, in creation order (the fake's
-// nextId pre-increments from 1, so the first task is T2).
 const TASK_TWIN = 'T2';
 const TODO_TWIN = 'T3';
 
@@ -707,8 +676,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     await h.chain.execute('Acme Widgets');
     await h.chain.execute('Old Project');
     const afterFirst = fingerprint(h.syncState);
-    // The first pass genuinely reconciled: it materialised the Todoist twins,
-    // so the second-pass assertion is not vacuous.
     expect(h.todoist.mutations.some((m) => m.startsWith('createTask:'))).toBe(
       true,
     );
@@ -749,12 +716,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
   });
 });
 
-// The dt-13 cascade is origin-agnostic by construction: the chain's vault
-// consistency step reads the task note's status and completes its to-dos,
-// whichever origin wrote that status. These two scenarios pin the vault-edit
-// origin (the vault's done status is pushed, then cascades) and the
-// already-arrived origin (the Todoist absorber wrote the done status; the
-// GitHub side is settled, so only the consistency step fires).
 describe('SyncProjectAction status cascade', () => {
   it('completes a done task to-dos when the vault edit drove the status', async () => {
     const h = harness();
@@ -787,10 +748,6 @@ describe('SyncProjectAction status cascade', () => {
   });
 });
 
-// The resurrection loop: a trashed note must not return. The sweep deletes the
-// card, closes the issue and removes the record; the untracked-closed gate then
-// keeps the closed issue from re-materialising on every later poll, and the
-// Todoist deletion propagation keeps the twin gone.
 describe('SyncProjectAction deletion sweep', () => {
   it('does not resurrect a deleted task after the sweep', async () => {
     const h = harness();
@@ -833,11 +790,6 @@ describe('SyncProjectAction deletion sweep', () => {
   });
 });
 
-// dt-17 churn fix: once a task/to-do has completed and its base carries the
-// stamp, no later pass may re-complete, re-archive or re-write it — even after
-// the completed-since window has aged past the completion and the twin is
-// returned by neither fetch. The mirror policy (dt-22) keeps the completed twin;
-// the settle gate stops the recreate-every-tick loop.
 describe('SyncProjectAction completion settle', () => {
   it('performs zero completion writes on N passes after a completion settles', async () => {
     const h = harness();
@@ -881,11 +833,6 @@ describe('SyncProjectAction completion settle', () => {
   });
 });
 
-// dt-16 three-way completion from the GitHub surface. The board lane is
-// authoritative for done-ness (the t3 decision) and GitHub's built-in project
-// workflows move the card when an issue is closed/reopened, so a GitHub-side
-// close/reopen arrives as the issue state AND the card lane moving together.
-// The chain then reconciles the vault note and the Todoist twin to it.
 describe('SyncProjectAction three-way completion from GitHub', () => {
   it('completes the note and its twin when the issue is closed', async () => {
     const h = harness();
@@ -938,9 +885,6 @@ describe('SyncProjectAction three-way completion from GitHub', () => {
   });
 });
 
-// The checklist mirror is driven by the GitHub issue body: a checked/unchecked
-// item moves the note's line, its to-do note and the to-do's Todoist twin. This
-// is the per-line mirror, distinct from the task-level asymmetric reopen rule.
 describe('SyncProjectAction checklist mirror from GitHub', () => {
   it('checks the line, completes the to-do and checks the twin when an item is checked', async () => {
     const h = harness();
@@ -1003,10 +947,6 @@ describe('SyncProjectAction checklist mirror from GitHub', () => {
   });
 });
 
-// Reopen after the deletion sweep: the GitHub half materialises only OPEN
-// untracked issues, so reopening the swept issue makes it materialise again — a
-// fresh note, a NEW board card and a recreated Todoist twin — and the system
-// then converges (the next pass writes nothing).
 describe('SyncProjectAction reopen after delete', () => {
   it('re-materialises the note, adds a new card and recreates the twin when the issue is reopened', async () => {
     const h = harness();
@@ -1053,10 +993,6 @@ describe('SyncProjectAction reopen after delete', () => {
   });
 });
 
-// The live churn loop: a completed Todoist twin whose captured note vanished
-// was re-captured every tick (289 duplicate twins). The canonical record is the
-// anchor; when the note is gone the record is evicted and the twin deleted, so
-// no later pass can re-anchor it. This pins the settle across repeated passes.
 describe('SyncProjectAction completed-twin churn', () => {
   it('evicts the stale record and deletes the twin, then writes nothing on N passes', async () => {
     const h = harness();
@@ -1133,13 +1069,6 @@ describe('SyncProjectAction completed-twin churn', () => {
   });
 });
 
-// The live bug this ticket fixes: a store predating parent tracking is settled
-// (notes match bases) and its board is quiet (the project's updatedAt unmoved),
-// yet GitHub-side sub-issue relations changed. The board probe cannot see them —
-// adding a sub-issue moves nothing on the board — so the one-shot fullScanPending
-// marker forces ONE parent-aware fetch. That single pass discovers the relation,
-// seeds the child's affiliation, and moves the already-adopted twin under its
-// parent's twin (the GitHub half runs before the Todoist half in the chain).
 describe('SyncProjectAction forced full scan', () => {
   const PARENT_URL = 'https://github.com/acme/widgets/issues/40';
   const PARENT_PATH = 'Projecten/Acme Widgets/taken/the-parent.md';

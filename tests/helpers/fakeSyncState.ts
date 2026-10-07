@@ -10,7 +10,6 @@ import type {
   SyncStatePort,
 } from '../../src/shared/SyncStatePort.js';
 
-// A port item seed: the handle plus its last-synced base.
 interface SeededMirror {
   handle: string;
   base?: TaskData | null;
@@ -20,19 +19,10 @@ function portKey(projectName: string, portId: string): string {
   return `${projectName}\u0000${portId}`;
 }
 
-// An in-memory SyncStatePort: the project-nested, port-grouped registry. It
-// mirrors the adapter's indexes (findByNotePath/findMirrorItem) and its handle
-// dedup, so an action under test sees the same lookups it would against the
-// real store. `seed` and the baseOf/handleOf readers are test conveniences for
-// the port-grouped shape.
 export class FakeSyncState implements SyncStatePort {
   records = new Map<string, EntityRecord>();
-  // portId -> handle -> item, global like the adapter's handle index.
   items = new Map<string, Map<string, MirrorItem>>();
-  // `${project}\u0000${portId}` -> state.
   portStates = new Map<string, PortState>();
-  // Test-only todoist view of the port state, in the pre-v3 shape many suites
-  // still seed and read. Kept in sync with portStates by the port methods.
   todoistProjects = new Map<
     string,
     { sections: Record<string, string>; lastCompletedPoll: string }
@@ -42,10 +32,6 @@ export class FakeSyncState implements SyncStatePort {
     state: { sections: Record<string, string>; lastCompletedPoll: string };
   }> = [];
   identities = new Map<string, ProjectIdentityData>();
-  // The per-connection identities, keyed by `${project}\u0000${slug}`. The
-  // project-keyed `identities` map above stays as a test convenience: a suite
-  // that seeds one identity per project keeps working, and getIdentity falls
-  // back to it when no per-slug entry exists.
   identitiesBySlug = new Map<string, ProjectIdentityData>();
   lastUpdates = new Map<string, string>();
   baselines = new Map<string, ArchiveBaselineData>();
@@ -61,14 +47,9 @@ export class FakeSyncState implements SyncStatePort {
     state: PortState;
   }> = [];
   lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
-  // The per-project forced-scan markers. A test seeds a project name to model a
-  // store that predates parent tracking; the chain peeks and only consumes
-  // after the GitHub half succeeds.
   fullScanPending = new Set<string>();
   fullScanConsumes: Array<{ project: string; pending: boolean }> = [];
 
-  // Seeds an entity plus its port items in one call, so a test names the
-  // mirrors it cares about without hand-building the port nesting.
   seed(record: EntityRecord, mirrors: Record<string, SeededMirror> = {}): void {
     this.records.set(record.id, record);
     for (const [portId, mirror] of Object.entries(mirrors)) {
@@ -79,7 +60,6 @@ export class FakeSyncState implements SyncStatePort {
     }
   }
 
-  // The handle an entity holds in a port, or null when it has no item there.
   handleOf(entityId: string, portId: string): string | null {
     for (const [handle, item] of this.items.get(portId) ?? []) {
       if (item.entityId === entityId) {
@@ -89,7 +69,6 @@ export class FakeSyncState implements SyncStatePort {
     return null;
   }
 
-  // The last-synced base an entity holds in a port, or null.
   baseOf(entityId: string, portId: string): TaskData | null {
     const handle = this.handleOf(entityId, portId);
     return handle === null
@@ -97,7 +76,6 @@ export class FakeSyncState implements SyncStatePort {
       : (this.items.get(portId)?.get(handle)?.base ?? null);
   }
 
-  // The port ids an entity has items in.
   mirrorsOf(entityId: string): string[] {
     const result: string[] = [];
     for (const [portId, handles] of this.items) {
@@ -120,9 +98,6 @@ export class FakeSyncState implements SyncStatePort {
     handles.set(handle, item);
   }
 
-  // Removes a record and sweeps every mirror item it owned, the same sweep the
-  // adapter's dropEntity performs. Shared by removeEntity (recorded) and the
-  // notePath eviction in setEntity (not an explicit removal).
   private dropRecord(id: string): void {
     this.records.delete(id);
     for (const handles of this.items.values()) {
@@ -138,8 +113,6 @@ export class FakeSyncState implements SyncStatePort {
     return this.records.get(id) ?? null;
   }
 
-  // Test-only aliases for the pre-v3 reads many suites still use; the port
-  // itself exposes only the getEntity/listEntities/findMirrorItem family.
   async get(id: string): Promise<EntityRecord | null> {
     return this.getEntity(id);
   }
@@ -168,9 +141,6 @@ export class FakeSyncState implements SyncStatePort {
   }
 
   async setEntity(record: EntityRecord): Promise<void> {
-    // A notePath resolves to exactly one entity: claiming an occupied path
-    // evicts the previous owner — its record AND its items — so the path can
-    // never hold two owners (the adapter's setEntity does the same).
     for (const [id, other] of this.records) {
       if (id !== record.id && other.notePath === record.notePath) {
         this.dropRecord(id);
@@ -216,10 +186,6 @@ export class FakeSyncState implements SyncStatePort {
     handle: string,
     item: MirrorItem,
   ): Promise<void> {
-    // Re-point, never destroy: the previous owner keeps its record and every
-    // OTHER mirror. Only this (portId, handle) address changes hands, so a
-    // collision never evicts an entity. Supersession is explicit (removeEntity),
-    // matching the adapter's setMirrorItem (REG-6).
     this.put(portId, handle, item);
   }
 
@@ -238,8 +204,6 @@ export class FakeSyncState implements SyncStatePort {
     const result: Array<{ handle: string; item: MirrorItem }> = [];
     for (const [handle, item] of this.items.get(portId) ?? []) {
       const record = this.records.get(item.entityId);
-      // A missing record is included (the test seeded only the item); a record
-      // in another project is excluded, matching the adapter's nesting.
       if (
         record === undefined ||
         projectFromNotePath(record.notePath) === projectName
@@ -316,8 +280,6 @@ export class FakeSyncState implements SyncStatePort {
     }
     this.portStates.delete(portKey(projectName, fromSlug));
     this.portStates.set(portKey(projectName, toSlug), state);
-    // The legacy todoist view is a pre-v3 convenience keyed by project, not
-    // slug; a re-key away from 'todoist' clears it.
     if (fromSlug === 'todoist') {
       this.todoistProjects.delete(projectName);
     }
@@ -412,10 +374,7 @@ export class FakeSyncState implements SyncStatePort {
     return pending;
   }
 
-  // The per-surface project-capture cursors (PRJ-2/PRJ-3).
   projectCursors = new Map<string, string>();
-  // Every setProjectCursor call, so a test can assert a quiet tick writes none
-  // (SYNC-8).
   cursorSets: Array<{ portId: string; iso: string }> = [];
 
   async getProjectCursor(portId: string): Promise<string | null> {

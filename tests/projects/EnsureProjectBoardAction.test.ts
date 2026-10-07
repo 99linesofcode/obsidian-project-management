@@ -15,9 +15,6 @@ import type {
 } from '../../src/shared/RepoBoardData.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the project-management port serves a canned board listing
-// and records the create/adopt calls, so the derivation ladder's decisions are
-// what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   repoBoards: RepositoryBoardsData = { repoNodeId: 'R_kgDOAAAA', boards: [] };
   viewerBoards: RemoteBoardData[] = [];

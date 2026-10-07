@@ -11,11 +11,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds note content and records creations and
-// writes; the task manager serves the fetched active/completed sets (and would
-// throw if the action ever wrote back to Todoist); the registry holds the
-// entity records and the lane map. The kind classification and the captured
-// note shape are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 

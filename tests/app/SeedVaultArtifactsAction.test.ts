@@ -7,9 +7,6 @@ import {
 } from '../../src/app/settings/settings.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 
-// A fake vault at the port. createNote mimics the real adapter's mkdir -p
-// contract (Obsidian's create throws on a missing parent), so the action's
-// create-if-missing decisions and the folder chain are both observable.
 class FakeVault implements VaultPort {
   notes = new Map<string, string>();
   folders = new Set<string>();
@@ -62,9 +59,6 @@ function settings(
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
 
-// The verbatim seed contents, restated here so the test is a real contract on
-// what lands in the vault rather than a restatement of the implementation. A
-// trailing '' yields the single trailing newline the seed writes.
 const TASK_TEMPLATE = [
   '---',
   'affiliation: []',

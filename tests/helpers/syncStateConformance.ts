@@ -5,14 +5,7 @@ import type {
 } from '../../src/shared/SyncStatePort.js';
 import { taskData } from './records.js';
 
-// The port-contract conformance harness. It is deliberately the SAME suite for
-// the real SyncStateAdapter and the in-memory FakeSyncState: the fake exists so
-// action suites can run without a store, and if the two can disagree, an action
-// under test sees behavior the real registry will never have. This is the guard
-// that keeps them honest.
 export interface SyncStateConformanceHarness {
-  // A fresh port over empty state. `pendingProjects` models a store whose
-  // projects carry the per-project forced-scan marker.
   create(options?: { pendingProjects?: string[] }): SyncStatePort;
 }
 
@@ -107,7 +100,6 @@ export function runSyncStateConformance(
           base: null,
         });
 
-        // e2 claims the github address e1 holds.
         await port.setMirrorItem(PROJECT_A, 'github', GH, {
           entityId: 'e2',
           base: null,
@@ -115,7 +107,6 @@ export function runSyncStateConformance(
 
         expect(await port.getEntity('e1')).not.toBeNull();
         expect((await port.findMirrorItem('github', GH))?.entityId).toBe('e2');
-        // e1's OTHER mirror survives the re-point (promise 2).
         expect((await port.findMirrorItem('todoist', TD))?.entityId).toBe('e1');
       });
 
@@ -149,10 +140,6 @@ export function runSyncStateConformance(
           base: taskData({ id: 'e1', notePath: PATH_A }),
         });
 
-        // Append order: the item written first wins the single-item lookup, so
-        // an entity can hold a stale placeholder ahead of its real handle. The
-        // action must scan listMirrorItems for a real one rather than trust
-        // findMirrorItemByEntity's first hit.
         expect(await port.findMirrorItemByEntity('github', 'e1')).toEqual({
           handle: PENDING,
           item: { entityId: 'e1', base: null },
@@ -200,7 +187,6 @@ export function runSyncStateConformance(
         expect(await port.listMirrorItems(PROJECT_B, 'github')).toEqual([
           { handle: GH, item: { entityId: 'e1', base: null } },
         ]);
-        // The handle index follows the move, so a global lookup still resolves.
         expect((await port.findMirrorItem('github', GH))?.entityId).toBe('e1');
         expect(await port.listEntities(PROJECT_A)).toEqual([]);
         expect((await port.listEntities(PROJECT_B)).map((r) => r.id)).toEqual([

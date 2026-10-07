@@ -13,8 +13,6 @@ export interface ToDoNoteInput {
 export interface ToDoNoteContext {
   syncedAt: string;
   statusName: 'open' | 'completed';
-  // A full ISO datetime stamp — the sync timestamp of the completion, e.g.
-  // 2026-09-18T12:00:00Z. Passed through verbatim; never date-only.
   completedAt?: string;
 }
 
@@ -23,9 +21,6 @@ export interface ToDoNote {
   content: string;
 }
 
-// Maps a vault-only to-do onto its note. Unlike a task note it has no remote
-// issue or board card: the frontmatter carries the affiliation and status, and
-// the body is empty — the note is a placeholder/status carrier.
 export const ToDoNoteMapper = {
   map(input: ToDoNoteInput, context: ToDoNoteContext): ToDoNote {
     const content = [
@@ -40,10 +35,6 @@ export const ToDoNoteMapper = {
     return { path: toDoNotePath(input), content };
   },
 
-  // Renders the note through a vault template: the template's frontmatter is
-  // kept verbatim (vault-owned fields), the managed fields are filled in, and
-  // {{date}}/{{time}} resolve to the sync stamp. The body stays empty. A
-  // missing or malformed template falls back to the built-in mapping.
   render(
     template: string | null,
     input: ToDoNoteInput,
@@ -58,13 +49,10 @@ export const ToDoNoteMapper = {
   },
 };
 
-// The note path: the project's todos folder, keyed by the title slug.
 function toDoNotePath(input: ToDoNoteInput): string {
   return `Projecten/${input.projectName}/todos/${slugify(input.title)}.md`;
 }
 
-// The affiliation list: the project first, then the parent task, then the
-// parent to-do when nested — each as a quoted wikilink.
 function affiliationValue(input: ToDoNoteInput): string {
   const links = [
     projectAffiliationLink(input.projectName),
@@ -76,12 +64,10 @@ function affiliationValue(input: ToDoNoteInput): string {
   return `[${links.map((link) => `"${link}"`).join(', ')}]`;
 }
 
-// An absent completion stamp is an empty field, not a missing one.
 function completedLine(completedAt: string | undefined): string {
   return completedAt === undefined ? 'completed:' : `completed: ${completedAt}`;
 }
 
-// Sync-owned fields, in append order when a template omits one.
 function managedValues(
   input: ToDoNoteInput,
   context: ToDoNoteContext,
@@ -93,8 +79,6 @@ function managedValues(
   ]);
 }
 
-// Renders a template into note content, or null when it carries no frontmatter
-// block (the caller falls back to the built-in mapping).
 function renderTemplate(
   template: string,
   input: ToDoNoteInput,

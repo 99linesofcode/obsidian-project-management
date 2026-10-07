@@ -7,11 +7,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds the mirrored notes (a missing path is a
-// vault deletion), the task manager records every twin deletion (and can be
-// made to fail), and the registry holds the entity records and records
-// evictions. The action's decisions — which twins go, which records are evicted
-// with them — are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -105,7 +100,6 @@ const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
 const nestedTodoPath = 'Projecten/Acme Widgets/todos/and-then-test-it.md';
 const otherPath = 'Projecten/Other Project/taken/9-other.md';
 
-// A record whose todoist base carries the given parent uuid.
 function record(
   syncState: FakeSyncState,
   id: string,

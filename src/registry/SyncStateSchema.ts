@@ -2,17 +2,8 @@ import { isRecord } from '../shared/isRecord.js';
 import { TaskData } from '../shared/TaskData.js';
 import type { MirrorItem, PortState } from '../shared/SyncStatePort.js';
 
-// The container schema: the persisted shape's constants and the pure readers
-// and writers of its nested nodes. Migrations and the adapter share these so
-// the schema has exactly one definition.
-
-// The sync state lives under its own top-level key, so the plugin's settings
-// (which merge the data.json root) never absorb a registry record.
 export const SYNC_STATE_KEY = 'syncState';
 
-// The registry version marker. A container without it (or with an older one) is
-// reset on load rather than migrated: under the alpha ruling the registry is
-// disposable and the vault re-syncs from scratch.
 export const VERSION = 3;
 
 export const ENTITIES_KEY = 'entities';
@@ -21,16 +12,8 @@ export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
 export const IDENTITIES_KEY = 'identities';
 
-// The project-capture cursors, keyed by remote SURFACE (portId). WHY a
-// container-level map and not a per-project node: the cursor guards a global
-// listing (all task-manager projects, all the viewer's boards), which has no
-// project to nest under. It is a new top-level dimension beside `projects`.
 export const PROJECT_CURSORS_KEY = 'projectCursors';
 
-// The one-shot marker that forces the first parent-aware fetch after a store
-// predates parent tracking. It lives on the PROJECT node (projects.<name>.
-// fullScanPending): a single container-level flag was consumed by whichever
-// project synced first, leaving every other project blind. Absent = pending.
 export const FULL_SCAN_PENDING_KEY = 'fullScanPending';
 
 export function str(value: unknown): string {
@@ -41,7 +24,6 @@ export function stringOrNull(value: unknown): string | null {
   return value === null || typeof value === 'string' ? value : null;
 }
 
-// The projects map of a container, created on demand.
 export function readProjectsMap(
   container: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -104,9 +86,6 @@ export function portNode(
   return isRecord(raw) ? raw : null;
 }
 
-// The per-connection identity map: projects.<name>.identities.<connectionSlug>.
-// WHY keyed by slug and not a single project identity: a project may hold two
-// code-host connections, each addressing its own repository and board.
 export function identitiesMap(
   node: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -170,8 +149,6 @@ export function mapBase(raw: unknown): TaskData | null {
   });
 }
 
-// A stored port item, as the core's MirrorItem. A malformed entry yields null
-// rather than a half-read item.
 export function mapMirrorItem(raw: unknown): MirrorItem | null {
   if (!isRecord(raw)) {
     return null;

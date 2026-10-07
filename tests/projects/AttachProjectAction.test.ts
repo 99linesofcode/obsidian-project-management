@@ -8,8 +8,6 @@ import type {
   RepositoryBoardsData,
 } from '../../src/shared/RepoBoardData.js';
 
-// A fake port at the boundary: records what the action asked for and serves a
-// canned board listing, so the action's own derivation behaviour is under test.
 class FakePort implements ProjectManagementPort {
   repoBoards: RepositoryBoardsData = { repoNodeId: 'R_kgDOAAAA', boards: [] };
   identityCalls: AttachProjectData[] = [];

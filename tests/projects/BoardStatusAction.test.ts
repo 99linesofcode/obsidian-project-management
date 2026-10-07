@@ -7,9 +7,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: hold the stored identity and record the board status
-// writes the action asks for, so the action's own behaviour (identity lookup
-// → option mapping → board write, or silent skip) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   boardStatusCalls: Array<{
     projectNodeId: string;

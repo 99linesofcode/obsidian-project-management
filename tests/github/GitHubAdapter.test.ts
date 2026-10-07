@@ -6,9 +6,6 @@ import {
 import type { AttachProjectData } from '../../src/shared/AttachProjectData.js';
 import { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 
-// A fake transport at the boundary: returns canned responses in call order
-// and records the request bodies/paths, so the adapter's mapping is what's
-// under test — never a real GitHub call.
 function fakeTransport(
   responses: Array<{ status: number; json: unknown; etag?: string }>,
 ) {
@@ -115,7 +112,6 @@ const orgProjectResponse = {
   },
 };
 
-// A typed issue in GitHub's REST shape, for building multi-page responses.
 function issue(number: number) {
   return {
     html_url: `https://github.com/acme/widgets/issues/${number}`,

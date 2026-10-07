@@ -101,8 +101,6 @@ class FakeTaskManager implements TaskManagerPort {
 
 class FakeProjectManagement implements ProjectManagementPort {
   boards: ProjectData[] = [];
-  // The repositories each board is linked to, keyed by the board url. A board
-  // with no entry has no linked repository.
   boardRepositories = new Map<string, string[]>();
   identities = new Map<string, ProjectIdentityData>();
   identityCalls: string[] = [];
@@ -129,7 +127,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   }): Promise<ProjectIdentityData | null> {
     this.identityCalls.push(data.boardUrl);
     const identity = this.identities.get(data.boardUrl);
-    // The adapter echoes the caller's repoUrl into the resolved identity.
     return identity === undefined
       ? null
       : { ...identity, repoUrl: data.repoUrl };
@@ -212,8 +209,6 @@ function todoistProject(
   };
 }
 
-// A canonical board as fetchViewerProjects returns it: the board url rides on
-// mirrors.github and the creation clock on createdAt.
 function board(
   name: string,
   createdAt: string,
@@ -489,7 +484,6 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       expect(captured).toEqual([]);
       expect(errors).toHaveLength(1);
       expect(h.vault.created).toEqual([]);
-      // The board stays at the cursor so the next pass retries it.
       expect(h.syncState.projectCursors.get('github')).toBe(cursor);
     });
 
@@ -587,8 +581,6 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      // The lifecycle never invents a task-manager connection: the board-born
-      // project carries only the github connection it was captured with.
       expect(h.taskManager.createCalls).toEqual([]);
       expect(h.vault.notes.get(homePath)).toBe(GITHUB_HOME);
       expect(
@@ -640,8 +632,6 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
     ];
 
     await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
-    // The board is derived from the repository, so the captured project gains
-    // one only once a repository is attached.
     h.syncState.identities.set('New Project', {
       repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: '',
@@ -684,15 +674,12 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
     h.projectManagement.boardRepositories.set(boardUrl, [
       'https://github.com/acme/widgets',
     ]);
-    // No identity registered: fetchProjectIdentity yields null, so the board is
-    // skipped rather than captured.
 
     await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
 
     expect(h.vault.created).toEqual([]);
     expect(h.syncState.projectCursors.get('github')).toBe(cursor);
 
-    // The next pass resolves the identity and captures it.
     h.projectManagement.identities.set(boardUrl, identityFor('9'));
     const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:05:00Z',
@@ -714,8 +701,6 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
         createdAt: '2026-10-05T10:00:00Z',
       }),
     ];
-    // The home note exists but discovery does not list it, so the vault-links
-    // dedup misses it and materializeVaultProject early-returns.
     h.vault.notes.set('Projecten/New Project/_New Project.md', TODOIST_HOME);
 
     const { captured } = await h.action.execute({

@@ -154,11 +154,8 @@ class FakeTaskManager implements TaskManagerPort {
   deleteTaskCalls: string[] = [];
   completeCalls: Array<{ id: string; completed: boolean }> = [];
   ensureLabelCalls: string[] = [];
-  // The mutation order across move/delete, so a test can pin that a slice's
-  // children are flattened BEFORE the slice twin is deleted.
   mutations: string[] = [];
   failMove = false;
-  // Counters so a test can pin the one-snapshot-per-pass contract.
   activeFetches = 0;
   completedFetches = 0;
   failCompleted = false;
@@ -244,9 +241,6 @@ class FakeTaskManager implements TaskManagerPort {
   async deleteTask(id: string): Promise<void> {
     this.deleteTaskCalls.push(id);
     this.mutations.push(`delete:${id}`);
-    // Model the API's cascade: deleting a parent takes its subtasks with it,
-    // so a successful flatten (no child still parented to the twin) is what
-    // keeps the children alive.
     const doomed = new Set<string>([id]);
     let grew = true;
     while (grew) {
@@ -344,8 +338,6 @@ function taskNote(statusName: string, body = '', todoistId?: string): string {
     : content.replace('---\n', `---\ntodoist: ${todoistId}\n`);
 }
 
-// A task note of any type, optionally nested under a parent note stem through
-// the affiliation (the parent relation the placement walk follows).
 function typedTaskNote(
   type: string,
   title: string,
@@ -434,8 +426,6 @@ function harness() {
   };
 }
 
-// A composed harness: the REAL writer over the fakes, so the settle property is
-// observable end to end.
 function composedHarness() {
   const vault = new FakeVault();
   const syncState = new FakeSyncState();
@@ -512,7 +502,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       github: { handle: taskUrl },
       todoist: {
         handle: 'T9',
-        // base lane Building; the twin sits in Unshaped
         base: toDiffViewWithBody(
           taskData({
             id: 'uuid-42',
@@ -1076,8 +1065,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     ];
     projectManagement.detail = { issues: [parentIssue, childIssue], cards };
 
-    // Pass 1 — the GitHub half sees the parent relation and pulls it into the
-    // child's affiliation
     const githubAction = new SyncGithubTasksAction(
       'github',
       projectManagement,
@@ -1105,8 +1092,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       'affiliation: ["[[_Acme Widgets]]", "[[the-parent]]"]',
     );
 
-    // Pass 2 — the Todoist projection moves the existing top-level twin under
-    // the parent's twin
     const { action: todoistAction } = buildAction(
       vault,
       syncState,

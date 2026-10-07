@@ -8,11 +8,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the project management port records the labels it was
-// asked to add and returns the task the action should materialise; the vault
-// and registry record what the note action creates. The promote action's own
-// behaviour (label first, then materialise the fetched task) is what's under
-// test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
   addedLabels: Array<{ url: string; label: string }> = [];
   task: GithubTaskData = {

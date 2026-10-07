@@ -23,11 +23,6 @@ export interface SyncChecklistInput {
   syncedAt: string;
 }
 
-// UC: keep a task note's markdown checklist and the project's vault-only to-do
-// notes in step. The checklist line is the source of truth: an unlinked line is
-// promoted to a to-do, a checked line completes its to-do, a renamed line
-// renames its to-do, and removing the line trashes the note. The action
-// settles: its own rewrites re-trigger it, and the second pass writes nothing.
 export class SyncChecklistAction {
   constructor(
     private readonly vault: VaultPort,
@@ -63,8 +58,6 @@ export class SyncChecklistAction {
     await this.removeDropped(input, taskLink, items);
   }
 
-  // Every unlinked item gets its own to-do at the next free slug; the item
-  // then carries the link so the rewrite below writes it into the line.
   private async promoteUnlinked(
     input: SyncChecklistInput,
     taskLink: string,
@@ -91,13 +84,6 @@ export class SyncChecklistAction {
     return promoted;
   }
 
-  // A linked item mirrors onto its to-do: a missing note is resolved before
-  // anything is created (a short or wrong-folder link is relinked to the to-do
-  // that already exists; only a genuinely absent one is re-promoted), a
-  // drifted filename is renamed to the item's slug, and an existing one follows
-  // the checkbox. Returns whether a relink or rename changed a link, so the
-  // caller rewrites the parent body once. A to-do with nothing to change is
-  // left alone — that is what lets the scheduler's echo settle.
   private async mirrorLinked(
     input: SyncChecklistInput,
     taskLink: string,
@@ -168,11 +154,6 @@ export class SyncChecklistAction {
     return relinked;
   }
 
-  // A missing link is resolved before anything is created: a to-do already in
-  // the project's folder wins (the link was merely short or pointed at the
-  // wrong folder), and only a genuinely absent to-do is re-promoted. A link
-  // already under todos/ is left to the self-heal path, so a deleted to-do is
-  // restored in place rather than duplicated.
   private async findTodoForMissingLink(
     input: SyncChecklistInput,
     item: ChecklistItem,
@@ -194,10 +175,6 @@ export class SyncChecklistAction {
     return null;
   }
 
-  // The single place a to-do is created. The hard guard lives here: a
-  // candidate outside the project's todos folder is replaced by the canonical
-  // slug path, so a malformed link can never litter the vault root or another
-  // folder. freePath then keeps a slug collision from overwriting a note.
   private async createTodo(
     input: SyncChecklistInput,
     item: ChecklistItem,
@@ -218,9 +195,6 @@ export class SyncChecklistAction {
     return path;
   }
 
-  // A to-do this task owns but no line links to is orphaned: move it to the
-  // trash. The affiliation check keeps other tasks' to-dos in the same folder
-  // out of it.
   private async removeDropped(
     input: SyncChecklistInput,
     taskLink: string,
@@ -245,10 +219,6 @@ export class SyncChecklistAction {
       if (parsed === null) {
         continue;
       }
-      // Gate: trash only when the to-do's CURRENT affiliation still names this
-      // task as its primary parent. A note whose affiliation was just rewritten
-      // (by the projection or a capture) no longer leads with this task, so it
-      // is left alone rather than trashed by a stale membership read.
       if (
         taskLinkFromAffiliation(parsed.affiliation, input.projectName) !==
         taskLink
@@ -260,12 +230,6 @@ export class SyncChecklistAction {
   }
 }
 
-// Drift exists only when the item's slug matches neither the to-do's stem nor
-// the stem with a trailing -<number> collision suffix stripped. The suffix
-// tolerance is essential: a collision-named to-do (test-2.md for the second
-// "test" item) must not read as drift, or every pass renames it forever. The
-// rule is ambiguous by design — the text "test 2" and a collision suffix are
-// indistinguishable by slug — and that ambiguity is accepted.
 function isDrifted(slug: string, stem: string): boolean {
   return slug !== stem && slug !== stem.replace(/-\d+$/, '');
 }
@@ -274,8 +238,6 @@ function todosFolder(projectName: string): string {
   return `Projecten/${projectName}/todos`;
 }
 
-// The hard guard's predicate: a path is inside the project's todos folder only
-// when it is a child of it, so a sibling like `todos-archive/` cannot pass.
 function isInTodosFolder(projectName: string, path: string): boolean {
   return path.startsWith(`${todosFolder(projectName)}/`);
 }

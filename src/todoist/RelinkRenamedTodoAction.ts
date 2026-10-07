@@ -13,13 +13,6 @@ export interface RelinkRenamedTodoInput {
   syncedAt: string;
 }
 
-// UC: when a to-do note is renamed by hand, its parent task note's checklist
-// line follows. The parent and task come from the to-do's new path and
-// affiliation; the line is located by the old link path. A rename the checklist
-// sync itself performed already updated the line, so no line matches the old
-// path and the action no-ops — that is what lets the rename echo settle. The
-// to-do's TodoistState record follows too (t5), so a rename keeps its twin
-// anchor rather than stranding it at the old path.
 export class RelinkRenamedTodoAction {
   constructor(
     private readonly vault: VaultPort,
@@ -70,9 +63,6 @@ export class RelinkRenamedTodoAction {
     );
   }
 
-  // Moves the to-do's registry record to the new path. The record is keyed by
-  // its uuid, so this is a notePath update, not a re-key; the mirror handles
-  // and base travel with it.
   private async moveRecord(oldPath: string, newPath: string): Promise<void> {
     const record = await this.syncState.findByNotePath(oldPath);
     if (record) {

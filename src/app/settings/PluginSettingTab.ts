@@ -11,16 +11,12 @@ import { TokenSettings } from './TokenSettings.js';
 import { DEFAULT_SETTINGS } from './settings.js';
 import { SEED_ARTIFACTS, type SeedArtifact } from '../seedArtifacts.js';
 
-// The DOM lib is not in the type environment, so the input element's type
-// attribute is reached through a structural guard rather than the unresolved
-// HTMLInputElement type.
 function setPasswordInput(input: unknown): void {
   if (isRecord(input)) {
     input.type = 'password';
   }
 }
 
-// Parses a comma-separated settings value into a trimmed, non-empty list.
 function parseList(value: string): string[] {
   return value
     .split(',')
@@ -28,9 +24,6 @@ function parseList(value: string): string[] {
     .filter((entry) => entry !== '');
 }
 
-// One settings row: the label and description shown, plus the populate method
-// that wires the control. The single table both render paths read, so the
-// declarative definitions and the imperative fallback cannot drift.
 interface SettingRow {
   name: string;
   desc: string;
@@ -39,7 +32,6 @@ interface SettingRow {
 
 export class ProjectManagementSettingTab extends PluginSettingTab {
   plugin: ProjectManagementPlugin;
-  // Stateless and secret-store-bound; constructed once, not per render.
   private readonly tokens: TokenSettings;
 
   constructor(app: App, plugin: ProjectManagementPlugin) {
@@ -48,11 +40,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     this.tokens = new TokenSettings(plugin.secrets);
   }
 
-  // The declarative definitions Obsidian 1.13+ renders and indexes for
-  // settings search. Each row reuses the same populate method as the
-  // imperative display() fallback, so the two paths cannot drift. On 1.13+
-  // Obsidian renders these and does not call display(); on older versions
-  // display() renders the same rows imperatively.
   override getSettingDefinitions(): SettingDefinitionItem[] {
     return this.rows().map((row) => ({
       name: row.name,
@@ -61,9 +48,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     }));
   }
 
-  // The imperative fallback for Obsidian older than 1.13.0, which does not
-  // read getSettingDefinitions(). It renders the same rows through the same
-  // populate methods, so the two paths stay in step.
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -76,8 +60,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     }
   }
 
-  // The one settings table. A row's populate method wires only the control; the
-  // name and description are set by the caller from this same row.
   private rows(): SettingRow[] {
     return [
       {
@@ -171,8 +153,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     );
   }
 
-  // A comma-separated list row. The list replaces the stored array (never
-  // mutates it), so DEFAULT_SETTINGS is never aliased into the live settings.
   private populateStatusOptions(setting: Setting): void {
     setting.addText((text) =>
       text
@@ -195,9 +175,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     );
   }
 
-  // The seed row: a repository (owner/name or url) and a button that applies
-  // the configured type labels to it. The action is create-if-missing, so the
-  // button is safe to press repeatedly. `refresh` re-renders the active path.
   private populateLabelSeed(setting: Setting, refresh: () => void): void {
     let repo = '';
     setting
@@ -220,9 +197,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       );
   }
 
-  // A path row for one vault artifact: the path input and a Scaffold button.
-  // The button is a no-op when the file already exists, so it is safe to press
-  // repeatedly. `refresh` re-renders the tab through whichever path is active.
   private populateArtifactSetting(
     setting: Setting,
     artifact: SeedArtifact,
@@ -249,11 +223,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       );
   }
 
-  // A token row: a stored/not-set indicator, a password field for a new value,
-  // and Set/Clear actions. The stored value is never read back into the field;
-  // the indicator is the only place the stored state is shown. Clearing writes
-  // the empty state to SecretStorage. `refresh` re-renders the tab through
-  // whichever path is active.
   private populateTokenSetting(
     setting: Setting,
     desc: string,

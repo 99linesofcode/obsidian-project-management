@@ -13,10 +13,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault records the anchor writes, the task manager
-// holds the project's tasks and records every mutation, and the registry holds
-// the per-note entity records. The writer's field gates and its base advance
-// are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -169,8 +165,6 @@ function setup() {
   return { action, taskManager, vault, syncState };
 }
 
-// The tracked entity record for the task note, at the given todoist handle and
-// base. A null handle means the note is not yet mirrored to Todoist.
 function seedRecord(
   syncState: FakeSyncState,
   handle: string | null,

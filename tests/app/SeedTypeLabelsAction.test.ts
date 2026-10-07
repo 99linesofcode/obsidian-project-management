@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { SeedTypeLabelsAction } from '../../src/app/SeedTypeLabelsAction.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 
-// A fake port at the boundary: serves the repository's existing labels and
-// records the creates, so the seed action's skip logic is what's under test.
 class FakePort implements ProjectManagementPort {
   existing: string[] = [];
   listCalls: string[] = [];
@@ -97,8 +95,6 @@ describe('SEED — the type-label vocabulary is applied to a repository', () => 
 
     await action.execute('acme/widgets', labels);
 
-    // The provider expands the shorthand at the boundary; the action passes it
-    // through unchanged.
     expect(port.listCalls).toEqual(['acme/widgets']);
     expect(port.createCalls).toEqual([
       {

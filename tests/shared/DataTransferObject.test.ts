@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { taskData } from '../helpers/records.js';
 
-// snapshotHash() now lives on the canonical base class: one canonical
-// serialization per DTO, hashed once. These tests pin the determinism the diff
-// and the base store rely on.
 describe('SYNC-6 — the base advances only when a mirror is written', () => {
   it('is deterministic for the same canonical values', () => {
     expect(taskData().snapshotHash()).toBe(taskData().snapshotHash());

@@ -1,5 +1,3 @@
-// The lines between a note's frontmatter delimiters, or null when the note has
-// no frontmatter block. The one splitter every frontmatter reader shares.
 export function frontmatterLines(content: string): string[] | null {
   const lines = content.split('\n');
   if (lines[0] !== '---') {

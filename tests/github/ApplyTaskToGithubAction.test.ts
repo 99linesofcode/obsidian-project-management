@@ -10,8 +10,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: record the writes the writer asks for, so its field-level
-// gates (write only what differs) and its base advance are what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   updateCalls: Array<{ url: string; title: string; body: string }> = [];
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
@@ -139,7 +137,6 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   };
 }
 
-// The winning task (real body) or the raw remote view; both are canonical.
 function task(overrides: Partial<TaskData> = {}): TaskData {
   return taskData({
     id: 'uuid-42',

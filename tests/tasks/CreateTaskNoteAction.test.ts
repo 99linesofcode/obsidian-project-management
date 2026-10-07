@@ -5,8 +5,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// A fake vault at the port: a path→content map plus the create log, so the
-// action's naming and rendering decisions are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 

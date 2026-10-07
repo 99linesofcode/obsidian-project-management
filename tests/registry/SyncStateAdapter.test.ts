@@ -10,9 +10,6 @@ import {
   type SyncStateConformanceHarness,
 } from '../helpers/syncStateConformance.js';
 
-// A fake storage at the boundary: an in-memory map behind load/save, so the
-// adapter's keying, migration and index maintenance is what's under test. The
-// backup counter records the rolling-backup requests.
 function fakeStorage(initial: Record<string, unknown> = {}) {
   let data: Record<string, unknown> = initial;
   let backups = 0;
@@ -37,12 +34,10 @@ function fakeStorage(initial: Record<string, unknown> = {}) {
   };
 }
 
-// The container under the top-level key, as the adapter persists it.
 function container(snapshot: Record<string, unknown>): Record<string, unknown> {
   return snapshot[SYNC_STATE_KEY] as Record<string, unknown>;
 }
 
-// The project node inside the container.
 function project(
   snapshot: Record<string, unknown>,
   name: string,
@@ -423,7 +418,6 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       'uuid-a',
     );
     expect(await adapter.findMirrorItem('todoist', 'T-a')).toBeNull();
-    // B's handle under the same slug must survive A's rename.
     expect((await adapter.findMirrorItem('todoist', 'T-b'))?.entityId).toBe(
       'uuid-b',
     );
@@ -472,9 +466,6 @@ describe('SyncStateAdapter write serialisation', () => {
   });
 });
 
-// F4 — a cursor that does not move is not a registry write. The capture runs
-// every tick, so persisting an unchanged watermark would dirty the store on a
-// quiet pass (SYNC-8).
 describe('F4 — a quiet tick writes nothing', () => {
   it('does not persist a project cursor set to its current value', async () => {
     const { storage, saves } = fakeStorage({
@@ -493,8 +484,6 @@ describe('F4 — a quiet tick writes nothing', () => {
   });
 });
 
-// F6 — a container written by a newer plugin version must never be rewritten in
-// this version's shape. Reads serve it; every mutating port method refuses.
 describe('F6 — a container from a newer plugin version is read-only', () => {
   it('serves reads but refuses every mutation', async () => {
     const { storage, snapshot } = fakeStorage({
@@ -527,10 +516,6 @@ describe('F6 — a container from a newer plugin version is read-only', () => {
   });
 });
 
-// F7 — settings save and registry persist share one serialization chain, so a
-// concurrent save can never revert a registry write (REG-3). Without the chain
-// the two load-modify-save cycles interleave and the later save wins with a
-// stale root.
 describe('F7 — settings and registry writes share one chain', () => {
   it('serialises a root mutation against a registry write', async () => {
     let disk: Record<string, unknown> = {};
@@ -539,7 +524,6 @@ describe('F7 — settings and registry writes share one chain', () => {
         return structuredClone(disk);
       },
       async save(next: unknown) {
-        // A delayed save makes an unserialised interleave lose a write.
         await new Promise((resolve) => setTimeout(resolve, 5));
         disk = structuredClone(next) as Record<string, unknown>;
       },
@@ -567,9 +551,6 @@ describe('F7 — settings and registry writes share one chain', () => {
   });
 });
 
-// The shared port contract, run against the REAL adapter. The exact same suite
-// runs against FakeSyncState (tests/helpers/fakeSyncState.test.ts), so the fake
-// and the adapter can never drift apart again.
 const conformanceHarness: SyncStateConformanceHarness = {
   create(options) {
     const raw: Record<string, unknown> = {};

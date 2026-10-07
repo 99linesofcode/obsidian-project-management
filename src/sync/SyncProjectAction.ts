@@ -18,32 +18,8 @@ import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAct
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 
-// THE CHAIN: one work item kind — a project folder name — and one entry point.
-// The chain re-resolves the project from the vault, so a stale work item (a
-// renamed-away project) no-ops and project-level deletion is never propagated
-// from a stale item. Steps compose the halves; each step is isolated, so a
-// failure logs and skips that step and one half failing never blocks the other.
-// Snapshots and cursors advance only on success, preserved by the underlying
-// actions.
-//
-//   1. resolve project — pm-note exists? else no-op
-//   2. cleanup frontmatter — strip the legacy machine-id fields
-//   3. ensure board (PRJ-1) — an active project with no board gains one
-//   4. reconcile lifecycle — ONE freeze verdict (folder ⇄ archive ⇄ remote)
-//   5. renames — DetectNoteRenamesAction (snapshot drift)
-//   6. code host half — probe → the code-host task pipeline (single query)
-//   7. vault consistency — checklist ↔ to-do (retained; verdict-independent)
-//   8. task manager half — the task-manager pipeline (gated by the verdict)
-//   9. deletions last — status records whose note is gone
-//
-// The probe is hoisted above the code host half because the lifecycle gate
-// needs the probed `closed` state; one probe serves both. The board step runs
-// BEFORE the probe so a board created this tick is visible to the probe and the
-// code host half in the same pass.
 export class SyncProjectAction {
   private readonly sweepDeletedNotes: SweepDeletedNotesAction;
-  // The errors the isolated steps collected this run, so the driving side can
-  // surface them (an ambiguous board, a failed half) instead of only logging.
   private stepErrors: unknown[] = [];
 
   constructor(
@@ -52,19 +28,12 @@ export class SyncProjectAction {
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
-    // Builds one sync half per connection declared in the note. The chain
-    // derives the half list from the note's connections, so a project with two
-    // task-manager connections runs that half twice — each with its own adapter
-    // and port state.
     private readonly halfFactory: SyncHalfFactory,
     private readonly completeTaskCascade: CompleteTaskCascadeAction,
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     handleDeletedNote: HandleDeletedNoteAction,
-    // PRJ-1's board leg. Optional so a chain assembled before the
-    // project-propagation wave still constructs.
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
-    // Re-keys a renamed connection's registry port before the halves run.
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
@@ -78,16 +47,11 @@ export class SyncProjectAction {
     this.stepErrors = [];
     const syncedAt = new Date().toISOString();
 
-    // Resolve project — a stale work item no-ops. The note's absence is not
-    // a synced fact, so a missing pm-note never propagates a deletion.
     const note = await this.resolveProject(project);
     if (!note) {
       return this.stepErrors;
     }
 
-    // Re-key a renamed connection's registry port before any half reads it, so
-    // a slug rename never disconnects the connection. A port with no matching
-    // connection is left in place and logged.
     if (this.rekeyRenamedConnections) {
       const warnings = await this.rekeyRenamedConnections.execute({
         projectName: project,
@@ -98,11 +62,6 @@ export class SyncProjectAction {
       }
     }
 
-    // Ensure the code host board exists (PRJ-1). Runs before the probe so a
-    // board created this tick is visible to the probe and the code host half in
-    // the same pass. An archived project never spawns a board: the folder
-    // location is the vault's own freeze signal, and a frozen project accepts
-    // no board work. One board per code-host connection.
     if (this.ensureProjectBoard && note.archivedAt === null) {
       for (const [slug, connection] of Object.entries(note.connections)) {
         if (connection.tool !== 'github') {
@@ -117,13 +76,8 @@ export class SyncProjectAction {
       }
     }
 
-    // The probe is a code-host-side read. A failure leaves the code host side
-    // skipped but never blocks the task manager half.
     const boardState = await this.probe(project, note.connections);
 
-    // Lifecycle — one freeze verdict for both halves. A failure leaves the
-    // project frozen for this tick so no task write runs against an unknown
-    // state; the next tick retries.
     const verdict = await this.runLifecycle(
       project,
       note,
@@ -135,10 +89,6 @@ export class SyncProjectAction {
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
     );
 
-    // The half list is derived from the note's connections: one half per
-    // connection, each bound to its own adapter and port state. Board halves
-    // run before task halves so a board-side change is visible to the task
-    // projection in the same pass.
     const halves = Object.entries(note.connections)
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
@@ -154,24 +104,16 @@ export class SyncProjectAction {
       ),
     );
 
-    // Vault consistency — checklist ↔ to-do. Retained as its own step
-    // because it must run for every task note regardless of the code host
-    // verdict; the vault writer's surface covers the note body it writes.
     await this.step('vault consistency', () =>
       this.runVaultConsistency(project, syncedAt),
     );
 
-    // Task manager halves — gated by the freeze verdict only. Each half carries
-    // its own connection's project id, so a lifecycle that resolved only the
-    // first connection (or none) never starves the others.
     if (!verdict.frozen) {
       await this.step('task manager half', () =>
         this.runTaskHalves(project, note.connections, halves, syncedAt),
       );
     }
 
-    // Deletions last, once per code-host connection: a project with two github
-    // connections sweeps both, so neither connection's issues are orphaned.
     await this.step('deletions', async () => {
       for (const half of halves) {
         if (!half.requiresBoard) {
@@ -228,9 +170,6 @@ export class SyncProjectAction {
         `SyncProjectAction: lifecycle failed for ${project}`,
         error,
       );
-      // The failure leaves the task manager half skipped (no resolved project)
-      // but does not block the code host half: it falls back to the
-      // pre-reconcile archive signal, preserving the halves' error isolation.
       return {
         remoteProjectId: null,
         frozen: note.archivedAt !== null || (boardState?.closed ?? false),
@@ -240,9 +179,6 @@ export class SyncProjectAction {
     }
   }
 
-  // Runs every board half (the code-host connections). A project without a
-  // probed code-host state has no board to sweep; a frozen project (archived)
-  // accepts no task writes.
   private async runBoardHalves(
     project: string,
     connections: Record<string, ConnectionData>,
@@ -256,11 +192,6 @@ export class SyncProjectAction {
     }
 
     const lastUpdate = await this.syncState.getLastProjectUpdate(project);
-    // The board's updatedAt is the probe gate, but a sub-issue relation moves
-    // nothing on the board. A project carrying a one-shot marker forces exactly
-    // one parent-aware fetch. The marker is PEEKED here and CONSUMED only after
-    // every board half succeeds, so a failed or interrupted half does not spend
-    // the scan and the next tick retries it.
     const fullScanPending = await this.syncState.isFullScanPending(project);
     const includeBoard = boardState.updatedAt !== lastUpdate || fullScanPending;
     let failed = false;
@@ -276,8 +207,6 @@ export class SyncProjectAction {
           connections,
         });
       } catch (error) {
-        // A failed half must not advance the stored update, so the next tick
-        // sees the same updatedAt and retries the fetch.
         failed = true;
         console.error(
           `SyncProjectAction: code host half failed for ${project}`,
@@ -285,8 +214,6 @@ export class SyncProjectAction {
         );
       }
     }
-    // The update and the one-shot marker advance once, after every board half
-    // has run, so a two-board project does not write the update twice.
     if (!failed) {
       await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
       if (fullScanPending) {
@@ -295,9 +222,6 @@ export class SyncProjectAction {
     }
   }
 
-  // Runs every task-manager half. The freeze gate is the caller's; each half
-  // carries its own connection's project id, so no lifecycle verdict is needed
-  // to address the remote.
   private async runTaskHalves(
     project: string,
     connections: Record<string, ConnectionData>,
@@ -319,13 +243,6 @@ export class SyncProjectAction {
     }
   }
 
-  // The vault-side consistency pass: the checklist line and its to-do notes
-  // converge in both directions. It is deliberately independent of the code
-  // host verdict — a checklist edit is a vault change that must
-  // promote/complete its to-dos even when the code host half writes nothing.
-  // The dt-13 cascade runs here first, so a task whose done status arrived from
-  // ANY origin (a remote close, a task-manager check, a vault edit) completes
-  // its to-dos; the writer itself cascades on the code host pull path.
   private async runVaultConsistency(
     project: string,
     syncedAt: string,

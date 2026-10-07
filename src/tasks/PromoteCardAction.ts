@@ -8,12 +8,9 @@ export interface PromoteCardInput {
   itemId: string;
   repoNodeId: string;
   projectName: string;
-  // The code-host connection the card belongs to.
   connectionSlug: string;
 }
 
-// UC: promote a board card into a tracked task with a note. The note starts
-// in the project's default lane.
 export class PromoteCardAction {
   constructor(
     private readonly port: ProjectManagementPort,

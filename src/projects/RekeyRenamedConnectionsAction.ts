@@ -6,12 +6,6 @@ export interface RekeyRenamedConnectionsInput {
   connections: Record<string, ConnectionData>;
 }
 
-// UC: re-key a renamed connection's registry port in lockstep, so a slug rename
-// never disconnects it. A port whose tool + project now lives under a different
-// slug is moved to the new slug in one write. A port whose slug disappeared with
-// no matching connection is left in place and returned as a warning — connection
-// removal is an open design question, so nothing is deleted. Extracted from
-// discovery so discovery stays a read.
 export class RekeyRenamedConnectionsAction {
   constructor(private readonly syncState: SyncStatePort) {}
 

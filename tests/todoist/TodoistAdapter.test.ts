@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// The adapter's live transport imports requestUrl from Obsidian, which has no
-// runtime entry in the package (types only). Mock just that function so the
-// transport's request shaping can be exercised without the host app.
 const { requestUrl } = vi.hoisted(() => ({ requestUrl: vi.fn() }));
 vi.mock('obsidian', () => ({ requestUrl }));
 
@@ -13,9 +10,6 @@ import {
 } from '../../src/todoist/TodoistAdapter.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
 
-// A fake transport at the boundary: returns canned responses in call order and
-// records the method/path/body, so the adapter's mapping and request shaping are
-// what's under test — never a real Todoist call.
 function fakeTransport(responses: Array<{ status: number; json: unknown }>) {
   const calls: Array<{ method: string; path: string; body: string }> = [];
   const next = () => {

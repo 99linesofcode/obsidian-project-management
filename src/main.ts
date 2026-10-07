@@ -59,9 +59,6 @@ import {
 import { PromoteToTaskCommand } from './app/commands/PromoteToTaskCommand.js';
 import { PromoteCardToIssueCommand } from './app/commands/PromoteCardToIssueCommand.js';
 
-// One authenticated GitHub request. GraphQL goes over POST to /graphql; the
-// REST calls pass their path. The adapter stays token-agnostic; the
-// Authorization header is added here.
 async function request(
   token: string,
   method: 'GET' | 'POST' | 'PATCH',
@@ -83,8 +80,6 @@ async function request(
   return { status: response.status, json: response.json };
 }
 
-// Builds the transport the GitHub adapter talks through. The conditional read
-// keeps its own shape: a 304 must come back as a response, not an error.
 function createTransport(token: string): Transport {
   return {
     post: (body) => request(token, 'POST', '/graphql', body),
@@ -98,7 +93,6 @@ function createTransport(token: string): Transport {
       if (etag) {
         headers['If-None-Match'] = etag;
       }
-      // throw: false so a 304 comes back as a response rather than an error.
       const response = await requestUrl({
         url: `https://api.github.com${path}`,
         method: 'GET',
@@ -113,10 +107,6 @@ function createTransport(token: string): Transport {
   };
 }
 
-// The composition seam: every action, the queue and the scheduler, built from
-// the plugin's settings and adapters. Split from onload so the wiring is one
-// readable block; the plugin's data loading and app-level registration stay in
-// onload.
 function composePlugin(
   plugin: ProjectManagementPlugin,
   syncState: SyncStateAdapter,
@@ -136,14 +126,9 @@ function composePlugin(
   const vault = new VaultAdapter(plugin.app, (eventRef) =>
     plugin.registerEvent(eventRef),
   );
-  // Seeds the six vault-owned templates and Bases files on first run. The
-  // action only writes when a configured path is genuinely absent, so it is
-  // safe on every init and the settings tab reuses it to scaffold on demand.
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
   const github = new GitHubAdapter(transport);
-  // Seeds the configured type-label vocabulary onto an arbitrary repository,
-  // driven by the settings tab's label-seed button.
   const seedTypeLabels = new SeedTypeLabelsAction(github);
   const createTaskNote = new CreateTaskNoteAction(
     vault,
@@ -162,13 +147,7 @@ function composePlugin(
     github,
     plugin.settings.doneOptionName,
   );
-  // t3: the canonical GitHub half. The two writers render a winning TaskData
-  // onto GitHub and the vault; the action fetches the whole project in one
-  // query and diffs each entity against the vault and the snapshot.
   const applyTaskToGithub = new ApplyTaskToGithubAction(github, syncState);
-  // t6: the dt-13 cascade — a done task completes its checklist line and its
-  // still-open to-dos. Composed into the vault writer (the pull path) and the
-  // chain's vault-consistency step (every other origin).
   const completeTaskCascade = new CompleteTaskCascadeAction(
     vault,
     plugin.settings.doneOptionName,
@@ -186,15 +165,9 @@ function composePlugin(
   );
   const probeProjects = new ProbeProjectsAction(github, syncState);
 
-  // The Todoist half of the tick: the adapter is token-bound through its
-  // transport, so a missing token surfaces as a failed request, not a crash.
   const todoist = new TodoistAdapter(
     transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
   );
-  // t4: ONE lifecycle action with ONE freeze verdict. It merges the former
-  // archive-state, Todoist-project and archived-watch actions: folder ⇄
-  // archive ⇄ Todoist two-way, name drift, frozen projects still polled by
-  // id, and the ETag + newest-issue watch.
   const reconcileProjectLifecycle = new ReconcileProjectLifecycleAction(
     github,
     todoist,
@@ -202,9 +175,6 @@ function composePlugin(
     syncState,
     plugin.settings.doneOptionName,
   );
-  // t4: the gated Todoist writer. It absorbs the two projection actions'
-  // write paths: content/section/parent/completed, writing only the fields
-  // that differ. The pipeline resolves the desired shape and placement.
   const applyTaskToTodoist = new ApplyTaskToTodoistAction(todoist, syncState);
   const applyTodoistCompletion = new ApplyTodoistCompletionAction(
     vault,
@@ -212,10 +182,6 @@ function composePlugin(
     applyTaskToVault,
     plugin.settings.doneOptionName,
   );
-  // t6: a deleted note's twin is removed, subtree included, and its records
-  // evicted. Keyed on the note's absence, so a completed twin (absent from
-  // the active set) is never deleted, and a remotely deleted twin is
-  // self-healed by the projection.
   const propagateTodoistDeletions = new PropagateTodoistDeletionsAction(
     todoist,
     vault,
@@ -230,10 +196,6 @@ function composePlugin(
   const relinkRenamedTodo = new RelinkRenamedTodoAction(vault, syncState);
   const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
 
-  // t5: absorb the remote side before the projections push. The verdict
-  // action applies content/lane/parent changes; the creation action captures
-  // Todoist-created items per the dt-06 table. Both reuse the rename and
-  // status machinery the vault-driven paths use.
   const applyTodoistRemoteChanges = new ApplyTodoistRemoteChangesAction(
     vault,
     syncState,
@@ -248,8 +210,6 @@ function composePlugin(
     plugin.settings.todoTemplatePath,
     plugin.settings.doneOptionName,
   );
-  // The project-propagation legs: capture remote-born projects into the
-  // vault (PRJ-2/PRJ-3), then the chain's board step completes PRJ-1.
   const captureRemoteProjects = new CaptureRemoteProjectsAction(
     github,
     todoist,
@@ -285,13 +245,6 @@ function composePlugin(
   );
   promoteCardToIssue.register(plugin);
 
-  // t4: the chain composes the rebuilt halves; the queue serialises every
-  // project; the scheduler is discovery + timing policies only.
-  //
-  // The half factory builds ONE half per connection declared in a note, each
-  // bound to its own adapter and port state. A project with two task-manager
-  // connections therefore runs the task-manager half twice, once per
-  // connection, with that connection's project id.
   const halfFactory: SyncHalfFactory = {
     create: (slug, connection) => {
       if (connection.tool === 'github') {
@@ -373,23 +326,13 @@ function composePlugin(
 
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
-  // The plugin's secret store, retained so the settings tab can read the
-  // stored/not-set state and set or clear a token.
   secrets!: SecretStore;
   projectNames: string[] = [];
-  // The registry adapter, retained so a settings save can share its
-  // serialization chain (REG-3).
   private syncState!: SyncStateAdapter;
-  // Retained so the settings tab can scaffold a single missing artifact on
-  // demand, with the same create-if-missing semantics as the onload seed.
   seedArtifacts!: SeedVaultArtifactsAction;
-  // Retained so the settings tab's label-seed button can apply the configured
-  // type labels to an arbitrary repository.
   seedTypeLabels!: SeedTypeLabelsAction;
 
   override async onload(): Promise<void> {
-    // Read the root through the safe loader: a corrupt data.json is quarantined
-    // rather than silently reset (REG-4).
     const raw = await loadDataSafely(
       () => this.loadData(),
       () => this.quarantineDataFile(),
@@ -397,9 +340,6 @@ export default class ProjectManagementPlugin extends Plugin {
     );
     const secrets = new SecretStorageAdapter(this.app.secretStorage);
     this.secrets = secrets;
-    // The registry container is stripped out of the settings merge: a stale
-    // registry snapshot in settings would be written back over every registry
-    // write made since onload (REG-3).
     this.settings = settingsFromData(raw);
 
     const syncState = new SyncStateAdapter({
@@ -423,9 +363,6 @@ export default class ProjectManagementPlugin extends Plugin {
     } = composePlugin(this, syncState, this.secrets);
     this.seedArtifacts = seedArtifacts;
     this.seedTypeLabels = seedTypeLabels;
-    // Seed the vault-owned templates and Bases files before any note is
-    // created: a fresh vault gets all six at their configured paths, and an
-    // existing file is never overwritten.
     await seedArtifacts.execute();
     this.addChild(scheduler);
 
@@ -440,11 +377,6 @@ export default class ProjectManagementPlugin extends Plugin {
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
   }
 
-  // Discovers the vault's synced projects and persists their identities for
-  // later board operations. The scheduler derives its project list from the
-  // notes' locations each tick, so discovery only needs to seed the identities.
-  // Discovery must never crash the plugin: unexpected failures and per-note
-  // errors surface as notices.
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
@@ -465,9 +397,6 @@ export default class ProjectManagementPlugin extends Plugin {
           `Project discovery: ${errors.length} project(s) could not be attached`,
         );
       }
-      // Capture remote-born projects AFTER discovery, so a just-created vault
-      // project is not re-attached this startup. The captured names are picked
-      // up by the scheduler's next tick.
       const capture = await captureRemoteProjects.execute({
         syncedAt: new Date().toISOString(),
       });
@@ -484,21 +413,11 @@ export default class ProjectManagementPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    // Route the settings save through the adapter's serialization so it shares
-    // one promise chain with every registry write: a concurrent settings save
-    // and registry persist can no longer each write a stale root and lose one
-    // (REG-3). The adapter hands back a FRESH data.json root (so registry writes
-    // made since onload survive) and persists the merge on the shared chain.
     await this.syncState.mutateRoot((data) =>
       mergeSettingsIntoData(data, this.settings),
     );
   }
 
-  // Obsidian's saveData is a whole-file write, so a crash mid-write can
-  // truncate data.json. Before a registry overwrite the adapter asks for a
-  // rolling backup of the current file (throttled to at most once a minute), so
-  // the next start can fall back to the previous state (REG-4). Best-effort: a
-  // failed copy must never block a registry write.
   private async backupDataFile(): Promise<void> {
     const path = this.dataFilePath();
     if (path === null) {
@@ -511,10 +430,6 @@ export default class ProjectManagementPlugin extends Plugin {
     await adapter.copy(path, `${path}.bak`);
   }
 
-  // A data.json that exists but cannot be parsed must never be silently reset:
-  // its bytes may still be recoverable by hand. Move it aside so the next load
-  // starts clean and the plugin keeps running, rather than overwriting the
-  // corrupt file with an empty registry.
   private async quarantineDataFile(): Promise<void> {
     const path = this.dataFilePath();
     if (path === null || !(await this.dataFileExists())) {
@@ -529,8 +444,6 @@ export default class ProjectManagementPlugin extends Plugin {
     return path !== null && (await this.app.vault.adapter.exists(path));
   }
 
-  // The plugin's own data.json path, or null before Obsidian has assigned a
-  // manifest directory.
   private dataFilePath(): string | null {
     const dir = this.manifest.dir;
     return dir === undefined ? null : `${dir}/data.json`;

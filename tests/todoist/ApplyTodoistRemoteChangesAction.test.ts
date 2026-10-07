@@ -177,7 +177,6 @@ function taskNote(
   ].join('\n');
 }
 
-// A registry record with a todoist base carrying the given content fields.
 function seedRecord(
   syncState: FakeSyncState,
   id: string,

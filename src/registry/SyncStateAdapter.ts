@@ -32,27 +32,16 @@ import {
   str,
 } from './SyncStateSchema.js';
 
-// The storage the adapter persists through. main.ts binds the plugin's
-// loadData/saveData so records live in the plugin's data.json.
 export interface SyncStateStorage {
   load(): Promise<Record<string, unknown>>;
   save(data: unknown): Promise<void>;
-  // Optional best-effort snapshot of the current data file, taken before an
-  // overwrite so a crash mid-write can fall back to the previous state. Absent
-  // when the platform cannot copy the file.
   backup?(): Promise<void>;
 }
 
-// The adapter asks for a rolling backup before a registry overwrite, but at
-// most once per window: a burst of port ops during one sync pass must not copy
-// data.json on every write.
 const BACKUP_MIN_INTERVAL_MS = 60_000;
 
-// Re-exported so the plugin's existing importers keep one entry point.
 export { SYNC_STATE_KEY } from './SyncStateSchema.js';
 
-// One port item's location, tracked so `removeEntity` can sweep an entity's
-// mirrors without scanning every project.
 interface ItemRef {
   project: string;
   portId: string;
@@ -60,16 +49,11 @@ interface ItemRef {
   entityId: string;
 }
 
-// A (portId, handle) owner, tracked so `findMirrorItem` resolves without a scan
-// and `setMirrorItem` can re-point an address without destroying its previous
-// owner.
 interface HandleOwner {
   project: string;
   entityId: string;
 }
 
-// The in-memory lookup indexes, rebuilt once from the container on first load
-// and maintained on every write afterwards.
 interface Indexes {
   byNotePath: Map<string, string>;
   byEntityPath: Map<string, string>;
@@ -129,7 +113,6 @@ function buildIndexes(container: Record<string, unknown>): Indexes {
   return indexes;
 }
 
-// Deletes one port item from the container and clears its index entries.
 function dropItem(
   container: Record<string, unknown>,
   indexes: Indexes,
@@ -157,9 +140,6 @@ function dropItem(
   }
 }
 
-// Removes an entity and every index entry that pointed at it, including the
-// mirror items it owned in each port (the sweep that keeps the ports from
-// stranding items whose hub is gone).
 function dropEntity(
   container: Record<string, unknown>,
   indexes: Indexes,
@@ -187,8 +167,6 @@ function dropEntity(
   indexes.itemsByEntity.delete(id);
 }
 
-// Deletes one port item node without touching the indexes (the caller owns the
-// index bookkeeping). Used when an address changes hands or moves project.
 function removeItemNode(
   container: Record<string, unknown>,
   project: string,
@@ -209,9 +187,6 @@ function removeItemNode(
   }
 }
 
-// Drops one entity's reverse-index ref to a (portId, handle) address. A handle
-// is port-unique, so matching on portId+handle is enough. Keeps a re-pointed
-// item from later being swept as if it were still the old owner's.
 function removeItemRef(
   indexes: Indexes,
   entityId: string,
@@ -232,8 +207,6 @@ function removeItemRef(
   }
 }
 
-// Tracks one entity's ref to an address when it is not already present, so
-// setMirrorItem never double-counts a (portId, handle).
 function addItemRef(
   indexes: Indexes,
   entityId: string,
@@ -255,11 +228,6 @@ function addItemRef(
   }
 }
 
-// Moves an entity's port item nodes from one project to another, so an
-// entity's items always live under the same project as the entity. The handle
-// owners and the reverse index are updated in step; the caller removes the old
-// entity node afterwards. Only refs still recorded under the old project move
-// (a ref already re-pointed by setMirrorItem is left alone).
 function relocateItems(
   container: Record<string, unknown>,
   indexes: Indexes,
@@ -288,8 +256,6 @@ function relocateItems(
     }
     const toNode = ensureProjectNode(ensureProjects(container), toProject);
     const toPort = ensurePortNode(toNode, ref.portId);
-    // A relocated item stamps the destination port's provider the same way a
-    // fresh item does.
     if (typeof toPort.provider !== 'string' || toPort.provider === '') {
       toPort.provider = ref.portId;
     }
@@ -302,30 +268,15 @@ function relocateItems(
   }
 }
 
-// Implements the sync state port against a namespaced key/value store. Storage
-// is project-nested and port-grouped: the entity holds only hub-side location;
-// each port holds its items keyed by handle. The adapter is the single writer:
-// every port method runs through an in-process promise chain and shares one
-// cached container, so two interleaved load-modify-save operations cannot each
-// persist a stale snapshot and lose one write (REG-2). The container is read
-// once and written through, instead of re-parsed per op.
 export class SyncStateAdapter implements SyncStatePort {
   private indexes: Indexes | null = null;
   private container: Record<string, unknown> | null = null;
   private chain: Promise<unknown> = Promise.resolve();
   private lastBackupAt: number | null = null;
-  // Set when the loaded container was written by a NEWER plugin version. Its
-  // schema is not ours to rewrite, so every mutating port method refuses: a
-  // downgrade would persist the newer layout in the old shape and corrupt it.
   private readOnly = false;
 
   constructor(private readonly storage: SyncStateStorage) {}
 
-  // The mutex every port method funnels through. External callers always chain,
-  // so a command racing a sync pass cannot interleave a load-modify-save. No
-  // port method calls another (the one shared lookup is a private helper), so
-  // there is no nested queue call to deadlock on. A rejected op does not poison
-  // the chain.
   private queue<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.chain.then(
       () => fn(),
@@ -338,11 +289,6 @@ export class SyncStateAdapter implements SyncStatePort {
     return run;
   }
 
-  // Refuses a mutation against a container written by a newer plugin version.
-  // WHY throw instead of silently skipping: a silent skip would let the sync
-  // pass believe its writes landed, and the newer schema would never be
-  // corrupted but the divergence would be invisible. The caller's step isolation
-  // logs the refusal and retries after the user upgrades.
   private assertWritable(): void {
     if (this.readOnly) {
       throw new Error(
@@ -351,26 +297,12 @@ export class SyncStateAdapter implements SyncStatePort {
     }
   }
 
-  // A serialized mutation of the data.json ROOT for the plugin's non-registry
-  // writers (settings). It runs on the SAME promise chain as every port method,
-  // so a settings save and a registry write can never interleave their
-  // load-modify-save and lose one (REG-2/REG-3). The caller's function receives
-  // a fresh root and returns the root to persist; the registry container rides
-  // along from that fresh read, never from the adapter's cache, so the two
-  // writers share one file without sharing one snapshot. WHY not a port method:
-  // settings are the composition root's concern, and the registry port owns
-  // registry state, not the root's other keys.
   mutateRoot(
     fn: (
       root: Record<string, unknown>,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>,
   ): Promise<void> {
     return this.queue(async () => {
-      // Ensure the container is loaded (and migrations run) before the root is
-      // touched, so the settings write never lands ahead of the first registry
-      // load. A newer container is deliberately not asserted writable here:
-      // saving settings must still work, and this method never rewrites the
-      // registry container.
       await this.loadContainer();
       const data = await this.storage.load();
       const next = await fn(data);
@@ -378,11 +310,6 @@ export class SyncStateAdapter implements SyncStatePort {
     });
   }
 
-  // The namespaced container. The container and its indexes are cached; every
-  // later read and write goes through the cache, so concurrent ops share one
-  // object. A container written by an OLDER schema is reset rather than
-  // migrated: under the alpha ruling the registry is disposable and the vault
-  // re-syncs from scratch.
   private async loadContainer(): Promise<Record<string, unknown>> {
     if (this.container !== null) {
       return this.container;
@@ -396,10 +323,6 @@ export class SyncStateAdapter implements SyncStatePort {
     }
     const version = container.version;
     if (typeof version === 'number' && version > VERSION) {
-      // A NEWER container is never rewritten: its schema is not ours, and a
-      // downgrade would corrupt it. Leave it byte-for-byte and note it. Reads
-      // still serve whatever the newer layout holds; writes are refused below
-      // so the newer layout is never persisted in the old shape.
       this.readOnly = true;
       console.warn(
         `SyncStateAdapter: registry version ${version} is newer than supported ${VERSION}; leaving it untouched`,
@@ -418,9 +341,6 @@ export class SyncStateAdapter implements SyncStatePort {
     return container;
   }
 
-  // Writes the cached container through to a FRESH data.json root, so keys
-  // owned by other writers (settings) survive. Asks for a rolling backup before
-  // the overwrite so a crash mid-write leaves the previous state on disk.
   private async persist(): Promise<void> {
     await this.maybeBackup();
     const data = await this.storage.load();
@@ -448,8 +368,6 @@ export class SyncStateAdapter implements SyncStatePort {
     return this.queue(() => this.getEntityUnsafe(id));
   }
 
-  // The shared lookup, called from within an already-queued method so the two
-  // never nest on the queue.
   private async getEntityUnsafe(id: string): Promise<EntityRecord | null> {
     const container = await this.loadContainer();
     const project = this.indexes!.byEntityProject.get(id);
@@ -477,22 +395,15 @@ export class SyncStateAdapter implements SyncStatePort {
       const container = await this.loadContainer();
       this.assertWritable();
       const indexes = this.indexes!;
-      // The project key is derived from the note path (Projecten/<name>/... and
-      // Archief/<name>/... both key <name>); WHY: the path convention IS the
-      // project partition, so no caller has to pass the name for an entity.
       const project = projectFromNotePath(record.notePath);
       const previousProject = indexes.byEntityProject.get(record.id);
       const previousPath = indexes.byEntityPath.get(record.id);
 
-      // A notePath resolves to exactly one entity: claiming an occupied path
-      // evicts the previous owner — its record AND its mirror items — so the
-      // path index can never hold two owners.
       const occupant = indexes.byNotePath.get(record.notePath);
       if (occupant !== undefined && occupant !== record.id) {
         dropEntity(container, indexes, occupant);
       }
 
-      // Re-key: drop the old path index before writing the new location.
       if (
         previousPath !== undefined &&
         previousPath !== record.notePath &&
@@ -500,9 +411,6 @@ export class SyncStateAdapter implements SyncStatePort {
       ) {
         indexes.byNotePath.delete(previousPath);
       }
-      // A project move relocates the entity's item nodes to the new project's
-      // ports and updates the handle/reverse indexes, so an entity's items never
-      // strand under the old project and the handle index never desyncs.
       if (previousProject !== undefined && previousProject !== project) {
         relocateItems(container, indexes, record.id, previousProject, project);
         const oldNode = projectNode(
@@ -609,16 +517,9 @@ export class SyncStateAdapter implements SyncStatePort {
       this.assertWritable();
       const indexes = this.indexes!;
 
-      // A (portId, handle) address has exactly one owner. Re-pointing it does
-      // NOT destroy the previous owner: promise 2 — no change is ever lost. The
-      // previous entity keeps its record and every OTHER mirror; only this
-      // address changes hands. Supersession is deliberate and explicit, via
-      // removeEntity — never a side effect of an address write (REG-6).
       const owner = indexes.byHandle.get(portId)?.get(handle);
       if (owner !== undefined) {
         if (owner.project !== projectName) {
-          // The same address now lives under another project: drop the stale
-          // node and its reverse ref before writing the new one.
           removeItemNode(container, owner.project, portId, handle);
           removeItemRef(indexes, owner.entityId, portId, handle);
         } else if (owner.entityId !== item.entityId) {
@@ -628,8 +529,6 @@ export class SyncStateAdapter implements SyncStatePort {
 
       const node = ensureProjectNode(ensureProjects(container), projectName);
       const port = ensurePortNode(node, portId);
-      // A port's provider is its concrete service; a first item stamps it when
-      // the caller has not written a port state yet.
       if (typeof port.provider !== 'string' || port.provider === '') {
         port.provider = portId;
       }
@@ -754,9 +653,6 @@ export class SyncStateAdapter implements SyncStatePort {
     });
   }
 
-  // Moves a project's whole port (state and mirror items) from one slug to
-  // another in ONE persist. The handle and reverse indexes are re-keyed in
-  // step, so a renamed connection's mirrors stay resolvable.
   async rekeyPortState(
     projectName: string,
     fromSlug: string,
@@ -781,10 +677,6 @@ export class SyncStateAdapter implements SyncStatePort {
       delete ports[fromSlug];
 
       const indexes = this.indexes!;
-      // Move only THIS project's handles. The handle index is shared across
-      // projects, so moving the whole slug bucket would re-point every other
-      // project's handles for that slug and break their resolution until the
-      // next reload.
       const fromHandles = indexes.byHandle.get(fromSlug);
       if (fromHandles !== undefined) {
         let toHandles = indexes.byHandle.get(toSlug);
@@ -912,8 +804,6 @@ export class SyncStateAdapter implements SyncStatePort {
     return {
       locationArchived,
       closed: raw.closed === true,
-      // A legacy baseline predates the stamp: an already-archived project
-      // carries '' (unknown transition time), an active one null.
       archivedAt:
         typeof raw.archivedAt === 'string'
           ? raw.archivedAt
@@ -953,9 +843,6 @@ export class SyncStateAdapter implements SyncStatePort {
     };
   }
 
-  // Reads the project's one-shot marker without clearing it. The chain peeks
-  // before the code host half and only consumes after that half succeeds, so a
-  // failed or interrupted fetch never spends the scan.
   async isFullScanPending(projectName: string): Promise<boolean> {
     return this.queue(async () => {
       const container = await this.loadContainer();
@@ -964,8 +851,6 @@ export class SyncStateAdapter implements SyncStatePort {
     });
   }
 
-  // Clears the project's one-shot marker. Only a pending marker is persisted
-  // (write-then-clear): consuming an already-spent project is a pure read.
   async consumeFullScan(projectName: string): Promise<boolean> {
     return this.queue(async () => {
       const container = await this.loadContainer();
@@ -1000,10 +885,6 @@ export class SyncStateAdapter implements SyncStatePort {
         container[PROJECT_CURSORS_KEY] = {};
       }
       const cursors = container[PROJECT_CURSORS_KEY] as Record<string, unknown>;
-      // A cursor that does not move is not a write. WHY: the capture runs on
-      // every tick, and persisting an unchanged watermark would make a quiet
-      // tick dirty the registry (SYNC-8). The caller also guards, but the
-      // adapter is the single writer and owns the invariant.
       if (cursors[portId] === iso) {
         return;
       }

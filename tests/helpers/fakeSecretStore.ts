@@ -1,8 +1,5 @@
 import type { SecretStore } from '../../src/app/settings/SecretStorageAdapter.js';
 
-// An in-memory SecretStore for tests: the same load/save/remove contract the
-// adapter implements, with a seed for the Given. An empty value reads as
-// absent, matching the adapter's cleared state.
 export class FakeSecretStore implements SecretStore {
   private readonly values = new Map<string, string>();
 

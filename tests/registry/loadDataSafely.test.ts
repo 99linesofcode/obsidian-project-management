@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadDataSafely } from '../../src/registry/loadDataSafely.js';
 
-// A recorder for quarantine calls, so a test can prove a corrupt file was moved
-// aside rather than silently reset.
 function quarantineSpy() {
   let calls = 0;
   return {

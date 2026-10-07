@@ -7,9 +7,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: record the state change the action asks for and hold the
-// registry record, so the action's own behaviour (PATCH state + base refresh +
-// board mirror) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   boardStatusCalls: Array<{ issueUrl: string; statusOptionId: string }> = [];

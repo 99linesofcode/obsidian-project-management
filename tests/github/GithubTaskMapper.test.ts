@@ -12,8 +12,6 @@ const issue: GithubTaskData = {
   body: 'The bug happens on resize.',
   state: 'open',
   createdAt: '2026-09-18T09:00:00Z',
-  // The comment-noisy updatedAt is deliberately later than lastEditedAt, so a
-  // mapper that reads the wrong clock is caught.
   lastEditedAt: '2026-09-18T10:00:00Z',
   updatedAt: '2026-09-18T11:30:00Z',
   labels: ['type: task'],

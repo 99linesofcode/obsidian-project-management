@@ -10,8 +10,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// A fake vault that records every mutator, so the writer's field-level gates
-// and its path decisions are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -75,8 +73,6 @@ function task(overrides: Partial<TaskData> = {}): TaskData {
   });
 }
 
-// The note content the writer renders for a given winning task, so a test can
-// seed a note already in step.
 function noteFor(t: TaskData): string {
   return TaskNoteMapper.map(
     {
@@ -101,7 +97,6 @@ function makeAction(vault: FakeVault, syncState: FakeSyncState) {
   );
 }
 
-// The registry record for the tracked note, at the given base lane.
 function seedRecord(
   syncState: FakeSyncState,
   base: TaskData | null = null,

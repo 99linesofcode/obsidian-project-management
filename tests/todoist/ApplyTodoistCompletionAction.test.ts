@@ -148,7 +148,6 @@ function todoNote(completedAt: string | null): string {
   ).content;
 }
 
-// The registry record for a mirrored note, at the given handle and base.
 function seedRecord(
   syncState: FakeSyncState,
   id: string,

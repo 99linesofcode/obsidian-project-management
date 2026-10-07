@@ -179,8 +179,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 }
 
-// A task manager that honours the projectId, so the two connections' fetches
-// are genuinely independent.
 class FakeTaskManager implements TaskManagerPort {
   projects = new Map<string, TodoistProjectData>();
   sections: TodoistSectionData[] = [];
@@ -563,7 +561,6 @@ describe('two task-manager connections sync independently', () => {
       'todoist-personal',
       ENTITY_ID,
     );
-    // A fact on the work connection: its twin is completed remotely.
     const workTask = h.todoist.active.find(
       (task) => task.id === workBefore!.handle,
     )!;
@@ -574,8 +571,6 @@ describe('two task-manager connections sync independently', () => {
     );
     h.todoist.completed.push(workTask);
 
-    // Run ONLY the work half: its absorption advances the work base, never the
-    // personal base.
     await h.workHalf.execute({
       projectName: PROJECT,
       syncedAt: new Date().toISOString(),

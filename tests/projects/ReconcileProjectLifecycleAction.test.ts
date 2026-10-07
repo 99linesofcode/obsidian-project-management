@@ -14,12 +14,6 @@ import type { TaskData } from '../../src/shared/TaskData.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds note content and actually moves folders,
-// the sync state holds TaskData records, baselines, watch state and the Todoist
-// project bookkeeping and relocates records, the task manager holds the Todoist
-// project list, and the project management fake records board mutations and
-// serves the latest-issue probe. The lifecycle's merge decisions are what's
-// under test; the fakes' real mutation is what makes idempotency observable.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -83,8 +77,6 @@ class FakeTaskManager implements TaskManagerPort {
   nextId = 'P-new';
 
   async fetchProjects(): Promise<TodoistProjectData[]> {
-    // The real list endpoint omits archived projects; the fake mirrors that so
-    // the fetch-by-id path is exercised.
     return this.projects.filter((project) => !project.isArchived);
   }
   async fetchProject(id: string): Promise<TodoistProjectData | null> {
@@ -273,8 +265,6 @@ function note(anchor?: string): string {
   return lines.join('\n');
 }
 
-// A note carrying the connection envelope: the todoist anchor lives in the
-// connection's project value, not the legacy `todoist` property.
 function connectionNote(anchor: string): string {
   return [
     '---',
@@ -293,8 +283,6 @@ function project(
   return { id: 'P1', name: 'Acme Widgets', isArchived: false, ...overrides };
 }
 
-// A tracked issue: the registry record carries the github handle and the
-// last-synced base whose status is the lane the lock sweep reads.
 function seedRecord(
   syncState: FakeSyncState,
   notePath: string,
@@ -356,8 +344,6 @@ const archivedInput = {
   closed: true,
 };
 
-// A settled archived project: the note under Archief/, the Todoist project
-// archived and the baseline archived.
 function setupArchived() {
   const h = setup();
   h.vault.notes.delete(activeNote);
@@ -373,9 +359,6 @@ function setupArchived() {
   return h;
 }
 
-// A harness whose discovered home note sits at a legacy path — the migration
-// tests' subject. The canonical note is removed so only the legacy file is
-// discovered.
 function setupLegacyHome(homePath: string, anchor = 'P1') {
   const h = setup(anchor);
   h.vault.notes.delete(activeNote);

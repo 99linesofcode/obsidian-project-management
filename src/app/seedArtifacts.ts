@@ -1,12 +1,3 @@
-// The six vault-owned artifacts the plugin assumes exist: the three note
-// templates and the three Bases files. Seeding writes these verbatim when the
-// configured path is genuinely absent — the literal `{{date}}` stays
-// unresolved, because Obsidian's core Templates (or the plugin's own fill)
-// resolves it at note-creation time, not at seed time.
-//
-// The contents are the contract the plugin's note mappers and the Bases views
-// read; they are pre-approved seed data, not a place to redesign.
-
 export type SeedPathKey =
   | 'projectTemplatePath'
   | 'taskTemplatePath'
@@ -25,15 +16,12 @@ export type SeedArtifactKey =
 
 export interface SeedArtifact {
   key: SeedArtifactKey;
-  // The settings field that holds this artifact's vault path.
   settingKey: SeedPathKey;
   label: string;
   description: string;
   content: string;
 }
 
-// A single trailing newline after the closing `---` (or the last body line)
-// matches the hand-authored templates this seed replaces.
 const TASK_TEMPLATE = `---
 affiliation: []
 status:

@@ -35,12 +35,6 @@ import type {
   ConnectionSyncInput,
 } from '../sync/SyncHalves.js';
 
-// The registry-first outward creation marker. Before the remote call, the
-// entity and a github mirror item are written so an interruption can never
-// orphan an issue; the item's handle is this synthetic, ENTITY-UNIQUE marker
-// (it can never collide with an issue url, and several interrupted creations
-// can coexist). Once the issue exists, the item is re-pointed to the issue's
-// url and the marker is removed.
 const PENDING_CREATION_PREFIX = 'pendingCreation:';
 
 function pendingCreationHandle(entityId: string): string {
@@ -54,25 +48,9 @@ function isPendingCreationHandle(handle: string): boolean {
 export interface SyncGithubTasksInput extends ConnectionSyncInput {
   projectName: string;
   syncedAt: string;
-  // The probe's verdict: the project's remote updatedAt moved since the last
-  // poll. When false, the fetch is skipped unless the vault drifted.
   includeBoard: boolean;
 }
 
-// The GitHub half on the uuid-keyed registry: probe gate → single-query project
-// detail fetch → per issue, resolve its record by mirror handle → map the
-// remote live view, read the note's live view, read the mirror's base → per-
-// field three-way diff → apply the winning side through the two writers.
-//
-// Identity always comes from the registry, never from the fetch: the mapper
-// leaves id/notePath empty and this action composes them from the record. All
-// diffing operates on diff views (body = digest); base storage is a diff view.
-//
-// The reopen veto (dt-17, the revert fix) lives here: a pull that would move a
-// done note off the done lane is vetoed while the mirror's own state disagrees
-// with its lane (a closed issue whose card sits in an active lane). The board
-// lane is eventually consistent, so a stale lane must never revert a
-// completion; the mirror is re-reconciled to the base instead.
 export class SyncGithubTasksAction implements ConnectionSyncHalf {
   readonly requiresBoard = true;
 
@@ -97,19 +75,10 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
         `SyncGithubTasksAction: no repo url for project ${input.projectName}`,
       );
     }
-    // A board without a repository attached (ATT-1 is a separate act): there
-    // are no issues to fetch, so the half is a quiet no-op rather than a
-    // per-tick failure. The board is still probed and archived by the chain.
     if (identity.repoUrl === '') {
       return;
     }
 
-    // The probe gate: skip the whole fetch when the remote is unmoved and the
-    // vault is settled. A vault-side drift re-opens it so the drift can be
-    // pushed; a project with no github-mirrored records is unknown, so it
-    // fetches. Outward drift (a vault-born task note with no github mirror)
-    // also re-opens it, so a new note materializes even when the board is
-    // quiet.
     if (
       !input.includeBoard &&
       !(await this.hasVaultDrift(input.projectName)) &&
@@ -132,10 +101,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     const doneLane = this.doneOptionName;
     const defaultLane = defaultStatusName(identity.statusOptions);
 
-    // Heal interrupted outward creations BEFORE the per-issue loop: a
-    // placeholder entity whose issue already exists (the remote call landed,
-    // the mirror write did not) adopts the issue's handle here, so the loop
-    // treats it as tracked and never materializes a duplicate note.
     await this.adoptPendingIssues(
       issues,
       cardByUrl,
@@ -173,19 +138,9 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       );
     }
 
-    // Outward materialization runs AFTER the per-issue loop so existing mirrors
-    // settle first. A vault-born task note with no real github mirror gains an
-    // issue and a card; a creation failure leaves the entity and its placeholder
-    // in place, and the next pass retries or adopts (see createOutward).
     await this.materializeOutward(input, identity, doneLane, defaultLane);
   }
 
-  // An untracked issue: materialise the note and add the card. A closed
-  // untracked issue is skipped — it is either swept or pre-plugin history, and
-  // the vault is the source of truth; reopening it on GitHub makes it an open
-  // untracked issue, so it materialises then. The raw state gates the decision,
-  // not the lane-derived completion (a closed issue with a stale card in an
-  // active lane still reads closed here).
   private async materializeUntracked(
     issue: GithubTaskData,
     card: BoardItemData | null,
@@ -204,8 +159,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       doneLane,
       defaultLane,
     );
-    // The vault writer creates the note (fresh uuid) and the registry record,
-    // and advances the base after the durable write (origin pull).
     await this.applyToVault.execute({
       task: remote,
       current: null,
@@ -214,7 +167,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       syncedAt: input.syncedAt,
       origin: 'pull',
     });
-    // The card add is a GitHub write; the writer owns the base advance.
     await this.applyToGithub.execute({
       task: remote,
       current: issueAsFetched,
@@ -235,7 +187,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     defaultLane: string,
   ): Promise<void> {
     const note = await this.vault.getNoteByPath(record.notePath);
-    // The note is gone; the deletion sweep owns it.
     if (note === null) {
       return;
     }
@@ -246,8 +197,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     if (vault === null) {
       return;
     }
-    // The parser no longer carries the id (dt-20); the registry record is the
-    // identity source, so compose it here.
     vault.id = record.id;
 
     const { remote, issueAsFetched } = await this.remoteViews(
@@ -259,12 +208,8 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       defaultLane,
     );
 
-    // The pure mapper leaves parent null: the affiliation link names the parent
-    // note, and only the registry can turn that path into the parent's uuid.
     vault.parent = await this.resolveParent(note.content, input.projectName);
 
-    // Type backfill: a note or record that predates the type promotion adopts
-    // the issue's type label. Stamping both settles the type field.
     const effectiveBase = await this.backfillType(
       issue,
       record,
@@ -291,7 +236,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     const overall = overallVerdict(resolved);
 
     if (overall === 'push') {
-      // Origin authority: the vault wins. The writer renders it onto the issue.
       await this.applyToGithub.execute({
         task: vault,
         current: issueAsFetched,
@@ -322,10 +266,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
           record,
         });
       }
-      // The completion invariant: a done lane implies a closed issue. When the
-      // lane and the issue's own state disagree, reconcile the issue. On a
-      // veto the base's shape is re-asserted so the stale card lane catches up
-      // to the closed issue; otherwise the lane-derived remote shape is applied.
       const laneDone = remote.completedAt !== null;
       const stateDone = issueAsFetched.completedAt !== null;
       if (vetoed && base !== null) {
@@ -350,8 +290,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       return;
     }
 
-    // Nothing content-wise moved: a membership gap (no card) or a lane gap (a
-    // card with no lane) is the only reason to write.
     if (card === null || card.statusOptionName === undefined) {
       await this.applyToGithub.execute({
         task: remote,
@@ -364,15 +302,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     }
   }
 
-  // The two remote views for one issue. `remote` is the canonical live view:
-  // the lane is authoritative for done-ness and falls back to the base lane (a
-  // card with no lane) or the lane its state implies (a card-less issue).
-  // `raw` is the issue as fetched: its completion stamp is the issue's own
-  // open/closed state, so the writer can tell a stale lane from a real reopen.
-  //
-  // The parent is the resolved sub-issue relation: a parentUrl that the registry
-  // knows becomes the parent entity's uuid, so GitHub-side placement is visible
-  // to the parent diff. A top-level issue (or an untracked parent) stays null.
   private async remoteViews(
     issue: GithubTaskData,
     record: EntityRecord | null,
@@ -427,11 +356,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     return { remote, issueAsFetched };
   }
 
-  // The uuid of the issue's parent relation, resolved through the registry: the
-  // parentUrl is the parent's github mirror handle. WHY the registry and not the
-  // transport: identity is hub-side, so the pure mapper leaves parent null and
-  // the half composes it here. An untracked parent resolves to null, which keeps
-  // the child top-level until the parent materializes.
   private async parentUuidFromIssue(
     issue: GithubTaskData,
   ): Promise<string | null> {
@@ -448,9 +372,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     return (await this.syncState.getEntity(item.entityId))?.id ?? null;
   }
 
-  // The timing evidence the conflict ladder may use: the note's real mtime and
-  // the issue's honest clocks. GitHub's lastEditedAt is the title/body clock
-  // (comments never move it); the card's own updatedAt is the lane clock.
   private async conflictHints(
     issue: GithubTaskData,
     card: BoardItemData | null,
@@ -466,10 +387,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     };
   }
 
-  // Resolves a note's affiliation link to its parent's uuid through the
-  // registry. A link may be a full note path or a bare stem, so the taken and
-  // todos folders are tried; an unresolved parent stays null and the next pass
-  // retries once the parent note is known.
   private async resolveParent(
     content: string,
     projectName: string,
@@ -485,7 +402,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     if (link === null || link === '') {
       return null;
     }
-    // A uuid reference resolves directly; a link target resolves by path.
     if ((await this.syncState.getEntity(link)) !== null) {
       return link;
     }
@@ -502,10 +418,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     return null;
   }
 
-  // Stamps the vault-owned type from the issue's type label when the note or
-  // the record's base lacks one (the migration path for existing notes). The
-  // note frontmatter and the base both move, so the type field settles. Returns
-  // the (possibly updated) base.
   private async backfillType(
     issue: GithubTaskData,
     record: EntityRecord,
@@ -543,9 +455,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     return base;
   }
 
-  // A vault-side drift: a github-mirrored entity whose note no longer matches
-  // its base. A project with no such entities is unknown and counts as drift,
-  // so a newly tracked issue is never starved by the probe gate.
   private async hasVaultDrift(projectName: string): Promise<boolean> {
     const prefix = `Projecten/${projectName}/`;
     const entries = await this.syncState.listMirrorItems(
@@ -576,9 +485,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
         doneLane: this.doneOptionName,
       });
       if (parsed === null) {
-        // A malformed note must not hold the probe gate open forever: log it
-        // and treat it as settled. It cannot sync until repaired, but it is not
-        // a change the fetch would resolve.
         console.warn(
           `SyncGithubTasksAction: unparseable note ${record.notePath}; not counting it as drift`,
         );
@@ -591,12 +497,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     return false;
   }
 
-  // Outward drift: a typed task note in the project's taken/ folder with no
-  // github mirror. WHY the GitHub half owns this: a vault-born note has no
-  // registry record until a half creates one, and the GitHub half is the one
-  // that materializes it outward, so it creates the entity itself rather than
-  // waiting for the Todoist half (which may be frozen or absent). A note with
-  // no record counts as drift, so the gate opens for it.
   private async hasOutwardDrift(projectName: string): Promise<boolean> {
     const folder = `Projecten/${projectName}/taken`;
     for (const notePath of await this.vault.listNotesInFolder(folder)) {
@@ -615,8 +515,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
         projectName,
         doneLane: this.doneOptionName,
       });
-      // Only a typed task note is materializable; an untyped or malformed note
-      // must not hold the gate open forever.
       if (parsed !== null && parsed.type !== '') {
         return true;
       }
@@ -624,10 +522,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     return false;
   }
 
-  // The outward phase: every taken/ task note with no github mirror gains an
-  // issue, a board card in the note's lane, and a mirror item. To-dos live in
-  // todos/ and are never issues; a note with no vault-owned type cannot carry
-  // the type label the adoption gate requires, so it is skipped.
   private async materializeOutward(
     input: SyncGithubTasksInput,
     identity: ProjectIdentityData,
@@ -652,13 +546,8 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
         existing !== null &&
         (await this.hasRealGithubMirror(input.projectName, existing.id))
       ) {
-        // Already mirrored: the per-issue loop owns it; leave it untouched.
         continue;
       }
-      // Validate the lane maps to a board option BEFORE creating the issue. An
-      // unmappable lane would otherwise create an issue whose card status can
-      // never be written, and the next pass would retry the same broken write
-      // forever.
       const lane = vault.status !== '' ? vault.status : defaultLane;
       const laneOption =
         lane === ''
@@ -680,10 +569,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
           laneOption?.id,
         );
       } catch (error) {
-        // Registry-first: a failed creation leaves the entity and its
-        // placeholder in place, so the next pass retries instead of
-        // materializing a second note. One note's failure must not starve the
-        // others.
         console.error(
           `SyncGithubTasksAction: outward creation failed for ${notePath}`,
           error,
@@ -692,13 +577,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     }
   }
 
-  // Creates the issue for one vault-born task and links it. Ordering is the
-  // safety property: the entity and a placeholder mirror item are written
-  // BEFORE the remote call, so an interruption can never orphan an issue — the
-  // next pass finds the placeholder and either adopts the issue (it exists) or
-  // retries the creation (it does not). Once the issue exists the placeholder
-  // is re-pointed to the issue's url and base; the card write follows, and a
-  // later card failure is healed by the per-issue loop's membership gap.
   private async createOutward(
     existing: EntityRecord | null,
     vault: TaskData,
@@ -707,10 +585,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     identity: ProjectIdentityData,
     laneOptionId: string | undefined,
   ): Promise<void> {
-    // Registry-first: the entity and its placeholder item exist before the
-    // remote call. A crash before the issue exists leaves a placeholder the next
-    // pass retries; a crash after leaves a placeholder the next pass adopts.
-    // Either way no second note is materialized for the same work.
     const record = existing ?? { id: crypto.randomUUID(), notePath };
     if (existing === null) {
       await this.syncState.setEntity(record);
@@ -722,13 +596,9 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       title: vault.title,
       body,
       type: vault.type,
-      // Born on the board: the issue is linked at create time, so no separate
-      // membership write is needed (and none is made).
       projectV2Ids: [identity.projectNodeId],
     });
 
-    // The base is a diff view of the canonical task, with the issue-comparable
-    // body digest — the same form the next pass's diff reads.
     vault.id = record.id;
     const base = toDiffView(vault, body);
     await this.syncState.setMirrorItem(
@@ -746,9 +616,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       pendingCreationHandle(record.id),
     );
 
-    // The card is already on the board (create-time linking); only the lane
-    // write remains. The lane was validated against the board's options by the
-    // caller, so this write cannot fail on an unknown option.
     if (laneOptionId !== undefined) {
       await this.projectManagement.setBoardStatus(
         new BoardStatusData({
@@ -761,9 +628,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     }
   }
 
-  // Writes the placeholder mirror item for an entity about to be created
-  // outward, unless it already carries a mirror item (a real handle or an
-  // earlier placeholder).
   private async ensurePlaceholder(
     record: EntityRecord,
     projectName: string,
@@ -783,10 +647,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     );
   }
 
-  // Heals interrupted outward creations: a placeholder entity whose issue was
-  // created (the remote call landed, the mirror write did not) adopts the
-  // issue's handle and base here. A placeholder with no matching issue is left
-  // for the outward phase to retry.
   private async adoptPendingIssues(
     issues: GithubTaskData[],
     cardByUrl: Map<string, BoardItemData>,
@@ -809,11 +669,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
         .filter(({ handle }) => !isPendingCreationHandle(handle))
         .map(({ handle }) => handle),
     );
-    // The entities that already hold a real handle. A crash between the real
-    // mirror write and the placeholder removal leaves BOTH items for one entity
-    // (placeholder first), so the placeholder is stale: the real mirror already
-    // covers the entity, and the placeholder would shadow it in every
-    // first-match lookup. Drop it before orphan matching.
     const realByEntity = new Set(
       items
         .filter(({ handle }) => !isPendingCreationHandle(handle))
@@ -848,10 +703,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
       if (parsed === null || parsed.type === '') {
         continue;
       }
-      // Match the orphan issue the interrupted creation left: an untracked,
-      // open, typed issue carrying the note's own title and type. A title
-      // collision is resolved by first match; the per-issue loop then treats it
-      // as tracked.
       const match = issues.find(
         (issue) =>
           !mirrored.has(issue.url) &&
@@ -886,16 +737,6 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
     }
   }
 
-  // Whether an entity already holds a REAL github mirror item (an issue handle,
-  // not the registry-first placeholder). The registry is the identity source, so
-  // this is the check that lets the outward phase leave an already-mirrored note
-  // untouched while still retrying a placeholder whose issue does not exist.
-  //
-  // WHY every github ref and not just the first: a crash between the real mirror
-  // write and the placeholder removal leaves both items for one entity,
-  // placeholder first. findMirrorItemByEntity would return that stale
-  // placeholder, hiding the real handle and letting the outward phase create a
-  // duplicate issue. Scan the project's items for ANY non-pending handle.
   private async hasRealGithubMirror(
     projectName: string,
     entityId: string,

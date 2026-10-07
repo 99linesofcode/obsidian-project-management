@@ -7,10 +7,6 @@ import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the sync state holds per-project identities and the
-// project management fake records each fleet probe and answers it from a
-// canned state map, so the action's identity resolution and re-keying is what's
-// under test.
 class FakeProjectManagement implements ProjectManagementPort {
   probeCalls: string[][] = [];
   states = new Map<string, ProjectStateData>();

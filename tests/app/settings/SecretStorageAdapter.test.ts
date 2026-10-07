@@ -5,8 +5,6 @@ import {
   SecretStorageAdapter,
 } from '../../../src/app/settings/SecretStorageAdapter.js';
 
-// A stand-in for Obsidian's SecretStorage: the three methods the typings
-// expose, backed by a map. The adapter is what's under test.
 class FakeObsidianSecretStorage {
   private readonly values = new Map<string, string>();
 

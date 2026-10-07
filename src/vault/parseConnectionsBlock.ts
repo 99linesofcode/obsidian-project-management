@@ -1,16 +1,5 @@
 import type { ConnectionData } from '../shared/ConnectionData.js';
 
-// Parses the `connections` block from a note's frontmatter lines (the lines
-// between the delimiters). The block is the canonical nested map:
-//
-//   connections:
-//     <slug>:
-//       tool: <tool>
-//       project: <project>
-//
-// A note without the block yields an empty map. The parser tolerates tabs and
-// any consistent indentation (a hand-authored note may use four spaces), and
-// strips surrounding quotes from a value, so a quoted project round-trips.
 export function parseConnectionsBlock(
   frontmatterLines: string[],
 ): Record<string, ConnectionData> {

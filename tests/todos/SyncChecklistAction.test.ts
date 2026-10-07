@@ -5,8 +5,6 @@ import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../../src/vault/ToDoNoteParser.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 
-// A path-keyed vault fake that records every create, write, rename and trash,
-// so the action's lifecycle decisions are observable at the port.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 

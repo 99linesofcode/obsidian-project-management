@@ -4,16 +4,9 @@ import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
   projectName: string;
-  // The code-host connection whose issue and card a deleted note closes. Null
-  // when the project has no code-host connection.
   connectionSlug: string | null;
 }
 
-// The chain's deletion sweep: a registry entity whose note is gone is a
-// deletion to propagate. Only records under the project's folder are swept —
-// a record relocated to Archief belongs to the archive lifecycle, not to the
-// active project's sweep. One note's failure is logged and the sweep continues,
-// so a single bad deletion never starves the rest.
 export class SweepDeletedNotesAction {
   constructor(
     private readonly vault: VaultPort,

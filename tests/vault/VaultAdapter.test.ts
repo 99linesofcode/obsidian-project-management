@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// The adapter imports TFile from Obsidian, which has no runtime entry in the
-// package (types only). Mock just that class so the adapter's event wiring can
-// be exercised without the host app — the same hand-rolled vi.mock('obsidian')
-// machinery the scheduler test already uses.
 const { TFile } = vi.hoisted(() => {
   class TFile {
     stat: { mtime: number };
@@ -20,16 +16,11 @@ const { TFile } = vi.hoisted(() => {
 
 vi.mock('obsidian', () => ({ TFile }));
 
-// The hoisted TFile is a value; this alias gives the instance type for the
-// fake vault's annotations.
 type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App, EventRef } from 'obsidian';
 import { VaultAdapter } from '../../src/vault/VaultAdapter.js';
 
-// A fake vault that records the handlers the adapter subscribes and lets a
-// test fire an event at them, so the adapter's filter and routing are what's
-// under test.
 class FakeVault {
   private readonly handlers = new Map<
     string,
@@ -173,9 +164,6 @@ describe('VaultAdapter.modifiedTime', () => {
   });
 });
 
-// A fake vault with a flat file list and a folder set, so the adapter's
-// moveFolder can be exercised: it filters getFiles() by prefix, renames each
-// through fileManager.renameFile, and creates destination folders as needed.
 class MoveVault {
   files: TFileInstance[];
   folders = new Set<string>();
@@ -262,9 +250,6 @@ describe('VaultAdapter.moveFolder', () => {
   });
 });
 
-// A fake vault with a folder set and a file map, so createNote's mkdir -p
-// chain can be exercised: Obsidian's create throws on a missing parent, so the
-// adapter builds the chain first.
 class CreateVault {
   folders = new Set<string>();
   files = new Map<string, string>();
@@ -308,9 +293,6 @@ describe('VaultAdapter.createNote', () => {
   });
 });
 
-// A fake app with a file map and a fileManager, so trashNote's delegation to
-// FileManager.trashFile (which respects the user's deletion preference) can be
-// exercised.
 class TrashVault {
   files: TFileInstance[];
   trashed: string[] = [];

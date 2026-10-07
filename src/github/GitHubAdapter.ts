@@ -22,13 +22,6 @@ import type { GithubTaskData } from './GithubTaskData.js';
 import { ProjectMapper } from '../projects/ProjectMapper.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 
-// The transport the adapter talks through, injected so tests can fake it.
-// GraphQL goes over POST, the REST reads over GET, the REST update over
-// PATCH. getConditional is the watched-repo read: it carries an If-None-Match
-// header when an etag is given and surfaces the response's etag, so a quiet
-// repository answers 304 without spending rate limit. The adapter stays
-// token-agnostic; production wiring injects a transport that adds the
-// Authorization header.
 export interface Transport {
   post(body: string): Promise<{ status: number; json: unknown }>;
   get(path: string): Promise<{ status: number; json: unknown }>;
@@ -109,9 +102,6 @@ const ORG_PROJECT_QUERY = `
   }
 `;
 
-// The canonical project read: one node query returns the ProjectV2 content
-// (title, closed, Status options) the core reasons about. The adapter maps it
-// onto ProjectData; the raw ProjectV2 shape never crosses the port.
 const PROJECT_CONTENT_QUERY = `
   query ProjectContent($projectId: ID!) {
     node(id: $projectId) {
@@ -170,11 +160,6 @@ const BOARD_ITEMS_QUERY = `
   }
 `;
 
-// The whole-project fetch: the repository's issues (with bodies, so checklist
-// → to-do extraction works from the same response) and the project's board
-// items (cards + Status lanes), in ONE GraphQL round trip. Both connections
-// are capped at 100 nodes — the same cap the board query always had; a project
-// with more than 100 issues or cards is a follow-up pagination concern.
 const PROJECT_DETAIL_QUERY = `
   query ProjectDetail($owner: String!, $name: String!, $projectId: ID!) {
     repository(owner: $owner, name: $name) {
@@ -286,21 +271,12 @@ const SET_PROJECT_CLOSED_MUTATION = `
   }
 `;
 
-// The owner a created board is created under. WHY the viewer and not the
-// repository's owner: a user-owned repo's board may be user- or org-owned, and
-// the token's own account is the only owner the plugin can address without an
-// extra owner-type lookup. The board is linked to the repo explicitly.
 const VIEWER_QUERY = `
   query Viewer {
     viewer { id }
   }
 `;
 
-// The repository's linked boards (the derivation ladder's listing) plus the
-// repository node id, in one read. The ladder keys on the repo name; adoption
-// re-resolves field ids through the identity read, so the listing stays cheap.
-// Capped at 100 boards: a repository with more is a follow-up pagination
-// concern, not a silent truncation the ladder can act on.
 const REPO_BOARDS_QUERY = `
   query RepoBoards($owner: String!, $name: String!) {
     repository(owner: $owner, name: $name) {
@@ -316,9 +292,6 @@ const REPO_BOARDS_QUERY = `
   }
 `;
 
-// Creates a board under the viewer. The board is linked to the repository in a
-// separate mutation (linkProjectV2ToRepository) and given its Status field
-// (createProjectV2Field), so the three scaffolding steps are explicit.
 const CREATE_BOARD_MUTATION = `
   mutation CreateBoard($ownerId: ID!, $title: String!) {
     createProjectV2(input: { ownerId: $ownerId, title: $title }) {
@@ -340,9 +313,6 @@ const LINK_BOARD_MUTATION = `
   }
 `;
 
-// The Status single-select field a created board gets, carrying the configured
-// option names. Each option needs a color and description; a neutral gray and
-// an empty description are the sensible defaults.
 const CREATE_STATUS_FIELD_MUTATION = `
   mutation CreateStatusField(
     $projectId: ID!
@@ -367,8 +337,6 @@ const CREATE_STATUS_FIELD_MUTATION = `
   }
 `;
 
-// The repository's label by name, for resolving the `type:*` label id a created
-// issue carries. A missing label resolves to null and is created first.
 const LABEL_QUERY = `
   query Label($owner: String!, $name: String!, $label: String!) {
     repository(owner: $owner, name: $name) {
@@ -377,9 +345,6 @@ const LABEL_QUERY = `
   }
 `;
 
-// Creates an issue already linked to its board (projectV2Ids) and carrying its
-// type label (labelIds), in one mutation. The issue is born tracked and on the
-// board, so no follow-up membership write is needed.
 const CREATE_ISSUE_MUTATION = `
   mutation CreateIssue(
     $repositoryId: ID!
@@ -402,9 +367,6 @@ const CREATE_ISSUE_MUTATION = `
   }
 `;
 
-// The viewer's boards (PRJ-3). createdAt is the capture cursor's clock and url
-// is the note's board anchor; both ride on the canonical ProjectData the
-// adapter returns, so the raw ProjectV2 shape never crosses the port.
 const VIEWER_PROJECTS_QUERY = `
   query ViewerProjects {
     viewer {
@@ -433,9 +395,6 @@ const VIEWER_PROJECTS_QUERY = `
   }
 `;
 
-// lockReason is omitted: the enum (RESOLVED/OFF_TOPIC/TOO_HEATED/SPAM) has no
-// "archived" reason, and the schema makes it optional. Re-locking an
-// already-locked issue is a no-op, so the archive retry is safe.
 const LOCK_ISSUE_MUTATION = `
   mutation LockIssue($nodeId: ID!) {
     lockLockable(input: { lockableId: $nodeId }) {
@@ -444,14 +403,7 @@ const LOCK_ISSUE_MUTATION = `
   }
 `;
 
-// Implements the project management port against GitHub's GraphQL API.
-// Maps raw responses onto the identity DTO; the core never sees GitHub JSON.
-// The adapter is repo-agnostic infrastructure: the repo url is passed per
-// call (from the attached project's identity) rather than bound at
-// construction, so constructing it can never fail on a bad url.
 export class GitHubAdapter implements ProjectManagementPort {
-  // The token viewer's node id, resolved lazily and cached for the adapter's
-  // lifetime (the token never changes while the plugin runs).
   private cachedViewerId: string | null = null;
 
   constructor(private readonly transport: Transport) {}
@@ -460,10 +412,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null> {
     const board = this.parseBoardUrl(data.boardUrl);
-    // A board without a repository yet: the board alone resolves the identity,
-    // and repoUrl/repoNodeId stay empty. Used by the board-born capture path
-    // (PRJ-3), which has a board but no repo, and by the derivation ladder to
-    // adopt a selected board and re-resolve its field ids.
     const repoNodeId =
       data.repoUrl === ''
         ? ''
@@ -479,9 +427,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
-  // The repository's node id and its linked boards, in one read. The
-  // derivation ladder keys on the repo name; a malformed board node is skipped
-  // rather than failing the whole listing.
   async fetchRepoBoards(repoUrl: string): Promise<RepositoryBoardsData> {
     const repo = this.parseRepoUrl(repoUrl);
     const data = await this.postQuery(REPO_BOARDS_QUERY, {
@@ -513,11 +458,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return { repoNodeId: repository.id, boards };
   }
 
-  // Creates a board titled with the repository's name under the token's viewer,
-  // links it to the repository, and creates its Status single-select field with
-  // the configured option names. The viewer id is resolved once and cached: a
-  // fleet of projects creates their boards in one pass, and the viewer never
-  // changes for the token's lifetime.
   async createBoardWithStatusField(
     repoUrl: string,
     statusOptions: string[],
@@ -551,10 +491,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  // Adopts an existing board: links it to the repository and ensures it carries
-  // a Status field. Heals an interrupted creation — a board created but not yet
-  // linked, or linked but without its Status field — so the next pass adopts it
-  // instead of creating a duplicate.
   async adoptBoard(
     boardUrl: string,
     repoUrl: string,
@@ -613,9 +549,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return status;
   }
 
-  // The repository's existing label names, for the seed action's skip check.
-  // Paginated: a repo with more than 100 labels would otherwise hide the tail,
-  // and the seed action would try to create an existing label (a 422).
   async listRepoLabels(repoUrl: string): Promise<string[]> {
     const repo = this.parseRepoUrl(repoUrl);
     const names: string[] = [];
@@ -646,9 +579,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return names;
   }
 
-  // Creates one label on the repository. The seed action calls it only for
-  // labels the listing did not already carry, so it is not idempotent on its
-  // own; a duplicate name is a 422 the caller never triggers.
   async createRepoLabel(
     repoUrl: string,
     name: string,
@@ -667,9 +597,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     }
   }
 
-  // The viewer's ProjectV2 boards, mapped onto canonical ProjectData (PRJ-3).
-  // A malformed node is skipped rather than failing the whole listing. The
-  // board's linked repositories ride along for the board-born capture.
   async fetchViewerProjects(): Promise<RemoteBoardData[]> {
     const data = await this.postQuery(VIEWER_PROJECTS_QUERY, {});
     const viewer = data.viewer;
@@ -714,7 +641,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return boards;
   }
 
-  // The token viewer's node id, resolved once and cached.
   private async viewerId(): Promise<string> {
     if (this.cachedViewerId !== null) {
       return this.cachedViewerId;
@@ -728,9 +654,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return viewer.id;
   }
 
-  // The canonical project read. The ProjectV2 node is mapped onto ProjectData
-  // at the boundary; the option ids stay in the identity storage shape, so the
-  // core only ever sees the canonical content.
   async fetchProject(
     repoUrl: string,
     projectNodeId: string,
@@ -755,12 +678,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     );
   }
 
-  // Creates a new issue from a vault-born task's canonical view, already linked
-  // to its board (projectV2Ids) and carrying its `type:*` label, in one GraphQL
-  // mutation. The label id is resolved (and the label created if absent) first,
-  // so the issue is born tracked and on the board — no follow-up membership
-  // write. promoteCard's draft conversion is a different path (it needs an
-  // existing draft card), so it is not reused here.
   async createIssue(
     repoUrl: string,
     payload: CreateIssueData,
@@ -791,9 +708,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  // The node id of a repository label, creating it with the default color when
-  // it does not exist yet. The seed action normally creates the type labels, so
-  // this is the fallback that keeps a fresh repo's first issue tracked.
   private async ensureLabelId(repo: RepoParts, label: string): Promise<string> {
     const data = await this.postQuery(LABEL_QUERY, {
       owner: repo.owner,
@@ -853,8 +767,6 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private isTrackedIssue(issue: Record<string, unknown>): boolean {
-    // The vault is the source of truth: every issue carrying a type label
-    // (type: task, type: bug, type: chore, type: slice, ...) is tracked.
     if (!Array.isArray(issue.labels)) {
       return false;
     }
@@ -866,10 +778,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     );
   }
 
-  // The whole-project fetch the sync chain works from: one GraphQL POST
-  // returns the repository's issues (bodies included) and the project's board
-  // items. The adapter filters to typed issues here, so the core receives the
-  // tracked set; the board cards come along for the lane join.
   async fetchProjectDetail(
     repoUrl: string,
     projectNodeId: string,
@@ -910,8 +818,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return { issues, cards };
   }
 
-  // Maps a GraphQL issue node onto the transport DTO. GraphQL names differ
-  // from REST (url/id/updatedAt, labels as a connection, uppercase state).
   private mapGraphqlIssue(node: Record<string, unknown>): GithubTaskData {
     const labels =
       isRecord(node.labels) && Array.isArray(node.labels.nodes)
@@ -931,14 +837,10 @@ export class GitHubAdapter implements ProjectManagementPort {
       body: typeof node.body === 'string' ? node.body : '',
       state: node.state === 'CLOSED' ? 'closed' : 'open',
       createdAt: typeof node.createdAt === 'string' ? node.createdAt : null,
-      // The GraphQL Issue type carries lastEditedAt, which moves only on
-      // title/body edits — unlike updatedAt, which comments bump.
       lastEditedAt:
         typeof node.lastEditedAt === 'string' ? node.lastEditedAt : null,
       updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : '',
       labels,
-      // A sub-issue exposes its parent issue's url; a top-level issue answers
-      // null. The url is the parent's github mirror handle.
       parentUrl:
         isRecord(node.parent) && typeof node.parent.url === 'string'
           ? node.parent.url
@@ -946,11 +848,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  // The watched-repo read: the newest issues by creation date, through a
-  // conditional request. A 304 means nothing changed since the stored etag and
-  // costs no rate limit. The issues REST endpoint returns pull requests too,
-  // and a PR is not an issue, so entries carrying a pull_request key are
-  // filtered out before the newest created_at is read.
   async fetchLatestIssueActivity(
     repoUrl: string,
     etag?: string,
@@ -992,8 +889,6 @@ export class GitHubAdapter implements ProjectManagementPort {
 
   async fetchUnpromotedIssues(repoUrl: string): Promise<GithubTaskData[]> {
     const repo = this.parseRepoUrl(repoUrl);
-    // Open issues only; the client-side filter keeps untyped issues, so the
-    // promote modal only offers what can be promoted.
     const path = `/repos/${repo.owner}/${repo.name}/issues?state=open&per_page=100`;
 
     const response = await this.transport.get(path);
@@ -1022,7 +917,6 @@ export class GitHubAdapter implements ProjectManagementPort {
         (label): label is { name: string } => typeof label.name === 'string',
       )
       .map((label) => label.name);
-    // A typed issue is already tracked, so promoting it would double-track it.
     return !names.some((name) => name.startsWith('type:'));
   }
 
@@ -1102,10 +996,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return this.mapIssue(response.json);
   }
 
-  // One cheap query for every project's lightweight state: an aliased node
-  // field per id with no connections, so the fleet probe costs about a point
-  // per project instead of the board query's 30-50. A missing or invalid node
-  // (e.g. a deleted project) is skipped rather than failing the whole probe.
   async fetchProjectStates(
     projectNodeIds: string[],
   ): Promise<Map<string, ProjectStateData>> {
@@ -1186,9 +1076,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
-  // Adds an existing issue to the board. Kept for adopting an untracked issue
-  // (materializeUntracked); the outward-creation path links at create time
-  // instead, so it never calls this.
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     const task = await this.fetchTask(issueUrl);
     await this.postQuery(ADD_BOARD_ITEM_MUTATION, {
@@ -1197,13 +1084,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
-  // Resolves the issue's card from the board (the same join setBoardStatus
-  // uses) and deletes it. A card-less issue is a no-op, so a sweep can call
-  // this without first checking membership.
-  //
-  // NOTE: deleting an ISSUE removes its board item automatically (verified
-  // against the live API), so the issue-deletion paths need no cleanup call.
-  // This method exists for removing a card while keeping the issue.
   async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
     const items = await this.fetchBoardItems(projectNodeId);
     const item = items.find((candidate) => candidate.issueUrl === issueUrl);
@@ -1271,8 +1151,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     const item: BoardItemData = {
       itemId: node.id,
       type,
-      // ProjectV2Item.updatedAt is the honest lane clock; a board that omits it
-      // leaves the hint null and the ladder falls through to the semantic rule.
       updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : null,
     };
     if (issueUrl !== undefined) {
@@ -1290,8 +1168,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     return item;
   }
 
-  // Finds the current Status single-select value's option name among a card's
-  // field values, so the core can tell whether the card is done.
   private statusOptionName(fieldValues: unknown): string | undefined {
     if (!isRecord(fieldValues) || !Array.isArray(fieldValues.nodes)) {
       return undefined;
@@ -1337,14 +1213,9 @@ export class GitHubAdapter implements ProjectManagementPort {
       body: typeof issue.body === 'string' ? issue.body : '',
       state: issue.state === 'closed' ? 'closed' : 'open',
       createdAt: typeof issue.created_at === 'string' ? issue.created_at : null,
-      // The REST shape carries no lastEditedAt; updated_at is comment-noisy, so
-      // it is not a substitute. The canonical content clock stays unknown here
-      // (the GraphQL detail fetch is the sync path and does carry it).
       lastEditedAt: null,
       updatedAt: typeof issue.updated_at === 'string' ? issue.updated_at : '',
       labels,
-      // The REST issue shape carries no parent relation (sub-issues are a
-      // GraphQL-only field), so a REST-mapped issue is top-level.
       parentUrl: null,
     };
   }
@@ -1392,9 +1263,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  // The tolerant sibling of fetchProjectByBoard: a board whose Status field has
-  // not been created yet yields an empty Status rather than throwing, so the
-  // ensure-board healing path can create the field instead of failing.
   private async fetchProjectFieldsByBoard(
     board: BoardParts,
   ): Promise<{ id: string; status: StatusField }> {
@@ -1443,11 +1311,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     throw new Error('GitHubAdapter: project has no Status field');
   }
 
-  // The tolerant sibling of findStatusField: a newly created board or a listing
-  // node whose fields have not loaded yet yields an empty Status rather than
-  // failing. WHY: the attach path must reject a board with no Status (a real
-  // config problem), but a create/list read must not — the user can repair the
-  // board and the next pass picks the field up.
   private statusFieldOrEmpty(fields: unknown): StatusField {
     if (!isRecord(fields) || !Array.isArray(fields.nodes)) {
       return { id: '', options: [] };
@@ -1494,8 +1357,6 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   private parseRepoUrl(url: string): RepoParts {
-    // The port accepts the `owner/name` shorthand the settings input invites;
-    // the provider expands it here, so no neutral action carries the host.
     const normalized = url.includes('://') ? url : `https://github.com/${url}`;
     let path: string[];
     try {

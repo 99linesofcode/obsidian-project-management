@@ -10,10 +10,6 @@ import type {
 } from '../../src/shared/RepoBoardData.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 
-// Fakes at the ports: the vault returns the project notes discovery finds, and
-// the project management port serves a canned board listing. The discovery
-// action's own behaviour (which notes become projects, which errors are
-// collected) is what's under test, against the real AttachProjectAction.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 

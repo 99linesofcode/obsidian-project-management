@@ -19,9 +19,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports and at every composed step, recording into one shared
-// events array so the chain's step order and its error isolation are what's
-// under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -135,8 +132,6 @@ function projectNote(
   };
 }
 
-// A tracked issue's registry entity; the deletion sweep reads only its note
-// path, so the base content is immaterial here.
 function status(notePath: string): EntityRecord {
   return entityRecord({ id: 'entity-42', notePath });
 }
@@ -318,9 +313,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
           h.lifecycle.fail = true;
         },
         assert: (h) => {
-          // The lifecycle failure leaves the project unfrozen (the archive
-          // signal is the fallback), so both halves still run: each half knows
-          // its own connection's project.
           expect(h.events).toEqual([
             'lifecycle',
             'renames',

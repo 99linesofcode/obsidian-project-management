@@ -6,9 +6,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: record the card deletion, the state change and the
-// record removal the action asks for, so the action's own behaviour (find →
-// delete card → close → remove) is what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
   deleteCardCalls: Array<{ projectNodeId: string; issueUrl: string }> = [];

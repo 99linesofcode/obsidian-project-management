@@ -4,19 +4,10 @@ import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { repoNameFromUrl } from './repoNameFromUrl.js';
 
-// The discovery input: one identifier per connection — the repository url. The
-// board is no longer configured; it is derived from the repo.
 export interface AttachProjectInput {
   repoUrl: string;
 }
 
-// UC1: attach a project. Resolves a project note's code-host connection to its
-// identities from the repository alone. A github connection without a repo url
-// is a config error. The board is derived by the same ladder the sync chain
-// uses: no board yet resolves the repo alone (the chain's ensure-board step
-// creates it), one board is adopted, several adopt the one titled with the repo
-// name, and several with no title match is a discovery error the user resolves
-// once.
 export class AttachProjectAction {
   constructor(private readonly port: ProjectManagementPort) {}
 
@@ -38,8 +29,6 @@ export class AttachProjectAction {
       );
     }
     if (choice.kind === 'create') {
-      // No board yet: discovery resolves the repository alone and never writes.
-      // The sync chain's ensure-board step creates the board on the next pass.
       return new ProjectIdentityData({
         repoUrl: data.repoUrl,
         repoNodeId,

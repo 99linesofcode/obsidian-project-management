@@ -8,11 +8,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the project management port records the draft card it
-// was asked to promote and returns the resulting task; the vault and registry
-// record what the note action creates. The promote action's own behaviour
-// (convert the card, then materialise the fetched task) is what's under test,
-// against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
   promoted: Array<{ itemId: string; repoNodeId: string }> = [];
   task: GithubTaskData = {

@@ -64,8 +64,6 @@ describe('MAT-5 — a task renders as a note', () => {
 });
 
 describe('TaskNoteMapper.render', () => {
-  // The user's template: empty sync fields the plugin fills, vault-owned
-  // fields it keeps, and a {{date}} placeholder for the created date.
   const template = [
     '---',
     'affiliation: []',

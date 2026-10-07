@@ -4,10 +4,6 @@ import { parseConnectionsBlock } from './parseConnectionsBlock.js';
 import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 import { stripConnectionsBlock } from './stripConnectionsBlock.js';
 
-// Rewrites one connection's `project` value in a note's frontmatter, in place.
-// WHY a dedicated writer: the connections block is nested, so the flat
-// stampFrontmatterField cannot reach it. A re-anchor is a re-key of the block,
-// never a legacy top-level property.
 export async function stampConnectionProject(
   vault: VaultPort,
   notePath: string,
