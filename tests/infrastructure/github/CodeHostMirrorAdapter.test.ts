@@ -1,0 +1,591 @@
+import { describe, expect, it } from 'vitest';
+import { AdapterRegistration } from '../../../src/core/data/AdapterRegistration.js';
+import { Baseline } from '../../../src/core/data/Baseline.js';
+import { CanonicalFieldWrite } from '../../../src/core/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../../src/core/data/CanonicalTask.js';
+import { MirrorSyncPass } from '../../../src/core/data/MirrorSyncPass.js';
+import { SideObservation } from '../../../src/core/data/SideObservation.js';
+import { MirrorSyncAction } from '../../../src/core/MirrorSyncAction.js';
+import { registerAdapters } from '../../../src/core/registerAdapters.js';
+import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
+import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
+import { CodeHostTarget } from '../../../src/infrastructure/github/CodeHostTarget.js';
+import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
+import { GithubTaskMapper } from '../../../src/github/GithubTaskMapper.js';
+import { typeFromLabels } from '../../../src/shared/typeFromLabels.js';
+
+const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
+const PARENT_URL = 'https://github.com/acme/widgets/issues/40';
+
+function target(): string {
+  return new CodeHostTarget({
+    repoUrl: 'https://github.com/acme/widgets',
+    projectNodeId: 'PVT_123',
+    statusFieldId: 'PVTF_456',
+    statusOptions: [
+      { id: 'PVTSSF_1', name: 'Unshaped' },
+      { id: 'PVTSSF_2', name: 'Done' },
+    ],
+  }).serialize();
+}
+
+class FakeTransport implements CodeHostTransport {
+  readonly bodies: string[] = [];
+  readonly paths: string[] = [];
+  private readonly responses: Array<{ status: number; json: unknown }>;
+
+  constructor(responses: Array<{ status: number; json: unknown }>) {
+    this.responses = [...responses];
+  }
+
+  async post(body: string): Promise<{ status: number; json: unknown }> {
+    this.bodies.push(body);
+    return this.next();
+  }
+
+  async get(path: string): Promise<{ status: number; json: unknown }> {
+    this.paths.push(path);
+    return this.next();
+  }
+
+  async patch(
+    path: string,
+    body: string,
+  ): Promise<{ status: number; json: unknown }> {
+    this.paths.push(path);
+    this.bodies.push(body);
+    return this.next();
+  }
+
+  async postPath(
+    path: string,
+    body: string,
+  ): Promise<{ status: number; json: unknown }> {
+    this.paths.push(path);
+    this.bodies.push(body);
+    return this.next();
+  }
+
+  async putPath(
+    path: string,
+    body: string,
+  ): Promise<{ status: number; json: unknown }> {
+    this.paths.push(path);
+    this.bodies.push(body);
+    return this.next();
+  }
+
+  private next(): { status: number; json: unknown } {
+    const response = this.responses.shift();
+    if (response === undefined) {
+      throw new Error('fake transport: no more responses queued');
+    }
+    return response;
+  }
+}
+
+function issueNode(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    url: ISSUE_URL,
+    number: 42,
+    id: 'I_kwDOAAAA42',
+    title: 'Fix the bug',
+    body: 'The bug happens on resize.',
+    state: 'OPEN',
+    createdAt: '2026-09-18T08:00:00Z',
+    lastEditedAt: '2026-09-18T10:00:00Z',
+    updatedAt: '2026-09-18T11:30:00Z',
+    labels: { nodes: [{ name: 'type: task' }] },
+    parent: { url: PARENT_URL },
+    ...overrides,
+  };
+}
+
+function cardNode(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: 'PVTI_1',
+    type: 'ISSUE',
+    updatedAt: '2026-09-18T12:00:00Z',
+    content: { url: ISSUE_URL },
+    fieldValues: {
+      nodes: [{ name: 'Building', field: { name: 'Status' } }],
+    },
+    ...overrides,
+  };
+}
+
+function boardResponse(
+  issues: Record<string, unknown>[],
+  cards: Record<string, unknown>[],
+): { status: number; json: unknown } {
+  return {
+    status: 200,
+    json: {
+      data: {
+        repository: { issues: { nodes: issues } },
+        node: { items: { nodes: cards } },
+      },
+    },
+  };
+}
+
+function restIssue(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    html_url: ISSUE_URL,
+    number: 42,
+    node_id: 'I_kwDOAAAA42',
+    title: 'Fix the bug',
+    body: 'The bug happens on resize.',
+    state: 'open',
+    updated_at: '2026-09-18T11:30:00Z',
+    labels: [{ name: 'type: task' }],
+    ...overrides,
+  };
+}
+
+function adapterWith(responses: Array<{ status: number; json: unknown }>): {
+  adapter: CodeHostMirrorAdapter;
+  transport: FakeTransport;
+} {
+  const transport = new FakeTransport(responses);
+  return { adapter: new CodeHostMirrorAdapter(transport, target()), transport };
+}
+
+describe('CodeHostMirrorAdapter — the canonical read (F01 ACM-5)', () => {
+  it('maps the issue and its board card onto the canonical task', async () => {
+    const { adapter } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+    ]);
+
+    const task = await adapter.readTask(ISSUE_URL);
+
+    expect(task).not.toBeNull();
+    expect(task!.handle).toBe(ISSUE_URL);
+    expect(task!.title).toBe('Fix the bug');
+    expect(task!.body).toBe('The bug happens on resize.');
+    expect(task!.status).toBe('Building');
+    expect(task!.completed).toBe(false);
+    expect(task!.parent).toBe(PARENT_URL);
+    expect(task!.labels).toEqual(['type: task']);
+  });
+
+  it('reads a closed issue as completion (the issue state, not the lane)', async () => {
+    const { adapter } = adapterWith([
+      boardResponse([issueNode({ state: 'CLOSED' })], [cardNode()]),
+    ]);
+
+    const task = await adapter.readTask(ISSUE_URL);
+
+    expect(task!.completed).toBe(true);
+    expect(task!.status).toBe('Building');
+  });
+
+  it('reads a card-less issue with no lane', async () => {
+    const { adapter } = adapterWith([boardResponse([issueNode()], [])]);
+
+    const task = await adapter.readTask(ISSUE_URL);
+
+    expect(task!.status).toBe('');
+  });
+});
+
+describe('CodeHostMirrorAdapter — the existing half is the characterization (MAT-3)', () => {
+  it('matches GithubTaskMapper on the shared canonical fields', async () => {
+    const { adapter } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+    ]);
+
+    const task = await adapter.readTask(ISSUE_URL);
+    const existing = GithubTaskMapper.parse(
+      {
+        url: ISSUE_URL,
+        nodeId: 'I_kwDOAAAA42',
+        title: 'Fix the bug',
+        body: 'The bug happens on resize.',
+        state: 'open',
+        createdAt: '2026-09-18T08:00:00Z',
+        lastEditedAt: '2026-09-18T10:00:00Z',
+        updatedAt: '2026-09-18T11:30:00Z',
+        labels: ['type: task'],
+        parentUrl: PARENT_URL,
+      },
+      {
+        itemId: 'PVTI_1',
+        type: 'ISSUE',
+        issueUrl: ISSUE_URL,
+        statusOptionName: 'Building',
+        updatedAt: '2026-09-18T12:00:00Z',
+      },
+      'Done',
+    );
+
+    expect(task!.title).toBe(existing.title);
+    expect(task!.body).toBe(existing.body);
+    expect(task!.status).toBe(existing.status);
+    expect(typeFromLabels([...task!.labels])).toBe(existing.type);
+  });
+});
+
+describe('CodeHostMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
+  it('writes a title through the issue REST endpoint', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: restIssue({ title: 'New title' }) },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'title',
+        value: 'New title',
+      }),
+    );
+
+    expect(transport.paths[0]).toBe('/repos/acme/widgets/issues/42');
+    expect(transport.bodies[0]).toBe(JSON.stringify({ title: 'New title' }));
+  });
+
+  it('writes a body through the issue REST endpoint', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: restIssue({ body: 'New body' }) },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'body',
+        value: 'New body',
+      }),
+    );
+
+    expect(transport.bodies[0]).toBe(JSON.stringify({ body: 'New body' }));
+  });
+
+  it('writes completion through the issue state', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: restIssue({ state: 'closed' }) },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'completion',
+        value: 'true',
+      }),
+    );
+
+    expect(transport.bodies[0]).toBe(JSON.stringify({ state: 'closed' }));
+  });
+
+  it('reopens an issue when completion is false', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: restIssue({ state: 'open' }) },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'completion',
+        value: 'false',
+      }),
+    );
+
+    expect(transport.bodies[0]).toBe(JSON.stringify({ state: 'open' }));
+  });
+
+  it('writes Status as the board card lane', async () => {
+    const { adapter, transport } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+      { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'Status',
+        value: 'Done',
+      }),
+    );
+
+    expect(transport.bodies[1]).toContain('SetBoardStatus');
+    expect(transport.bodies[1]).toContain('"itemId":"PVTI_1"');
+    expect(transport.bodies[1]).toContain('"fieldId":"PVTF_456"');
+    expect(transport.bodies[1]).toContain('"optionId":"PVTSSF_2"');
+  });
+
+  it('writes the label set through the issue labels endpoint', async () => {
+    const { adapter, transport } = adapterWith([{ status: 200, json: [] }]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'label',
+        value: 'type: task,bug',
+      }),
+    );
+
+    expect(transport.paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
+    expect(transport.bodies[0]).toBe(
+      JSON.stringify({ labels: ['type: task', 'bug'] }),
+    );
+  });
+
+  it('links a parent through the sub-issue relation', async () => {
+    const { adapter, transport } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+      {
+        status: 200,
+        json: restIssue({ html_url: PARENT_URL, node_id: 'I_kwDOAAAA40' }),
+      },
+      {
+        status: 200,
+        json: { data: { addSubIssue: { issue: { id: 'I_kwDOAAAA42' } } } },
+      },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'subtasks',
+        value: PARENT_URL,
+      }),
+    );
+
+    expect(transport.bodies[1]).toContain('addSubIssue');
+    expect(transport.bodies[1]).toContain('"issueId":"I_kwDOAAAA40"');
+    expect(transport.bodies[1]).toContain('"subIssueId":"I_kwDOAAAA42"');
+  });
+
+  it('unlinks a parent through the sub-issue relation', async () => {
+    const { adapter, transport } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+      {
+        status: 200,
+        json: restIssue({ html_url: PARENT_URL, node_id: 'I_kwDOAAAA40' }),
+      },
+      {
+        status: 200,
+        json: { data: { removeSubIssue: { issue: { id: 'I_kwDOAAAA42' } } } },
+      },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'subtasks',
+        value: null,
+      }),
+    );
+
+    expect(transport.bodies[1]).toContain('removeSubIssue');
+    expect(transport.bodies[1]).toContain('"subIssueId":"I_kwDOAAAA42"');
+  });
+});
+
+describe('CodeHostMirrorAdapter — the remaining surface', () => {
+  it('deletes the issue card from the board', async () => {
+    const { adapter, transport } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+      {
+        status: 200,
+        json: { data: { deleteProjectV2Item: { deletedItemId: 'PVTI_1' } } },
+      },
+    ]);
+
+    await adapter.deleteTask(ISSUE_URL);
+
+    expect(transport.bodies[1]).toContain('DeleteBoardItem');
+    expect(transport.bodies[1]).toContain('"itemId":"PVTI_1"');
+    expect(transport.bodies[1]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('returns the decisive per-field time', async () => {
+    const { adapter } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+    ]);
+    const title = await adapter.fieldTime(ISSUE_URL, 'title');
+
+    const { adapter: second } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+    ]);
+    const status = await second.fieldTime(ISSUE_URL, 'Status');
+
+    expect(title).toBe('2026-09-18T10:00:00Z');
+    expect(status).toBe('2026-09-18T12:00:00Z');
+  });
+
+  it('reads the tracked (typed) issues for the board', async () => {
+    const { adapter } = adapterWith([
+      boardResponse(
+        [
+          issueNode(),
+          issueNode({
+            url: 'https://github.com/acme/widgets/issues/43',
+            number: 43,
+            id: 'I_kwDOAAAA43',
+            labels: { nodes: [{ name: 'bug' }] },
+          }),
+        ],
+        [cardNode()],
+      ),
+    ]);
+
+    const tasks = await adapter.readTasks(target());
+
+    expect(tasks.map((task) => task.handle)).toEqual([ISSUE_URL]);
+  });
+
+  it('captures the untyped, open issues as remote-born tasks', async () => {
+    const { adapter } = adapterWith([
+      boardResponse(
+        [
+          issueNode(),
+          issueNode({
+            url: 'https://github.com/acme/widgets/issues/43',
+            number: 43,
+            id: 'I_kwDOAAAA43',
+            state: 'OPEN',
+            labels: { nodes: [{ name: 'bug' }] },
+          }),
+          issueNode({
+            url: 'https://github.com/acme/widgets/issues/44',
+            number: 44,
+            id: 'I_kwDOAAAA44',
+            state: 'CLOSED',
+            labels: { nodes: [] },
+          }),
+        ],
+        [cardNode()],
+      ),
+    ]);
+
+    const tasks = await adapter.capture(target());
+
+    expect(tasks.map((task) => task.handle)).toEqual([
+      'https://github.com/acme/widgets/issues/43',
+    ]);
+  });
+
+  it('reports the fetch as complete', () => {
+    const { adapter } = adapterWith([]);
+
+    expect(adapter.fetchComplete()).toBe(true);
+  });
+
+  it('creates an issue and returns its canonical task', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } },
+      {
+        status: 200,
+        json: {
+          data: {
+            createIssue: {
+              issue: {
+                id: 'I_kwDOAAAA50',
+                url: 'https://github.com/acme/widgets/issues/50',
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    const created = await adapter.createTask(
+      target(),
+      new CanonicalTask({
+        handle: '',
+        entityId: 'uuid-1',
+        title: 'New task',
+        body: 'Body',
+        status: '',
+        completed: false,
+        parent: null,
+        labels: [],
+      }),
+    );
+
+    expect(transport.bodies[1]).toContain('CreateIssue');
+    expect(transport.bodies[1]).toContain('"projectV2Ids":["PVT_123"]');
+    expect(created.handle).toBe('https://github.com/acme/widgets/issues/50');
+    expect(created.entityId).toBe('uuid-1');
+  });
+});
+
+describe('githubDescriptor — registers with the core (F01 ACM-8, ACM-9)', () => {
+  it('registers the code host as a mirror under the application id github', () => {
+    const result = registerAdapters([
+      new AdapterRegistration(
+        githubDescriptor(),
+        new CodeHostMirrorAdapter(new FakeTransport([]), target()),
+      ),
+    ]);
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.adapters.get('github')?.descriptor.applicationId).toBe(
+      'github',
+    );
+  });
+
+  it('declares the universal and mandatory surface plus the optional mirrors', () => {
+    const descriptor = githubDescriptor();
+
+    expect(descriptor.capabilities).toContain('project');
+    expect(descriptor.capabilities).toContain('lifecycle');
+    expect(descriptor.capabilities).toContain('Status');
+    expect(descriptor.capabilities).toContain('label');
+    expect(descriptor.capabilities).toContain('subtasks');
+    expect(descriptor.capabilities).toContain('completion');
+    expect(descriptor.capabilities).toContain('capture');
+    expect(descriptor.capabilities).toContain(
+      'trustworthy per-field timestamps',
+    );
+    expect(descriptor.capabilities).toContain('complete-fetch');
+    expect(descriptor.represents('Status')).toBe(true);
+    expect(descriptor.represents('subtasks')).toBe(true);
+  });
+});
+
+describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', () => {
+  it('reconciles a vault Status change onto the board lane', async () => {
+    const transport = new FakeTransport([
+      boardResponse([issueNode()], [cardNode()]),
+      boardResponse([issueNode()], [cardNode()]),
+      boardResponse([issueNode()], [cardNode()]),
+      boardResponse([issueNode()], [cardNode()]),
+      { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } },
+    ]);
+    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const registered = registerAdapters([
+      new AdapterRegistration(githubDescriptor(), adapter),
+    ]).adapters.get('github')!;
+
+    const pass = new MirrorSyncPass({
+      entityId: ISSUE_URL,
+      field: 'Status',
+      origin: new SideObservation({
+        side: 'vault',
+        role: 'origin',
+        current: 'Done',
+        baseline: new Baseline('Building', false),
+        fieldTime: null,
+        timestampTrustworthy: true,
+        completeFetch: true,
+        currentCompleted: false,
+      }),
+      mirrors: [registered],
+      baselines: new Map([['github', new Baseline('Building', false)]]),
+    });
+
+    const record = await new MirrorSyncAction().invoke(pass);
+
+    expect(record.result.value).toBe('Done');
+    expect(record.written).toEqual(['github']);
+    expect(transport.bodies[4]).toContain('SetBoardStatus');
+    expect(transport.bodies[4]).toContain('"optionId":"PVTSSF_2"');
+  });
+});
