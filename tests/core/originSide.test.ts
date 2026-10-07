@@ -5,9 +5,11 @@ import { Baseline } from '../../src/core/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../src/core/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
 import { MirrorSyncPass } from '../../src/core/data/MirrorSyncPass.js';
+import { OriginObservation } from '../../src/core/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
 import { SideObservation } from '../../src/core/data/SideObservation.js';
 import { MirrorSyncAction } from '../../src/core/MirrorSyncAction.js';
+import { originSideObservation } from '../../src/core/originSideObservation.js';
 import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../src/infrastructure/fake/conformanceDescriptor.js';
@@ -70,16 +72,16 @@ function originSide(
   status: string | null,
   baseline: Baseline,
 ): SideObservation {
-  return new SideObservation({
-    side: 'vault',
-    role: 'origin',
-    current: status,
+  return originSideObservation(
+    'vault',
     baseline,
-    fieldTime: null,
-    timestampTrustworthy: true,
-    completeFetch: true,
-    currentCompleted: false,
-  });
+    new OriginObservation({
+      current: status,
+      currentCompleted: false,
+      fieldTime: null,
+      trustworthy: true,
+    }),
+  );
 }
 
 function mirrorAdapter(applicationId: string): {

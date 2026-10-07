@@ -30,6 +30,7 @@ import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../src/infrastructure/fake/conformanceDescriptor.js';
 import { VaultOriginAdapter } from '../../src/infrastructure/vault/VaultOriginAdapter.js';
+import { originSideObservation } from '../../src/core/originSideObservation.js';
 
 const NOTE_PATH = 'Projecten/Acme/taken/fix-the-bug.md';
 const MTIME = Date.parse('2026-10-08T10:00:00Z');
@@ -219,5 +220,50 @@ describe('VaultOriginAdapter — the origin round-trip (F02 NWM-3, NWM-17)', () 
     expect(vault.content(NOTE_PATH)).toContain('status: Review');
     expect(record.advanced).toContain('vault');
     expect(record.advanced).toContain('conformance');
+  });
+});
+
+describe('VaultOriginAdapter — the origin timestamp reaches the merge (F02 NWM-6, NWM-28)', () => {
+  it("wins the decisive-timestamp rung with the note's mtime", async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, NOTE, MTIME);
+    const mirror = new ConformanceMirrorAdapter();
+    mirror.seed(
+      new CanonicalTask({
+        handle: NOTE_PATH,
+        entityId: NOTE_PATH,
+        title: 'Task',
+        body: '',
+        status: 'Review',
+        completed: false,
+        parent: null,
+        labels: [],
+      }),
+    );
+    mirror.setFieldTime(NOTE_PATH, 'Status', '2026-10-08T09:00:00Z');
+    const registered = registerAdapters([
+      new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
+    ]).adapters.get('conformance')!;
+
+    const observed = await adapter.observe(NOTE_PATH, 'Status');
+    const pass = new MirrorSyncPass({
+      entityId: NOTE_PATH,
+      field: 'Status',
+      origin: originSideObservation(
+        'vault',
+        new Baseline('Todo', false),
+        observed,
+      ),
+      mirrors: [registered],
+      baselines: new Map([['conformance', new Baseline('Todo', false)]]),
+    });
+
+    const record = await new MirrorSyncAction(adapter).invoke(pass);
+
+    expect(observed.fieldTime).toBe(new Date(MTIME).toISOString());
+    expect(record.result.rung).toBe(1);
+    expect(record.result.winner).toBe('vault');
+    expect(record.result.value).toBe('Building');
+    expect(mirror.currentTask(NOTE_PATH)?.status).toBe('Building');
   });
 });
