@@ -1,15 +1,20 @@
-// The code-host identities a project note resolves to, in the shape the core
-// needs. Node IDs are opaque code-host identifiers; the core never sees raw
-// code-host JSON.
 export interface ProjectStatusOption {
   id: string;
   name: string;
 }
 
-export interface ProjectIdentityData {
+export class ProjectIdentityData {
   repoUrl: string;
   repoNodeId: string;
   projectNodeId: string;
   statusFieldId: string;
   statusOptions: ProjectStatusOption[];
+
+  constructor(init: ProjectIdentityData) {
+    this.repoUrl = init.repoUrl;
+    this.repoNodeId = init.repoNodeId;
+    this.projectNodeId = init.projectNodeId;
+    this.statusFieldId = init.statusFieldId;
+    this.statusOptions = init.statusOptions;
+  }
 }

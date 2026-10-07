@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// The adapter imports TFile from Obsidian, which has no runtime entry in the
-// package (types only). Mock just that class so the adapter's event wiring can
-// be exercised without the host app — the same hand-rolled vi.mock('obsidian')
-// machinery the scheduler test already uses.
 const { TFile } = vi.hoisted(() => {
   class TFile {
     stat: { mtime: number };
@@ -20,16 +16,11 @@ const { TFile } = vi.hoisted(() => {
 
 vi.mock('obsidian', () => ({ TFile }));
 
-// The hoisted TFile is a value; this alias gives the instance type for the
-// fake vault's annotations.
 type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App, EventRef } from 'obsidian';
 import { VaultAdapter } from '../../src/vault/VaultAdapter.js';
 
-// A fake vault that records the handlers the adapter subscribes and lets a
-// test fire an event at them, so the adapter's filter and routing are what's
-// under test.
 class FakeVault {
   private readonly handlers = new Map<
     string,
@@ -173,9 +164,6 @@ describe('VaultAdapter.modifiedTime', () => {
   });
 });
 
-// A fake vault with a flat file list and a folder set, so the adapter's
-// moveFolder can be exercised: it filters getFiles() by prefix, renames each
-// through fileManager.renameFile, and creates destination folders as needed.
 class MoveVault {
   files: TFileInstance[];
   folders = new Set<string>();
@@ -259,5 +247,95 @@ describe('VaultAdapter.moveFolder', () => {
     await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
 
     expect(vault.renames).toEqual([]);
+  });
+});
+
+class CreateVault {
+  folders = new Set<string>();
+  files = new Map<string, string>();
+
+  getFolderByPath(path: string): unknown {
+    return this.folders.has(path) ? {} : null;
+  }
+
+  async createFolder(path: string): Promise<void> {
+    this.folders.add(path);
+  }
+
+  async create(path: string, content: string): Promise<void> {
+    this.files.set(path, content);
+  }
+}
+
+function createSetup() {
+  const vault = new CreateVault();
+  const app = { vault } as unknown as App;
+  const adapter = new VaultAdapter(app, () => {});
+  return { vault, adapter };
+}
+
+describe('VaultAdapter.createNote', () => {
+  it('creates the missing parent folder before writing the file', async () => {
+    const { vault, adapter } = createSetup();
+
+    await adapter.createNote('Templates/Task.md', 'starter');
+
+    expect(vault.folders.has('Templates')).toBe(true);
+    expect(vault.files.get('Templates/Task.md')).toBe('starter');
+  });
+
+  it('creates each level of a nested folder chain', async () => {
+    const { vault, adapter } = createSetup();
+
+    await adapter.createNote('Bases/My/Projects.base', 'x');
+
+    expect([...vault.folders].sort()).toEqual(['Bases', 'Bases/My']);
+  });
+});
+
+class TrashVault {
+  files: TFileInstance[];
+  trashed: string[] = [];
+
+  constructor(paths: string[]) {
+    this.files = paths.map(
+      (path) => new TFile(path, path.split('.').pop() ?? ''),
+    );
+  }
+
+  getAbstractFileByPath(path: string): TFileInstance | null {
+    return this.files.find((file) => file.path === path) ?? null;
+  }
+
+  fileManager = {
+    trashFile: async (file: TFileInstance): Promise<void> => {
+      this.trashed.push(file.path);
+    },
+  };
+}
+
+describe('VaultAdapter.trashNote', () => {
+  it('delegates to FileManager.trashFile so the user preference is respected', async () => {
+    const vault = new TrashVault([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+    const app = { vault, fileManager: vault.fileManager } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    await adapter.trashNote('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+
+    expect(vault.trashed).toEqual([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+  });
+
+  it('is a no-op for an unknown path', async () => {
+    const vault = new TrashVault([]);
+    const app = { vault, fileManager: vault.fileManager } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    await adapter.trashNote('Projecten/missing.md');
+
+    expect(vault.trashed).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { requestUrl } from 'obsidian';
 import { isRecord } from '../shared/isRecord.js';
 import type { CreateTodoistTaskData } from './CreateTodoistTaskData.js';
 import type { TodoistProjectData } from './TodoistProjectData.js';
@@ -5,10 +6,6 @@ import type { TodoistSectionData } from './TodoistSectionData.js';
 import type { TodoistTaskData } from './TodoistTaskData.js';
 import type { TaskManagerPort } from '../shared/TaskManagerPort.js';
 
-// The transport the adapter talks through, injected so tests can fake it.
-// Todoist's REST v1 is path-based: reads over GET, writes over POST, deletes
-// over DELETE. The adapter stays token-agnostic; production wiring injects a
-// transport that adds the Authorization header (see createTodoistTransport).
 export interface TodoistTransport {
   get(path: string): Promise<TodoistResponse>;
   post(path: string, body: string): Promise<TodoistResponse>;
@@ -22,28 +19,35 @@ export interface TodoistResponse {
 
 const BASE_URL = 'https://api.todoist.com/api/v1';
 
-// Builds the token-bound transport the adapter talks through. The adapter
-// stays token-agnostic; the Authorization header is added here. Kept beside
-// the adapter so the live probe and the plugin wiring share one transport.
 export function createTodoistTransport(token: string): TodoistTransport {
   const request = async (
     method: string,
     path: string,
     body?: string,
   ): Promise<TodoistResponse> => {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body }),
-    });
-    const text = await response.text();
-    return {
-      status: response.status,
-      json: text.length > 0 ? JSON.parse(text) : null,
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
     };
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const response = await requestUrl({
+      url: `${BASE_URL}${path}`,
+      method,
+      headers,
+      ...(body === undefined ? {} : { body }),
+      throw: false,
+    });
+    const text = response.text;
+    let json: unknown = null;
+    if (text.length > 0) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+    }
+    return { status: response.status, json };
   };
   return {
     get: (path) => request('GET', path),
@@ -52,12 +56,6 @@ export function createTodoistTransport(token: string): TodoistTransport {
   };
 }
 
-// Implements the task manager port against Todoist's REST API v1. Maps raw
-// responses onto the provider DTOs; the core never sees Todoist JSON. The
-// adapter is token-agnostic infrastructure: the transport carries the bearer
-// token, so constructing the adapter can never fail on a bad token. The clock
-// is injected so the completed-since query's `until` bound is deterministic in
-// tests.
 export class TodoistAdapter implements TaskManagerPort {
   constructor(
     private readonly transport: TodoistTransport,
@@ -69,8 +67,6 @@ export class TodoistAdapter implements TaskManagerPort {
     return raw.map((project) => this.mapProject(project));
   }
 
-  // The list endpoint omits archived projects, so a single fetch is the only
-  // way to read one. A 404 means the project is gone (deleted), not archived.
   async fetchProject(id: string): Promise<TodoistProjectData | null> {
     const response = await this.transport.get(`/projects/${id}`);
     if (response.status === 404) {
@@ -118,8 +114,6 @@ export class TodoistAdapter implements TaskManagerPort {
     return this.mapSection(this.requireRecord(response, 'create section'));
   }
 
-  // Renames a section in place. The update endpoint takes the new name; the
-  // section id is stable, so a lane rename keeps its section (dt-07).
   async updateSection(id: string, name: string): Promise<void> {
     await this.postOk(`/sections/${id}`, { name }, 'update section');
   }
@@ -131,9 +125,6 @@ export class TodoistAdapter implements TaskManagerPort {
     return raw.map((task) => this.mapTask(task, false));
   }
 
-  // Completed tasks are queried by completion date, not by project listing:
-  // the active set never contains them. `until` is bounded by the injected
-  // clock so the window is explicit and testable.
   async fetchCompletedTasks(
     projectId: string,
     since: string,
@@ -172,12 +163,6 @@ export class TodoistAdapter implements TaskManagerPort {
     await this.postOk(`/tasks/${id}`, input, 'update task');
   }
 
-  // Moving is its own endpoint: the update endpoint silently drops section_id,
-  // and the move endpoint accepts exactly one of project_id/section_id/
-  // parent_id. The port only exposes section and parent placement. A null
-  // parent is an explicit move to the TOP LEVEL (dt-23's slice flatten): the
-  // API takes parent_id: null, and a section_id may ride along so the
-  // unparented task lands in its lane rather than the project's default.
   async moveTask(
     id: string,
     to: { sectionId?: string; parentId?: string | null },
@@ -225,20 +210,12 @@ export class TodoistAdapter implements TaskManagerPort {
 
   async deleteTask(id: string): Promise<void> {
     const response = await this.transport.delete(`/tasks/${id}`);
-    // Deleting an already-gone twin is the desired end state, not a failure:
-    // vault-deletion propagation must be able to evict its bookkeeping even
-    // when the twin was removed on the Todoist side first. Any other non-2xx
-    // (auth, network, server) still throws, so the record survives and the
-    // next tick retries.
     if (response.status === 404) {
       return;
     }
     this.assertOk(response, 'delete task');
   }
 
-  // Labels are derived and auto-created (dt-09). Creating an existing label
-  // errors on Todoist, so the adapter checks first and no-ops when present —
-  // ensureLabel is idempotent by contract.
   async ensureLabel(name: string): Promise<void> {
     const labels = await this.getList('/labels');
     const exists = labels.some(
@@ -255,10 +232,7 @@ export class TodoistAdapter implements TaskManagerPort {
       id: this.stringField(raw, 'id'),
       name: this.stringField(raw, 'name'),
       isArchived: raw.is_archived === true,
-      // The provider's creation clock the capture cursor compares against; a
-      // missing clock is null (the cursor then never treats it as new).
-      createdAt:
-        typeof raw.created_at === 'string' ? raw.created_at : null,
+      createdAt: typeof raw.created_at === 'string' ? raw.created_at : null,
     };
   }
 
@@ -274,8 +248,6 @@ export class TodoistAdapter implements TaskManagerPort {
     raw: Record<string, unknown>,
     completed: boolean,
   ): TodoistTaskData {
-    // A completed-task record keys the task as task_id (its own id is the
-    // completion event); an active task keys it as id.
     const id =
       typeof raw.task_id === 'string'
         ? raw.task_id
@@ -288,8 +260,6 @@ export class TodoistAdapter implements TaskManagerPort {
       content: this.stringField(raw, 'content'),
       labels: this.stringList(raw.labels),
       isCompleted: completed || raw.checked === true,
-      // The provider clocks the conflict ladder may use. A missing clock is ''
-      // rather than null so the transport shape stays uniform.
       addedAt: this.stringOrEmpty(raw.added_at),
       updatedAt: this.stringOrEmpty(raw.updated_at),
       completedAt:
@@ -297,8 +267,6 @@ export class TodoistAdapter implements TaskManagerPort {
     };
   }
 
-  // Walks a cursor-paginated list endpoint. v1 list responses carry the page
-  // under `results` (or `items` for completed tasks) plus a `next_cursor`.
   private async getList(path: string): Promise<Record<string, unknown>[]> {
     const items: Record<string, unknown>[] = [];
     let cursor: string | null = null;
@@ -375,8 +343,6 @@ export class TodoistAdapter implements TaskManagerPort {
     return typeof value === 'string' ? value : null;
   }
 
-  // A provider clock is carried as a string; an absent one is the empty string
-  // so callers never have to branch on undefined.
   private stringOrEmpty(value: unknown): string {
     return typeof value === 'string' ? value : '';
   }

@@ -8,11 +8,6 @@ import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPo
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the project management port records the labels it was
-// asked to add and returns the task the action should materialise; the vault
-// and registry record what the note action creates. The promote action's own
-// behaviour (label first, then materialise the fetched task) is what's under
-// test, against the real CreateTaskNoteAction.
 class FakePort implements ProjectManagementPort {
   addedLabels: Array<{ url: string; label: string }> = [];
   task: GithubTaskData = {
@@ -84,7 +79,22 @@ class FakePort implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async adoptBoard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -110,8 +120,8 @@ class FakeVault implements VaultPort {
   async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async findProjectNotes(): Promise<never> {
-    throw new Error('not used in this test');
+  async findProjectNotes(): Promise<[]> {
+    return [];
   }
   async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
@@ -158,6 +168,7 @@ describe('PRO-1 — an untyped issue is promoted by hand', () => {
       url: port.task.url,
       label: 'type: task',
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
     });
 
     expect(port.addedLabels).toEqual([
@@ -180,6 +191,7 @@ describe('PRO-1 — an untyped issue is promoted by hand', () => {
       url: port.task.url,
       label: 'type: task',
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
     });
 
     expect(port.addedLabels).toEqual([

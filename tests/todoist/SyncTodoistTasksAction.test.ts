@@ -122,7 +122,22 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async adoptBoard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -139,11 +154,8 @@ class FakeTaskManager implements TaskManagerPort {
   deleteTaskCalls: string[] = [];
   completeCalls: Array<{ id: string; completed: boolean }> = [];
   ensureLabelCalls: string[] = [];
-  // The mutation order across move/delete, so a test can pin that a slice's
-  // children are flattened BEFORE the slice twin is deleted.
   mutations: string[] = [];
   failMove = false;
-  // Counters so a test can pin the one-snapshot-per-pass contract.
   activeFetches = 0;
   completedFetches = 0;
   failCompleted = false;
@@ -229,9 +241,6 @@ class FakeTaskManager implements TaskManagerPort {
   async deleteTask(id: string): Promise<void> {
     this.deleteTaskCalls.push(id);
     this.mutations.push(`delete:${id}`);
-    // Model the API's cascade: deleting a parent takes its subtasks with it,
-    // so a successful flatten (no child still parented to the twin) is what
-    // keeps the children alive.
     const doomed = new Set<string>([id]);
     let grew = true;
     while (grew) {
@@ -329,8 +338,6 @@ function taskNote(statusName: string, body = '', todoistId?: string): string {
     : content.replace('---\n', `---\ntodoist: ${todoistId}\n`);
 }
 
-// A task note of any type, optionally nested under a parent note stem through
-// the affiliation (the parent relation the placement walk follows).
 function typedTaskNote(
   type: string,
   title: string,
@@ -363,6 +370,8 @@ function buildAction(
 ): { action: SyncTodoistTasksAction; events: string[] } {
   const events: string[] = [];
   const action = new SyncTodoistTasksAction(
+    'todoist',
+    projectId,
     taskManager,
     projectManagement,
     vault,
@@ -371,10 +380,22 @@ function buildAction(
       execute: async () => sections,
     } as unknown as EnsureTodoistSectionsAction,
     writer,
-    recorder(events, 'applyRemoteChanges') as unknown as ApplyTodoistRemoteChangesAction,
-    recorder(events, 'captureCreations') as unknown as CaptureTodoistCreationsAction,
-    recorder(events, 'applyCompletion') as unknown as ApplyTodoistCompletionAction,
-    recorder(events, 'propagateDeletions') as unknown as PropagateTodoistDeletionsAction,
+    recorder(
+      events,
+      'applyRemoteChanges',
+    ) as unknown as ApplyTodoistRemoteChangesAction,
+    recorder(
+      events,
+      'captureCreations',
+    ) as unknown as CaptureTodoistCreationsAction,
+    recorder(
+      events,
+      'applyCompletion',
+    ) as unknown as ApplyTodoistCompletionAction,
+    recorder(
+      events,
+      'propagateDeletions',
+    ) as unknown as PropagateTodoistDeletionsAction,
     'Shipped',
   );
   return { action, events };
@@ -394,11 +415,17 @@ function harness() {
     taskManager,
     writer as unknown as ApplyTaskToTodoistAction,
   );
-  return { action, events, vault, syncState, projectManagement, taskManager, writer };
+  return {
+    action,
+    events,
+    vault,
+    syncState,
+    projectManagement,
+    taskManager,
+    writer,
+  };
 }
 
-// A composed harness: the REAL writer over the fakes, so the settle property is
-// observable end to end.
 function composedHarness() {
   const vault = new FakeVault();
   const syncState = new FakeSyncState();
@@ -413,10 +440,25 @@ function composedHarness() {
     taskManager,
     writer,
   );
-  return { action, events, vault, syncState, projectManagement, taskManager, writer };
+  return {
+    action,
+    events,
+    vault,
+    syncState,
+    projectManagement,
+    taskManager,
+    writer,
+  };
 }
 
-const input = { projectName, projectId, syncedAt };
+const input = {
+  projectName,
+  syncedAt,
+  includeBoard: false,
+  connections: {
+    github: { tool: 'github', project: 'https://github.com/acme/widgets' },
+  },
+};
 
 describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('absorbs remote changes and captures before projecting, deletions last', async () => {
@@ -460,7 +502,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       github: { handle: taskUrl },
       todoist: {
         handle: 'T9',
-        // base lane Building; the twin sits in Unshaped
         base: toDiffViewWithBody(
           taskData({
             id: 'uuid-42',
@@ -697,8 +738,18 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       todoist: { handle: 'T-child' },
     });
     h.taskManager.active = [
-      todoistTask({ id: 'T-slice', content: 'The slice', sectionId: 'S2', labels: ['slice'] }),
-      todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
+      todoistTask({
+        id: 'T-slice',
+        content: 'The slice',
+        sectionId: 'S2',
+        labels: ['slice'],
+      }),
+      todoistTask({
+        id: 'T-child',
+        content: 'The child',
+        parentId: 'T-slice',
+        labels: ['task'],
+      }),
     ];
 
     await h.action.execute(input);
@@ -738,8 +789,18 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       todoist: { handle: 'T-child' },
     });
     h.taskManager.active = [
-      todoistTask({ id: 'T-slice', content: 'The slice', sectionId: 'S2', labels: ['slice'] }),
-      todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
+      todoistTask({
+        id: 'T-slice',
+        content: 'The slice',
+        sectionId: 'S2',
+        labels: ['slice'],
+      }),
+      todoistTask({
+        id: 'T-child',
+        content: 'The child',
+        parentId: 'T-slice',
+        labels: ['task'],
+      }),
     ];
     h.taskManager.failMove = true;
 
@@ -747,7 +808,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
 
     expect(h.taskManager.deleteTaskCalls).toEqual([]);
     expect(h.taskManager.mutations).toEqual(['move:T-child']);
-    expect(await h.syncState.findMirrorItem('todoist', 'T-slice')).not.toBeNull();
+    expect(
+      await h.syncState.findMirrorItem('todoist', 'T-slice'),
+    ).not.toBeNull();
   });
 
   it('settles after retiring a slice twin: a second pass writes nothing', async () => {
@@ -796,8 +859,18 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       todoist: { handle: 'T-child', base: childBase },
     });
     h.taskManager.active = [
-      todoistTask({ id: 'T-slice', content: 'The slice', sectionId: 'S2', labels: ['slice'] }),
-      todoistTask({ id: 'T-child', content: 'The child', parentId: 'T-slice', labels: ['task'] }),
+      todoistTask({
+        id: 'T-slice',
+        content: 'The slice',
+        sectionId: 'S2',
+        labels: ['slice'],
+      }),
+      todoistTask({
+        id: 'T-child',
+        content: 'The child',
+        parentId: 'T-slice',
+        labels: ['task'],
+      }),
     ];
 
     await h.action.execute(input);
@@ -902,10 +975,7 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     syncState.identities.set(projectName, identity);
     const projectManagement = new FakeProjectManagement();
     const taskManager = new FakeTaskManager();
-    const todoistWriter = new ApplyTaskToTodoistAction(
-      taskManager,
-      syncState,
-    );
+    const todoistWriter = new ApplyTaskToTodoistAction(taskManager, syncState);
 
     const parentUrl = 'https://github.com/acme/widgets/issues/40';
     const childUrl = 'https://github.com/acme/widgets/issues/42';
@@ -995,9 +1065,8 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     ];
     projectManagement.detail = { issues: [parentIssue, childIssue], cards };
 
-    // Pass 1 — the GitHub half sees the parent relation and pulls it into the
-    // child's affiliation
     const githubAction = new SyncGithubTasksAction(
+      'github',
       projectManagement,
       syncState,
       vault,
@@ -1012,14 +1081,17 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       new VerdictResolver('Shipped'),
       'Shipped',
     );
-    await githubAction.execute({ projectName, syncedAt, includeBoard: true });
+    await githubAction.execute({
+      projectName,
+      syncedAt,
+      includeBoard: true,
+      connections: {},
+    });
 
     expect(vault.notes.get(childPath)).toContain(
       'affiliation: ["[[_Acme Widgets]]", "[[the-parent]]"]',
     );
 
-    // Pass 2 — the Todoist projection moves the existing top-level twin under
-    // the parent's twin
     const { action: todoistAction } = buildAction(
       vault,
       syncState,
@@ -1105,20 +1177,33 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('swallows a step failure so the GitHub half is never affected', async () => {
     const events: string[] = [];
     const action = new SyncTodoistTasksAction(
+      'todoist',
+      projectId,
       new FakeTaskManager(),
       new FakeProjectManagement(),
       new FakeVault(),
       new FakeSyncState(),
-      { execute: async () => sections } as unknown as EnsureTodoistSectionsAction,
+      {
+        execute: async () => sections,
+      } as unknown as EnsureTodoistSectionsAction,
       new FakeWriter() as unknown as ApplyTaskToTodoistAction,
       {
         execute: async () => {
           throw new Error('todoist failed');
         },
       } as unknown as ApplyTodoistRemoteChangesAction,
-      recorder(events, 'captureCreations') as unknown as CaptureTodoistCreationsAction,
-      recorder(events, 'applyCompletion') as unknown as ApplyTodoistCompletionAction,
-      recorder(events, 'propagateDeletions') as unknown as PropagateTodoistDeletionsAction,
+      recorder(
+        events,
+        'captureCreations',
+      ) as unknown as CaptureTodoistCreationsAction,
+      recorder(
+        events,
+        'applyCompletion',
+      ) as unknown as ApplyTodoistCompletionAction,
+      recorder(
+        events,
+        'propagateDeletions',
+      ) as unknown as PropagateTodoistDeletionsAction,
       'Shipped',
     );
 

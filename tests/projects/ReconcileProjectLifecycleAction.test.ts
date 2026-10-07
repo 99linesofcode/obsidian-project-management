@@ -14,12 +14,6 @@ import type { TaskData } from '../../src/shared/TaskData.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds note content and actually moves folders,
-// the sync state holds TaskData records, baselines, watch state and the Todoist
-// project bookkeeping and relocates records, the task manager holds the Todoist
-// project list, and the project management fake records board mutations and
-// serves the latest-issue probe. The lifecycle's merge decisions are what's
-// under test; the fakes' real mutation is what makes idempotency observable.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -83,8 +77,6 @@ class FakeTaskManager implements TaskManagerPort {
   nextId = 'P-new';
 
   async fetchProjects(): Promise<TodoistProjectData[]> {
-    // The real list endpoint omits archived projects; the fake mirrors that so
-    // the fetch-by-id path is exercised.
     return this.projects.filter((project) => !project.isArchived);
   }
   async fetchProject(id: string): Promise<TodoistProjectData | null> {
@@ -231,7 +223,22 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async adoptBoard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -244,12 +251,30 @@ const archivedTaskPath = 'Archief/Acme Widgets/taken/42-fix-the-bug.md';
 const issueUrl = 'https://github.com/acme/widgets/issues/42';
 
 function note(anchor?: string): string {
-  const lines = ['---', 'pm: github'];
+  const lines = [
+    '---',
+    'connections:',
+    '  github:',
+    '    tool: github',
+    '    project: https://github.com/acme/widgets',
+  ];
   if (anchor !== undefined) {
-    lines.push(`todoist: ${anchor}`);
+    lines.push('  todoist:', '    tool: todoist', `    project: ${anchor}`);
   }
   lines.push('---', '# Acme Widgets');
   return lines.join('\n');
+}
+
+function connectionNote(anchor: string): string {
+  return [
+    '---',
+    'connections:',
+    '  todoist:',
+    '    tool: todoist',
+    `    project: ${anchor}`,
+    '---',
+    '# Acme Widgets',
+  ].join('\n');
 }
 
 function project(
@@ -258,8 +283,6 @@ function project(
   return { id: 'P1', name: 'Acme Widgets', isArchived: false, ...overrides };
 }
 
-// A tracked issue: the registry record carries the github handle and the
-// last-synced base whose status is the lane the lock sweep reads.
 function seedRecord(
   syncState: FakeSyncState,
   notePath: string,
@@ -321,8 +344,6 @@ const archivedInput = {
   closed: true,
 };
 
-// A settled archived project: the note under Archief/, the Todoist project
-// archived and the baseline archived.
 function setupArchived() {
   const h = setup();
   h.vault.notes.delete(activeNote);
@@ -338,9 +359,6 @@ function setupArchived() {
   return h;
 }
 
-// A harness whose discovered home note sits at a legacy path — the migration
-// tests' subject. The canonical note is removed so only the legacy file is
-// discovered.
 function setupLegacyHome(homePath: string, anchor = 'P1') {
   const h = setup(anchor);
   h.vault.notes.delete(activeNote);
@@ -351,23 +369,32 @@ function setupLegacyHome(homePath: string, anchor = 'P1') {
 describe('ARC-2 — any side can start the freeze', () => {
   describe('Todoist project resolution', () => {
     it('creates and stamps the project on first sight', async () => {
-      const h = setup('');
-      h.vault.notes.set(activeNote, note());
+      const h = setup('P-missing');
       h.taskManager.projects = [];
 
       const verdict = await h.action.execute(activeInput);
 
       expect(h.taskManager.createCalls).toEqual(['Acme Widgets']);
       expect(h.vault.writes).toHaveLength(1);
-      expect(h.vault.writes[0]!.content).toContain('todoist: P-new');
+      expect(h.vault.writes[0]!.content).toContain('project: "P-new"');
       expect(h.syncState.todoistSets).toHaveLength(1);
       expect(verdict.remoteProjectId).toBe('P-new');
       expect(verdict.frozen).toBe(false);
     });
 
+    it('resolves the project from the todoist connection anchor', async () => {
+      const h = setup();
+      h.vault.notes.set(activeNote, connectionNote('P1'));
+
+      const verdict = await h.action.execute(activeInput);
+
+      expect(h.taskManager.createCalls).toEqual([]);
+      expect(verdict.remoteProjectId).toBe('P1');
+      expect(h.vault.writes).toEqual([]);
+    });
+
     it('resolves by name before creating, so no duplicate is made', async () => {
-      const h = setup('');
-      h.vault.notes.set(activeNote, note());
+      const h = setup('P-missing');
       h.taskManager.projects = [project({ id: 'P9' })];
 
       const verdict = await h.action.execute(activeInput);
@@ -393,7 +420,19 @@ describe('ARC-2 — any side can start the freeze', () => {
 
       await h.action.execute(activeInput);
 
-      expect(h.vault.writes[0]!.content).toContain('todoist: P9');
+      expect(h.vault.writes[0]!.content).toContain('project: "P9"');
+    });
+
+    it('re-stamps the connection project, not a legacy property, for an envelope note', async () => {
+      const h = setup();
+      h.vault.notes.set(activeNote, connectionNote('P-missing'));
+      h.taskManager.projects = [project({ id: 'P9' })];
+
+      await h.action.execute(activeInput);
+
+      const content = h.vault.writes[0]!.content;
+      expect(content).toContain('project: "P9"');
+      expect(content).not.toContain('todoist: P9');
     });
 
     it('does nothing when the project note is gone', async () => {
@@ -876,15 +915,15 @@ describe('ARC-2 — any side can start the freeze', () => {
       expect(h.vault.notes.has(target)).toBe(true);
     });
 
-    it('stamps the todoist anchor on the renamed file', async () => {
+    it('stamps the connection project on the renamed file', async () => {
       const legacy = 'Projecten/Acme Widgets/_home.md';
-      const h = setupLegacyHome(legacy, '');
+      const h = setupLegacyHome(legacy, 'P-missing');
       h.taskManager.projects = [];
 
       await h.action.execute({ ...activeInput, notePath: legacy });
 
       expect(h.vault.renameCalls).toEqual([{ from: legacy, to: canonical }]);
-      expect(h.vault.notes.get(canonical)).toContain('todoist: P-new');
+      expect(h.vault.notes.get(canonical)).toContain('project: "P-new"');
       expect(h.vault.notes.has(legacy)).toBe(false);
     });
 

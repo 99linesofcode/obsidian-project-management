@@ -149,7 +149,9 @@ describe('SYNC-1 — a checklist projects to an issue body', () => {
       '- [ ] [[Projecten/X/todos/foo|Fix the bug]]',
       '- [x] Plain',
     ].join('\n');
-    expect(toIssueBody(body)).toBe(['- [ ] Fix the bug', '- [x] Plain'].join('\n'));
+    expect(toIssueBody(body)).toBe(
+      ['- [ ] Fix the bug', '- [x] Plain'].join('\n'),
+    );
 
     const fenced = [
       'Intro',

@@ -11,11 +11,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds note content and records creations and
-// writes; the task manager serves the fetched active/completed sets (and would
-// throw if the action ever wrote back to Todoist); the registry holds the
-// entity records and the lane map. The kind classification and the captured
-// note shape are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -171,6 +166,8 @@ function setup() {
   ): Promise<void> =>
     action.execute({
       projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
       syncedAt,
       snapshot: {
         active: taskManager.active,
@@ -209,9 +206,9 @@ describe('MAT-4 — a hand-made Todoist task is captured', () => {
 
     await run();
 
-    expect(vault.notes.get('Projecten/Acme Widgets/taken/buy-milk.md')).toContain(
-      'status: Unshaped',
-    );
+    expect(
+      vault.notes.get('Projecten/Acme Widgets/taken/buy-milk.md'),
+    ).toContain('status: Unshaped');
   });
 
   it("captures a subtask under a slice's twin as a slice-affiliated draft", async () => {
@@ -269,8 +266,19 @@ describe('MAT-4 — a hand-made Todoist task is captured', () => {
     vault.notes.set(taskPath, taskNote('Body.', 'TASK'));
     anchored(syncState, 'task-uuid', taskPath, 'TASK');
     taskManager.completed = [
-      todoistTask({ id: 'T1', content: 'Already done', isCompleted: true, completedAt: syncedAt }),
-      todoistTask({ id: 'T2', content: 'Done too', parentId: 'TASK', isCompleted: true, completedAt: syncedAt }),
+      todoistTask({
+        id: 'T1',
+        content: 'Already done',
+        isCompleted: true,
+        completedAt: syncedAt,
+      }),
+      todoistTask({
+        id: 'T2',
+        content: 'Done too',
+        parentId: 'TASK',
+        isCompleted: true,
+        completedAt: syncedAt,
+      }),
     ];
 
     await run();

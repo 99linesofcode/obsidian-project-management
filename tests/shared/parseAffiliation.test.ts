@@ -11,14 +11,12 @@ describe('SUB-1 — affiliation names the parent note', () => {
   });
 
   it('returns an empty list for an undefined field', () => {
-
     const links = parseAffiliation(undefined);
 
     expect(links).toEqual([]);
   });
 
   it('returns an empty list for an empty value', () => {
-
     const links = parseAffiliation('');
 
     expect(links).toEqual([]);

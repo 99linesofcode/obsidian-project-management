@@ -148,7 +148,6 @@ function todoNote(completedAt: string | null): string {
   ).content;
 }
 
-// The registry record for a mirrored note, at the given handle and base.
 function seedRecord(
   syncState: FakeSyncState,
   id: string,
@@ -188,6 +187,8 @@ function setup() {
   ): Promise<void> =>
     action.execute({
       projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
       syncedAt,
       snapshot: {
         active: taskManager.active,
@@ -210,7 +211,12 @@ describe('COM-3 — a Todoist completion fans out like a vault one', () => {
       taskData({ id: 'uuid-todo', notePath: todoPath, status: 'open' }),
     );
     taskManager.completed = [
-      todoistTask({ id: 'T2', content: 'Step one', isCompleted: true, completedAt: cursor }),
+      todoistTask({
+        id: 'T2',
+        content: 'Step one',
+        isCompleted: true,
+        completedAt: cursor,
+      }),
     ];
 
     await run();
@@ -233,7 +239,12 @@ describe('COM-3 — a Todoist completion fans out like a vault one', () => {
       taskData({ id: 'uuid-task', notePath: taskPath, status: 'Building' }),
     );
     taskManager.completed = [
-      todoistTask({ id: 'T9', content: 'Fix the widget', isCompleted: true, completedAt: cursor }),
+      todoistTask({
+        id: 'T9',
+        content: 'Fix the widget',
+        isCompleted: true,
+        completedAt: cursor,
+      }),
     ];
 
     await run();
@@ -273,7 +284,12 @@ describe('COM-3 — a Todoist completion fans out like a vault one', () => {
       'uuid-task',
       taskPath,
       'T9',
-      taskData({ id: 'uuid-task', notePath: taskPath, status: doneLane, completedAt: cursor }),
+      taskData({
+        id: 'uuid-task',
+        notePath: taskPath,
+        status: doneLane,
+        completedAt: cursor,
+      }),
     );
     taskManager.active = [todoistTask({ id: 'T9', isCompleted: false })];
 
@@ -293,7 +309,12 @@ describe('COM-3 — a Todoist completion fans out like a vault one', () => {
       'uuid-todo',
       todoPath,
       'T2',
-      taskData({ id: 'uuid-todo', notePath: todoPath, status: 'completed', completedAt: cursor }),
+      taskData({
+        id: 'uuid-todo',
+        notePath: todoPath,
+        status: 'completed',
+        completedAt: cursor,
+      }),
     );
     taskManager.active = [todoistTask({ id: 'T2', isCompleted: false })];
 
@@ -311,7 +332,12 @@ describe('COM-3 — a Todoist completion fans out like a vault one', () => {
       'uuid-todo',
       todoPath,
       'T2',
-      taskData({ id: 'uuid-todo', notePath: todoPath, status: 'completed', completedAt: cursor }),
+      taskData({
+        id: 'uuid-todo',
+        notePath: todoPath,
+        status: 'completed',
+        completedAt: cursor,
+      }),
     );
     taskManager.completed = [
       todoistTask({ id: 'T2', isCompleted: true, completedAt: cursor }),

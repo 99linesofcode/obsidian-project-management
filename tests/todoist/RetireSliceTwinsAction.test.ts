@@ -45,6 +45,7 @@ describe('SLI-2 — a slice twin is retired only after its children are flattene
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'todoist',
       sliceHandles: ['SLICE'],
       active: [
         todoistTask({ id: 'child-1', parentId: 'SLICE' }),
@@ -65,6 +66,7 @@ describe('SLI-2 — a slice twin is retired only after its children are flattene
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'todoist',
       sliceHandles: ['SLICE'],
       active: [],
     });
@@ -87,6 +89,7 @@ describe('SLI-3 — a failed flatten retries safely, losing no child', () => {
     await expect(
       h.action.execute({
         projectName: 'Acme Widgets',
+        connectionSlug: 'todoist',
         sliceHandles: ['SLICE'],
         active,
       }),
@@ -98,6 +101,7 @@ describe('SLI-3 — a failed flatten retries safely, losing no child', () => {
     h.allowMove();
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'todoist',
       sliceHandles: ['SLICE'],
       active,
     });

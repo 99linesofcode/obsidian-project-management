@@ -7,11 +7,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault holds the mirrored notes (a missing path is a
-// vault deletion), the task manager records every twin deletion (and can be
-// made to fail), and the registry holds the entity records and records
-// evictions. The action's decisions — which twins go, which records are evicted
-// with them — are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -105,7 +100,6 @@ const todoPath = 'Projecten/Acme Widgets/todos/fix-the-widget.md';
 const nestedTodoPath = 'Projecten/Acme Widgets/todos/and-then-test-it.md';
 const otherPath = 'Projecten/Other Project/taken/9-other.md';
 
-// A record whose todoist base carries the given parent uuid.
 function record(
   syncState: FakeSyncState,
   id: string,
@@ -142,7 +136,11 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     vault.notes.set(todoPath, '---\nstatus: open\n---\n');
     vault.notes.set(nestedTodoPath, '---\nstatus: open\n---\n');
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual(['T1']);
     expect(syncState.removed.sort()).toEqual(
@@ -157,7 +155,11 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     record(syncState, 'uuid-todo', todoPath, 'T7', 'uuid-task');
     vault.notes.set(taskPath, '---\nstatus: open\n---\n');
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual(['T7']);
     expect(syncState.removed).toEqual(['uuid-todo']);
@@ -169,7 +171,11 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     record(syncState, 'uuid-task', taskPath, 'T1', null);
     vault.notes.set(taskPath, '---\nstatus: open\n---\n');
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);
@@ -179,16 +185,14 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     const { action, vault, taskManager, syncState } = setup();
     record(syncState, 'uuid-slice', slicePath, 'SLICE', null);
     record(syncState, 'uuid-child', sliceChildPath, 'CHILD', 'uuid-slice');
-    vault.notes.set(
-      slicePath,
-      '---\ntype: slice\nstatus: Building\n---\n',
-    );
-    vault.notes.set(
-      sliceChildPath,
-      '---\ntype: task\nstatus: Building\n---\n',
-    );
+    vault.notes.set(slicePath, '---\ntype: slice\nstatus: Building\n---\n');
+    vault.notes.set(sliceChildPath, '---\ntype: task\nstatus: Building\n---\n');
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);
@@ -208,7 +212,11 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     });
     vault.notes.set(todoPath, '---\nstatus: completed\n---\n');
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);
@@ -219,16 +227,24 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     record(syncState, 'uuid-task', taskPath, 'T1', null);
     taskManager.failDelete = true;
 
-    await expect(action.execute({ projectName })).rejects.toThrow(
-      'delete failed',
-    );
+    await expect(
+      action.execute({
+        projectName,
+        connectionSlug: 'todoist',
+        githubConnectionSlug: 'github',
+      }),
+    ).rejects.toThrow('delete failed');
 
     expect(syncState.removed).toEqual([]);
     expect(await syncState.get('uuid-task')).not.toBeNull();
     expect(await syncState.findByMirror('todoist', 'T1')).not.toBeNull();
 
     taskManager.failDelete = false;
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual(['T1', 'T1']);
     expect(syncState.removed).toEqual(['uuid-task']);
@@ -239,7 +255,11 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
     const { action, taskManager, syncState } = setup();
     record(syncState, 'uuid-other', otherPath, 'OTHER', null);
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);
@@ -248,7 +268,11 @@ describe('DEL-2 — a remote deletion never deletes the note of record', () => {
   it('does nothing when the project has no mirrored records', async () => {
     const { action, taskManager, syncState } = setup();
 
-    await action.execute({ projectName });
+    await action.execute({
+      projectName,
+      connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
+    });
 
     expect(taskManager.deleteCalls).toEqual([]);
     expect(syncState.removed).toEqual([]);

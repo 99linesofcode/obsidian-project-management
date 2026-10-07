@@ -17,9 +17,12 @@ can be added without changing how the vault works.
 
 ## What it does
 
-- **Projects** — a project note in your vault anchors a GitHub repository and
-  Projects board. Creating, renaming, archiving and restoring a project in the
-  vault drives the remote side.
+- **Projects** — a project note in your vault declares one or more
+  **connections** to external tools. A GitHub connection anchors a repository;
+  the plugin derives the Projects board from that repository, so there is
+  nothing to configure. A Todoist connection anchors a task-manager project.
+  Creating, renaming, archiving and restoring a project in the vault drives the
+  remote side.
 - **Tasks** — a task note becomes a GitHub issue and a Todoist task. Edits,
   status changes and deletions propagate in both directions.
 - **Todos** — small checklist-style notes sync to Todoist as tasks.
@@ -31,25 +34,42 @@ can be added without changing how the vault works.
 ## How to use it
 
 Install the plugin, open its settings, and provide a GitHub fine-grained PAT
-(Issues: read/write, Projects: read/write) and a Todoist API token. Then create
+(Issues: read/write, Projects: read/write) and a Todoist API token. Tokens live
+in Obsidian's SecretStorage, never in the plugin's `data.json`. Then create
 notes — the plugin discovers them and does the rest.
+
+On first run the plugin seeds six vault-owned artifacts at their configured
+paths: three note templates and three Bases files. An existing file is never
+overwritten, and the settings tab can scaffold a missing one on demand.
 
 ### Create a project
 
-A project is a **folder** under `Projecten/` containing one note that carries
-the `pm` property. By convention the note is named after the folder with an
-underscore prefix:
+A project is a **folder** under `Projecten/` containing one home note that
+declares a non-empty `connections` map. By convention the note is named after
+the folder with an underscore prefix — `Projecten/My Project/_My Project.md`:
 
-```markdown
-<!-- Projecten/My Project/_My Project.md -->
----
-pm: github
-url: https://github.com/you/my-project
-board: https://github.com/users/you/projects/1
----
+```yaml
+connections:
+  github:
+    tool: github
+    project: https://github.com/you/my-project
+  todoist:
+    tool: todoist
+    project: P123456
+```
 
 Everything about this project lives in this folder.
-```
+
+Each key under `connections` is a **connection slug** you choose; `tool` selects
+the adapter and `project` is the opaque value that tool interprets (a repository
+URL for GitHub, a project id for Todoist). A project may hold two connections of
+the same tool under distinct slugs — for example `todoist-work` and
+`todoist-personal`.
+
+The GitHub board is **derived from the repository**: the plugin adopts a board
+already linked to the repo, prefers the one titled with the repo name when
+several are linked, and creates one (with a Status field) when none exists.
+There is no `board:` property to set.
 
 The folder name is the project name — rename the folder and the plugin follows;
 the note's own filename does not matter. Moving the folder to `Archief/<project>/`
@@ -58,21 +78,19 @@ archives the project; moving it back restores it.
 ### Create a task
 
 A task note is any note whose frontmatter carries `type`, `status` and an
-`affiliation` linking it to its project:
+`affiliation` linking it to its project — for example
+`Projecten/My Project/taken/Write the README.md`:
 
-```markdown
-<!-- Projecten/My Project/taken/Write the README.md -->
----
+```yaml
 categories: [taken]
 type: task
 status: Backlog
-affiliation: "[[My Project]]"
+affiliation: '[[My Project]]'
 created: 2026-10-06
 synced: 2026-10-06T09:30:00
----
+```
 
 Everything this task needs to say. This body becomes the issue body.
-```
 
 - `type` is the content kind: `task`, `slice` (a sub-task nested under another
   note) or `bug`.
@@ -84,15 +102,15 @@ Everything this task needs to say. This body becomes the issue body.
 ### Create a todo
 
 A todo note is smaller: frontmatter with a `status` field makes it a todo,
-`affiliation` attaches it to a project:
+`affiliation` attaches it to a project — for example
+`Projecten/My Project/todos/Call the printer.md`:
+
+```yaml
+status: open
+affiliation: '[[My Project]]'
+```
 
 ```markdown
-<!-- Projecten/My Project/todos/Call the printer.md -->
----
-status: open
-affiliation: "[[My Project]]"
----
-
 - [ ] order toner
 - [ ] confirm delivery date
 ```

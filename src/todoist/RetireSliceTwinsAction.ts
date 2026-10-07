@@ -4,18 +4,11 @@ import type { TodoistTaskData } from './TodoistTaskData.js';
 
 export interface RetireSliceTwinsInput {
   projectName: string;
-  // The twin ids of the project's slice items, resolved by the caller.
+  connectionSlug: string;
   sliceHandles: string[];
-  // The pass's active Todoist set, so a slice's children can be flattened.
   active: TodoistTaskData[];
 }
 
-// Retires every existing slice twin (dt-23): a slice is a project-management
-// artifact and never materializes in Todoist. Ordering is the whole point:
-// Todoist cascades a parent deletion to its subtasks, so every direct child is
-// moved to the top level FIRST, awaited, and only then is the slice twin
-// deleted. A failed flatten aborts before the delete — the twin retires next
-// tick rather than taking its children with it.
 export class RetireSliceTwinsAction {
   constructor(
     private readonly taskManager: TaskManagerPort,
@@ -30,9 +23,11 @@ export class RetireSliceTwinsAction {
         await this.taskManager.moveTask(child.id, { parentId: null });
       }
       await this.taskManager.deleteTask(twin);
-      // Drop the stale mirror item so no later pass resolves the retired
-      // handle and the capture path can never re-anchor the deleted twin.
-      await this.syncState.removeMirrorItem(input.projectName, 'todoist', twin);
+      await this.syncState.removeMirrorItem(
+        input.projectName,
+        input.connectionSlug,
+        twin,
+      );
     }
   }
 }

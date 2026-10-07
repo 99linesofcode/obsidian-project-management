@@ -3,7 +3,6 @@ import { hash } from '../../src/shared/hash.js';
 
 describe('SYNC-6 — the canonical digest is stable', () => {
   it('is deterministic for the same input', () => {
-
     const first = hash('The bug happens when the widget is resized.');
     const second = hash('The bug happens when the widget is resized.');
 
@@ -11,7 +10,6 @@ describe('SYNC-6 — the canonical digest is stable', () => {
   });
 
   it('produces distinct hashes for distinct inputs', () => {
-
     const first = hash('The bug happens when the widget is resized.');
     const second = hash('The widget is resized and the bug happens.');
 
@@ -19,14 +17,12 @@ describe('SYNC-6 — the canonical digest is stable', () => {
   });
 
   it('matches the FNV-1a 64-bit known-answer vectors', () => {
-
     expect(hash('')).toBe('cbf29ce484222325');
     expect(hash('a')).toBe('af63dc4c8601ec8c');
     expect(hash('foobar')).toBe('85944171f73967e8');
   });
 
   it('always renders a normalized 16-hex-character digest', () => {
-
     const digests = ['', 'a', 'foobar', 'The bug happens on resize.'].map(
       (input) => hash(input),
     );

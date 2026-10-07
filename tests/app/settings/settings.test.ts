@@ -9,14 +9,11 @@ import {
 describe('REG-3 — a settings save never reverts the registry', () => {
   it('strips the registry container out of the loaded settings', () => {
     const data = {
-      githubToken: 'ghp_x',
       syncState: { version: 3, projects: { A: {} } },
     };
 
-
     const settings = settingsFromData(data);
     expect(settings).not.toHaveProperty('syncState');
-    expect(settings.githubToken).toBe('ghp_x');
     expect(settings.pollIntervalMinutes).toBe(
       DEFAULT_SETTINGS.pollIntervalMinutes,
     );
@@ -24,15 +21,13 @@ describe('REG-3 — a settings save never reverts the registry', () => {
 
   it('preserves registry writes made after onload when settings are saved', () => {
     const onloadData = {
-      githubToken: 'old',
       syncState: { version: 3, projects: { A: {} } },
     };
     const settings = settingsFromData(onloadData);
 
-    settings.githubToken = 'new';
+    settings.pollIntervalMinutes = 10;
 
     const currentData = {
-      githubToken: 'old',
       syncState: { version: 3, projects: { A: {}, B: {} } },
     };
 
@@ -42,7 +37,7 @@ describe('REG-3 — a settings save never reverts the registry', () => {
       version: 3,
       projects: { A: {}, B: {} },
     });
-    expect(merged.githubToken).toBe('new');
+    expect(merged.pollIntervalMinutes).toBe(10);
   });
 
   it('never lets a stale settings snapshot shadow the registry', () => {
@@ -57,5 +52,95 @@ describe('REG-3 — a settings save never reverts the registry', () => {
     const merged = mergeSettingsIntoData(currentData, settings);
 
     expect(merged.syncState).toEqual({ version: 3, projects: { fresh: {} } });
+  });
+});
+
+describe('settings are secret-free', () => {
+  it('does not carry token fields', () => {
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('githubToken');
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('todoistToken');
+  });
+});
+
+describe('the board scaffolding vocabularies round-trip', () => {
+  it('defaults the status and type vocabularies', () => {
+    const settings = settingsFromData({});
+
+    expect(settings.statusOptions).toEqual([
+      'Unshaped',
+      'Shaping',
+      'Shaped',
+      'Building',
+      'Shipped',
+    ]);
+    expect(settings.typeLabels).toEqual([
+      'type: bug',
+      'type: chore',
+      'type: pitch',
+      'type: slice',
+      'type: task',
+    ]);
+  });
+
+  it('loads and persists configured vocabularies', () => {
+    const settings = settingsFromData({
+      statusOptions: ['Todo', 'Doing', 'Done'],
+      typeLabels: ['type: task'],
+    });
+
+    expect(settings.statusOptions).toEqual(['Todo', 'Doing', 'Done']);
+    expect(settings.typeLabels).toEqual(['type: task']);
+
+    const merged = mergeSettingsIntoData({}, settings);
+    expect(merged.statusOptions).toEqual(['Todo', 'Doing', 'Done']);
+    expect(merged.typeLabels).toEqual(['type: task']);
+  });
+
+  it('clones the default lists so a caller cannot mutate them', () => {
+    const settings = settingsFromData({});
+
+    settings.statusOptions.push('Extra');
+
+    expect(DEFAULT_SETTINGS.statusOptions).not.toContain('Extra');
+  });
+});
+
+describe('the six seeded artifact paths round-trip', () => {
+  const custom = {
+    projectTemplatePath: 'Templates/MijnProject.md',
+    taskTemplatePath: 'Templates/MijnTaken.md',
+    todoTemplatePath: 'Templates/MijnTodos.md',
+    projectsBasePath: 'Bases/MijnProjecten.base',
+    tasksBasePath: 'Bases/MijnTaken.base',
+    todosBasePath: 'Bases/MijnTodos.base',
+  };
+
+  it('defaults each path when data.json does not set it', () => {
+    const settings = settingsFromData({});
+
+    expect(settings.projectTemplatePath).toBe('Templates/Project.md');
+    expect(settings.taskTemplatePath).toBe('Templates/Task.md');
+    expect(settings.todoTemplatePath).toBe('Templates/ToDo.md');
+    expect(settings.projectsBasePath).toBe('Bases/Projects.base');
+    expect(settings.tasksBasePath).toBe('Bases/Tasks.base');
+    expect(settings.todosBasePath).toBe('Bases/Todos.base');
+  });
+
+  it('loads every configured path from data.json', () => {
+    const settings = settingsFromData(custom);
+
+    for (const [key, value] of Object.entries(custom)) {
+      expect(settings[key as keyof typeof custom]).toBe(value);
+    }
+  });
+
+  it('persists every configured path on a settings save', () => {
+    const settings = settingsFromData(custom);
+
+    const merged = mergeSettingsIntoData({}, settings);
+
+    for (const [key, value] of Object.entries(custom)) {
+      expect(merged[key]).toBe(value);
+    }
   });
 });

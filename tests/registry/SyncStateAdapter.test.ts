@@ -2,21 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   SYNC_STATE_KEY,
   SyncStateAdapter,
-  migrateEntities,
-  migrateLegacyState,
-  migrateV3,
   type SyncStateStorage,
 } from '../../src/registry/SyncStateAdapter.js';
-import { hash } from '../../src/shared/hash.js';
-import { entityRecord, taskData } from '../helpers/records.js';
+import { entityRecord } from '../helpers/records.js';
 import {
   runSyncStateConformance,
   type SyncStateConformanceHarness,
 } from '../helpers/syncStateConformance.js';
 
-// A fake storage at the boundary: an in-memory map behind load/save, so the
-// adapter's keying, migration and index maintenance is what's under test. The
-// backup counter records the rolling-backup requests.
 function fakeStorage(initial: Record<string, unknown> = {}) {
   let data: Record<string, unknown> = initial;
   let backups = 0;
@@ -41,12 +34,10 @@ function fakeStorage(initial: Record<string, unknown> = {}) {
   };
 }
 
-// The container under the top-level key, as the adapter persists it.
 function container(snapshot: Record<string, unknown>): Record<string, unknown> {
   return snapshot[SYNC_STATE_KEY] as Record<string, unknown>;
 }
 
-// The project node inside the container.
 function project(
   snapshot: Record<string, unknown>,
   name: string,
@@ -200,9 +191,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       entityRecord({ id: 'b', notePath: 'Projecten/Other/taken/b.md' }),
     );
 
-    expect((await adapter.listEntities('Acme Widgets')).map((r) => r.id)).toEqual(
-      ['a'],
-    );
+    expect(
+      (await adapter.listEntities('Acme Widgets')).map((r) => r.id),
+    ).toEqual(['a']);
     expect((await adapter.listEntities('Other')).map((r) => r.id)).toEqual([
       'b',
     ]);
@@ -213,10 +204,16 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(
-      entityRecord({ id: 'entity-1', notePath: 'Projecten/Acme Widgets/taken/old.md' }),
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Acme Widgets/taken/old.md',
+      }),
     );
     await adapter.setEntity(
-      entityRecord({ id: 'entity-1', notePath: 'Projecten/Acme Widgets/taken/new.md' }),
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Acme Widgets/taken/new.md',
+      }),
     );
 
     expect(
@@ -231,7 +228,10 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
     await adapter.setEntity(
-      entityRecord({ id: 'older', notePath: 'Projecten/Acme Widgets/taken/older.md' }),
+      entityRecord({
+        id: 'older',
+        notePath: 'Projecten/Acme Widgets/taken/older.md',
+      }),
     );
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'older',
@@ -243,7 +243,10 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
 
     await adapter.setEntity(
-      entityRecord({ id: 'newer', notePath: 'Projecten/Acme Widgets/taken/newer.md' }),
+      entityRecord({
+        id: 'newer',
+        notePath: 'Projecten/Acme Widgets/taken/newer.md',
+      }),
     );
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'newer',
@@ -263,7 +266,7 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
-    await adapter.setIdentity('Acme Widgets', identity);
+    await adapter.setIdentity('Acme Widgets', 'github', identity);
     await adapter.setLastProjectUpdate('Acme Widgets', '2026-09-18T10:00:00Z');
     await adapter.setArchiveBaseline('Acme Widgets', {
       locationArchived: true,
@@ -275,7 +278,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       cursor: '2026-09-18T10:00:00Z',
     });
 
-    expect(await adapter.getIdentity('Acme Widgets')).toEqual(identity);
+    expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(
+      identity,
+    );
     expect(await adapter.getLastProjectUpdate('Acme Widgets')).toBe(
       '2026-09-18T10:00:00Z',
     );
@@ -290,7 +295,7 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
 
     const acme = project(snapshot(), 'Acme Widgets');
-    expect(acme['identity']).toEqual(identity);
+    expect(acme['identities']).toEqual({ github: identity });
     expect(acme['lastProjectUpdate']).toBe('2026-09-18T10:00:00Z');
     expect(acme['archive']).toEqual({
       locationArchived: true,
@@ -308,13 +313,16 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const adapter = new SyncStateAdapter(storage);
     const state = {
       provider: 'todoist',
+      project: 'P1',
       lastPoll: '2026-09-18T10:00:00Z',
       lanes: { Unshaped: 'S1' },
     };
 
     await adapter.setPortState('Acme Widgets', 'todoist', state);
 
-    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toEqual(state);
+    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toEqual(
+      state,
+    );
     expect(await adapter.getPortState('Acme Widgets', 'github')).toBeNull();
     const ports = project(snapshot(), 'Acme Widgets')['ports'] as Record<
       string,
@@ -322,379 +330,97 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     >;
     expect(ports['todoist']).toEqual(state);
   });
-});
 
-describe('SyncStateAdapter migration', () => {
-  it('migrates a pre-t5 status record into a github-mirrored entity', async () => {
-    const { storage, snapshot } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          notePath,
-          lastSyncedBodyHash: 'abc123',
-          lastSyncedRemoteUpdatedAt: '2026-09-18T10:00:00Z',
-          lastSyncedStatus: 'Shipped',
-          lastSyncedTitle: 'Fix the Bug!',
-        },
-      },
-    });
+  it('keys two connections of the same tool independently', async () => {
+    const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
-    const records = await adapter.listEntities('Acme Widgets');
-
-    expect(records).toHaveLength(1);
-    const record = records[0]!;
-    expect(record.notePath).toBe(notePath);
-    const item = await adapter.findMirrorItem('github', url);
-    expect(item?.entityId).toBe(record.id);
-    expect(item?.base?.title).toBe('Fix the Bug!');
-    expect(item?.base?.body).toBe('abc123');
-    expect(item?.base?.status).toBe('Shipped');
-    expect(item?.base?.updatedAt).toBe('2026-09-18T10:00:00Z');
-    expect(container(snapshot())[`status.${url}`]).toBeUndefined();
-  });
-
-  it('migrates a done status record to a non-null completedAt stamp', async () => {
-    const { storage } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          notePath,
-          lastSyncedBodyHash: 'abc123',
-          lastSyncedStatus: 'done',
-          lastSyncedTitle: 'Fix the Bug!',
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    const item = await adapter.findMirrorItem('github', url);
-    expect(item?.base?.completedAt).toBe('');
-  });
-
-  it('migrates a canonical status record without re-hashing its body', async () => {
-    const { storage } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          nodeId: 'I_kwDOAAAA42',
-          todoistId: '',
-          notePath,
-          title: 'Fix the Bug!',
-          body: 'digest-already',
-          status: 'Shipped',
-          completed: true,
-          parent: null,
-          labels: [],
-          updatedAt: '2026-09-18T10:00:00Z',
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    const base = (await adapter.findMirrorItem('github', url))?.base;
-    expect(base?.body).toBe('digest-already');
-    expect(base?.completedAt).toBe('');
-    expect(base?.updatedAt).toBe('2026-09-18T10:00:00Z');
-  });
-
-  it('migrates a todoist-only record into a Todoist-mirrored entity', async () => {
-    const { storage } = fakeStorage({
-      syncState: {
-        [`todoistItem.${notePath}`]: {
-          todoistId: 'T1',
-          notePath,
-          lastSyncedHash: 'h1',
-          lastSyncedCompleted: false,
-          lastSyncedContent: 'Fix the bug',
-          lastSyncedLane: 'Building',
-          lastSyncedParent: null,
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    const records = await adapter.listEntities('Acme Widgets');
-    expect(records).toHaveLength(1);
-    const item = await adapter.findMirrorItem('todoist', 'T1');
-    expect(item?.entityId).toBe(records[0]!.id);
-    expect(item?.base).toEqual(
-      taskData({
-        id: records[0]!.id,
-        notePath,
-        title: 'Fix the bug',
-        body: hash(''),
-        status: 'Building',
-        completedAt: null,
-        parent: null,
-        updatedAt: null,
-      }),
-    );
-  });
-
-  it('carries a completed to-do and its parent across the migration', async () => {
-    const { storage } = fakeStorage({
-      syncState: {
-        [`todoistItem.${notePath}`]: {
-          todoistId: 'T1',
-          notePath,
-          lastSyncedCompleted: true,
-          lastSyncedContent: 'Fix the bug',
-          lastSyncedLane: 'Building',
-          lastSyncedParent: 'TP1',
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    const base = (await adapter.findMirrorItem('todoist', 'T1'))?.base;
-    expect(base?.completedAt).toBe('');
-    expect(base?.parent).toBe('TP1');
-  });
-
-  it('merges a todoist record into the github entity at the same note path', async () => {
-    const { storage, snapshot } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          notePath,
-          lastSyncedBodyHash: 'abc123',
-          lastSyncedStatus: 'Building',
-          lastSyncedTitle: 'Fix the bug',
-        },
-        [`todoistItem.${notePath}`]: {
-          todoistId: 'T1',
-          notePath,
-          lastSyncedContent: 'Fix the bug',
-          lastSyncedLane: 'Building',
-          lastSyncedCompleted: false,
-          lastSyncedParent: null,
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    const records = await adapter.listEntities('Acme Widgets');
-    expect(records).toHaveLength(1);
-    const record = records[0]!;
-    expect((await adapter.findMirrorItem('github', url))?.entityId).toBe(
-      record.id,
-    );
-    expect((await adapter.findMirrorItem('todoist', 'T1'))?.entityId).toBe(
-      record.id,
-    );
-    expect(container(snapshot())[`todoistItem.${notePath}`]).toBeUndefined();
-  });
-
-  it('drops no data across a mixed store', async () => {
-    const otherUrl = url.replace('42', '43');
-    const otherPath = notePath.replace('42', '43');
-    const { storage } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          notePath,
-          lastSyncedBodyHash: 'h42',
-          lastSyncedStatus: 'Shipped',
-          lastSyncedTitle: 'Task 42',
-        },
-        [`status.${otherUrl}`]: {
-          url: otherUrl,
-          remoteId: 43,
-          notePath: otherPath,
-          lastSyncedBodyHash: 'h43',
-          lastSyncedStatus: 'Building',
-          lastSyncedTitle: 'Task 43',
-        },
-        [`todoistItem.${notePath}`]: {
-          todoistId: 'T1',
-          notePath,
-          lastSyncedContent: 'Task 42',
-          lastSyncedLane: 'Shipped',
-          lastSyncedCompleted: false,
-          lastSyncedParent: null,
-        },
-        'todoistItem.Projecten/Acme Widgets/todos/only.md': {
-          todoistId: 'T2',
-          notePath: 'Projecten/Acme Widgets/todos/only.md',
-          lastSyncedContent: 'Only todo',
-          lastSyncedLane: null,
-          lastSyncedCompleted: false,
-          lastSyncedParent: null,
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    const records = await adapter.listEntities('Acme Widgets');
-    expect(records).toHaveLength(3);
-    expect(await adapter.findMirrorItem('github', url)).not.toBeNull();
-    expect(await adapter.findMirrorItem('github', otherUrl)).not.toBeNull();
-    expect(await adapter.findMirrorItem('todoist', 'T2')).not.toBeNull();
-    expect(
-      await adapter.findByNotePath('Projecten/Acme Widgets/todos/only.md'),
-    ).not.toBeNull();
-  });
-
-  it('folds a todoistProject namespace into the todoist port state', async () => {
-    const { storage, snapshot } = fakeStorage({
-      syncState: {
-        'todoistProject.Acme Widgets': {
-          sections: { Unshaped: 'S1' },
-          lastCompletedPoll: '2026-09-18T10:00:00Z',
-        },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toEqual({
+    await adapter.setPortState('Acme Widgets', 'todoist-work', {
       provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: { Unshaped: 'S1' },
+    });
+    await adapter.setPortState('Acme Widgets', 'todoist-personal', {
+      provider: 'todoist',
+      project: 'P2',
+      lastPoll: '2026-09-18T11:00:00Z',
+      lanes: { Unshaped: 'S9' },
+    });
+
+    expect(await adapter.getPortState('Acme Widgets', 'todoist-work')).toEqual({
+      provider: 'todoist',
+      project: 'P1',
       lastPoll: '2026-09-18T10:00:00Z',
       lanes: { Unshaped: 'S1' },
     });
     expect(
-      container(snapshot())['todoistProject.Acme Widgets'],
-    ).toBeUndefined();
-  });
-
-  it('migrates a v2 entity registry into the port-grouped layout', async () => {
-    const { storage, snapshot } = fakeStorage({
-      syncState: {
-        entities: {
-          'entity-1': {
-            id: 'entity-1',
-            notePath,
-            mirrors: {
-              github: { handle: url, base: taskData({ id: 'entity-1', notePath }) },
-            },
-          },
-        },
-      },
+      await adapter.getPortState('Acme Widgets', 'todoist-personal'),
+    ).toEqual({
+      provider: 'todoist',
+      project: 'P2',
+      lastPoll: '2026-09-18T11:00:00Z',
+      lanes: { Unshaped: 'S9' },
     });
-    const adapter = new SyncStateAdapter(storage);
-
-    const record = await adapter.getEntity('entity-1');
-
-    expect(record).toEqual({ id: 'entity-1', notePath });
-    expect((await adapter.findMirrorItem('github', url))?.entityId).toBe(
-      'entity-1',
-    );
-    expect(container(snapshot())['entities']).toBeUndefined();
-    expect(container(snapshot())['version']).toBe(3);
   });
 
-  it('is idempotent: a second load does not re-migrate', async () => {
-    const { storage, snapshot } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          notePath,
-          lastSyncedBodyHash: 'abc123',
-          lastSyncedStatus: 'Shipped',
-          lastSyncedTitle: 'Fix the bug',
-        },
-      },
-    });
-    const first = new SyncStateAdapter(storage);
-    await first.listEntities('Acme Widgets');
-
-    const changed = migrateV3(container(snapshot()));
-    const second = new SyncStateAdapter(storage);
-    const records = await second.listEntities('Acme Widgets');
-
-    expect(changed).toBe(false);
-    expect(records).toHaveLength(1);
-    expect(container(snapshot())[`status.${url}`]).toBeUndefined();
-  });
-
-  it('migrates legacy flat root keys into the container, then into v3', async () => {
-    const { storage, snapshot } = fakeStorage({
-      githubToken: 'secret',
-      [`status.${url}`]: {
-        url,
-        remoteId: 42,
-        notePath,
-        lastSyncedBodyHash: 'abc123',
-        lastSyncedStatus: 'Shipped',
-        lastSyncedTitle: 'Fix the Bug!',
-      },
-      'identity.Acme Widgets': identity,
-    });
-    const adapter = new SyncStateAdapter(storage);
-
-    const records = await adapter.listEntities('Acme Widgets');
-
-    const data = snapshot();
-    expect(Object.keys(data).sort()).toEqual(['githubToken', 'syncState']);
-    expect(data['githubToken']).toBe('secret');
-    expect(await adapter.getIdentity('Acme Widgets')).toEqual(identity);
-    expect(records).toHaveLength(1);
-    expect(container(data)[`status.${url}`]).toBeUndefined();
-  });
-
-  it('keeps migrateLegacyState a no-op once the container exists', async () => {
-    const { storage } = fakeStorage({ syncState: { 'identity.A': identity } });
-    expect(migrateLegacyState(await storage.load())).toBe(false);
-  });
-
-  it('keeps migrateEntities a no-op once the v2 keys are gone', async () => {
-    const { storage, snapshot } = fakeStorage({
-      syncState: {
-        [`status.${url}`]: {
-          url,
-          remoteId: 42,
-          notePath,
-          lastSyncedBodyHash: 'abc123',
-          lastSyncedStatus: 'Shipped',
-          lastSyncedTitle: 'Fix the bug',
-        },
-      },
-    });
-    const first = new SyncStateAdapter(storage);
-    await first.listEntities('Acme Widgets');
-    expect(migrateEntities(container(snapshot()))).toBe(false);
-  });
-
-  it('seeds a fullScanPending marker per project and consumes it once', async () => {
-    const { storage, snapshot } = fakeStorage({
-      [SYNC_STATE_KEY]: {
-        version: 3,
-        projects: { 'Acme Widgets': {}, Other: {} },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-
-    expect(await adapter.isFullScanPending('Acme Widgets')).toBe(true);
-    expect(await adapter.isFullScanPending('Other')).toBe(true);
-
-    expect(await adapter.consumeFullScan('Acme Widgets')).toBe(true);
-
-    expect(await adapter.isFullScanPending('Acme Widgets')).toBe(false);
-    expect(await adapter.isFullScanPending('Other')).toBe(true);
-    expect(project(snapshot(), 'Acme Widgets')['fullScanPending']).toBe(false);
-    expect(project(snapshot(), 'Other')['fullScanPending']).toBe(true);
-
-    expect(await adapter.consumeFullScan('Acme Widgets')).toBe(false);
-  });
-
-  it('respects an existing per-project fullScanPending false', async () => {
-    const { storage, snapshot } = fakeStorage({
-      [SYNC_STATE_KEY]: {
-        version: 3,
-        projects: { 'Acme Widgets': { fullScanPending: false } },
-      },
-    });
-    const adapter = new SyncStateAdapter(storage);
-
-    expect(await adapter.isFullScanPending('Acme Widgets')).toBe(false);
-    expect(await adapter.consumeFullScan('Acme Widgets')).toBe(false);
-    expect(project(snapshot(), 'Acme Widgets')['fullScanPending']).toBe(false);
-  });
-
-  it('reports no pending scan for an unknown project', async () => {
+  it('re-keys a port to a new slug in one write, moving its items', async () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
-    expect(await adapter.isFullScanPending('Missing')).toBe(false);
-    expect(await adapter.consumeFullScan('Missing')).toBe(false);
+    await adapter.setEntity({ id: 'uuid-1', notePath });
+    await adapter.setPortState('Acme Widgets', 'todoist', {
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: {},
+    });
+    await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T1', {
+      entityId: 'uuid-1',
+      base: null,
+    });
+
+    await adapter.rekeyPortState('Acme Widgets', 'todoist', 'todoist-work');
+
+    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toBeNull();
+    expect(await adapter.getPortState('Acme Widgets', 'todoist-work')).toEqual({
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: {},
+    });
+    expect(await adapter.findMirrorItem('todoist-work', 'T1')).not.toBeNull();
+    expect(await adapter.findMirrorItem('todoist', 'T1')).toBeNull();
+  });
+
+  it('re-keys one project without disturbing another project sharing the slug', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity({
+      id: 'uuid-a',
+      notePath: 'Projecten/A/taken/a.md',
+    });
+    await adapter.setEntity({
+      id: 'uuid-b',
+      notePath: 'Projecten/B/taken/b.md',
+    });
+    await adapter.setMirrorItem('A', 'todoist', 'T-a', {
+      entityId: 'uuid-a',
+      base: null,
+    });
+    await adapter.setMirrorItem('B', 'todoist', 'T-b', {
+      entityId: 'uuid-b',
+      base: null,
+    });
+
+    await adapter.rekeyPortState('A', 'todoist', 'work');
+
+    expect((await adapter.findMirrorItem('work', 'T-a'))?.entityId).toBe(
+      'uuid-a',
+    );
+    expect(await adapter.findMirrorItem('todoist', 'T-a')).toBeNull();
+    expect((await adapter.findMirrorItem('todoist', 'T-b'))?.entityId).toBe(
+      'uuid-b',
+    );
   });
 });
 
@@ -740,9 +466,6 @@ describe('SyncStateAdapter write serialisation', () => {
   });
 });
 
-// F4 — a cursor that does not move is not a registry write. The capture runs
-// every tick, so persisting an unchanged watermark would dirty the store on a
-// quiet pass (SYNC-8).
 describe('F4 — a quiet tick writes nothing', () => {
   it('does not persist a project cursor set to its current value', async () => {
     const { storage, saves } = fakeStorage({
@@ -761,8 +484,6 @@ describe('F4 — a quiet tick writes nothing', () => {
   });
 });
 
-// F6 — a container written by a newer plugin version must never be rewritten in
-// this version's shape. Reads serve it; every mutating port method refuses.
 describe('F6 — a container from a newer plugin version is read-only', () => {
   it('serves reads but refuses every mutation', async () => {
     const { storage, snapshot } = fakeStorage({
@@ -778,11 +499,14 @@ describe('F6 — a container from a newer plugin version is read-only', () => {
 
     await expect(
       adapter.setEntity(
-        entityRecord({ id: 'e2', notePath: 'Projecten/Acme Widgets/taken/2.md' }),
+        entityRecord({
+          id: 'e2',
+          notePath: 'Projecten/Acme Widgets/taken/2.md',
+        }),
       ),
     ).rejects.toThrow(/newer plugin version/);
     await expect(
-      adapter.setIdentity('Acme Widgets', identity),
+      adapter.setIdentity('Acme Widgets', 'github', identity),
     ).rejects.toThrow(/refusing to mutate/);
 
     expect(container(snapshot())['version']).toBe(4);
@@ -792,10 +516,6 @@ describe('F6 — a container from a newer plugin version is read-only', () => {
   });
 });
 
-// F7 — settings save and registry persist share one serialization chain, so a
-// concurrent save can never revert a registry write (REG-3). Without the chain
-// the two load-modify-save cycles interleave and the later save wins with a
-// stale root.
 describe('F7 — settings and registry writes share one chain', () => {
   it('serialises a root mutation against a registry write', async () => {
     let disk: Record<string, unknown> = {};
@@ -804,7 +524,6 @@ describe('F7 — settings and registry writes share one chain', () => {
         return structuredClone(disk);
       },
       async save(next: unknown) {
-        // A delayed save makes an unserialised interleave lose a write.
         await new Promise((resolve) => setTimeout(resolve, 5));
         disk = structuredClone(next) as Record<string, unknown>;
       },
@@ -814,7 +533,10 @@ describe('F7 — settings and registry writes share one chain', () => {
 
     await Promise.all([
       adapter.setEntity(
-        entityRecord({ id: 'e2', notePath: 'Projecten/Acme Widgets/taken/2.md' }),
+        entityRecord({
+          id: 'e2',
+          notePath: 'Projecten/Acme Widgets/taken/2.md',
+        }),
       ),
       adapter.mutateRoot((root) => ({ ...root, githubToken: 'tok' })),
     ]);
@@ -829,35 +551,18 @@ describe('F7 — settings and registry writes share one chain', () => {
   });
 });
 
-// The shared port + migration contract, run against the REAL adapter. The exact
-// same suite runs against FakeSyncState (tests/helpers/fakeSyncState.test.ts),
-// so the fake and the adapter can never drift apart again.
 const conformanceHarness: SyncStateConformanceHarness = {
   create(options) {
     const raw: Record<string, unknown> = {};
     if (options?.pendingProjects?.length) {
-      // A current store whose projects carry no marker: absent = pending, which
-      // the adapter seeds on load (the fake models it with its pending set).
       const projects: Record<string, unknown> = {};
       for (const name of options.pendingProjects) {
-        projects[name] = {};
+        projects[name] = { fullScanPending: true };
       }
       raw[SYNC_STATE_KEY] = { version: 3, projects };
     }
     const { storage } = fakeStorage(raw);
     return new SyncStateAdapter(storage);
-  },
-  migration: {
-    createFromRoot(raw) {
-      const { storage, snapshot } = fakeStorage(raw);
-      const port = new SyncStateAdapter(storage);
-      return {
-        port,
-        root: () => snapshot(),
-        container: () =>
-          snapshot()[SYNC_STATE_KEY] as Record<string, unknown>,
-      };
-    },
   },
 };
 

@@ -5,29 +5,8 @@ import type {
 } from '../../src/shared/SyncStatePort.js';
 import { taskData } from './records.js';
 
-// The port-contract conformance harness. It is deliberately the SAME suite for
-// the real SyncStateAdapter and the in-memory FakeSyncState: the fake exists so
-// action suites can run without a store, and if the two can disagree, an action
-// under test sees behavior the real registry will never have. This is the guard
-// that keeps them honest.
 export interface SyncStateConformanceHarness {
-  // A fresh port over empty state. `pendingProjects` models a store whose
-  // projects predate the per-project forced-scan marker (absent = pending).
   create(options?: { pendingProjects?: string[] }): SyncStatePort;
-  // Storage/migration capabilities. Present only for the storage-backed
-  // adapter; the fake has no persisted container to migrate, so the migration
-  // cases are registered only when this is provided.
-  migration?: SyncStateMigrationHarness;
-}
-
-export interface SyncStateMigrationHarness {
-  // Builds a port over a storage seeded with a raw data.json root and exposes
-  // the persisted root/container after the adapter has run its migration.
-  createFromRoot(raw: Record<string, unknown>): {
-    port: SyncStatePort;
-    root(): Record<string, unknown>;
-    container(): Record<string, unknown>;
-  };
 }
 
 const PROJECT_A = 'Project A';
@@ -121,7 +100,6 @@ export function runSyncStateConformance(
           base: null,
         });
 
-        // e2 claims the github address e1 holds.
         await port.setMirrorItem(PROJECT_A, 'github', GH, {
           entityId: 'e2',
           base: null,
@@ -129,7 +107,6 @@ export function runSyncStateConformance(
 
         expect(await port.getEntity('e1')).not.toBeNull();
         expect((await port.findMirrorItem('github', GH))?.entityId).toBe('e2');
-        // e1's OTHER mirror survives the re-point (promise 2).
         expect((await port.findMirrorItem('todoist', TD))?.entityId).toBe('e1');
       });
 
@@ -163,10 +140,6 @@ export function runSyncStateConformance(
           base: taskData({ id: 'e1', notePath: PATH_A }),
         });
 
-        // Append order: the item written first wins the single-item lookup, so
-        // an entity can hold a stale placeholder ahead of its real handle. The
-        // action must scan listMirrorItems for a real one rather than trust
-        // findMirrorItemByEntity's first hit.
         expect(await port.findMirrorItemByEntity('github', 'e1')).toEqual({
           handle: PENDING,
           item: { entityId: 'e1', base: null },
@@ -193,9 +166,9 @@ export function runSyncStateConformance(
         await port.removeMirrorItem(PROJECT_A, 'github', PENDING);
 
         expect(await port.findMirrorItem('github', PENDING)).toBeNull();
-        expect((await port.findMirrorItemByEntity('github', 'e1'))?.handle).toBe(
-          GH2,
-        );
+        expect(
+          (await port.findMirrorItemByEntity('github', 'e1'))?.handle,
+        ).toBe(GH2);
       });
     });
 
@@ -214,7 +187,6 @@ export function runSyncStateConformance(
         expect(await port.listMirrorItems(PROJECT_B, 'github')).toEqual([
           { handle: GH, item: { entityId: 'e1', base: null } },
         ]);
-        // The handle index follows the move, so a global lookup still resolves.
         expect((await port.findMirrorItem('github', GH))?.entityId).toBe('e1');
         expect(await port.listEntities(PROJECT_A)).toEqual([]);
         expect((await port.listEntities(PROJECT_B)).map((r) => r.id)).toEqual([
@@ -266,13 +238,17 @@ export function runSyncStateConformance(
 
     describe('fullScanPending per-project semantics', () => {
       it('reads each seeded project as pending', async () => {
-        const port = harness.create({ pendingProjects: [PROJECT_A, PROJECT_B] });
+        const port = harness.create({
+          pendingProjects: [PROJECT_A, PROJECT_B],
+        });
         expect(await port.isFullScanPending(PROJECT_A)).toBe(true);
         expect(await port.isFullScanPending(PROJECT_B)).toBe(true);
       });
 
       it('consumes only the named project, once', async () => {
-        const port = harness.create({ pendingProjects: [PROJECT_A, PROJECT_B] });
+        const port = harness.create({
+          pendingProjects: [PROJECT_A, PROJECT_B],
+        });
         expect(await port.consumeFullScan(PROJECT_A)).toBe(true);
         expect(await port.isFullScanPending(PROJECT_A)).toBe(false);
         expect(await port.isFullScanPending(PROJECT_B)).toBe(true);
@@ -286,112 +262,4 @@ export function runSyncStateConformance(
       });
     });
   });
-
-  if (harness.migration !== undefined) {
-    const migration = harness.migration;
-    describe(`${label} — migration contract`, () => {
-      it('folds a legacy flat root into a version-marked v3 container', async () => {
-        const { port, container } = migration.createFromRoot({
-          [`status.${GH}`]: {
-            url: GH,
-            remoteId: 1,
-            notePath: PATH_A,
-            lastSyncedBodyHash: 'abc123',
-            lastSyncedStatus: 'Shipped',
-            lastSyncedTitle: 'One',
-          },
-        });
-
-        const records = await port.listEntities(PROJECT_A);
-
-        expect(records).toHaveLength(1);
-        expect(container().version).toBe(3);
-        expect(container()[`status.${GH}`]).toBeUndefined();
-      });
-
-      it('normalizes a legacy archive node to the canonical shape', async () => {
-        const { port, container } = migration.createFromRoot({
-          [`archiveBaseline.${PROJECT_A}`]: {
-            locationArchived: true,
-            closed: true,
-          },
-          [`archiveBaseline.${PROJECT_B}`]: {
-            locationArchived: false,
-            closed: false,
-          },
-        });
-
-        // Any read runs the one-shot migration on first load.
-        await port.listEntities(PROJECT_A);
-
-        const projects = container()['projects'] as Record<
-          string,
-          Record<string, unknown>
-        >;
-        expect(projects[PROJECT_A]!['archive']).toEqual({
-          locationArchived: true,
-          closed: true,
-          archivedAt: '',
-        });
-        expect(projects[PROJECT_B]!['archive']).toEqual({
-          locationArchived: false,
-          closed: false,
-          archivedAt: null,
-        });
-      });
-
-      it('does not re-run the migration chain on an already-current container', async () => {
-        const { port, container } = migration.createFromRoot({
-          syncState: {
-            version: 3,
-            projects: {
-              [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-            },
-          },
-        });
-
-        expect(await port.getEntity('e1')).not.toBeNull();
-        expect(container().version).toBe(3);
-        // No v2 `entities` map is stranded at the container root.
-        expect(container()['entities']).toBeUndefined();
-      });
-
-      it('never re-migrates a newer container and leaves it untouched', async () => {
-        const { port, container } = migration.createFromRoot({
-          syncState: {
-            version: 4,
-            projects: {
-              [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-            },
-            futureField: { kept: true },
-          },
-        });
-
-        expect(await port.getEntity('e1')).not.toBeNull();
-        expect(container().version).toBe(4);
-        expect(container()['futureField']).toEqual({ kept: true });
-        // A newer container is not rewritten at all: no per-project markers.
-        expect(container()['projects']).toEqual({
-          [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-        });
-      });
-
-      it('does not strand v2 entities on a current container with stray legacy keys', async () => {
-        const { port, container } = migration.createFromRoot({
-          syncState: {
-            version: 3,
-            projects: {
-              [PROJECT_A]: { entities: { e1: { notePath: PATH_A } } },
-            },
-            [`status.${GH}`]: { url: GH, notePath: PATH_A },
-          },
-        });
-
-        expect(await port.getEntity('e1')).not.toBeNull();
-        // migrateEntities never ran, so no v2 `entities` map was created.
-        expect(container()['entities']).toBeUndefined();
-        expect(container().version).toBe(3);
-      });
-    });
-  }
 }

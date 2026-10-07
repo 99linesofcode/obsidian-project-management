@@ -9,9 +9,9 @@ describe('DISC-3 — a project under Archief is the same project, archived', () 
     expect(
       projectFromNotePath('Archief/Acme Widgets/taken/42-fix-the-bug.md'),
     ).toBe('Acme Widgets');
-    expect(
-      projectFromNotePath('Archief/Acme Widgets/_Acme Widgets.md'),
-    ).toBe('Acme Widgets');
+    expect(projectFromNotePath('Archief/Acme Widgets/_Acme Widgets.md')).toBe(
+      'Acme Widgets',
+    );
   });
 });
 

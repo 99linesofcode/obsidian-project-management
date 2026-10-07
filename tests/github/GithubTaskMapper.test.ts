@@ -12,8 +12,6 @@ const issue: GithubTaskData = {
   body: 'The bug happens on resize.',
   state: 'open',
   createdAt: '2026-09-18T09:00:00Z',
-  // The comment-noisy updatedAt is deliberately later than lastEditedAt, so a
-  // mapper that reads the wrong clock is caught.
   lastEditedAt: '2026-09-18T10:00:00Z',
   updatedAt: '2026-09-18T11:30:00Z',
   labels: ['type: task'],
@@ -30,7 +28,6 @@ const card: BoardItemData = {
 
 describe('MAT-3 — only typed issues are adopted', () => {
   it('parses an issue and its card onto the canonical task', () => {
-
     const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
 
     expect(task.id).toBe('');
@@ -46,14 +43,12 @@ describe('MAT-3 — only typed issues are adopted', () => {
   });
 
   it('uses lastEditedAt as the content clock, not the comment-noisy updatedAt', () => {
-
     const task = GithubTaskMapper.parse(issue, card, DONE_LANE);
 
     expect(task.updatedAt).toBe('2026-09-18T10:00:00Z');
   });
 
   it('parses a card-less issue with no lane', () => {
-
     const task = GithubTaskMapper.parse(issue, null, DONE_LANE);
 
     expect(task.status).toBe('');
@@ -61,7 +56,6 @@ describe('MAT-3 — only typed issues are adopted', () => {
   });
 
   it('stamps a done-lane issue as completed (the invariant)', () => {
-
     const task = GithubTaskMapper.parse(
       issue,
       { ...card, statusOptionName: DONE_LANE },
@@ -72,7 +66,6 @@ describe('MAT-3 — only typed issues are adopted', () => {
   });
 
   it('reads the vault-owned type from the type label', () => {
-
     const task = GithubTaskMapper.parse(
       { ...issue, labels: ['type:bug'] },
       card,

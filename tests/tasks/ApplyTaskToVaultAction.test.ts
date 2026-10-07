@@ -10,8 +10,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// A fake vault that records every mutator, so the writer's field-level gates
-// and its path decisions are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -75,8 +73,6 @@ function task(overrides: Partial<TaskData> = {}): TaskData {
   });
 }
 
-// The note content the writer renders for a given winning task, so a test can
-// seed a note already in step.
 function noteFor(t: TaskData): string {
   return TaskNoteMapper.map(
     {
@@ -101,7 +97,6 @@ function makeAction(vault: FakeVault, syncState: FakeSyncState) {
   );
 }
 
-// The registry record for the tracked note, at the given base lane.
 function seedRecord(
   syncState: FakeSyncState,
   base: TaskData | null = null,
@@ -121,6 +116,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task(),
       current: null,
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -130,7 +126,9 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
     expect(created.path).toBe(notePath);
     const record = await syncState.findByMirror('github', url);
     expect(record?.notePath).toBe(notePath);
-    expect(syncState.baseOf(record!.id, 'github')?.body).toBe(hash(task().body));
+    expect(syncState.baseOf(record!.id, 'github')?.body).toBe(
+      hash(task().body),
+    );
   });
 
   it('renames the note when the title changed', async () => {
@@ -145,6 +143,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: retitled,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -166,11 +165,14 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
 
-    expect(vault.written).toEqual([{ path: notePath, content: noteFor(changed) }]);
+    expect(vault.written).toEqual([
+      { path: notePath, content: noteFor(changed) },
+    ]);
   });
 
   it('rewrites a task note without introducing a todoist anchor', async () => {
@@ -185,6 +187,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -204,6 +207,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task(),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'push',
     });
@@ -249,6 +253,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -291,6 +296,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -335,6 +341,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: done,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -368,6 +375,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task({ body: '- [x] Fix the bug' }),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -379,9 +387,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const slicePath = 'Projecten/Acme Widgets/taken/the-slice.md';
-    syncState.seed(
-      entityRecord({ id: 'slice-uuid', notePath: slicePath }),
-    );
+    syncState.seed(entityRecord({ id: 'slice-uuid', notePath: slicePath }));
     seedRecord(syncState);
     const content = noteFor(task()).replace(
       'affiliation: ["[[_Acme Widgets]]"]',
@@ -395,6 +401,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -415,6 +422,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task({ parent: 'slice-uuid' }),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
@@ -445,11 +453,14 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: changed,
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'pull',
     });
 
-    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(hash(changed.body));
+    expect(syncState.baseOf('uuid-42', 'github')?.body).toBe(
+      hash(changed.body),
+    );
     expect(vault.written).toHaveLength(1);
   });
 
@@ -472,6 +483,7 @@ describe('SYNC-2 — a remote change flows into the vault', () => {
       task: task({ body: 'A vault-side edit.' }),
       current: task(),
       projectName,
+      connectionSlug: 'github',
       syncedAt,
       origin: 'push',
     });

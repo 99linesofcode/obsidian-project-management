@@ -31,8 +31,6 @@ describe('MAT-1 — a vault task maps to the canonical shape', () => {
     expect(task?.body).toBe('The bug happens on resize.');
     expect(task?.status).toBe('Building');
     expect(task?.completedAt).toBeNull();
-    // The mapper is pure: the affiliation-derived parent waits for the action
-    // layer, which alone can reach the registry.
     expect(task?.parent).toBeNull();
     expect(task?.createdAt).toBe('2026-09-18');
     expect(task?.updatedAt).toBeNull();
@@ -60,7 +58,6 @@ describe('MAT-1 — a vault task maps to the canonical shape', () => {
   });
 
   it('returns null for a note that is not a task note', () => {
-
     const task = VaultTaskMapper.parseTask('Just a note.', notePath, context);
 
     expect(task).toBeNull();
