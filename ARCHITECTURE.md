@@ -116,7 +116,8 @@ registers from its own module.
   project note's repository/board identity, fetch the whole project (issues
   with bodies + board cards with lanes) in one round trip, probe every project
   cheaply, read and update a single issue, set its open/closed state, lock its
-  conversation, drive the board (cards, Status, membership), and watch a
+  conversation, drive the board (cards, Status, membership), list the viewer's
+  boards (each with its linked repositories) for the capture, and watch a
   repository's newest issue through a conditional read. Adapter:
   `GitHubAdapter`.
 - **`TaskManagerPort`** — the core's need for a personal task mirror: resolve,
@@ -145,8 +146,9 @@ into the store and stripped on first load.
 ## 4. Data Stores
 
 - **The vault** — the system of record; markdown notes, not a database.
-  Project notes live under `Projecten/<name>/` (or `Archief/` when archived);
-  task notes under `taken/`; to-do notes under `todos/`. Identity is a
+  Project notes live under `Projecten/<name>/` (or `Archief/` when archived)
+  and declare their tool connections in a non-empty `connections` map; task
+  notes under `taken/`; to-do notes under `todos/`. Identity is a
   vault-owned uuid held in the registry — filenames and frontmatter carry no
   machine id.
 - **`data.json`** — the plugin's data file and the registry. One `syncState`
@@ -262,7 +264,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-06
+Date of Last Update: 2026-10-07
 
 ## 11. Glossary / Acronyms
 
@@ -286,7 +288,12 @@ Date of Last Update: 2026-10-06
 - **Outward materialization** — creating a mirror for a vault-born task,
   registry-first.
 - **Capture** — adopting a remote-born project into the vault, guarded by a
-  per-surface creation cursor.
+  per-surface creation cursor. The home note is born with the connection
+  envelope: a task-manager-born project declares a todoist connection, a
+  board-born project a github connection derived from the board's single linked
+  repository. Zero or several linked repositories is a collected error, never a
+  silent capture; the legacy `pm`/`url`/`board`/`todoist` properties are never
+  written.
 
 ## 12. Conventions & Boundaries
 
