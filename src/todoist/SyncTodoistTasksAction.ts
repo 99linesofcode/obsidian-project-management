@@ -134,12 +134,14 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
       await this.captureTodoistCreations.execute({
         projectName: input.projectName,
         connectionSlug: this.connectionSlug,
+        githubConnectionSlug,
         syncedAt: input.syncedAt,
         snapshot,
       });
       await this.applyTodoistCompletion.execute({
         projectName: input.projectName,
         connectionSlug: this.connectionSlug,
+        githubConnectionSlug,
         syncedAt: input.syncedAt,
         snapshot,
       });
@@ -196,7 +198,13 @@ export class SyncTodoistTasksAction implements ConnectionSyncHalf {
     githubConnectionSlug: string | null,
   ): Promise<{ twinIdByNotePath: Map<string, string>; sections: Record<string, string> }> {
     const taskTwinIdByNotePath = new Map<string, string>();
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      githubConnectionSlug === null
+        ? null
+        : await this.syncState.getIdentity(
+            input.projectName,
+            githubConnectionSlug,
+          );
     // A project without a GitHub attach has no typed issues to project (dt-03).
     if (!identity?.repoUrl) {
       return { twinIdByNotePath: taskTwinIdByNotePath, sections: {} };

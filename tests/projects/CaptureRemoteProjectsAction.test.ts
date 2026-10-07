@@ -120,6 +120,9 @@ class FakeProjectManagement implements ProjectManagementPort {
       repoUrls: this.boardRepositories.get(project.mirrors.github ?? '') ?? [],
     }));
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchProjectIdentity(data: {
     repoUrl: string;
     boardUrl: string;
@@ -315,7 +318,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       );
       const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
       expect(home).toBe(TODOIST_HOME);
-      expect(await h.syncState.getIdentity('New Project')).toEqual({
+      expect(await h.syncState.getIdentity('New Project', 'todoist')).toEqual({
         repoUrl: '',
         repoNodeId: '',
         projectNodeId: '',
@@ -452,7 +455,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       const home = h.vault.notes.get('Projecten/New Board/_New Board.md');
       expect(home).toBe(GITHUB_HOME);
       expect(h.projectManagement.identityCalls).toEqual([newUrl]);
-      expect(await h.syncState.getIdentity('New Board')).toEqual({
+      expect(await h.syncState.getIdentity('New Board', 'github')).toEqual({
         ...identityFor('9'),
         repoUrl,
       });
@@ -577,7 +580,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       // project carries only the github connection it was captured with.
       expect(h.taskManager.createCalls).toEqual([]);
       expect(h.vault.notes.get(homePath)).toBe(GITHUB_HOME);
-      expect((await h.syncState.getIdentity('New Board'))?.repoUrl).toBe(repoUrl);
+      expect((await h.syncState.getIdentity('New Board', 'github'))?.repoUrl).toBe(repoUrl);
     });
   });
 
@@ -634,7 +637,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       statusOptions: [],
     });
     h.projectManagement.repoBoards = { repoNodeId: 'R_kgDOAAAA', boards: [] };
-    await h.ensureBoard.execute({ projectName: 'New Project' });
+    await h.ensureBoard.execute({ projectName: 'New Project', connectionSlug: 'github' });
 
     const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
     expect(home).toBe(TODOIST_HOME);
@@ -644,7 +647,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         statusOptions: ['Unshaped'],
       },
     ]);
-    expect(await h.syncState.getIdentity('New Project')).toEqual({
+    expect(await h.syncState.getIdentity('New Project', 'github')).toEqual({
       repoUrl: 'https://github.com/acme/widgets',
       repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_new',

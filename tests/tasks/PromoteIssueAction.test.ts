@@ -99,6 +99,9 @@ class FakePort implements ProjectManagementPort {
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeVault implements VaultPort {
@@ -145,7 +148,6 @@ function makeAction(
     port,
     syncState,
     new CreateTaskNoteAction(vault, syncState, ''),
-    vault,
   );
 }
 
@@ -171,6 +173,7 @@ describe('PRO-1 — an untyped issue is promoted by hand', () => {
       url: port.task.url,
       label: 'type: task',
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
     });
 
     expect(port.addedLabels).toEqual([
@@ -193,6 +196,7 @@ describe('PRO-1 — an untyped issue is promoted by hand', () => {
       url: port.task.url,
       label: 'type: task',
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
     });
 
     expect(port.addedLabels).toEqual([

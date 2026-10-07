@@ -17,6 +17,7 @@ type ChooseEvent = Parameters<
 export interface PromoteSuggestion {
   task: GithubTaskData;
   projectName: string;
+  connectionSlug: string;
 }
 
 // UC10: pick an unpromoted GitHub issue to promote into a tracked task. Thin
@@ -40,13 +41,16 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
   override async onOpen(): Promise<void> {
     const items: PromoteSuggestion[] = [];
     for (const projectName of this.getProjectNames()) {
-      const identity = await this.syncState.getIdentity(projectName);
-      if (!identity) {
-        continue;
-      }
-      const issues = await this.port.fetchUnpromotedIssues(identity.repoUrl);
-      for (const issue of issues) {
-        items.push({ task: issue, projectName });
+      for (const { slug, identity } of await this.syncState.listIdentities(
+        projectName,
+      )) {
+        if (!identity.repoUrl) {
+          continue;
+        }
+        const issues = await this.port.fetchUnpromotedIssues(identity.repoUrl);
+        for (const issue of issues) {
+          items.push({ task: issue, projectName, connectionSlug: slug });
+        }
       }
     }
     this.items = items;
@@ -71,6 +75,7 @@ export class PromoteModal extends FuzzySuggestModal<PromoteSuggestion> {
       url: item.task.url,
       label: 'type: task',
       projectName: item.projectName,
+      connectionSlug: item.connectionSlug,
     });
   }
 }

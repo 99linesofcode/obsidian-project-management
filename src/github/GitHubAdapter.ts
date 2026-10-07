@@ -539,11 +539,53 @@ export class GitHubAdapter implements ProjectManagementPort {
     const projectNodeId = project.id;
     const boardUrl = typeof project.url === 'string' ? project.url : '';
 
-    await this.postQuery(LINK_BOARD_MUTATION, {
-      projectId: projectNodeId,
-      repositoryId,
-    });
+    await this.linkBoard(projectNodeId, repositoryId);
+    const status = await this.createStatusField(projectNodeId, statusOptions);
+    return {
+      projectNodeId,
+      boardUrl,
+      statusFieldId: status.id,
+      statusOptions: status.options,
+    };
+  }
 
+  // Adopts an existing board: links it to the repository and ensures it carries
+  // a Status field. Heals an interrupted creation — a board created but not yet
+  // linked, or linked but without its Status field — so the next pass adopts it
+  // instead of creating a duplicate.
+  async adoptBoard(
+    boardUrl: string,
+    repoUrl: string,
+    statusOptions: string[],
+  ): Promise<ProjectBoardData> {
+    const board = this.parseBoardUrl(boardUrl);
+    const repo = this.parseRepoUrl(repoUrl);
+    const repositoryId = await this.fetchRepoNodeId(repo);
+    const project = await this.fetchProjectFieldsByBoard(board);
+    const status =
+      project.status.id === ''
+        ? await this.createStatusField(project.id, statusOptions)
+        : project.status;
+    await this.linkBoard(project.id, repositoryId);
+    return {
+      projectNodeId: project.id,
+      boardUrl,
+      statusFieldId: status.id,
+      statusOptions: status.options,
+    };
+  }
+
+  private async linkBoard(
+    projectNodeId: string,
+    repositoryId: string,
+  ): Promise<void> {
+    await this.postQuery(LINK_BOARD_MUTATION, { projectId: projectNodeId, repositoryId });
+  }
+
+  private async createStatusField(
+    projectNodeId: string,
+    statusOptions: string[],
+  ): Promise<StatusField> {
     const fieldData = await this.postQuery(CREATE_STATUS_FIELD_MUTATION, {
       projectId: projectNodeId,
       options: statusOptions.map((name) => ({
@@ -563,12 +605,7 @@ export class GitHubAdapter implements ProjectManagementPort {
     if (status.id === '') {
       throw new Error('GitHubAdapter: create board returned no Status field');
     }
-    return {
-      projectNodeId,
-      boardUrl,
-      statusFieldId: status.id,
-      statusOptions: status.options,
-    };
+    return status;
   }
 
   // The repository's existing label names, for the seed action's skip check.
@@ -1336,6 +1373,31 @@ export class GitHubAdapter implements ProjectManagementPort {
       statusFieldId: status.id,
       statusOptions: status.options,
     };
+  }
+
+  // The tolerant sibling of fetchProjectByBoard: a board whose Status field has
+  // not been created yet yields an empty Status rather than throwing, so the
+  // ensure-board healing path can create the field instead of failing.
+  private async fetchProjectFieldsByBoard(
+    board: BoardParts,
+  ): Promise<{ id: string; status: StatusField }> {
+    const query =
+      board.kind === 'users' ? USER_PROJECT_QUERY : ORG_PROJECT_QUERY;
+    const data = await this.postQuery(query, {
+      login: board.login,
+      number: board.number,
+    });
+    const owner = data[board.kind === 'users' ? 'user' : 'organization'];
+    if (!isRecord(owner)) {
+      throw new Error(`GitHubAdapter: ${board.kind} ${board.login} not found`);
+    }
+    const project = owner.projectV2;
+    if (!isRecord(project) || typeof project.id !== 'string') {
+      throw new Error(
+        `GitHubAdapter: project ${board.number} not found for ${board.login}`,
+      );
+    }
+    return { id: project.id, status: this.statusFieldOrEmpty(project.fields) };
   }
 
   private findStatusField(fields: unknown): StatusField {

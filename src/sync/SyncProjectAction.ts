@@ -99,16 +99,24 @@ export class SyncProjectAction {
     // board created this tick is visible to the probe and the code host half in
     // the same pass. An archived project never spawns a board: the folder
     // location is the vault's own freeze signal, and a frozen project accepts
-    // no board work.
+    // no board work. One board per code-host connection.
     if (this.ensureProjectBoard && note.archivedAt === null) {
-      await this.step('ensure board', () =>
-        this.ensureProjectBoard!.execute({ projectName: project }),
-      );
+      for (const [slug, connection] of Object.entries(note.connections)) {
+        if (connection.tool !== 'github') {
+          continue;
+        }
+        await this.step(`ensure board ${slug}`, () =>
+          this.ensureProjectBoard!.execute({
+            projectName: project,
+            connectionSlug: slug,
+          }),
+        );
+      }
     }
 
     // The probe is a code-host-side read. A failure leaves the code host side
     // skipped but never blocks the task manager half.
-    const boardState = await this.probe(project);
+    const boardState = await this.probe(project, note.connections);
 
     // Lifecycle — one freeze verdict for both halves. A failure leaves the
     // project frozen for this tick so no task write runs against an unknown
@@ -173,9 +181,15 @@ export class SyncProjectAction {
     return notes.find((note) => note.projectName === project) ?? null;
   }
 
-  private async probe(project: string): Promise<ProjectStateData | undefined> {
+  private async probe(
+    project: string,
+    connections: Record<string, ConnectionData>,
+  ): Promise<ProjectStateData | undefined> {
     try {
-      return (await this.probeProjects.execute([project])).get(project);
+      const targets = Object.entries(connections)
+        .filter(([, connection]) => connection.tool === 'github')
+        .map(([slug]) => ({ projectName: project, connectionSlug: slug }));
+      return (await this.probeProjects.execute(targets)).get(project);
     } catch (error) {
       console.error(`SyncProjectAction: probe failed for ${project}`, error);
       return undefined;

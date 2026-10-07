@@ -94,6 +94,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const identity: ProjectIdentityData = {

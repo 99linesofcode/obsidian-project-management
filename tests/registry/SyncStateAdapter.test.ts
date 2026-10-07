@@ -263,7 +263,7 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
-    await adapter.setIdentity('Acme Widgets', identity);
+    await adapter.setIdentity('Acme Widgets', 'github', identity);
     await adapter.setLastProjectUpdate('Acme Widgets', '2026-09-18T10:00:00Z');
     await adapter.setArchiveBaseline('Acme Widgets', {
       locationArchived: true,
@@ -275,7 +275,7 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       cursor: '2026-09-18T10:00:00Z',
     });
 
-    expect(await adapter.getIdentity('Acme Widgets')).toEqual(identity);
+    expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(identity);
     expect(await adapter.getLastProjectUpdate('Acme Widgets')).toBe(
       '2026-09-18T10:00:00Z',
     );
@@ -290,7 +290,7 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
 
     const acme = project(snapshot(), 'Acme Widgets');
-    expect(acme['identity']).toEqual(identity);
+    expect(acme['identities']).toEqual({ github: identity });
     expect(acme['lastProjectUpdate']).toBe('2026-09-18T10:00:00Z');
     expect(acme['archive']).toEqual({
       locationArchived: true,
@@ -383,6 +383,38 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
     expect(await adapter.findMirrorItem('todoist-work', 'T1')).not.toBeNull();
     expect(await adapter.findMirrorItem('todoist', 'T1')).toBeNull();
+  });
+
+  it('re-keys one project without disturbing another project sharing the slug', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity({
+      id: 'uuid-a',
+      notePath: 'Projecten/A/taken/a.md',
+    });
+    await adapter.setEntity({
+      id: 'uuid-b',
+      notePath: 'Projecten/B/taken/b.md',
+    });
+    await adapter.setMirrorItem('A', 'todoist', 'T-a', {
+      entityId: 'uuid-a',
+      base: null,
+    });
+    await adapter.setMirrorItem('B', 'todoist', 'T-b', {
+      entityId: 'uuid-b',
+      base: null,
+    });
+
+    await adapter.rekeyPortState('A', 'todoist', 'work');
+
+    expect((await adapter.findMirrorItem('work', 'T-a'))?.entityId).toBe(
+      'uuid-a',
+    );
+    expect(await adapter.findMirrorItem('todoist', 'T-a')).toBeNull();
+    // B's handle under the same slug must survive A's rename.
+    expect((await adapter.findMirrorItem('todoist', 'T-b'))?.entityId).toBe(
+      'uuid-b',
+    );
   });
 });
 
@@ -689,7 +721,7 @@ describe('SyncStateAdapter migration', () => {
     const data = snapshot();
     expect(Object.keys(data).sort()).toEqual(['githubToken', 'syncState']);
     expect(data['githubToken']).toBe('secret');
-    expect(await adapter.getIdentity('Acme Widgets')).toEqual(identity);
+    expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(identity);
     expect(records).toHaveLength(1);
     expect(container(data)[`status.${url}`]).toBeUndefined();
   });
@@ -845,7 +877,7 @@ describe('F6 — a container from a newer plugin version is read-only', () => {
       ),
     ).rejects.toThrow(/newer plugin version/);
     await expect(
-      adapter.setIdentity('Acme Widgets', identity),
+      adapter.setIdentity('Acme Widgets', 'github', identity),
     ).rejects.toThrow(/refusing to mutate/);
 
     expect(container(snapshot())['version']).toBe(4);

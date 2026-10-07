@@ -35,6 +35,9 @@ class FakePort implements ProjectManagementPort {
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async createIssue(): Promise<never> {
     throw new Error('not used in this test');
   }

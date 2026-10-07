@@ -8,6 +8,8 @@ import { repoNameFromUrl } from './repoNameFromUrl.js';
 
 export interface EnsureProjectBoardInput {
   projectName: string;
+  // The code-host connection whose identity this board belongs to.
+  connectionSlug: string;
 }
 
 // UC: complete PRJ-1's vault -> code-host leg, now that the board is DERIVED
@@ -15,9 +17,9 @@ export interface EnsureProjectBoardInput {
 // board yet gains one by the derivation ladder, keyed on the REPOSITORY NAME
 // (parsed from the connection's repo url), never the vault project name:
 //
-//   - no board linked to the repo -> create one titled with the repo name,
-//     link it to the repo, and give it a Status field with the configured
-//     options;
+//   - no board linked to the repo -> adopt an unlinked same-name viewer board
+//     (the orphan of an interrupted creation) when one exists, else create one
+//     titled with the repo name, link it, and give it a Status field;
 //   - exactly one -> adopt it, re-resolving its field ids;
 //   - several -> adopt the one titled with the repo name; no title match is a
 //     discovery error the user resolves once (nothing is created or adopted
@@ -36,7 +38,10 @@ export class EnsureProjectBoardAction {
   ) {}
 
   async execute(input: EnsureProjectBoardInput): Promise<void> {
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity = await this.syncState.getIdentity(
+      input.projectName,
+      input.connectionSlug,
+    );
     if (identity?.projectNodeId) {
       return;
     }
@@ -61,10 +66,7 @@ export class EnsureProjectBoardAction {
 
     const board =
       choice.kind === 'create'
-        ? await this.projectManagement.createBoardWithStatusField(
-            repoUrl,
-            this.statusOptions,
-          )
+        ? await this.createOrAdoptOrphan(repoUrl, repoName)
         : await this.adopt(choice.board, repoUrl);
 
     const merged = new ProjectIdentityData({
@@ -74,30 +76,57 @@ export class EnsureProjectBoardAction {
       statusFieldId: board.statusFieldId,
       statusOptions: board.statusOptions,
     });
-    await this.syncState.setIdentity(input.projectName, merged);
+    await this.syncState.setIdentity(
+      input.projectName,
+      input.connectionSlug,
+      merged,
+    );
   }
 
-  // Re-resolves an adopted board's field ids through the identity read, so the
-  // registry stores live addressing rather than a stale listing's.
+  // A repo with no linked board: adopt the orphan of an interrupted creation
+  // (a same-name viewer board linked to no repository) when one exists, so a
+  // crash between create and link never duplicates the board. Otherwise create.
+  private async createOrAdoptOrphan(
+    repoUrl: string,
+    repoName: string,
+  ): Promise<ProjectBoardData> {
+    const orphanUrl = await this.findOrphanBoard(repoName);
+    if (orphanUrl === null) {
+      return this.projectManagement.createBoardWithStatusField(
+        repoUrl,
+        this.statusOptions,
+      );
+    }
+    return this.projectManagement.adoptBoard(
+      orphanUrl,
+      repoUrl,
+      this.statusOptions,
+    );
+  }
+
+  // The url of a same-name viewer board linked to no repository, or null. A
+  // board linked to another repository is not an orphan and is left alone.
+  private async findOrphanBoard(repoName: string): Promise<string | null> {
+    const boards = await this.projectManagement.fetchViewerProjects();
+    const orphan = boards.find(
+      (board) =>
+        board.project.name === repoName && board.repoUrls.length === 0,
+    );
+    const url = orphan?.project.mirrors.github ?? '';
+    return url === '' ? null : url;
+  }
+
+  // Re-resolves an adopted board's field ids through the port, so the registry
+  // stores live addressing rather than a stale listing's, and heals a board
+  // whose Status field was never created.
   private async adopt(
     board: RepoBoardData,
     repoUrl: string,
   ): Promise<ProjectBoardData> {
-    const resolved = await this.projectManagement.fetchProjectIdentity({
-      pm: 'github',
+    return this.projectManagement.adoptBoard(
+      board.boardUrl,
       repoUrl,
-      boardUrl: board.boardUrl,
-    });
-    if (resolved === null) {
-      throw new Error(
-        `EnsureProjectBoardAction: board ${board.boardUrl} could not be resolved`,
-      );
-    }
-    return {
-      projectNodeId: resolved.projectNodeId,
-      boardUrl: board.boardUrl,
-      statusFieldId: resolved.statusFieldId,
-      statusOptions: resolved.statusOptions,
-    };
+      this.statusOptions,
+    );
   }
 }

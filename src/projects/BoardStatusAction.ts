@@ -27,7 +27,10 @@ export class BoardStatusAction {
   ) {}
 
   async execute(input: BoardStatusInput): Promise<void> {
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity = await this.syncState.getIdentity(
+      input.projectName,
+      input.connectionSlug,
+    );
     if (!identity) {
       return;
     }

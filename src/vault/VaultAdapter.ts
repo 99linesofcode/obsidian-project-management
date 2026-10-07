@@ -103,7 +103,8 @@ export class VaultAdapter implements VaultPort {
 
   async findProjectNotes(): Promise<ProjectNoteData[]> {
     // Reads each markdown file's frontmatter cache (no full-file reads) and
-    // keeps the notes that declare a pm property under Projecten/ or Archief/.
+    // keeps the notes that declare a non-empty `connections` map under
+    // Projecten/ or Archief/.
     const notes: ProjectNoteData[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);

@@ -59,6 +59,17 @@ export interface ProjectManagementPort {
     repoUrl: string,
     statusOptions: string[],
   ): Promise<ProjectBoardData>;
+  // Adopts an EXISTING board: links it to the repository (idempotent) and
+  // ensures it carries a Status single-select field, creating one with the
+  // configured options when the board has none. WHY separate from
+  // fetchProjectIdentity: attach must reject a board with no Status (a real
+  // config problem), while the ensure-board healing path must repair an
+  // interrupted creation instead of duplicating the board.
+  adoptBoard(
+    boardUrl: string,
+    repoUrl: string,
+    statusOptions: string[],
+  ): Promise<ProjectBoardData>;
   // The repository's existing label names, for the seed action's skip check.
   listRepoLabels(repoUrl: string): Promise<string[]>;
   // Creates one label on the repository with the given color. The seed action

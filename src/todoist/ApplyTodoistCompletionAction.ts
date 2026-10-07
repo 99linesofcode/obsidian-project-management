@@ -14,6 +14,9 @@ export interface ApplyTodoistCompletionInput {
   projectName: string;
   // The connection whose mirror this pass advances.
   connectionSlug: string;
+  // The project's code-host connection slug, when it has one, so the lane
+  // vocabulary resolves from that connection's identity.
+  githubConnectionSlug: string | null;
   syncedAt: string;
   // The pass's shared Todoist snapshot. The half fetched the active and
   // completed sets once; this absorber never lists the project itself.
@@ -226,7 +229,13 @@ export class ApplyTodoistCompletionAction {
     if (!current) {
       return;
     }
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      input.githubConnectionSlug === null
+        ? null
+        : await this.syncState.getIdentity(
+            input.projectName,
+            input.githubConnectionSlug,
+          );
     const defaultLane = identity?.statusOptions[0]?.name ?? '';
     // A project without lanes has no lane to return to, so there is nothing to
     // pull out of done.

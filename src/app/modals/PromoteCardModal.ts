@@ -17,6 +17,7 @@ type ChooseEvent = Parameters<
 export interface PromoteCardSuggestion {
   item: BoardItemData;
   projectName: string;
+  connectionSlug: string;
   repoNodeId: string;
 }
 
@@ -41,18 +42,26 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
   override async onOpen(): Promise<void> {
     const items: PromoteCardSuggestion[] = [];
     for (const projectName of this.getProjectNames()) {
-      const identity = await this.syncState.getIdentity(projectName);
-      if (!identity) {
-        continue;
-      }
-      const boardItems = await this.port.fetchBoardItems(
-        identity.projectNodeId,
-      );
-      for (const item of boardItems) {
-        if (item.type !== 'DRAFT_ISSUE') {
+      for (const { slug, identity } of await this.syncState.listIdentities(
+        projectName,
+      )) {
+        if (!identity.projectNodeId) {
           continue;
         }
-        items.push({ item, projectName, repoNodeId: identity.repoNodeId });
+        const boardItems = await this.port.fetchBoardItems(
+          identity.projectNodeId,
+        );
+        for (const item of boardItems) {
+          if (item.type !== 'DRAFT_ISSUE') {
+            continue;
+          }
+          items.push({
+            item,
+            projectName,
+            connectionSlug: slug,
+            repoNodeId: identity.repoNodeId,
+          });
+        }
       }
     }
     this.items = items;
@@ -77,6 +86,7 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
       itemId: item.item.itemId,
       repoNodeId: item.repoNodeId,
       projectName: item.projectName,
+      connectionSlug: item.connectionSlug,
     });
   }
 }

@@ -45,7 +45,13 @@ export class HandleDeletedNoteAction {
     // with no card is a no-op at the port; a board-less project has no identity
     // to resolve, and the issue is still closed below. A to-do-only entity has
     // no code-host mirror and skips the whole code-host side.
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      input.connectionSlug === null
+        ? null
+        : await this.syncState.getIdentity(
+            input.projectName,
+            input.connectionSlug,
+          );
     if (identity && url !== '') {
       await this.projectManagement.deleteCard(identity.projectNodeId, url);
     }

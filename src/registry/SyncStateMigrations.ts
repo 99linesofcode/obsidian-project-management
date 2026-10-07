@@ -249,8 +249,16 @@ export function migrateV3(container: Record<string, unknown>): boolean {
       // as the vault-location arm of the three-way merge, so dropping it from
       // the persisted node would silently reopen every archived project. The
       // canonical persisted node therefore carries all three fields.
-      node[field] =
-        field === 'archive' ? normalizeArchive(container[key]) : container[key];
+      if (field === 'identity') {
+        // The identity is per connection now; a legacy project-level identity
+        // migrates under the default code-host slug.
+        node['identities'] = { github: container[key] };
+      } else {
+        node[field] =
+          field === 'archive'
+            ? normalizeArchive(container[key])
+            : container[key];
+      }
       delete container[key];
     }
   }

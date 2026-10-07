@@ -88,7 +88,10 @@ export class SyncGithubTasksAction implements ConnectionSyncHalf {
   ) {}
 
   async execute(input: ConnectionSyncInput): Promise<void> {
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity = await this.syncState.getIdentity(
+      input.projectName,
+      this.connectionSlug,
+    );
     if (identity === null) {
       throw new Error(
         `SyncGithubTasksAction: no repo url for project ${input.projectName}`,

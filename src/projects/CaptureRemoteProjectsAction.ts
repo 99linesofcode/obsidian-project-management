@@ -234,7 +234,10 @@ export class CaptureRemoteProjectsAction {
       homePath,
       this.homeNoteContent(name, connections),
     );
-    await this.syncState.setIdentity(name, identity);
+    const slug = Object.keys(connections)[0];
+    if (slug !== undefined) {
+      await this.syncState.setIdentity(name, slug, identity);
+    }
     return true;
   }
 

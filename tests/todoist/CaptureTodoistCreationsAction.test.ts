@@ -172,6 +172,7 @@ function setup() {
     action.execute({
       projectName,
       connectionSlug: 'todoist',
+      githubConnectionSlug: 'github',
       syncedAt,
       snapshot: {
         active: taskManager.active,

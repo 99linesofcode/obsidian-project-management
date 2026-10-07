@@ -280,7 +280,6 @@ function composePlugin(
     github,
     syncState,
     createTaskNote,
-    vault,
   );
   const promoteToTask = new PromoteToTaskCommand(
     () => plugin.projectNames,
@@ -294,7 +293,6 @@ function composePlugin(
     github,
     syncState,
     createTaskNote,
-    vault,
   );
   const promoteCardToIssue = new PromoteCardToIssueCommand(
     () => plugin.projectNames,
@@ -486,7 +484,11 @@ export default class ProjectManagementPlugin extends Plugin {
     try {
       const { projects, errors, warnings } = await discoverProjects.execute();
       for (const project of projects) {
-        await syncState.setIdentity(project.projectName, project.identity);
+        await syncState.setIdentity(
+          project.projectName,
+          project.connectionSlug,
+          project.identity,
+        );
       }
       this.projectNames = projects.map((project) => project.projectName);
       if (errors.length > 0) {

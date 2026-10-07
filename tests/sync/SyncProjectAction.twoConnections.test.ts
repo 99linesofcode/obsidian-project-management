@@ -174,6 +174,9 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used');
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 // A task manager that honours the projectId, so the two connections' fetches

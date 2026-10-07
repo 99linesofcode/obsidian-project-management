@@ -103,6 +103,9 @@ class FakePort implements ProjectManagementPort {
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 class FakeVault implements VaultPort {
@@ -149,7 +152,6 @@ function makeAction(
     port,
     syncState,
     new CreateTaskNoteAction(vault, syncState, ''),
-    vault,
   );
 }
 
@@ -172,6 +174,7 @@ describe('PRO-2 — a card without an issue is promoted', () => {
       itemId: 'PVTI_2',
       repoNodeId: 'R_kgDOAAAA',
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
     });
 
     expect(port.promoted).toEqual([

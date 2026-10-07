@@ -85,17 +85,30 @@ describe('DISC-1 — the project note is read from the cache', () => {
     expect(note?.connectionErrors).toHaveLength(3);
   });
 
-  it('rejects a second connection of the same tool, keeping the first', () => {
+  it('accepts two connections of the same tool under distinct slugs', () => {
     const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
       connections: {
-        first: { tool: 'github', project: 'https://github.com/acme/one' },
-        second: { tool: 'github', project: 'https://github.com/acme/two' },
+        'todoist-work': { tool: 'todoist', project: 'P-work' },
+        'todoist-personal': { tool: 'todoist', project: 'P-personal' },
       },
     });
 
     expect(note?.connections).toEqual({
-      first: { tool: 'github', project: 'https://github.com/acme/one' },
+      'todoist-work': { tool: 'todoist', project: 'P-work' },
+      'todoist-personal': { tool: 'todoist', project: 'P-personal' },
     });
+    expect(note?.connectionErrors).toHaveLength(0);
+  });
+
+  it('rejects a slug that does not start alphanumeric', () => {
+    const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
+      connections: {
+        '-work': { tool: 'todoist', project: 'P-work' },
+        good: github,
+      },
+    });
+
+    expect(note?.connections).toEqual({ good: github });
     expect(note?.connectionErrors).toHaveLength(1);
   });
 });

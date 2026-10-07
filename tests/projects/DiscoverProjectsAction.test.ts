@@ -121,6 +121,9 @@ class FakePort implements ProjectManagementPort {
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async adoptBoard(): Promise<never> {
+    throw new Error('not used in this test');
+  }
 }
 
 const repoUrl = 'https://github.com/acme/widgets';
@@ -178,7 +181,7 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const result = await action.execute();
 
     expect(result.projects).toEqual([
-      { projectName: 'Acme Widgets', identity },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', identity },
     ]);
     expect(result.errors).toEqual([]);
   });
@@ -220,7 +223,7 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const result = await action.execute();
 
     expect(result.projects).toEqual([
-      { projectName: 'Acme Widgets', identity },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', identity },
     ]);
     expect(result.errors).toEqual([]);
   });
@@ -240,7 +243,7 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const result = await action.execute();
 
     expect(result.projects).toEqual([
-      { projectName: 'Acme Widgets', identity },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', identity },
     ]);
     expect(result.errors).toEqual([validationError]);
   });
@@ -266,7 +269,7 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const result = await action.execute();
 
     expect(result.projects).toEqual([
-      { projectName: 'Acme Widgets', identity },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', identity },
     ]);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toBeInstanceOf(Error);
@@ -302,7 +305,7 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const result = await action.execute();
 
     expect(result.projects).toEqual([
-      { projectName: 'Acme Widgets', identity },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', identity },
     ]);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toBeInstanceOf(Error);

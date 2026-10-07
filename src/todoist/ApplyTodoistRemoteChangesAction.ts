@@ -115,7 +115,13 @@ export class ApplyTodoistRemoteChangesAction {
       twinById.set(twin.id, twin);
     }
 
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      input.githubConnectionSlug === null
+        ? null
+        : await this.syncState.getIdentity(
+            input.projectName,
+            input.githubConnectionSlug,
+          );
     const hasLanes = (identity?.statusOptions.length ?? 0) > 0;
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 

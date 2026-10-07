@@ -20,6 +20,7 @@ export const ENTITIES_KEY = 'entities';
 export const PROJECTS_KEY = 'projects';
 export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
+export const IDENTITIES_KEY = 'identities';
 
 // The project-capture cursors, keyed by remote SURFACE (portId). WHY a
 // container-level map and not a per-project node: the cursor guards a global
@@ -96,6 +97,24 @@ export function portNode(
 ): Record<string, unknown> | null {
   const raw = portsMap(node)[portId];
   return isRecord(raw) ? raw : null;
+}
+
+// The per-connection identity map: projects.<name>.identities.<connectionSlug>.
+// WHY keyed by slug and not a single project identity: a project may hold two
+// code-host connections, each addressing its own repository and board.
+export function identitiesMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  return isRecord(node[IDENTITIES_KEY]) ? node[IDENTITIES_KEY] : {};
+}
+
+export function ensureIdentitiesMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isRecord(node[IDENTITIES_KEY])) {
+    node[IDENTITIES_KEY] = {};
+  }
+  return node[IDENTITIES_KEY] as Record<string, unknown>;
 }
 
 export function ensurePortNode(

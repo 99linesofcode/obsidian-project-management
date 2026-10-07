@@ -24,6 +24,9 @@ export interface CaptureTodoistCreationsInput {
   projectName: string;
   // The connection whose mirror this pass advances.
   connectionSlug: string;
+  // The project's code-host connection slug, when it has one, so the lane
+  // vocabulary resolves from that connection's identity.
+  githubConnectionSlug: string | null;
   syncedAt: string;
   // The pass's shared Todoist snapshot. The half fetched the active and
   // completed sets once; this absorber never lists the project itself.
@@ -88,7 +91,13 @@ export class CaptureTodoistCreationsAction {
       entries.map((entry) => [entry.handle, entry.record.notePath] as const),
     );
 
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      input.githubConnectionSlug === null
+        ? null
+        : await this.syncState.getIdentity(
+            input.projectName,
+            input.githubConnectionSlug,
+          );
     const hasLanes = (identity?.statusOptions.length ?? 0) > 0;
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 

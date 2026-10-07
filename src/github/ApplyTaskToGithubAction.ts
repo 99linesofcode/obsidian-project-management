@@ -45,7 +45,10 @@ export class ApplyTaskToGithubAction {
     if (url === '') {
       return;
     }
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity = await this.syncState.getIdentity(
+      input.projectName,
+      input.connectionSlug,
+    );
 
     // Issue content: the note body is projected for GitHub first — checklist
     // wikilinks are vault-only and never reach the issue. The title is

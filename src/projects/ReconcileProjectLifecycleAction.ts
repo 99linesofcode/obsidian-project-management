@@ -82,6 +82,8 @@ export class ReconcileProjectLifecycleAction {
     // once from the note's anchor (the envelope slug, or 'todoist' for a legacy
     // note).
     const todoistSlug = todoistAnchor(note.content)?.slug ?? 'todoist';
+    // The code-host connection slug the identity is keyed under.
+    const githubSlug = githubConnectionSlug(note.content);
 
     // Migrate the home note to the _<project>.md convention before any write in
     // this pass, so the todoist-anchor stamping below lands on the renamed file
@@ -123,7 +125,10 @@ export class ReconcileProjectLifecycleAction {
     // archivedAt is the canonical stamp ProjectData carries. The core reasons
     // about ProjectData and maps it back into the two storage records at this
     // seam.
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      githubSlug === null
+        ? null
+        : await this.syncState.getIdentity(input.projectName, githubSlug);
     const canonical = this.canonicalProject(
       input.projectName,
       identity,
@@ -194,6 +199,7 @@ export class ReconcileProjectLifecycleAction {
           input.syncedAt,
           project,
           todoistSlug,
+          githubSlug,
         );
         if (reactivated) {
           return await this.reactivatedVerdict(
@@ -248,6 +254,7 @@ export class ReconcileProjectLifecycleAction {
         input.syncedAt,
         project,
         todoistSlug,
+        githubSlug,
       );
       if (reactivated) {
         return await this.reactivatedVerdict(
@@ -477,8 +484,12 @@ export class ReconcileProjectLifecycleAction {
     syncedAt: string,
     project: RemoteProjectData | null,
     connectionSlug: string | null,
+    githubSlug: string | null,
   ): Promise<boolean> {
-    const identity = await this.syncState.getIdentity(projectName);
+    const identity =
+      githubSlug === null
+        ? null
+        : await this.syncState.getIdentity(projectName, githubSlug);
     if (!identity?.repoUrl) {
       return false;
     }
@@ -504,7 +515,13 @@ export class ReconcileProjectLifecycleAction {
       activity.newestCreatedAt !== null &&
       activity.newestCreatedAt > watch.cursor
     ) {
-      await this.reactivate(projectName, syncedAt, project, connectionSlug);
+      await this.reactivate(
+        projectName,
+        syncedAt,
+        project,
+        connectionSlug,
+        githubSlug,
+      );
       await this.syncState.setWatchState(projectName, {
         etag: null,
         cursor: null,
@@ -527,9 +544,13 @@ export class ReconcileProjectLifecycleAction {
     syncedAt: string,
     project: RemoteProjectData | null,
     connectionSlug: string | null,
+    githubSlug: string | null,
   ): Promise<void> {
     await this.moveFolder(projectName, false, '');
-    const identity = await this.syncState.getIdentity(projectName);
+    const identity =
+      githubSlug === null
+        ? null
+        : await this.syncState.getIdentity(projectName, githubSlug);
     if (identity?.projectNodeId) {
       await this.projectManagement.setProjectClosed(
         identity.projectNodeId,

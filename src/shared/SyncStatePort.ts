@@ -103,9 +103,18 @@ export interface SyncStatePort {
 
   setIdentity(
     projectName: string,
+    connectionSlug: string,
     identity: ProjectIdentityData,
   ): Promise<void>;
-  getIdentity(projectName: string): Promise<ProjectIdentityData | null>;
+  getIdentity(
+    projectName: string,
+    connectionSlug: string,
+  ): Promise<ProjectIdentityData | null>;
+  // Every code-host identity a project holds, keyed by connection slug, so a
+  // driving surface can enumerate the project's boards.
+  listIdentities(
+    projectName: string,
+  ): Promise<Array<{ slug: string; identity: ProjectIdentityData }>>;
   getLastProjectUpdate(projectName: string): Promise<string | null>;
   setLastProjectUpdate(projectName: string, iso: string): Promise<void>;
   getArchiveBaseline(projectName: string): Promise<ArchiveBaselineData | null>;

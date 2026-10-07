@@ -4,10 +4,12 @@ import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 
-// A project discovered in the vault: its name (from the note path) and the
-// code-host identities it resolves to.
+// A project discovered in the vault: its name (from the note path), the
+// connection slug the identity belongs to, and the code-host identity it
+// resolves to.
 export interface DiscoveredProject {
   projectName: string;
+  connectionSlug: string;
   identity: ProjectIdentityData;
 }
 
@@ -44,7 +46,7 @@ export class DiscoverProjectsAction {
     for (const note of notes) {
       errors.push(...note.connectionErrors);
       await this.rekeyRenamedConnections(note, warnings);
-      for (const connection of Object.values(note.connections)) {
+      for (const [slug, connection] of Object.entries(note.connections)) {
         if (connection.tool !== 'github') {
           continue;
         }
@@ -54,6 +56,7 @@ export class DiscoverProjectsAction {
           });
           projects.push({
             projectName: note.projectName,
+            connectionSlug: slug,
             identity: { ...identity, repoUrl: connection.project },
           });
         } catch (error) {

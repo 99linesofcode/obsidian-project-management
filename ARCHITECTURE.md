@@ -27,7 +27,7 @@ obsidian-project-management/
 │   ├── todoist/      # task-manager provider: adapter, mapper, sync half, writers, absorbers
 │   ├── vault/        # the vault adapter and the note mappers/parsers
 │   ├── projects/     # discovery, attach, board creation, lifecycle, remote capture
-│   ├── registry/     # the data.json-backed SyncStatePort adapter, schema and migrations
+│   ├── registry/     # the data.json-backed SyncStatePort adapter and schema
 │   ├── tasks/        # task actions: the vault writer, cascade, promote, status
 │   ├── todos/        # checklist ⇄ to-do note consistency
 │   ├── sync/         # the chain, the two halves, the probe, renames, deletion sweep
@@ -94,14 +94,14 @@ provider actions. A provider's name never appears in the chain.
 
 | Component | Responsibility | Technology | Target |
 |---|---|---|---|
-| `src/main.ts` | The composition root: plugin lifecycle, settings load and migration, wiring, startup discovery and remote-project capture | host plugin API | the vault |
-| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, and the SecretStorage-backed token store | host plugin API, `Component` | the vault |
+| `src/main.ts` | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture | host plugin API | the vault |
+| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions | host plugin API, `Component` | the vault |
 | `src/sync/` | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep | TypeScript | in-process |
 | `src/github/` | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer) | GraphQL + REST | the code host |
 | `src/todoist/` | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers | REST v1 | the task manager |
 | `src/vault/` | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec) | host vault API | the vault |
-| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture, connection migration and the project mapper | TypeScript | in-process |
-| `src/registry/` | The `SyncStatePort` adapter, its schema and its migration chain | `data.json` | the vault |
+| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper | TypeScript | in-process |
+| `src/registry/` | The `SyncStatePort` adapter and its schema | `data.json` | the vault |
 | `src/tasks/` | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation | TypeScript | in-process |
 | `src/todos/` | Checklist ⇄ to-do note consistency in both directions | TypeScript | the vault |
 | `src/shared/` | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers | TypeScript | in-process |
@@ -140,8 +140,7 @@ import each other; the two sync halves meet only through `shared/` and `sync/`.
 The API tokens are not settings and not a port: they live in Obsidian's
 SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
 composition root reads at adapter construction and the settings tab sets and
-clears. `data.json` is secret-free; the legacy plaintext fields are migrated
-into the store and stripped on first load.
+clears. `data.json` is secret-free.
 
 ## 4. Data Stores
 
@@ -155,7 +154,8 @@ into the store and stripped on first load.
   container (schema version 3) holding `entities` (uuid → note path),
   `projects.<name>.ports.<connectionSlug>.items.<handle>` (each mirror's
   last-synced base, a diff view whose body is a digest), `ports` (provider,
-  project, last poll, lane names), project identities, watch state, the
+  project, last poll, lane names), per-connection identities
+  (`projects.<name>.identities.<connectionSlug>`), watch state, the
   per-project `fullScanPending` marker, and the per-surface `projectCursors`.
   Ports are keyed by the note's connection slug, so a project can hold two
   connections of the same tool; a slug rename re-keys the port in lockstep.
@@ -194,9 +194,10 @@ over HTTPS.
 
 ## 7. Security Considerations
 
-- **Credentials** — the code-host and task-manager tokens live in the plugin
-  settings, persisted in `data.json` (git-ignored), never in the repository.
-  `.env` files are ignored.
+- **Credentials** — the code-host and task-manager tokens live in Obsidian's
+  SecretStorage behind `SecretStorageAdapter`, never in `data.json` and never in
+  the repository. The composition root reads them at adapter construction; the
+  settings tab sets and clears them. `.env` files are ignored.
 - **Transport** — every request is HTTPS through the host's `requestUrl`. The
   adapters are token-agnostic; the composition root injects the bearer header.
 - **Least privilege** — the code-host token needs only Issues and Projects
@@ -292,8 +293,7 @@ Date of Last Update: 2026-10-07
   envelope: a task-manager-born project declares a todoist connection, a
   board-born project a github connection derived from the board's single linked
   repository. Zero or several linked repositories is a collected error, never a
-  silent capture; the legacy `pm`/`url`/`board`/`todoist` properties are never
-  written.
+  silent capture; the home note declares only the connection envelope.
 
 ## 12. Conventions & Boundaries
 

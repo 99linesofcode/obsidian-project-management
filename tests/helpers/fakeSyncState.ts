@@ -42,6 +42,11 @@ export class FakeSyncState implements SyncStatePort {
     state: { sections: Record<string, string>; lastCompletedPoll: string };
   }> = [];
   identities = new Map<string, ProjectIdentityData>();
+  // The per-connection identities, keyed by `${project}\u0000${slug}`. The
+  // project-keyed `identities` map above stays as a test convenience: a suite
+  // that seeds one identity per project keeps working, and getIdentity falls
+  // back to it when no per-slug entry exists.
+  identitiesBySlug = new Map<string, ProjectIdentityData>();
   lastUpdates = new Map<string, string>();
   baselines = new Map<string, ArchiveBaselineData>();
   watches = new Map<string, WatchStateData>();
@@ -326,13 +331,41 @@ export class FakeSyncState implements SyncStatePort {
 
   async setIdentity(
     projectName: string,
+    connectionSlug: string,
     identity: ProjectIdentityData,
   ): Promise<void> {
+    this.identitiesBySlug.set(portKey(projectName, connectionSlug), identity);
     this.identities.set(projectName, identity);
   }
 
-  async getIdentity(projectName: string): Promise<ProjectIdentityData | null> {
-    return this.identities.get(projectName) ?? null;
+  async getIdentity(
+    projectName: string,
+    connectionSlug: string,
+  ): Promise<ProjectIdentityData | null> {
+    return (
+      this.identitiesBySlug.get(portKey(projectName, connectionSlug)) ??
+      this.identities.get(projectName) ??
+      null
+    );
+  }
+
+  async listIdentities(
+    projectName: string,
+  ): Promise<Array<{ slug: string; identity: ProjectIdentityData }>> {
+    const result: Array<{ slug: string; identity: ProjectIdentityData }> = [];
+    const prefix = `${projectName}\u0000`;
+    for (const [key, identity] of this.identitiesBySlug) {
+      if (key.startsWith(prefix)) {
+        result.push({ slug: key.slice(prefix.length), identity });
+      }
+    }
+    if (result.length === 0) {
+      const identity = this.identities.get(projectName);
+      if (identity !== undefined) {
+        result.push({ slug: 'github', identity });
+      }
+    }
+    return result;
   }
 
   async getLastProjectUpdate(projectName: string): Promise<string | null> {

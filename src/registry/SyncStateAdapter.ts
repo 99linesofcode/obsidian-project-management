@@ -15,11 +15,13 @@ import {
   SYNC_STATE_KEY,
   VERSION,
   ensureEntityMap,
+  ensureIdentitiesMap,
   ensureItemsMap,
   ensurePortNode,
   ensureProjectNode,
   ensureProjects,
   entityMap,
+  identitiesMap,
   itemsMap,
   mapMirrorItem,
   mapPortState,
@@ -801,10 +803,27 @@ export class SyncStateAdapter implements SyncStatePort {
       delete ports[fromSlug];
 
       const indexes = this.indexes!;
-      const handles = indexes.byHandle.get(fromSlug);
-      if (handles !== undefined) {
-        indexes.byHandle.delete(fromSlug);
-        indexes.byHandle.set(toSlug, handles);
+      // Move only THIS project's handles. The handle index is shared across
+      // projects, so moving the whole slug bucket would re-point every other
+      // project's handles for that slug and break their resolution until the
+      // next reload.
+      const fromHandles = indexes.byHandle.get(fromSlug);
+      if (fromHandles !== undefined) {
+        let toHandles = indexes.byHandle.get(toSlug);
+        if (toHandles === undefined) {
+          toHandles = new Map();
+          indexes.byHandle.set(toSlug, toHandles);
+        }
+        for (const [handle, owner] of [...fromHandles]) {
+          if (owner.project !== projectName) {
+            continue;
+          }
+          fromHandles.delete(handle);
+          toHandles.set(handle, owner);
+        }
+        if (fromHandles.size === 0) {
+          indexes.byHandle.delete(fromSlug);
+        }
       }
       for (const refs of indexes.itemsByEntity.values()) {
         for (const ref of refs) {
@@ -819,23 +838,46 @@ export class SyncStateAdapter implements SyncStatePort {
 
   async setIdentity(
     projectName: string,
+    connectionSlug: string,
     identity: ProjectIdentityData,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      ensureProjectNode(ensureProjects(container), projectName).identity =
-        identity;
+      const node = ensureProjectNode(ensureProjects(container), projectName);
+      ensureIdentitiesMap(node)[connectionSlug] = identity;
       await this.persist();
     });
   }
 
-  async getIdentity(projectName: string): Promise<ProjectIdentityData | null> {
+  async getIdentity(
+    projectName: string,
+    connectionSlug: string,
+  ): Promise<ProjectIdentityData | null> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       const node = projectNode(readProjectsMap(container), projectName);
-      const raw = node === null ? undefined : node.identity;
+      const raw = node === null ? undefined : identitiesMap(node)[connectionSlug];
       return isRecord(raw) ? this.mapIdentity(raw) : null;
+    });
+  }
+
+  async listIdentities(
+    projectName: string,
+  ): Promise<Array<{ slug: string; identity: ProjectIdentityData }>> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      const node = projectNode(readProjectsMap(container), projectName);
+      if (node === null) {
+        return [];
+      }
+      const result: Array<{ slug: string; identity: ProjectIdentityData }> = [];
+      for (const [slug, raw] of Object.entries(identitiesMap(node))) {
+        if (isRecord(raw)) {
+          result.push({ slug, identity: this.mapIdentity(raw) });
+        }
+      }
+      return result;
     });
   }
 
