@@ -26,7 +26,6 @@ export function projectNoteFromCache(
     archivedAt: path.startsWith('Archief/') ? '' : null,
     pm: frontmatter.pm,
     url: typeof frontmatter.url === 'string' ? frontmatter.url : '',
-    board: typeof frontmatter.board === 'string' ? frontmatter.board : '',
   };
 }
 

@@ -98,10 +98,7 @@ export class SyncProjectAction {
     // no board work.
     if (this.ensureProjectBoard && note.archivedAt === null) {
       await this.step('ensure board', () =>
-        this.ensureProjectBoard!.execute({
-          projectName: project,
-          notePath: note.path,
-        }),
+        this.ensureProjectBoard!.execute({ projectName: project }),
       );
     }
 

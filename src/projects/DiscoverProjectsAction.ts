@@ -38,7 +38,6 @@ export class DiscoverProjectsAction {
         const identity = await this.attachProject.execute({
           pm: note.pm,
           repoUrl: note.url,
-          boardUrl: note.board,
         });
         if (identity) {
           projects.push({

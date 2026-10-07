@@ -84,6 +84,49 @@ describe('settings are secret-free', () => {
   });
 });
 
+describe('the board scaffolding vocabularies round-trip', () => {
+  it('defaults the status and type vocabularies', () => {
+    const settings = settingsFromData({});
+
+    expect(settings.statusOptions).toEqual([
+      'Unshaped',
+      'Shaping',
+      'Shaped',
+      'Building',
+      'Shipped',
+    ]);
+    expect(settings.typeLabels).toEqual([
+      'type: bug',
+      'type: chore',
+      'type: pitch',
+      'type: slice',
+      'type: task',
+    ]);
+  });
+
+  it('loads and persists configured vocabularies', () => {
+    const settings = settingsFromData({
+      statusOptions: ['Todo', 'Doing', 'Done'],
+      typeLabels: ['type: task'],
+    });
+
+    expect(settings.statusOptions).toEqual(['Todo', 'Doing', 'Done']);
+    expect(settings.typeLabels).toEqual(['type: task']);
+
+    const merged = mergeSettingsIntoData({}, settings);
+    expect(merged.statusOptions).toEqual(['Todo', 'Doing', 'Done']);
+    expect(merged.typeLabels).toEqual(['type: task']);
+  });
+
+  it('clones the default lists so a caller cannot mutate them', () => {
+    const settings = settingsFromData({});
+
+    settings.statusOptions.push('Extra');
+
+    expect(DEFAULT_SETTINGS.statusOptions).not.toContain('Extra');
+  });
+});
+
 describe('the six seeded artifact paths round-trip', () => {
   const custom = {
     projectTemplatePath: 'Templates/MijnProject.md',

@@ -14,7 +14,6 @@ describe('DISC-1 — the project note is read from the cache', () => {
       archivedAt: null,
       pm: 'github',
       url: 'https://github.com/acme/widgets',
-      board: 'https://github.com/orgs/acme/projects/1',
     });
 
     const archived = projectNoteFromCache('Archief/Acme Widgets/_home.md', {
@@ -26,7 +25,6 @@ describe('DISC-1 — the project note is read from the cache', () => {
       archivedAt: '',
       pm: 'github',
       url: '',
-      board: '',
     });
   });
 

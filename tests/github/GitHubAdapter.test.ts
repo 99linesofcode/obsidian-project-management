@@ -301,8 +301,64 @@ describe('PRJ-4 — a project payload is canonical at the boundary', () => {
 
 });
 
-describe('PRJ-1 — a vault project gains a board', () => {
-  it('creates a board under the token viewer and returns its addressing', async () => {
+describe('PRJ-1 — the board is derived from the repository', () => {
+  it('lists the repository node id and its linked boards', async () => {
+    const repoBoardsResponse = {
+      status: 200,
+      json: {
+        data: {
+          repository: {
+            id: 'R_kgDOAAAA',
+            projectsV2: {
+              nodes: [
+                {
+                  id: 'PVT_1',
+                  title: 'widgets',
+                  url: 'https://github.com/users/acme/projects/1',
+                },
+                {
+                  id: 'PVT_2',
+                  title: 'Roadmap',
+                  url: 'https://github.com/users/acme/projects/2',
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([repoBoardsResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    const result = await adapter.fetchRepoBoards(
+      'https://github.com/acme/widgets',
+    );
+
+    expect(result).toEqual({
+      repoNodeId: 'R_kgDOAAAA',
+      boards: [
+        {
+          projectNodeId: 'PVT_1',
+          name: 'widgets',
+          boardUrl: 'https://github.com/users/acme/projects/1',
+        },
+        {
+          projectNodeId: 'PVT_2',
+          name: 'Roadmap',
+          boardUrl: 'https://github.com/users/acme/projects/2',
+        },
+      ],
+    });
+    expect(bodies[0]).toContain('RepoBoards');
+    expect(bodies[0]).toContain('"owner":"acme"');
+    expect(bodies[0]).toContain('"name":"widgets"');
+  });
+
+  it('creates, links and gives a Status field with the configured options', async () => {
+    const repoResponse = {
+      status: 200,
+      json: { data: { repository: { id: 'R_kgDOAAAA' } } },
+    };
     const viewerResponse = {
       status: 200,
       json: { data: { viewer: { id: 'U_kgDOAAAA' } } },
@@ -315,68 +371,67 @@ describe('PRJ-1 — a vault project gains a board', () => {
             projectV2: {
               id: 'PVT_9',
               url: 'https://github.com/users/acme/projects/9',
-              fields: {
-                nodes: [
-                  {
-                    id: 'PVTF_9',
-                    name: 'Status',
-                    options: [{ id: 'PVTSSF_1', name: 'Todo' }],
-                  },
-                ],
-              },
+            },
+          },
+        },
+      },
+    };
+    const linkResponse = {
+      status: 200,
+      json: {
+        data: {
+          linkProjectV2ToRepository: { repository: { id: 'R_kgDOAAAA' } },
+        },
+      },
+    };
+    const fieldResponse = {
+      status: 200,
+      json: {
+        data: {
+          createProjectV2Field: {
+            projectV2Field: {
+              id: 'PVTF_9',
+              name: 'Status',
+              options: [
+                { id: 'PVTSSF_1', name: 'Unshaped' },
+                { id: 'PVTSSF_2', name: 'Shipped' },
+              ],
             },
           },
         },
       },
     };
     const { transport, bodies } = fakeTransport([
+      repoResponse,
       viewerResponse,
       createResponse,
+      linkResponse,
+      fieldResponse,
     ]);
     const adapter = new GitHubAdapter(transport);
 
-    const board = await adapter.createProject('New Project');
+    const board = await adapter.createBoardWithStatusField(
+      'https://github.com/acme/widgets',
+      ['Unshaped', 'Shipped'],
+    );
 
     expect(board).toEqual({
       projectNodeId: 'PVT_9',
       boardUrl: 'https://github.com/users/acme/projects/9',
       statusFieldId: 'PVTF_9',
-      statusOptions: [{ id: 'PVTSSF_1', name: 'Todo' }],
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Unshaped' },
+        { id: 'PVTSSF_2', name: 'Shipped' },
+      ],
     });
-    expect(bodies[0]).toContain('viewer');
-    expect(bodies[1]).toContain('createProjectV2');
-    expect(bodies[1]).toContain('"ownerId":"U_kgDOAAAA"');
-    expect(bodies[1]).toContain('"title":"New Project"');
-  });
-
-  it('caches the viewer id across board creations', async () => {
-    const viewerResponse = {
-      status: 200,
-      json: { data: { viewer: { id: 'U_kgDOAAAA' } } },
-    };
-    const created = (id: string) => ({
-      status: 200,
-      json: {
-        data: {
-          createProjectV2: {
-            projectV2: { id, url: `https://github.com/users/acme/projects/1` },
-          },
-        },
-      },
-    });
-    const { transport, bodies } = fakeTransport([
-      viewerResponse,
-      created('PVT_1'),
-      created('PVT_2'),
-    ]);
-    const adapter = new GitHubAdapter(transport);
-
-    await adapter.createProject('One');
-    await adapter.createProject('Two');
-
-    expect(bodies.filter((body) => body.includes('viewer'))).toHaveLength(1);
-    expect(bodies[1]).toContain('"ownerId":"U_kgDOAAAA"');
-    expect(bodies[2]).toContain('"ownerId":"U_kgDOAAAA"');
+    expect(bodies[0]).toContain('repository');
+    expect(bodies[1]).toContain('viewer');
+    expect(bodies[2]).toContain('createProjectV2');
+    expect(bodies[2]).toContain('"title":"widgets"');
+    expect(bodies[3]).toContain('linkProjectV2ToRepository');
+    expect(bodies[3]).toContain('"repositoryId":"R_kgDOAAAA"');
+    expect(bodies[4]).toContain('createProjectV2Field');
+    expect(bodies[4]).toContain('"name":"Unshaped"');
   });
 
   it('lists the viewer boards as canonical ProjectData', async () => {
@@ -427,56 +482,152 @@ describe('PRJ-1 — a vault project gains a board', () => {
 });
 
 describe('MAT-3 — only typed issues are adopted', () => {
-  it('renders the vault-owned type as a type label, and omits it when empty', async () => {
-    const cases = [
+  it('creates the issue on the board with its type label', async () => {
+    const repoResponse = {
+      status: 200,
+      json: { data: { repository: { id: 'R_kgDOAAAA' } } },
+    };
+    const labelResponse = {
+      status: 200,
+      json: { data: { repository: { label: { id: 'LA_1' } } } },
+    };
+    const createResponse = {
+      status: 200,
+      json: {
+        data: {
+          createIssue: {
+            issue: {
+              id: 'I_kwDOAAAA50',
+              url: 'https://github.com/acme/widgets/issues/50',
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies } = fakeTransport([
+      repoResponse,
+      labelResponse,
+      createResponse,
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    const handle = await adapter.createIssue(
+      'https://github.com/acme/widgets',
       {
-        type: 'bug',
         title: 'Fix the bug',
         body: 'The bug.',
-        url: 'https://github.com/acme/widgets/issues/50',
-        nodeId: 'I_kwDOAAAA50',
-        expectLabel: true,
+        type: 'bug',
+        projectV2Ids: ['PVT_123'],
       },
-      {
-        type: '',
-        title: 'Untyped',
-        body: '',
-        url: 'https://github.com/acme/widgets/issues/51',
-        nodeId: 'I_kwDOAAAA51',
-        expectLabel: false,
+    );
+
+    expect(handle).toEqual({
+      url: 'https://github.com/acme/widgets/issues/50',
+      nodeId: 'I_kwDOAAAA50',
+    });
+    expect(bodies[0]).toContain('repository');
+    expect(bodies[1]).toContain('label');
+    expect(bodies[1]).toContain('"label":"type: bug"');
+    expect(bodies[2]).toContain('CreateIssue');
+    expect(bodies[2]).toContain('"labelIds":["LA_1"]');
+    expect(bodies[2]).toContain('"projectV2Ids":["PVT_123"]');
+  });
+
+  it('creates an untyped issue without a label lookup', async () => {
+    const repoResponse = {
+      status: 200,
+      json: { data: { repository: { id: 'R_kgDOAAAA' } } },
+    };
+    const createResponse = {
+      status: 200,
+      json: {
+        data: {
+          createIssue: {
+            issue: {
+              id: 'I_kwDOAAAA51',
+              url: 'https://github.com/acme/widgets/issues/51',
+            },
+          },
+        },
       },
-    ];
-    for (const c of cases) {
-      const { transport, bodies, paths } = fakeTransport([
-        { status: 201, json: { html_url: c.url, node_id: c.nodeId } },
-      ]);
-      const adapter = new GitHubAdapter(transport);
+    };
+    const { transport, bodies } = fakeTransport([repoResponse, createResponse]);
+    const adapter = new GitHubAdapter(transport);
 
-      const handle = await adapter.createIssue(
-        'https://github.com/acme/widgets',
-        { title: c.title, body: c.body, type: c.type },
-      );
+    const handle = await adapter.createIssue(
+      'https://github.com/acme/widgets',
+      { title: 'Untyped', body: '', type: '', projectV2Ids: [] },
+    );
 
-      expect(handle, c.title).toEqual({ url: c.url, nodeId: c.nodeId });
-      expect(paths[0]).toBe('/repos/acme/widgets/issues');
-      expect(bodies[0]).toContain(`"title":${JSON.stringify(c.title)}`);
-      if (c.expectLabel) {
-        expect(bodies[0]).toContain(`"labels":["type: ${c.type}"]`);
-      } else {
-        expect(bodies[0]).not.toContain('labels');
-      }
-    }
+    expect(handle).toEqual({
+      url: 'https://github.com/acme/widgets/issues/51',
+      nodeId: 'I_kwDOAAAA51',
+    });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toContain('CreateIssue');
+    expect(bodies[1]).toContain('"labelIds":[]');
+  });
+
+  it('creates a missing type label before creating the issue', async () => {
+    const repoResponse = {
+      status: 200,
+      json: { data: { repository: { id: 'R_kgDOAAAA' } } },
+    };
+    const missingLabelResponse = {
+      status: 200,
+      json: { data: { repository: { label: null } } },
+    };
+    const createLabelResponse = { status: 201, json: { node_id: 'LA_new' } };
+    const createResponse = {
+      status: 200,
+      json: {
+        data: {
+          createIssue: {
+            issue: {
+              id: 'I_kwDOAAAA52',
+              url: 'https://github.com/acme/widgets/issues/52',
+            },
+          },
+        },
+      },
+    };
+    const { transport, bodies, paths } = fakeTransport([
+      repoResponse,
+      missingLabelResponse,
+      createLabelResponse,
+      createResponse,
+    ]);
+    const adapter = new GitHubAdapter(transport);
+
+    await adapter.createIssue('https://github.com/acme/widgets', {
+      title: 'Fix the bug',
+      body: '',
+      type: 'bug',
+      projectV2Ids: ['PVT_123'],
+    });
+
+    expect(paths[0]).toBe('/repos/acme/widgets/labels');
+    expect(bodies[2]).toContain('"name":"type: bug"');
+    expect(bodies[3]).toContain('"labelIds":["LA_new"]');
   });
 
   it('throws when issue creation fails', async () => {
-    const { transport } = fakeTransport([{ status: 422, json: {} }]);
+    const repoResponse = {
+      status: 200,
+      json: { data: { repository: { id: 'R_kgDOAAAA' } } },
+    };
+    const { transport } = fakeTransport([
+      repoResponse,
+      { status: 422, json: {} },
+    ]);
     const adapter = new GitHubAdapter(transport);
 
     await expect(
       adapter.createIssue('https://github.com/acme/widgets', {
         title: 'Fix the bug',
         body: '',
-        type: 'task',
+        type: '',
+        projectV2Ids: [],
       }),
     ).rejects.toThrow(/status 422/);
   });
@@ -1577,5 +1728,40 @@ describe('PRB-1 — a quiet board is probed cheaply', () => {
 
       expect([...result.keys()], name).toEqual(expected);
     }
+  });
+});
+
+describe('SEED — repository labels are listed and created', () => {
+  it('lists the repository label names', async () => {
+    const labelsResponse = {
+      status: 200,
+      json: [{ name: 'type: task' }, { name: 'bug' }, { name: 42 }],
+    };
+    const { transport, paths } = fakeTransport([labelsResponse]);
+    const adapter = new GitHubAdapter(transport);
+
+    const labels = await adapter.listRepoLabels(
+      'https://github.com/acme/widgets',
+    );
+
+    expect(labels).toEqual(['type: task', 'bug']);
+    expect(paths[0]).toBe('/repos/acme/widgets/labels?per_page=100');
+  });
+
+  it('creates a repository label with the given color', async () => {
+    const created = { status: 201, json: { name: 'type: bug' } };
+    const { transport, paths, bodies } = fakeTransport([created]);
+    const adapter = new GitHubAdapter(transport);
+
+    await adapter.createRepoLabel(
+      'https://github.com/acme/widgets',
+      'type: bug',
+      'ededed',
+    );
+
+    expect(paths[0]).toBe('/repos/acme/widgets/labels');
+    expect(bodies[0]).toBe(
+      JSON.stringify({ name: 'type: bug', color: 'ededed' }),
+    );
   });
 });

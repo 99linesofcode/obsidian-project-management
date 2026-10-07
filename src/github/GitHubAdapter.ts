@@ -1,4 +1,5 @@
 import { isRecord } from '../shared/isRecord.js';
+import { DEFAULT_LABEL_COLOR } from '../shared/labels.js';
 import type { AttachProjectData } from '../shared/AttachProjectData.js';
 import type { BoardItemData } from '../shared/BoardItemData.js';
 import type { CreateIssueData } from '../shared/CreateIssueData.js';
@@ -11,6 +12,10 @@ import type {
 } from '../shared/ProjectIdentityData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ProjectDetailData } from '../shared/ProjectDetailData.js';
+import type {
+  RepoBoardData,
+  RepositoryBoardsData,
+} from '../shared/RepoBoardData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
 import { ProjectMapper } from '../projects/ProjectMapper.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
@@ -273,37 +278,116 @@ const SET_PROJECT_CLOSED_MUTATION = `
   }
 `;
 
-// The owner a vault-born board is created under. WHY the viewer and not the
-// note's existing identity resolution: a vault-born project (PRJ-1) has no
-// repo or board address yet, so there is no login to resolve from. The token's
-// own account is the only defensible owner; the board can be transferred later.
+// The owner a created board is created under. WHY the viewer and not the
+// repository's owner: a user-owned repo's board may be user- or org-owned, and
+// the token's own account is the only owner the plugin can address without an
+// extra owner-type lookup. The board is linked to the repo explicitly.
 const VIEWER_QUERY = `
   query Viewer {
     viewer { id }
   }
 `;
 
-// Creates a board under the viewer and returns the addressing the registry
-// stores: the node id, its url (the note's board anchor) and the default
-// project's Status field. GitHub's default template carries a Status field;
-// the parser tolerates its absence so a created board never fails on a schema
-// the user can repair.
-const CREATE_PROJECT_MUTATION = `
-  mutation CreateProject($ownerId: ID!, $title: String!) {
+// The repository's linked boards (the derivation ladder's listing) plus the
+// repository node id, in one read. The ladder keys on the repo name; adoption
+// re-resolves field ids through the identity read, so the listing stays cheap.
+const REPO_BOARDS_QUERY = `
+  query RepoBoards($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) {
+      id
+      projectsV2(first: 100) {
+        nodes {
+          id
+          title
+          url
+        }
+      }
+    }
+  }
+`;
+
+// Creates a board under the viewer. The board is linked to the repository in a
+// separate mutation (linkProjectV2ToRepository) and given its Status field
+// (createProjectV2Field), so the three scaffolding steps are explicit.
+const CREATE_BOARD_MUTATION = `
+  mutation CreateBoard($ownerId: ID!, $title: String!) {
     createProjectV2(input: { ownerId: $ownerId, title: $title }) {
       projectV2 {
         id
         url
-        fields(first: 20) {
-          nodes {
-            ... on ProjectV2SingleSelectField {
-              id
-              name
-              options { id name }
-            }
-          }
+      }
+    }
+  }
+`;
+
+const LINK_BOARD_MUTATION = `
+  mutation LinkBoard($projectId: ID!, $repositoryId: ID!) {
+    linkProjectV2ToRepository(
+      input: { projectId: $projectId, repositoryId: $repositoryId }
+    ) {
+      repository { id }
+    }
+  }
+`;
+
+// The Status single-select field a created board gets, carrying the configured
+// option names. Each option needs a color and description; a neutral gray and
+// an empty description are the sensible defaults.
+const CREATE_STATUS_FIELD_MUTATION = `
+  mutation CreateStatusField(
+    $projectId: ID!
+    $options: [ProjectV2SingleSelectFieldOptionInput!]!
+  ) {
+    createProjectV2Field(
+      input: {
+        projectId: $projectId
+        dataType: SINGLE_SELECT
+        name: "Status"
+        singleSelectOptions: $options
+      }
+    ) {
+      projectV2Field {
+        ... on ProjectV2SingleSelectField {
+          id
+          name
+          options { id name }
         }
       }
+    }
+  }
+`;
+
+// The repository's label by name, for resolving the `type:*` label id a created
+// issue carries. A missing label resolves to null and is created first.
+const LABEL_QUERY = `
+  query Label($owner: String!, $name: String!, $label: String!) {
+    repository(owner: $owner, name: $name) {
+      label(name: $label) { id }
+    }
+  }
+`;
+
+// Creates an issue already linked to its board (projectV2Ids) and carrying its
+// type label (labelIds), in one mutation. The issue is born tracked and on the
+// board, so no follow-up membership write is needed.
+const CREATE_ISSUE_MUTATION = `
+  mutation CreateIssue(
+    $repositoryId: ID!
+    $title: String!
+    $body: String
+    $labelIds: [ID!]
+    $projectV2Ids: [ID!]
+  ) {
+    createIssue(
+      input: {
+        repositoryId: $repositoryId
+        title: $title
+        body: $body
+        labelIds: $labelIds
+        projectV2Ids: $projectV2Ids
+      }
+    ) {
+      issue { id url }
     }
   }
 `;
@@ -363,10 +447,10 @@ export class GitHubAdapter implements ProjectManagementPort {
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null> {
     const board = this.parseBoardUrl(data.boardUrl);
-    // A board without a repository yet (repo attachment is a separate ATT-1
-    // act): the board alone resolves the identity, and repoUrl/repoNodeId stay
-    // empty. WHY not require a repo: a captured board (PRJ-3) and a vault-born
-    // board (PRJ-1) legitimately exist before the user attaches one.
+    // A board without a repository yet: the board alone resolves the identity,
+    // and repoUrl/repoNodeId stay empty. Used by the board-born capture path
+    // (PRJ-3), which has a board but no repo, and by the derivation ladder to
+    // adopt a selected board and re-resolve its field ids.
     const repoNodeId =
       data.repoUrl === ''
         ? ''
@@ -382,30 +466,140 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  // Creates a ProjectV2 board under the token's viewer (PRJ-1). The viewer id
-  // is resolved once and cached: a fleet of vault-born projects creates their
-  // boards in one pass, and the viewer never changes for the token's lifetime.
-  async createProject(name: string): Promise<ProjectBoardData> {
-    const ownerId = await this.viewerId();
-    const data = await this.postQuery(CREATE_PROJECT_MUTATION, {
-      ownerId,
-      title: name,
+  // The repository's node id and its linked boards, in one read. The
+  // derivation ladder keys on the repo name; a malformed board node is skipped
+  // rather than failing the whole listing.
+  async fetchRepoBoards(repoUrl: string): Promise<RepositoryBoardsData> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const data = await this.postQuery(REPO_BOARDS_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
     });
-    const payload = data.createProjectV2;
+    const repository = data.repository;
+    if (!isRecord(repository) || typeof repository.id !== 'string') {
+      throw new Error(
+        `GitHubAdapter: repository ${repo.owner}/${repo.name} not found`,
+      );
+    }
+    const nodes =
+      isRecord(repository.projectsV2) &&
+      Array.isArray(repository.projectsV2.nodes)
+        ? repository.projectsV2.nodes
+        : [];
+    const boards: RepoBoardData[] = [];
+    for (const node of nodes) {
+      if (!isRecord(node) || typeof node.id !== 'string') {
+        continue;
+      }
+      boards.push({
+        projectNodeId: node.id,
+        name: typeof node.title === 'string' ? node.title : '',
+        boardUrl: typeof node.url === 'string' ? node.url : '',
+      });
+    }
+    return { repoNodeId: repository.id, boards };
+  }
+
+  // Creates a board titled with the repository's name under the token's viewer,
+  // links it to the repository, and creates its Status single-select field with
+  // the configured option names. The viewer id is resolved once and cached: a
+  // fleet of projects creates their boards in one pass, and the viewer never
+  // changes for the token's lifetime.
+  async createBoardWithStatusField(
+    repoUrl: string,
+    statusOptions: string[],
+  ): Promise<ProjectBoardData> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const repositoryId = await this.fetchRepoNodeId(repo);
+    const ownerId = await this.viewerId();
+
+    const created = await this.postQuery(CREATE_BOARD_MUTATION, {
+      ownerId,
+      title: repo.name,
+    });
+    const payload = created.createProjectV2;
     const project =
       isRecord(payload) && isRecord(payload.projectV2)
         ? payload.projectV2
         : undefined;
     if (!project || typeof project.id !== 'string') {
-      throw new Error('GitHubAdapter: create project returned no project');
+      throw new Error('GitHubAdapter: create board returned no project');
     }
-    const status = this.statusFieldOrEmpty(project.fields);
+    const projectNodeId = project.id;
+    const boardUrl = typeof project.url === 'string' ? project.url : '';
+
+    await this.postQuery(LINK_BOARD_MUTATION, {
+      projectId: projectNodeId,
+      repositoryId,
+    });
+
+    const fieldData = await this.postQuery(CREATE_STATUS_FIELD_MUTATION, {
+      projectId: projectNodeId,
+      options: statusOptions.map((name) => ({
+        name,
+        color: 'GRAY',
+        description: '',
+      })),
+    });
+    const fieldPayload = fieldData.createProjectV2Field;
+    const fieldNode =
+      isRecord(fieldPayload) && isRecord(fieldPayload.projectV2Field)
+        ? fieldPayload.projectV2Field
+        : undefined;
+    const status = this.statusFieldOrEmpty({
+      nodes: fieldNode === undefined ? [] : [fieldNode],
+    });
+    if (status.id === '') {
+      throw new Error('GitHubAdapter: create board returned no Status field');
+    }
     return {
-      projectNodeId: project.id,
-      boardUrl: typeof project.url === 'string' ? project.url : '',
+      projectNodeId,
+      boardUrl,
       statusFieldId: status.id,
       statusOptions: status.options,
     };
+  }
+
+  // The repository's existing label names, for the seed action's skip check.
+  async listRepoLabels(repoUrl: string): Promise<string[]> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const path = `/repos/${repo.owner}/${repo.name}/labels?per_page=100`;
+    const response = await this.transport.get(path);
+    if (response.status !== 200) {
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
+    }
+    if (!Array.isArray(response.json)) {
+      throw new Error('GitHubAdapter: unexpected REST response shape');
+    }
+    return response.json
+      .filter(isRecord)
+      .filter(
+        (label): label is { name: string } => typeof label.name === 'string',
+      )
+      .map((label) => label.name);
+  }
+
+  // Creates one label on the repository. The seed action calls it only for
+  // labels the listing did not already carry, so it is not idempotent on its
+  // own; a duplicate name is a 422 the caller never triggers.
+  async createRepoLabel(
+    repoUrl: string,
+    name: string,
+    color: string,
+  ): Promise<void> {
+    const repo = this.parseRepoUrl(repoUrl);
+    const path = `/repos/${repo.owner}/${repo.name}/labels`;
+    const response = await this.transport.postPath(
+      path,
+      JSON.stringify({ name, color }),
+    );
+    if (response.status !== 201 && response.status !== 200) {
+      throw new Error(
+        `GitHubAdapter: REST request failed with status ${response.status}`,
+      );
+    }
   }
 
   // The viewer's ProjectV2 boards, mapped onto canonical ProjectData (PRJ-3).
@@ -483,49 +677,73 @@ export class GitHubAdapter implements ProjectManagementPort {
     );
   }
 
-  // Creates a new issue from a vault-born task's canonical view. The vault-owned
-  // type is rendered as the `type:*` label, so the created issue is immediately
-  // tracked by the same gate that adopts typed issues. The REST create is the
-  // adapter's issue-creation internal; promoteCard's draft conversion is a
-  // different path (it needs an existing draft card), so it is not reused here.
+  // Creates a new issue from a vault-born task's canonical view, already linked
+  // to its board (projectV2Ids) and carrying its `type:*` label, in one GraphQL
+  // mutation. The label id is resolved (and the label created if absent) first,
+  // so the issue is born tracked and on the board — no follow-up membership
+  // write. promoteCard's draft conversion is a different path (it needs an
+  // existing draft card), so it is not reused here.
   async createIssue(
     repoUrl: string,
     payload: CreateIssueData,
   ): Promise<IssueHandleData> {
     const repo = this.parseRepoUrl(repoUrl);
-    const path = `/repos/${repo.owner}/${repo.name}/issues`;
-    const body: Record<string, unknown> = {
+    const repositoryId = await this.fetchRepoNodeId(repo);
+    const labelIds =
+      payload.type === ''
+        ? []
+        : [await this.ensureLabelId(repo, `type: ${payload.type}`)];
+
+    const data = await this.postQuery(CREATE_ISSUE_MUTATION, {
+      repositoryId,
       title: payload.title,
       body: payload.body,
-    };
-    if (payload.type !== '') {
-      body.labels = [`type: ${payload.type}`];
+      labelIds,
+      projectV2Ids: payload.projectV2Ids,
+    });
+    const created = data.createIssue;
+    const issue =
+      isRecord(created) && isRecord(created.issue) ? created.issue : undefined;
+    if (!issue || typeof issue.url !== 'string' || issue.url === '') {
+      throw new Error('GitHubAdapter: create issue returned no url');
     }
+    return {
+      url: issue.url,
+      nodeId: typeof issue.id === 'string' ? issue.id : '',
+    };
+  }
 
+  // The node id of a repository label, creating it with the default color when
+  // it does not exist yet. The seed action normally creates the type labels, so
+  // this is the fallback that keeps a fresh repo's first issue tracked.
+  private async ensureLabelId(repo: RepoParts, label: string): Promise<string> {
+    const data = await this.postQuery(LABEL_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+      label,
+    });
+    const repository = data.repository;
+    if (
+      isRecord(repository) &&
+      isRecord(repository.label) &&
+      typeof repository.label.id === 'string'
+    ) {
+      return repository.label.id;
+    }
+    const path = `/repos/${repo.owner}/${repo.name}/labels`;
     const response = await this.transport.postPath(
       path,
-      JSON.stringify(body),
+      JSON.stringify({ name: label, color: DEFAULT_LABEL_COLOR }),
     );
     if (response.status !== 201 && response.status !== 200) {
       throw new Error(
         `GitHubAdapter: REST request failed with status ${response.status}`,
       );
     }
-    if (!isRecord(response.json)) {
-      throw new Error('GitHubAdapter: unexpected REST response shape');
+    if (!isRecord(response.json) || typeof response.json.node_id !== 'string') {
+      throw new Error('GitHubAdapter: create label returned no node id');
     }
-    const url =
-      typeof response.json.html_url === 'string' ? response.json.html_url : '';
-    if (url === '') {
-      throw new Error('GitHubAdapter: create issue returned no url');
-    }
-    return {
-      url,
-      nodeId:
-        typeof response.json.node_id === 'string'
-          ? response.json.node_id
-          : '',
-    };
+    return response.json.node_id;
   }
 
   async fetchTrackedIssues(repoUrl: string): Promise<GithubTaskData[]> {
@@ -893,6 +1111,9 @@ export class GitHubAdapter implements ProjectManagementPort {
     });
   }
 
+  // Adds an existing issue to the board. Kept for adopting an untracked issue
+  // (materializeUntracked); the outward-creation path links at create time
+  // instead, so it never calls this.
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     const task = await this.fetchTask(issueUrl);
     await this.postQuery(ADD_BOARD_ITEM_MUTATION, {
@@ -904,6 +1125,10 @@ export class GitHubAdapter implements ProjectManagementPort {
   // Resolves the issue's card from the board (the same join setBoardStatus
   // uses) and deletes it. A card-less issue is a no-op, so a sweep can call
   // this without first checking membership.
+  //
+  // NOTE: deleting an ISSUE removes its board item automatically (verified
+  // against the live API), so the issue-deletion paths need no cleanup call.
+  // This method exists for removing a card while keeping the issue.
   async deleteCard(projectNodeId: string, issueUrl: string): Promise<void> {
     const items = await this.fetchBoardItems(projectNodeId);
     const item = items.find((candidate) => candidate.issueUrl === issueUrl);

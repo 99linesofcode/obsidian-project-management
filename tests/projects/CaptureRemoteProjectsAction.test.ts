@@ -11,6 +11,7 @@ import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
+import type { RepositoryBoardsData } from '../../src/shared/RepoBoardData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
 import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
@@ -122,6 +123,24 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.createCalls.push(name);
     return this.board;
   }
+  repoBoards: RepositoryBoardsData = { repoNodeId: 'R_kgDOAAAA', boards: [] };
+  boardCreateCalls: Array<{ repoUrl: string; statusOptions: string[] }> = [];
+  async fetchRepoBoards(): Promise<RepositoryBoardsData> {
+    return this.repoBoards;
+  }
+  async createBoardWithStatusField(
+    repoUrl: string,
+    statusOptions: string[],
+  ): Promise<ProjectBoardData> {
+    this.boardCreateCalls.push({ repoUrl, statusOptions });
+    return this.board;
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchProject(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -222,8 +241,8 @@ function setup() {
   );
   const ensureBoard = new EnsureProjectBoardAction(
     projectManagement,
-    vault,
     syncState,
+    ['Unshaped'],
   );
   return { action, ensureBoard, vault, syncState, taskManager, projectManagement };
 }
@@ -309,7 +328,6 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
           archivedAt: null,
           pm: 'github',
           url: '',
-          board: '',
         },
       ];
       h.vault.notes.set(
@@ -424,7 +442,6 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         archivedAt: null,
         pm: 'github',
         url: '',
-        board: '',
       },
     ];
 
@@ -436,7 +453,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
     expect(h.vault.created).toEqual([]);
   });
 
-  it('splices a Todoist-captured project all the way to a board (PRJ-2 + PRJ-1)', async () => {
+  it('splices a Todoist-captured project to a board once a repo is attached (PRJ-2 + PRJ-1)', async () => {
     const h = setup();
     h.syncState.projectCursors.set('todoist', cursor);
     h.taskManager.projects = [
@@ -448,19 +465,29 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
     ];
 
     await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
-    await h.ensureBoard.execute({
-      projectName: 'New Project',
-      notePath: 'Projecten/New Project/_New Project.md',
+    // The board is derived from the repository, so the captured project gains
+    // one only once a repository is attached.
+    h.syncState.identities.set('New Project', {
+      repoUrl: 'https://github.com/acme/widgets',
+      repoNodeId: '',
+      projectNodeId: '',
+      statusFieldId: '',
+      statusOptions: [],
     });
+    h.projectManagement.repoBoards = { repoNodeId: 'R_kgDOAAAA', boards: [] };
+    await h.ensureBoard.execute({ projectName: 'New Project' });
 
     const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
     expect(home).toContain('todoist: P-new');
-    expect(home).toContain(
-      'board: https://github.com/users/acme/projects/9',
-    );
+    expect(h.projectManagement.boardCreateCalls).toEqual([
+      {
+        repoUrl: 'https://github.com/acme/widgets',
+        statusOptions: ['Unshaped'],
+      },
+    ]);
     expect(await h.syncState.getIdentity('New Project')).toEqual({
-      repoUrl: '',
-      repoNodeId: '',
+      repoUrl: 'https://github.com/acme/widgets',
+      repoNodeId: 'R_kgDOAAAA',
       projectNodeId: 'PVT_new',
       statusFieldId: 'PVTF_new',
       statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],

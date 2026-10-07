@@ -13,6 +13,11 @@ export interface ProjectManagementSettings {
   projectsBasePath: string;
   tasksBasePath: string;
   todosBasePath: string;
+  // The Status lane vocabulary a CREATED board's Status field gets. An adopted
+  // board keeps its own options, so this governs creation only.
+  statusOptions: string[];
+  // The type-label vocabulary the seed action applies to a repository.
+  typeLabels: string[];
 }
 
 export const DEFAULT_SETTINGS: ProjectManagementSettings = {
@@ -25,6 +30,14 @@ export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   projectsBasePath: 'Bases/Projects.base',
   tasksBasePath: 'Bases/Tasks.base',
   todosBasePath: 'Bases/Todos.base',
+  statusOptions: ['Unshaped', 'Shaping', 'Shaped', 'Building', 'Shipped'],
+  typeLabels: [
+    'type: bug',
+    'type: chore',
+    'type: pitch',
+    'type: slice',
+    'type: task',
+  ],
 };
 
 // The pre-SecretStorage plaintext token fields. They are stripped on load and
@@ -48,7 +61,12 @@ export function settingsFromData(
   for (const field of LEGACY_SECRET_FIELDS) {
     delete settings[field];
   }
-  return Object.assign({}, DEFAULT_SETTINGS, settings);
+  const merged = Object.assign({}, DEFAULT_SETTINGS, settings);
+  // The two list settings are cloned so a caller that edits one in place can
+  // never mutate DEFAULT_SETTINGS for the rest of the process.
+  merged.statusOptions = [...merged.statusOptions];
+  merged.typeLabels = [...merged.typeLabels];
+  return merged;
 }
 
 // Merges the in-memory settings into a FRESH data.json read, so a registry

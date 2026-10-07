@@ -691,6 +691,9 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       title: vault.title,
       body,
       type: vault.type,
+      // Born on the board: the issue is linked at create time, so no separate
+      // membership write is needed (and none is made).
+      projectV2Ids: [identity.projectNodeId],
     });
 
     // The base is a diff view of the canonical task, with the issue-comparable
@@ -707,10 +710,9 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       pendingCreationHandle(record.id),
     );
 
-    // The card: add it and place it in the note's lane. The lane was validated
-    // against the board's options by the caller, so this write cannot fail on an
-    // unknown option.
-    await this.projectManagement.addBoardItem(identity.projectNodeId, handle.url);
+    // The card is already on the board (create-time linking); only the lane
+    // write remains. The lane was validated against the board's options by the
+    // caller, so this write cannot fail on an unknown option.
     if (laneOptionId !== undefined) {
       await this.projectManagement.setBoardStatus(
         identity.projectNodeId,

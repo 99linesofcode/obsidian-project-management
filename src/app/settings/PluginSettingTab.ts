@@ -20,6 +20,14 @@ function setPasswordInput(input: unknown): void {
   }
 }
 
+// Parses a comma-separated settings value into a trimmed, non-empty list.
+function parseList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+}
+
 export class ProjectManagementSettingTab extends PluginSettingTab {
   plugin: ProjectManagementPlugin;
 
@@ -74,6 +82,22 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
         desc: 'How long to wait after a vault change before syncing.',
         render: (setting) => this.populateDebounce(setting),
       },
+      {
+        name: 'Status options',
+        desc: 'The Status lanes a newly created board gets (comma-separated).',
+        render: (setting) => this.populateStatusOptions(setting),
+      },
+      {
+        name: 'Type labels',
+        desc: 'The type-label vocabulary the seed action applies (comma-separated).',
+        render: (setting) => this.populateTypeLabels(setting),
+      },
+      {
+        name: 'Seed type labels',
+        desc: 'Create the configured type labels on a repository (owner/name).',
+        render: (setting) =>
+          this.populateLabelSeed(setting, () => this.update()),
+      },
       ...SEED_ARTIFACTS.map((artifact) => ({
         name: artifact.label,
         desc: artifact.description,
@@ -107,6 +131,9 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     this.populatePollInterval(new Setting(containerEl));
     this.populateDoneOption(new Setting(containerEl));
     this.populateDebounce(new Setting(containerEl));
+    this.populateStatusOptions(new Setting(containerEl));
+    this.populateTypeLabels(new Setting(containerEl));
+    this.populateLabelSeed(new Setting(containerEl), () => this.display());
 
     for (const artifact of SEED_ARTIFACTS) {
       this.populateArtifactSetting(new Setting(containerEl), artifact, () =>
@@ -161,6 +188,67 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
               this.plugin.settings.debounceSeconds = parsed;
               await this.plugin.saveSettings();
             }
+          }),
+      );
+  }
+
+  // A comma-separated list row. The list replaces the stored array (never
+  // mutates it), so DEFAULT_SETTINGS is never aliased into the live settings.
+  private populateStatusOptions(setting: Setting): void {
+    setting
+      .setName('Status options')
+      .setDesc(
+        'The Status lanes a newly created board gets (comma-separated).',
+      )
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.statusOptions.join(', '))
+          .onChange(async (value) => {
+            this.plugin.settings.statusOptions = parseList(value);
+            await this.plugin.saveSettings();
+          }),
+      );
+  }
+
+  private populateTypeLabels(setting: Setting): void {
+    setting
+      .setName('Type labels')
+      .setDesc(
+        'The type-label vocabulary the seed action applies (comma-separated).',
+      )
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.typeLabels.join(', '))
+          .onChange(async (value) => {
+            this.plugin.settings.typeLabels = parseList(value);
+            await this.plugin.saveSettings();
+          }),
+      );
+  }
+
+  // The seed row: a repository (owner/name or url) and a button that applies
+  // the configured type labels to it. The action is create-if-missing, so the
+  // button is safe to press repeatedly. `refresh` re-renders the active path.
+  private populateLabelSeed(setting: Setting, refresh: () => void): void {
+    let repo = '';
+    setting
+      .setName('Seed type labels')
+      .setDesc('Create the configured type labels on a repository (owner/name).')
+      .addText((text) =>
+        text.setPlaceholder('owner/name').onChange((value) => {
+          repo = value;
+        }),
+      )
+      .addButton((button) =>
+        button
+          .setButtonText('Seed')
+          .setTooltip('Create the configured type labels that are missing')
+          .onClick(async () => {
+            await this.plugin.seedTypeLabels.execute(
+              repo,
+              this.plugin.settings.typeLabels,
+            );
+            refresh();
           }),
       );
   }

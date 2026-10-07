@@ -80,7 +80,6 @@ function projectNote(
     archivedAt,
     pm: 'github',
     url: 'https://github.com/acme/widgets',
-    board: 'https://github.com/orgs/acme/projects/1',
   };
 }
 

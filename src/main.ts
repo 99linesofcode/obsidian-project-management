@@ -14,6 +14,7 @@ import { migrateLegacyTokens } from './app/settings/migrateLegacyTokens.js';
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
 import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
 import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
+import { SeedTypeLabelsAction } from './app/SeedTypeLabelsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
@@ -128,6 +129,7 @@ function composePlugin(
   discoverProjects: DiscoverProjectsAction;
   captureRemoteProjects: CaptureRemoteProjectsAction;
   seedArtifacts: SeedVaultArtifactsAction;
+  seedTypeLabels: SeedTypeLabelsAction;
 } {
   const transport = transportFromSecret(
     secrets,
@@ -143,6 +145,9 @@ function composePlugin(
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
   const github = new GitHubAdapter(transport);
+  // Seeds the configured type-label vocabulary onto an arbitrary repository,
+  // driven by the settings tab's label-seed button.
+  const seedTypeLabels = new SeedTypeLabelsAction(github);
   // The frontmatter cleanup runs at the chain start, per project, before any
   // half reads notes: it strips the legacy `id:`/`url:` fields (dt-20).
   const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
@@ -269,8 +274,8 @@ function composePlugin(
   );
   const ensureProjectBoard = new EnsureProjectBoardAction(
     github,
-    vault,
     syncState,
+    plugin.settings.statusOptions,
   );
 
   const promoteIssue = new PromoteIssueAction(
@@ -335,7 +340,13 @@ function composePlugin(
     () => captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
   );
 
-  return { scheduler, discoverProjects, captureRemoteProjects, seedArtifacts };
+  return {
+    scheduler,
+    discoverProjects,
+    captureRemoteProjects,
+    seedArtifacts,
+    seedTypeLabels,
+  };
 }
 
 export default class ProjectManagementPlugin extends Plugin {
@@ -350,6 +361,9 @@ export default class ProjectManagementPlugin extends Plugin {
   // Retained so the settings tab can scaffold a single missing artifact on
   // demand, with the same create-if-missing semantics as the onload seed.
   seedArtifacts!: SeedVaultArtifactsAction;
+  // Retained so the settings tab's label-seed button can apply the configured
+  // type labels to an arbitrary repository.
+  seedTypeLabels!: SeedTypeLabelsAction;
 
   override async onload(): Promise<void> {
     // Read the root through the safe loader: a corrupt data.json is quarantined
@@ -395,8 +409,10 @@ export default class ProjectManagementPlugin extends Plugin {
       discoverProjects,
       captureRemoteProjects,
       seedArtifacts,
+      seedTypeLabels,
     } = composePlugin(this, syncState, this.secrets);
     this.seedArtifacts = seedArtifacts;
+    this.seedTypeLabels = seedTypeLabels;
     // Seed the vault-owned templates and Bases files before any note is
     // created: a fresh vault gets all six at their configured paths, and an
     // existing file is never overwritten.

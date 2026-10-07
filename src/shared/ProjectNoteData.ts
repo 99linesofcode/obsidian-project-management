@@ -6,13 +6,12 @@
 // convention. archivedAt is derived from the location: null when the note sits
 // under Projecten/, '' when it sits under Archief/ but the real transition
 // stamp is not yet known (discovery/adoption). The reconcile pass owns the
-// authoritative stamp and persists it on the archive baseline. pm, url and
-// board come from the same frontmatter.
+// authoritative stamp and persists it on the archive baseline. pm and url come
+// from the same frontmatter; the board is derived from the repo, never read.
 export interface ProjectNoteData {
   path: string;
   projectName: string;
   archivedAt: string | null;
   pm: string;
   url: string;
-  board: string;
 }
