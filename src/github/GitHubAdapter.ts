@@ -13,6 +13,7 @@ import {
 } from '../shared/ProjectIdentityData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ProjectDetailData } from '../shared/ProjectDetailData.js';
+import type { RemoteBoardData } from '../shared/RemoteBoardData.js';
 import type {
   RepoBoardData,
   RepositoryBoardsData,
@@ -78,6 +79,9 @@ const USER_PROJECT_QUERY = `
             }
           }
         }
+        repositories(first: 10) {
+          nodes { url }
+        }
       }
     }
   }
@@ -96,6 +100,9 @@ const ORG_PROJECT_QUERY = `
               options { id name }
             }
           }
+        }
+        repositories(first: 10) {
+          nodes { url }
         }
       }
     }
@@ -415,6 +422,9 @@ const VIEWER_PROJECTS_QUERY = `
               }
             }
           }
+          repositories(first: 10) {
+            nodes { url }
+          }
         }
       }
     }
@@ -604,8 +614,9 @@ export class GitHubAdapter implements ProjectManagementPort {
   }
 
   // The viewer's ProjectV2 boards, mapped onto canonical ProjectData (PRJ-3).
-  // A malformed node is skipped rather than failing the whole listing.
-  async fetchViewerProjects(): Promise<ProjectData[]> {
+  // A malformed node is skipped rather than failing the whole listing. The
+  // board's linked repositories ride along for the board-born capture.
+  async fetchViewerProjects(): Promise<RemoteBoardData[]> {
     const data = await this.postQuery(VIEWER_PROJECTS_QUERY, {});
     const viewer = data.viewer;
     const nodes =
@@ -614,13 +625,24 @@ export class GitHubAdapter implements ProjectManagementPort {
       Array.isArray(viewer.projectsV2.nodes)
         ? viewer.projectsV2.nodes
         : [];
-    const projects: ProjectData[] = [];
+    const boards: RemoteBoardData[] = [];
     for (const node of nodes) {
       if (!isRecord(node) || typeof node.id !== 'string') {
         continue;
       }
-      projects.push(
-        ProjectMapper.fromCodeHostBoard(
+      const repositoryNodes =
+        isRecord(node.repositories) && Array.isArray(node.repositories.nodes)
+          ? node.repositories.nodes
+          : [];
+      const repoUrls = repositoryNodes
+        .filter(isRecord)
+        .filter(
+          (repository): repository is { url: string } =>
+            typeof repository.url === 'string' && repository.url !== '',
+        )
+        .map((repository) => repository.url);
+      boards.push({
+        project: ProjectMapper.fromCodeHostBoard(
           {
             id: node.id,
             name: typeof node.title === 'string' ? node.title : '',
@@ -632,9 +654,10 @@ export class GitHubAdapter implements ProjectManagementPort {
           },
           { path: '', doneLane: '', archivedAt: null, repoUrl: '' },
         ),
-      );
+        repoUrls,
+      });
     }
-    return projects;
+    return boards;
   }
 
   // The token viewer's node id, resolved once and cached.

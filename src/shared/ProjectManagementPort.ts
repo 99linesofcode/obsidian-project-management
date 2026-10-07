@@ -9,6 +9,7 @@ import type { ProjectData } from './ProjectData.js';
 import type { ProjectDetailData } from './ProjectDetailData.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
 import type { ProjectStateData } from './ProjectStateData.js';
+import type { RemoteBoardData } from './RemoteBoardData.js';
 import type { RepositoryBoardsData } from './RepoBoardData.js';
 
 // WHY this port lives in the shared kernel: it is the core's need, designed
@@ -69,8 +70,12 @@ export interface ProjectManagementPort {
   ): Promise<void>;
   // The viewer's boards, mapped onto canonical ProjectData at the boundary
   // (PRJ-3). The board's url rides on mirrors.github and its creation clock on
-  // createdAt, so the capture cursor never sees a raw provider shape.
-  fetchViewerProjects(): Promise<ProjectData[]>;
+  // createdAt, so the capture cursor never sees a raw provider shape. The
+  // linked repositories ride alongside: under the repo-only connection model a
+  // board is capturable only through exactly one linked repository, so the
+  // capture derives the github connection's project from that list and
+  // collects an error when it is empty or ambiguous.
+  fetchViewerProjects(): Promise<RemoteBoardData[]>;
   // Creates a new issue from a vault-born task's canonical view. The adapter
   // renders the vault-owned type as the `type:*` label, so the issue is
   // immediately tracked. Returns the issue's mirror handle.

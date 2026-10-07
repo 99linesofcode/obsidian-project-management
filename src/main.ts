@@ -366,7 +366,15 @@ function composePlugin(
     queue,
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
-    () => captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
+    () =>
+      captureRemoteProjects
+        .execute({ syncedAt: new Date().toISOString() })
+        .then((result) => {
+          if (result.errors.length > 0) {
+            console.error('Project capture collected errors', result.errors);
+          }
+          return result.captured;
+        }),
   );
 
   return {
@@ -494,9 +502,14 @@ export default class ProjectManagementPlugin extends Plugin {
       // Capture remote-born projects AFTER discovery, so a just-created vault
       // project is not re-attached this startup. The captured names are picked
       // up by the scheduler's next tick.
-      await captureRemoteProjects.execute({
+      const capture = await captureRemoteProjects.execute({
         syncedAt: new Date().toISOString(),
       });
+      if (capture.errors.length > 0) {
+        new Notice(
+          `Project capture: ${capture.errors.length} board(s) could not be captured`,
+        );
+      }
     } catch (error) {
       new Notice(
         `Project discovery failed: ${error instanceof Error ? error.message : String(error)}`,

@@ -458,6 +458,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
                       },
                     ],
                   },
+                  repositories: {
+                    nodes: [
+                      { url: 'https://github.com/acme/widgets' },
+                    ],
+                  },
                 },
               ],
             },
@@ -471,12 +476,15 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     const boards = await adapter.fetchViewerProjects();
 
     expect(boards).toHaveLength(1);
-    expect(boards[0]!.name).toBe('Fresh Board');
-    expect(boards[0]!.mirrors).toEqual({
+    expect(boards[0]!.project.name).toBe('Fresh Board');
+    expect(boards[0]!.project.mirrors).toEqual({
       github: 'https://github.com/users/acme/projects/9',
     });
-    expect(boards[0]!.createdAt).toBe('2026-10-02T09:00:00Z');
-    expect(boards[0]!.statusOptions).toEqual(['Unshaped']);
+    expect(boards[0]!.project.createdAt).toBe('2026-10-02T09:00:00Z');
+    expect(boards[0]!.project.statusOptions).toEqual(['Unshaped']);
+    expect(boards[0]!.repoUrls).toEqual([
+      'https://github.com/acme/widgets',
+    ]);
     expect(bodies[0]).toContain('ViewerProjects');
   });
 

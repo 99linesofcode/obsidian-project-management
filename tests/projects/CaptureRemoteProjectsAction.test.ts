@@ -11,6 +11,7 @@ import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
+import type { RemoteBoardData } from '../../src/shared/RemoteBoardData.js';
 import type { RepositoryBoardsData } from '../../src/shared/RepoBoardData.js';
 import type { TodoistProjectData } from '../../src/todoist/TodoistProjectData.js';
 import type { TodoistSectionData } from '../../src/todoist/TodoistSectionData.js';
@@ -100,6 +101,9 @@ class FakeTaskManager implements TaskManagerPort {
 
 class FakeProjectManagement implements ProjectManagementPort {
   boards: ProjectData[] = [];
+  // The repositories each board is linked to, keyed by the board url. A board
+  // with no entry has no linked repository.
+  boardRepositories = new Map<string, string[]>();
   identities = new Map<string, ProjectIdentityData>();
   identityCalls: string[] = [];
   createCalls: string[] = [];
@@ -110,14 +114,22 @@ class FakeProjectManagement implements ProjectManagementPort {
     statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
   };
 
-  async fetchViewerProjects(): Promise<ProjectData[]> {
-    return this.boards;
+  async fetchViewerProjects(): Promise<RemoteBoardData[]> {
+    return this.boards.map((project) => ({
+      project,
+      repoUrls: this.boardRepositories.get(project.mirrors.github ?? '') ?? [],
+    }));
   }
   async fetchProjectIdentity(data: {
+    repoUrl: string;
     boardUrl: string;
   }): Promise<ProjectIdentityData | null> {
     this.identityCalls.push(data.boardUrl);
-    return this.identities.get(data.boardUrl) ?? null;
+    const identity = this.identities.get(data.boardUrl);
+    // The adapter echoes the caller's repoUrl into the resolved identity.
+    return identity === undefined
+      ? null
+      : { ...identity, repoUrl: data.repoUrl };
   }
   async createProject(name: string): Promise<ProjectBoardData> {
     this.createCalls.push(name);
@@ -249,9 +261,33 @@ function setup() {
 
 const cursor = '2026-09-30T00:00:00Z';
 
+const TODOIST_HOME = [
+  '---',
+  'connections:',
+  '  todoist:',
+  '    tool: todoist',
+  '    project: P-new',
+  '---',
+  '',
+  '# New Project',
+  '',
+].join('\n');
+
+const GITHUB_HOME = [
+  '---',
+  'connections:',
+  '  github:',
+  '    tool: github',
+  '    project: https://github.com/acme/widgets',
+  '---',
+  '',
+  '# New Board',
+  '',
+].join('\n');
+
 describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
   describe('PRJ-2: Todoist -> vault', () => {
-    it('captures a project created after the cursor and ignores an older one', async () => {
+    it('captures a project created after the cursor as a todoist connection and ignores an older one', async () => {
       const h = setup();
       h.syncState.projectCursors.set('todoist', cursor);
       h.taskManager.projects = [
@@ -267,18 +303,18 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         }),
       ];
 
-      const captured = await h.action.execute({
+      const { captured, errors } = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
       expect(captured).toEqual(['New Project']);
+      expect(errors).toEqual([]);
       expect(h.vault.created).toEqual(['Projecten/New Project/_New Project.md']);
       expect(h.vault.notes.get('Projecten/Old Project/_Old Project.md')).toBe(
         undefined,
       );
       const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
-      expect(home).toContain('pm: github');
-      expect(home).toContain('todoist: P-new');
+      expect(home).toBe(TODOIST_HOME);
       expect(await h.syncState.getIdentity('New Project')).toEqual({
         repoUrl: '',
         repoNodeId: '',
@@ -288,17 +324,40 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       });
     });
 
+    it('never writes the legacy top-level properties into a captured note', async () => {
+      const h = setup();
+      h.syncState.projectCursors.set('todoist', cursor);
+      h.taskManager.projects = [
+        todoistProject({
+          id: 'P-new',
+          name: 'New Project',
+          createdAt: '2026-10-05T10:00:00Z',
+        }),
+      ];
+
+      await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
+
+      const home = h.vault.notes.get('Projecten/New Project/_New Project.md')!;
+      const lines = home.split('\n');
+      const closing = lines.indexOf('---', 1);
+      const properties = lines
+        .slice(1, closing)
+        .filter((line) => !line.startsWith(' '));
+      expect(properties).toEqual(['connections:']);
+    });
+
     it('adopts the current clock on first sight and captures nothing', async () => {
       const h = setup();
       h.taskManager.projects = [
         todoistProject({ createdAt: '2026-09-01T00:00:00Z' }),
       ];
 
-      const captured = await h.action.execute({
+      const { captured, errors } = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
       expect(captured).toEqual([]);
+      expect(errors).toEqual([]);
       expect(h.vault.created).toEqual([]);
       expect(await h.syncState.getProjectCursor('todoist')).toBe(
         '2026-09-01T00:00:00Z',
@@ -310,11 +369,12 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       h.syncState.projectCursors.set('todoist', cursor);
       h.taskManager.projects = [todoistProject({ createdAt: null })];
 
-      const captured = await h.action.execute({
+      const { captured, errors } = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
       expect(captured).toEqual([]);
+      expect(errors).toEqual([]);
       expect(h.vault.created).toEqual([]);
     });
 
@@ -326,17 +386,41 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
           path: 'Projecten/New Project/_New Project.md',
           projectName: 'New Project',
           archivedAt: null,
-          connections: {},
+          connections: { todoist: { tool: 'todoist', project: 'P1' } },
           connectionErrors: [],
         },
       ];
-      h.vault.notes.set(
-        'Projecten/New Project/_New Project.md',
-        '---\npm: github\n---\n',
-      );
       h.taskManager.projects = [todoistProject({ name: 'New Project' })];
 
-      const captured = await h.action.execute({
+      const { captured } = await h.action.execute({
+        syncedAt: '2026-10-06T12:00:00Z',
+      });
+
+      expect(captured).toEqual([]);
+      expect(h.vault.created).toEqual([]);
+    });
+
+    it('does not adopt a project whose todoist connection already has a vault home', async () => {
+      const h = setup();
+      h.syncState.projectCursors.set('todoist', cursor);
+      h.vault.projectNotes = [
+        {
+          path: 'Projecten/Other Name/_Other Name.md',
+          projectName: 'Other Name',
+          archivedAt: null,
+          connections: { todoist: { tool: 'todoist', project: 'P-new' } },
+          connectionErrors: [],
+        },
+      ];
+      h.taskManager.projects = [
+        todoistProject({
+          id: 'P-new',
+          name: 'New Project',
+          createdAt: '2026-10-05T10:00:00Z',
+        }),
+      ];
+
+      const { captured } = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
@@ -346,30 +430,103 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
   });
 
   describe('PRJ-3: GitHub -> vault', () => {
-    it('captures a board created after the cursor and ignores an older one', async () => {
+    it('captures a board with exactly one linked repository and ignores an older one', async () => {
       const h = setup();
       h.syncState.projectCursors.set('github', cursor);
       const newUrl = 'https://github.com/users/acme/projects/9';
+      const repoUrl = 'https://github.com/acme/widgets';
       h.projectManagement.boards = [
         board('Old Board', '2026-09-01T00:00:00Z'),
         board('New Board', '2026-10-05T10:00:00Z', newUrl),
       ];
+      h.projectManagement.boardRepositories.set(newUrl, [repoUrl]);
       h.projectManagement.identities.set(newUrl, identityFor('9'));
 
-      const captured = await h.action.execute({
+      const { captured, errors } = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
       expect(captured).toEqual(['New Board']);
+      expect(errors).toEqual([]);
       expect(h.vault.created).toEqual(['Projecten/New Board/_New Board.md']);
       const home = h.vault.notes.get('Projecten/New Board/_New Board.md');
-      expect(home).toContain('pm: github');
-      expect(home).toContain(`board: ${newUrl}`);
+      expect(home).toBe(GITHUB_HOME);
       expect(h.projectManagement.identityCalls).toEqual([newUrl]);
-      expect(await h.syncState.getIdentity('New Board')).toEqual(
-        identityFor('9'),
-      );
+      expect(await h.syncState.getIdentity('New Board')).toEqual({
+        ...identityFor('9'),
+        repoUrl,
+      });
       expect(h.vault.notes.has('Projecten/Old Board/_Old Board.md')).toBe(false);
+    });
+
+    it('collects an error and captures nothing when the board links no repository', async () => {
+      const h = setup();
+      h.syncState.projectCursors.set('github', cursor);
+      const boardUrl = 'https://github.com/users/acme/projects/9';
+      h.projectManagement.boards = [
+        board('New Board', '2026-10-05T10:00:00Z', boardUrl),
+      ];
+      h.projectManagement.identities.set(boardUrl, identityFor('9'));
+
+      const { captured, errors } = await h.action.execute({
+        syncedAt: '2026-10-06T12:00:00Z',
+      });
+
+      expect(captured).toEqual([]);
+      expect(errors).toHaveLength(1);
+      expect(h.vault.created).toEqual([]);
+      // The board stays at the cursor so the next pass retries it.
+      expect(h.syncState.projectCursors.get('github')).toBe(cursor);
+    });
+
+    it('collects an error and captures nothing when the board links several repositories', async () => {
+      const h = setup();
+      h.syncState.projectCursors.set('github', cursor);
+      const boardUrl = 'https://github.com/users/acme/projects/9';
+      h.projectManagement.boards = [
+        board('New Board', '2026-10-05T10:00:00Z', boardUrl),
+      ];
+      h.projectManagement.boardRepositories.set(boardUrl, [
+        'https://github.com/acme/one',
+        'https://github.com/acme/two',
+      ]);
+      h.projectManagement.identities.set(boardUrl, identityFor('9'));
+
+      const { captured, errors } = await h.action.execute({
+        syncedAt: '2026-10-06T12:00:00Z',
+      });
+
+      expect(captured).toEqual([]);
+      expect(errors).toHaveLength(1);
+      expect(h.vault.created).toEqual([]);
+      expect(h.syncState.projectCursors.get('github')).toBe(cursor);
+    });
+
+    it('does not adopt a board whose linked repository already has a vault home', async () => {
+      const h = setup();
+      h.syncState.projectCursors.set('github', cursor);
+      const boardUrl = 'https://github.com/users/acme/projects/9';
+      const repoUrl = 'https://github.com/acme/widgets';
+      h.vault.projectNotes = [
+        {
+          path: 'Projecten/Other Name/_Other Name.md',
+          projectName: 'Other Name',
+          archivedAt: null,
+          connections: { github: { tool: 'github', project: repoUrl } },
+          connectionErrors: [],
+        },
+      ];
+      h.projectManagement.boards = [
+        board('New Board', '2026-10-05T10:00:00Z', boardUrl),
+      ];
+      h.projectManagement.boardRepositories.set(boardUrl, [repoUrl]);
+
+      const { captured } = await h.action.execute({
+        syncedAt: '2026-10-06T12:00:00Z',
+      });
+
+      expect(captured).toEqual([]);
+      expect(h.vault.created).toEqual([]);
     });
 
     it('adopts the current clock on first sight and captures nothing', async () => {
@@ -378,7 +535,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         board('Existing Board', '2026-09-01T00:00:00Z'),
       ];
 
-      const captured = await h.action.execute({
+      const { captured } = await h.action.execute({
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
@@ -389,13 +546,15 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
       );
     });
 
-    it('materializes the captured board to Todoist through the lifecycle', async () => {
+    it('leaves a board-born project on its declared github connection through the lifecycle', async () => {
       const h = setup();
       h.syncState.projectCursors.set('github', cursor);
       const boardUrl = 'https://github.com/users/acme/projects/9';
+      const repoUrl = 'https://github.com/acme/widgets';
       h.projectManagement.boards = [
         board('New Board', '2026-10-05T10:00:00Z', boardUrl),
       ];
+      h.projectManagement.boardRepositories.set(boardUrl, [repoUrl]);
       h.projectManagement.identities.set(boardUrl, identityFor('9'));
       await h.action.execute({ syncedAt: '2026-10-06T12:00:00Z' });
       const homePath = 'Projecten/New Board/_New Board.md';
@@ -414,11 +573,11 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         syncedAt: '2026-10-06T12:00:00Z',
       });
 
-      expect(h.taskManager.createCalls).toEqual(['New Board']);
-      expect(h.vault.notes.get(homePath)).toContain('todoist: P-created');
-      expect((await h.syncState.getIdentity('New Board'))?.projectNodeId).toBe(
-        identityFor('9').projectNodeId,
-      );
+      // The lifecycle never invents a task-manager connection: the board-born
+      // project carries only the github connection it was captured with.
+      expect(h.taskManager.createCalls).toEqual([]);
+      expect(h.vault.notes.get(homePath)).toBe(GITHUB_HOME);
+      expect((await h.syncState.getIdentity('New Board'))?.repoUrl).toBe(repoUrl);
     });
   });
 
@@ -440,12 +599,12 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
         path: 'Projecten/New Project/_New Project.md',
         projectName: 'New Project',
         archivedAt: null,
-        connections: {},
+        connections: { todoist: { tool: 'todoist', project: 'P-new' } },
         connectionErrors: [],
       },
     ];
 
-    const captured = await h.action.execute({
+    const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:05:00Z',
     });
 
@@ -478,7 +637,7 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
     await h.ensureBoard.execute({ projectName: 'New Project' });
 
     const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
-    expect(home).toContain('todoist: P-new');
+    expect(home).toBe(TODOIST_HOME);
     expect(h.projectManagement.boardCreateCalls).toEqual([
       {
         repoUrl: 'https://github.com/acme/widgets',
@@ -503,6 +662,9 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
     h.projectManagement.boards = [
       board('New Board', '2026-10-05T10:00:00Z', boardUrl),
     ];
+    h.projectManagement.boardRepositories.set(boardUrl, [
+      'https://github.com/acme/widgets',
+    ]);
     // No identity registered: fetchProjectIdentity yields null, so the board is
     // skipped rather than captured.
 
@@ -513,7 +675,7 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
 
     // The next pass resolves the identity and captures it.
     h.projectManagement.identities.set(boardUrl, identityFor('9'));
-    const captured = await h.action.execute({
+    const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:05:00Z',
     });
 
@@ -537,10 +699,10 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
     // dedup misses it and materializeVaultProject early-returns.
     h.vault.notes.set(
       'Projecten/New Project/_New Project.md',
-      '---\npm: github\n---\n',
+      TODOIST_HOME,
     );
 
-    const captured = await h.action.execute({
+    const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:00:00Z',
     });
 
@@ -560,7 +722,7 @@ describe('F3/F4 — the capture cursor is a watermark over handled projects', ()
       board('Old Board', '2026-10-01T00:00:00Z'),
     ];
 
-    const captured = await h.action.execute({
+    const { captured } = await h.action.execute({
       syncedAt: '2026-10-06T12:00:00Z',
     });
 
