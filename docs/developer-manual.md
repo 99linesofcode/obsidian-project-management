@@ -18,12 +18,13 @@ described behavior can be traced.
 ### What the plugin is
 
 The vault is the origin of truth. A project is a folder under `Projecten/`
-(or `Archief/` when archived); a task is a note under its `taken/` folder; a
-to-do is a note under its `todos/` folder. GitHub (a repository plus a Projects
-v2 board) and Todoist are **mirrors**: they hold copies of the vault's title,
-body, status and completion, and the plugin keeps them honest. Identity is a
-vault-owned uuid held in the registry (`data.json`'s `syncState` container);
-filenames and frontmatter carry no machine id.
+(or `Archief/` when archived) whose home note declares a non-empty
+`connections` map — one entry per tool, `{ tool, project }`; a task is a note
+under its `taken/` folder; a to-do is a note under its `todos/` folder. GitHub
+(a repository plus a Projects v2 board) and Todoist are **mirrors**: they hold
+copies of the vault's title, body, status and completion, and the plugin keeps
+them honest. Identity is a vault-owned uuid held in the registry (`data.json`'s
+`syncState` container); filenames and frontmatter carry no machine id.
 
 ### The five core promises
 
@@ -86,9 +87,15 @@ The actions and infrastructure:
   items into the vault as notes.
 - **CaptureRemoteProjectsAction** — captures remote-born PROJECTS into the
   vault (PRJ-2 task manager, PRJ-3 code host), guarded by a per-surface
-  creation-clock cursor.
+  creation-clock cursor. The home note is born with the captured surface's
+  connection (a todoist connection, or a github connection from the board's
+  single linked repository); the legacy properties are never written.
 - **EnsureProjectBoardAction** — creates (or adopts) the code-host board for a
   vault-born project (PRJ-1).
+- **MigrateProjectConnectionsAction** — on load, rewrites a project note's
+  legacy `pm`/`url`/`board`/`todoist` frontmatter into the `connections` map
+  (github from `url`, todoist from `todoist`), stripping all four in one save,
+  under both `Projecten/` and `Archief/`.
 - **ReconcileProjectLifecycleAction** — one freeze verdict across folder,
   board and Todoist project; the archive stamp and the reactivation watch.
 - **ProjectMapper** — the pure boundary mapping of provider project payloads
@@ -142,6 +149,9 @@ one-paragraph summary and the scenario IDs precede each.
 
 ### 2.1 The pass
 
+On load, `MigrateProjectConnectionsAction` rewrites the legacy project
+frontmatter under `Projecten/` and `Archief/` to the connection envelope before
+discovery reads any note.
 `SyncScheduler.tick` first runs `CaptureRemoteProjectsAction` (remote-born
 projects into the vault, PRJ-2/PRJ-3), then enumerates the vault's project
 notes and enqueues each project name; `SyncQueue` runs them one at a time.
@@ -175,7 +185,7 @@ sequenceDiagram
   Sched->>Q: enqueue(projectName) per note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes() to resolve
-  alt pm-note missing
+  alt project note missing
     SP-->>Q: no-op
   end
 ```
@@ -734,17 +744,28 @@ seen at the last poll. A project at or before the cursor is pre-existing and is
 never adopted; a first sight (no cursor) adopts the current newest clock and
 captures nothing, so installing the plugin against an account full of unrelated
 projects adopts none of them. The capture materializes a `Projecten/<name>/`
-folder with a `_<name>.md` home note carrying the birth surface's anchor, plus a
-registry identity; the normal lifecycle then materializes the other surfaces.
+folder with a `_<name>.md` home note declaring the captured surface's
+connection, plus a registry identity: a task-manager-born project declares a
+todoist connection; a board-born project declares a github connection whose
+`project` is the board's single linked repository. The legacy top-level
+properties are never written.
+
+Dedup reads each existing home note's `connections` map: a remote project whose
+name, todoist project id or repository url is already declared is handled, not
+re-adopted. Under the repo-only model a board is capturable only through
+exactly one linked repository; zero or several links are collected as an error,
+never captured silently.
 
 The cursor is a watermark over handled projects, walked in creation order: it
 advances only over projects actually processed. A post-cursor project that
-could not be captured (a board whose identity cannot be resolved, a home note
-the discovery scan did not see) stops the watermark, so the next pass retries
-it; a project already linked to a vault home is handled and the watermark may
-pass it. A skipped project is never reported as captured. A cursor that does not
-move is not written (the adapter and the call site both guard), so a quiet tick
-performs zero registry writes (SYNC-8). Implements PRJ-2, PRJ-3.
+could not be captured (a board whose identity cannot be resolved, a board that
+does not link exactly one repository, a home note the discovery scan did not
+see) stops the watermark, so the next pass retries it; a project already linked
+to a vault home is handled and the watermark may pass it. A skipped project is
+never reported as captured; the capture returns `{ captured, errors }` so the
+caller surfaces the collected errors. A cursor that does not move is not
+written (the adapter and the call site both guard), so a quiet tick performs
+zero registry writes (SYNC-8). Implements PRJ-2, PRJ-3.
 
 ```mermaid
 sequenceDiagram
@@ -757,8 +778,8 @@ sequenceDiagram
 
   Sched->>Cap: execute(syncedAt)
   Cap->>TM: fetchProjects()
-  Cap->>PM: fetchViewerProjects()
-  Cap->>V: findProjectNotes(), vault-links dedup
+  Cap->>PM: fetchViewerProjects() with linked repo urls
+  Cap->>V: findProjectNotes(), connections-map dedup
   Cap->>SS: getProjectCursor(surface)
   alt first sight
     Cap->>SS: setProjectCursor(newest), capture nothing
@@ -768,8 +789,10 @@ sequenceDiagram
         Note over Cap: handled, watermark may pass
       else capturable
         Cap->>PM: fetchProjectIdentity(board) for PRJ-3
-        Cap->>V: createNote(folder plus home note)
+        Cap->>V: createNote(folder + home note with connections)
         Cap->>SS: setIdentity
+      else board links zero or several repos
+        Note over Cap: collect error, stop the watermark
       else skipped (unresolvable board, unseen home note)
         Note over Cap: stop the watermark, retry next pass
       end
@@ -827,7 +850,11 @@ promise-chain mutex, so a command racing a sync pass cannot interleave a
 load-modify-save. The first load runs the one-shot migration chain (legacy
 flat root into the `syncState` container, then the v2 entity registry, then
 the v3 project-nested port-grouped layout, then the per-project full-scan
-seed), builds the in-memory indexes, and caches the container. The container
+seed), builds the in-memory indexes, and caches the container. Ports are keyed
+by the note's connection slug (not the provider name), so a project can hold
+two connections of the same tool; discovery re-keys a renamed connection's
+port in lockstep (`rekeyPortState`), and a slug that disappears with no
+matching connection is left in place with a collected warning. The container
 also carries the per-surface project-capture cursors (`projectCursors`, keyed
 by `todoist`/`github`) beside the projects; setting a cursor to its current
 value is a no-op, so a quiet tick writes nothing (SYNC-8). Every write persists
@@ -1009,27 +1036,30 @@ sequenceDiagram
   D-->>P: projects and errors
   P->>Cap: execute(syncedAt), capture after discovery
   Cap->>SS: get/setProjectCursor per surface
-  Cap->>V: createNote for each remote-born project
+  Cap->>V: createNote with the captured connection
 ```
 
 ### 2.16 Project propagation (PRJ-1/2/3/4)
 
 A project exists on all three surfaces with the vault as the splice. Every
 project payload entering the core is canonical `ProjectData` mapped at the
-boundary (PRJ-4): a code-host board via `ProjectMapper.fromCodeHostBoard`, a
-task-manager project via `ProjectMapper.fromRemoteProject` (whose neutral input
-is `RemoteProjectData`). The raw provider project shape never crosses a port.
+boundary (PRJ-4): a code-host board via `ProjectMapper.fromCodeHostBoard` (with
+its linked repositories riding in `RemoteBoardData`), a task-manager project
+via `ProjectMapper.fromRemoteProject` (whose neutral input is
+`RemoteProjectData`). The raw provider project shape never crosses a port.
 
 - **PRJ-1 (vault → code host).** `EnsureProjectBoardAction` creates a board for
   an active vault project whose identity has none, or ADOPTS a same-name viewer
   board (so an interrupted creation is healed, never duplicated); repo
   attachment follows the separate ATT-1 act.
 - **PRJ-2 (task manager → vault).** `CaptureRemoteProjectsAction` captures a
-  project created after the todoist cursor, writes the folder + home note with
-  the `todoist:` anchor, and the lifecycle then materializes the board.
+  project created after the todoist cursor and writes the folder + home note
+  declaring a todoist connection; the lifecycle then syncs it.
 - **PRJ-3 (code host → vault).** The same capture, after the github cursor,
-  writes the `board:` anchor and stores the resolved identity; the lifecycle
-  then creates the task-manager project.
+  writes a github connection whose `project` is the board's single linked
+  repository and stores the resolved identity; a board linking zero or several
+  repositories is a collected error, and the lifecycle then syncs the declared
+  connection.
 
 The cursor guards are per surface and walked in creation order (2.9c): a
 pre-existing project is never adopted, a first sight captures nothing, and a

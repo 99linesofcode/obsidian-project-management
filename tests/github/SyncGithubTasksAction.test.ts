@@ -9,6 +9,7 @@ import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
@@ -93,13 +94,11 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return issue({ url, state });
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    optionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({ issueUrl, optionId });
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.boardStatusCalls.push({
+      issueUrl: status.issueUrl,
+      optionId: status.statusOptionId,
+    });
   }
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     this.addBoardItemCalls.push({ projectNodeId, issueUrl });
@@ -133,12 +132,18 @@ class FakeProjectManagement implements ProjectManagementPort {
     title: string;
     body: string;
     type: string;
+    projectV2Ids: string[];
   }> = [];
   createdIssueUrl = 'https://github.com/acme/widgets/issues/99';
   failCreateIssue = false;
   async createIssue(
     repoUrl: string,
-    payload: { title: string; body: string; type: string },
+    payload: {
+      title: string;
+      body: string;
+      type: string;
+      projectV2Ids: string[];
+    },
   ): Promise<{ url: string; nodeId: string }> {
     this.createIssueCalls.push({ repoUrl, ...payload });
     if (this.failCreateIssue) {
@@ -158,6 +163,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   async setProjectClosed(): Promise<void> {}
   async lockIssue(): Promise<void> {}
   async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
     throw new Error('not used in this test');
   }
   async fetchViewerProjects(): Promise<never> {
@@ -292,6 +309,7 @@ function makeAction(
     new CompleteTaskCascadeAction(vault, doneLane),
   );
   return new SyncGithubTasksAction(
+    'github',
     projectManagement,
     syncState,
     vault,
@@ -302,7 +320,7 @@ function makeAction(
   );
 }
 
-const input = { projectName, syncedAt, includeBoard: true };
+const input = { projectName, syncedAt, includeBoard: true, connections: {} };
 
 describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('materialises a new typed issue and anchors a matching uuid', async () => {
@@ -923,14 +941,12 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
         title: 'fix the bug',
         body: 'A fresh bug.',
         type: 'bug',
+        projectV2Ids: ['PVT_123'],
       },
     ]);
-    expect(projectManagement.addBoardItemCalls).toEqual([
-      {
-        projectNodeId: 'PVT_123',
-        issueUrl: projectManagement.createdIssueUrl,
-      },
-    ]);
+    // Born on the board: the creation path links at create time and never adds
+    // a card separately.
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: projectManagement.createdIssueUrl, optionId: 'PVTSSF_1' },
     ]);
@@ -987,12 +1003,8 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     expect(
       await syncState.findMirrorItem('github', `pendingCreation:${record!.id}`),
     ).toBeNull();
-    expect(projectManagement.addBoardItemCalls).toEqual([
-      {
-        projectNodeId: 'PVT_123',
-        issueUrl: projectManagement.createdIssueUrl,
-      },
-    ]);
+    // The retry links at create time too, so no separate card add.
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
   });
 
   it('heals an interrupted outward creation without a duplicate issue or note', async () => {

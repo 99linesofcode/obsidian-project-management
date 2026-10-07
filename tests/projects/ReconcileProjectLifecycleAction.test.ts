@@ -231,6 +231,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -250,6 +262,20 @@ function note(anchor?: string): string {
   }
   lines.push('---', '# Acme Widgets');
   return lines.join('\n');
+}
+
+// A note carrying the connection envelope: the todoist anchor lives in the
+// connection's project value, not the legacy `todoist` property.
+function connectionNote(anchor: string): string {
+  return [
+    '---',
+    'connections:',
+    '  todoist:',
+    '    tool: todoist',
+    `    project: ${anchor}`,
+    '---',
+    '# Acme Widgets',
+  ].join('\n');
 }
 
 function project(
@@ -365,6 +391,17 @@ describe('ARC-2 — any side can start the freeze', () => {
       expect(verdict.frozen).toBe(false);
     });
 
+    it('resolves the project from the todoist connection anchor', async () => {
+      const h = setup();
+      h.vault.notes.set(activeNote, connectionNote('P1'));
+
+      const verdict = await h.action.execute(activeInput);
+
+      expect(h.taskManager.createCalls).toEqual([]);
+      expect(verdict.remoteProjectId).toBe('P1');
+      expect(h.vault.writes).toEqual([]);
+    });
+
     it('resolves by name before creating, so no duplicate is made', async () => {
       const h = setup('');
       h.vault.notes.set(activeNote, note());
@@ -394,6 +431,18 @@ describe('ARC-2 — any side can start the freeze', () => {
       await h.action.execute(activeInput);
 
       expect(h.vault.writes[0]!.content).toContain('todoist: P9');
+    });
+
+    it('re-stamps the connection project, not a legacy property, for an envelope note', async () => {
+      const h = setup();
+      h.vault.notes.set(activeNote, connectionNote('P-missing'));
+      h.taskManager.projects = [project({ id: 'P9' })];
+
+      await h.action.execute(activeInput);
+
+      const content = h.vault.writes[0]!.content;
+      expect(content).toContain('project: P9');
+      expect(content).not.toContain('todoist: P9');
     });
 
     it('does nothing when the project note is gone', async () => {

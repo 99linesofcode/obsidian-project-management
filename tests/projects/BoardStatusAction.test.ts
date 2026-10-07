@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BoardStatusAction } from '../../src/projects/BoardStatusAction.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
@@ -17,17 +18,12 @@ class FakeProjectManagement implements ProjectManagementPort {
     statusOptionId: string;
   }> = [];
 
-  async setBoardStatus(
-    projectNodeId: string,
-    statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void> {
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
     this.boardStatusCalls.push({
-      projectNodeId,
-      statusFieldId,
-      issueUrl,
-      statusOptionId,
+      projectNodeId: status.projectNodeId,
+      statusFieldId: status.statusFieldId,
+      issueUrl: status.issueUrl,
+      statusOptionId: status.statusOptionId,
     });
   }
   async fetchProjectIdentity(): Promise<null> {
@@ -83,6 +79,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -118,6 +126,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Shipped',
     });
@@ -138,6 +147,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Unshaped',
     });
@@ -164,6 +174,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Building',
     });
@@ -176,6 +187,7 @@ describe('LANE-2 — a lane move follows on every surface', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       url,
       statusName: 'Shipped',
     });

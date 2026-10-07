@@ -13,6 +13,8 @@ export interface CreateTaskNoteInput {
   // The vault-owned content type (from the winning task or the promoted label).
   type: string;
   projectName: string;
+  // The connection whose mirror this note is registered under.
+  connectionSlug: string;
   syncedAt: string;
   // The project's Status option name the task starts in.
   statusName: string;
@@ -38,7 +40,8 @@ export class CreateTaskNoteAction {
     // any task with the same title, so path existence no longer means "ours".
     if (
       input.url !== '' &&
-      (await this.syncState.findMirrorItem('github', input.url)) !== null
+      (await this.syncState.findMirrorItem(input.connectionSlug, input.url)) !==
+        null
     ) {
       return;
     }
@@ -69,10 +72,15 @@ export class CreateTaskNoteAction {
     await this.vault.createNote(path, content);
     await this.syncState.setEntity({ id, notePath: path });
     if (input.url !== '') {
-      await this.syncState.setMirrorItem(input.projectName, 'github', input.url, {
-        entityId: id,
-        base: null,
-      });
+      await this.syncState.setMirrorItem(
+        input.projectName,
+        input.connectionSlug,
+        input.url,
+        {
+          entityId: id,
+          base: null,
+        },
+      );
     }
   }
 

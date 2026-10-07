@@ -42,6 +42,7 @@ const ALL_ELEMENT_TYPES = [
 //   vault/tasks/todos/projects write notes, sync orchestrates them, and the
 //   registry reads project paths. Everything else is forbidden, which makes
 //   the matrix acyclic by construction (no circular module dependencies).
+/** @type {Record<string, string[]>} */
 const MATRIX = {
   app: [
     'app',
@@ -121,6 +122,9 @@ const PROVIDER_SURFACE = {
 
 // The elements the matrix lets import a provider; the surface narrows those
 // edges only, so it can never grant a provider to a module the matrix forbids.
+/**
+ * @param {string} provider
+ */
 const importersOf = (provider) =>
   Object.entries(MATRIX)
     .filter(([, allowed]) => allowed.includes(provider))

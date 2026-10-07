@@ -1,4 +1,5 @@
 import type { BoardItemData } from '../shared/BoardItemData.js';
+import { BoardStatusData } from '../shared/BoardStatusData.js';
 import type { GithubTaskData } from './GithubTaskData.js';
 import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { TaskData } from '../shared/TaskData.js';
@@ -29,7 +30,10 @@ import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 import type { ApplyTaskToGithubAction } from './ApplyTaskToGithubAction.js';
 import type { ApplyTaskToVaultAction } from '../tasks/ApplyTaskToVaultAction.js';
-import type { CodeHostSyncHalf } from '../sync/SyncHalves.js';
+import type {
+  ConnectionSyncHalf,
+  ConnectionSyncInput,
+} from '../sync/SyncHalves.js';
 
 // The registry-first outward creation marker. Before the remote call, the
 // entity and a github mirror item are written so an interruption can never
@@ -47,7 +51,7 @@ function isPendingCreationHandle(handle: string): boolean {
   return handle.startsWith(PENDING_CREATION_PREFIX);
 }
 
-export interface SyncGithubTasksInput {
+export interface SyncGithubTasksInput extends ConnectionSyncInput {
   projectName: string;
   syncedAt: string;
   // The probe's verdict: the project's remote updatedAt moved since the last
@@ -69,8 +73,11 @@ export interface SyncGithubTasksInput {
 // with its lane (a closed issue whose card sits in an active lane). The board
 // lane is eventually consistent, so a stale lane must never revert a
 // completion; the mirror is re-reconciled to the base instead.
-export class SyncGithubTasksAction implements CodeHostSyncHalf {
+export class SyncGithubTasksAction implements ConnectionSyncHalf {
+  readonly requiresBoard = true;
+
   constructor(
+    readonly connectionSlug: string,
     private readonly projectManagement: ProjectManagementPort,
     private readonly syncState: SyncStatePort,
     private readonly vault: VaultPort,
@@ -80,7 +87,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     private readonly doneOptionName: string,
   ) {}
 
-  async execute(input: SyncGithubTasksInput): Promise<void> {
+  async execute(input: ConnectionSyncInput): Promise<void> {
     const identity = await this.syncState.getIdentity(input.projectName);
     if (identity === null) {
       throw new Error(
@@ -136,7 +143,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
 
     for (const issue of issues) {
       const card = cardByUrl.get(issue.url) ?? null;
-      const item = await this.syncState.findMirrorItem('github', issue.url);
+      const item = await this.syncState.findMirrorItem(this.connectionSlug, issue.url);
       const record =
         item === null ? null : await this.syncState.getEntity(item.entityId);
       if (record === null) {
@@ -197,6 +204,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       task: remote,
       current: null,
       projectName: input.projectName,
+      connectionSlug: this.connectionSlug,
       syncedAt: input.syncedAt,
       origin: 'pull',
     });
@@ -206,6 +214,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       current: issueAsFetched,
       hasCard: card !== null,
       projectName: input.projectName,
+      connectionSlug: this.connectionSlug,
       syncedAt: input.syncedAt,
     });
   }
@@ -282,6 +291,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
         current: issueAsFetched,
         hasCard: card !== null,
         projectName: input.projectName,
+        connectionSlug: this.connectionSlug,
         syncedAt: input.syncedAt,
       });
       return;
@@ -300,6 +310,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
           task: remote,
           current: vault,
           projectName: input.projectName,
+          connectionSlug: this.connectionSlug,
           syncedAt: input.syncedAt,
           origin: 'pull',
           record,
@@ -317,6 +328,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
           current: issueAsFetched,
           hasCard: card !== null,
           projectName: input.projectName,
+          connectionSlug: this.connectionSlug,
           syncedAt: input.syncedAt,
         });
       } else if (laneDone !== stateDone) {
@@ -325,6 +337,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
           current: issueAsFetched,
           hasCard: card !== null,
           projectName: input.projectName,
+          connectionSlug: this.connectionSlug,
           syncedAt: input.syncedAt,
         });
       }
@@ -339,6 +352,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
         current: issueAsFetched,
         hasCard: card !== null,
         projectName: input.projectName,
+        connectionSlug: this.connectionSlug,
         syncedAt: input.syncedAt,
       });
     }
@@ -418,7 +432,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     if (issue.parentUrl === null || issue.parentUrl === '') {
       return null;
     }
-    const item = await this.syncState.findMirrorItem('github', issue.parentUrl);
+    const item = await this.syncState.findMirrorItem(this.connectionSlug, issue.parentUrl);
     if (item === null) {
       return null;
     }
@@ -507,7 +521,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     }
     if (base !== null && base.type === '') {
       base.type = vault.type !== '' ? vault.type : issueType;
-      await this.syncState.setMirrorItem(projectName, 'github', issue.url, {
+      await this.syncState.setMirrorItem(projectName, this.connectionSlug, issue.url, {
         entityId: record.id,
         base,
       });
@@ -520,7 +534,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
   // so a newly tracked issue is never starved by the probe gate.
   private async hasVaultDrift(projectName: string): Promise<boolean> {
     const prefix = `Projecten/${projectName}/`;
-    const entries = await this.syncState.listMirrorItems(projectName, 'github');
+    const entries = await this.syncState.listMirrorItems(projectName, this.connectionSlug);
     const records: Array<{ record: EntityRecord; base: TaskData | null }> = [];
     for (const entry of entries) {
       const record = await this.syncState.getEntity(entry.item.entityId);
@@ -691,32 +705,36 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       title: vault.title,
       body,
       type: vault.type,
+      // Born on the board: the issue is linked at create time, so no separate
+      // membership write is needed (and none is made).
+      projectV2Ids: [identity.projectNodeId],
     });
 
     // The base is a diff view of the canonical task, with the issue-comparable
     // body digest — the same form the next pass's diff reads.
     vault.id = record.id;
     const base = toDiffView(vault, body);
-    await this.syncState.setMirrorItem(input.projectName, 'github', handle.url, {
+    await this.syncState.setMirrorItem(input.projectName, this.connectionSlug, handle.url, {
       entityId: record.id,
       base,
     });
     await this.syncState.removeMirrorItem(
       input.projectName,
-      'github',
+      this.connectionSlug,
       pendingCreationHandle(record.id),
     );
 
-    // The card: add it and place it in the note's lane. The lane was validated
-    // against the board's options by the caller, so this write cannot fail on an
-    // unknown option.
-    await this.projectManagement.addBoardItem(identity.projectNodeId, handle.url);
+    // The card is already on the board (create-time linking); only the lane
+    // write remains. The lane was validated against the board's options by the
+    // caller, so this write cannot fail on an unknown option.
     if (laneOptionId !== undefined) {
       await this.projectManagement.setBoardStatus(
-        identity.projectNodeId,
-        identity.statusFieldId,
-        handle.url,
-        laneOptionId,
+        new BoardStatusData({
+          projectNodeId: identity.projectNodeId,
+          statusFieldId: identity.statusFieldId,
+          issueUrl: handle.url,
+          statusOptionId: laneOptionId,
+        }),
       );
     }
   }
@@ -729,7 +747,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     projectName: string,
   ): Promise<void> {
     const item = await this.syncState.findMirrorItemByEntity(
-      'github',
+      this.connectionSlug,
       record.id,
     );
     if (item !== null) {
@@ -737,7 +755,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     }
     await this.syncState.setMirrorItem(
       projectName,
-      'github',
+      this.connectionSlug,
       pendingCreationHandle(record.id),
       { entityId: record.id, base: null },
     );
@@ -756,7 +774,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
   ): Promise<void> {
     const items = await this.syncState.listMirrorItems(
       input.projectName,
-      'github',
+      this.connectionSlug,
     );
     const pending = items.filter(({ handle }) =>
       isPendingCreationHandle(handle),
@@ -784,7 +802,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       if (record === null) {
         await this.syncState.removeMirrorItem(
           input.projectName,
-          'github',
+          this.connectionSlug,
           handle,
         );
         continue;
@@ -792,7 +810,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       if (realByEntity.has(item.entityId)) {
         await this.syncState.removeMirrorItem(
           input.projectName,
-          'github',
+          this.connectionSlug,
           handle,
         );
         continue;
@@ -833,13 +851,13 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
       );
       await this.syncState.setMirrorItem(
         input.projectName,
-        'github',
+        this.connectionSlug,
         match.url,
         { entityId: record.id, base: toDiffViewWithBody(remote) },
       );
       await this.syncState.removeMirrorItem(
         input.projectName,
-        'github',
+        this.connectionSlug,
         handle,
       );
       mirrored.add(match.url);
@@ -860,7 +878,7 @@ export class SyncGithubTasksAction implements CodeHostSyncHalf {
     projectName: string,
     entityId: string,
   ): Promise<boolean> {
-    const items = await this.syncState.listMirrorItems(projectName, 'github');
+    const items = await this.syncState.listMirrorItems(projectName, this.connectionSlug);
     return items.some(
       ({ handle, item }) =>
         item.entityId === entityId && !isPendingCreationHandle(handle),

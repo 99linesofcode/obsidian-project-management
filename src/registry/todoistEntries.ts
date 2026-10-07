@@ -13,12 +13,13 @@ export interface MirrorEntry {
 
 export async function todoistEntries(
   syncState: SyncStatePort,
+  connectionSlug: string,
   projectName: string,
 ): Promise<MirrorEntry[]> {
   const result: MirrorEntry[] = [];
   for (const { handle, item } of await syncState.listMirrorItems(
     projectName,
-    'todoist',
+    connectionSlug,
   )) {
     const record = await syncState.getEntity(item.entityId);
     if (record !== null) {

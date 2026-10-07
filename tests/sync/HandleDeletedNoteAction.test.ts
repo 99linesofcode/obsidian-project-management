@@ -84,6 +84,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -128,7 +140,7 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     seed(syncState);
     const action = makeAction(syncState, projectManagement);
 
-    await action.execute({ notePath, projectName });
+    await action.execute({ notePath, projectName, connectionSlug: 'github' });
 
     expect(projectManagement.deleteCardCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: url },
@@ -144,7 +156,7 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     seed(syncState, 'Shipped');
     const action = makeAction(syncState, projectManagement);
 
-    await action.execute({ notePath, projectName });
+    await action.execute({ notePath, projectName, connectionSlug: 'github' });
 
     expect(projectManagement.deleteCardCalls).toHaveLength(1);
     expect(projectManagement.stateCalls).toEqual([]);
@@ -159,6 +171,7 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     await action.execute({
       notePath: 'Projecten/Acme Widgets/taken/99-untracked.md',
       projectName,
+      connectionSlug: 'github',
     });
 
     expect(projectManagement.deleteCardCalls).toEqual([]);

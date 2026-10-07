@@ -71,6 +71,7 @@ function input() {
     body: 'The bug happens when the widget is resized.',
     type: 'task',
     projectName: 'Acme Widgets',
+    connectionSlug: 'github',
     syncedAt: '2026-09-18T12:00:00Z',
     statusName: 'Building',
   };

@@ -1,5 +1,6 @@
 import type { AttachProjectData } from './AttachProjectData.js';
 import type { BoardItemData } from './BoardItemData.js';
+import type { BoardStatusData } from './BoardStatusData.js';
 import type { CodeHostTaskData } from './CodeHostTaskData.js';
 import type { CreateIssueData } from './CreateIssueData.js';
 import type { IssueHandleData } from './IssueHandleData.js';
@@ -8,6 +9,8 @@ import type { ProjectData } from './ProjectData.js';
 import type { ProjectDetailData } from './ProjectDetailData.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
 import type { ProjectStateData } from './ProjectStateData.js';
+import type { RemoteBoardData } from './RemoteBoardData.js';
+import type { RepositoryBoardsData } from './RepoBoardData.js';
 
 // WHY this port lives in the shared kernel: it is the core's need, designed
 // for the core and owned by no provider. A provider's adapter registers from
@@ -24,10 +27,10 @@ import type { ProjectStateData } from './ProjectStateData.js';
 // conditional read. Designed for the core, not to mimic the provider's API.
 // Returns null when the provider is not ours to handle.
 export interface ProjectManagementPort {
-  // Resolves a project note's code-host identities. A note with a board but no
-  // repository yet (repo attachment is a separate ATT-1 act) resolves the board
-  // alone: repoUrl/repoNodeId stay empty. A pm: github note with no board is a
-  // config error the caller surfaces.
+  // Resolves a project note's code-host identities from an explicit board url.
+  // Used to adopt a board the derivation ladder already selected, and by the
+  // board-born capture path, which has a board but no repository yet. The
+  // repo-derived ladder itself is fetchRepoBoards + createBoardWithStatusField.
   fetchProjectIdentity(
     data: AttachProjectData,
   ): Promise<ProjectIdentityData | null>;
@@ -42,16 +45,37 @@ export interface ProjectManagementPort {
     projectNodeId: string,
     doneLane: string,
   ): Promise<ProjectData>;
-  // Creates a new board for a vault-born project (PRJ-1). The owner is the
-  // token's viewer: a vault-born project carries no repo/board address yet, so
-  // the token's own account is the only defensible owner. Returns the board's
-  // addressing for the identity record; repo attachment stays a separate act
-  // (ATT-1), so a board without a repo materializes no issues.
-  createProject(name: string): Promise<ProjectBoardData>;
+  // The repository's node id and its linked boards, in one listing read. The
+  // derivation ladder keys on the repo name: no boards -> create, one -> adopt,
+  // several -> adopt the one titled with the repo name. Field ids are not part
+  // of the listing; adoption re-resolves them through fetchProjectIdentity.
+  fetchRepoBoards(repoUrl: string): Promise<RepositoryBoardsData>;
+  // Creates a board titled with the repository's name under the token's viewer,
+  // links it to the repository, creates its Status single-select field carrying
+  // the configured option names, and returns the board's addressing. The
+  // configured vocabulary governs CREATION only; an adopted board keeps its own
+  // options.
+  createBoardWithStatusField(
+    repoUrl: string,
+    statusOptions: string[],
+  ): Promise<ProjectBoardData>;
+  // The repository's existing label names, for the seed action's skip check.
+  listRepoLabels(repoUrl: string): Promise<string[]>;
+  // Creates one label on the repository with the given color. The seed action
+  // calls it only for labels the listing did not already carry.
+  createRepoLabel(
+    repoUrl: string,
+    name: string,
+    color: string,
+  ): Promise<void>;
   // The viewer's boards, mapped onto canonical ProjectData at the boundary
   // (PRJ-3). The board's url rides on mirrors.github and its creation clock on
-  // createdAt, so the capture cursor never sees a raw provider shape.
-  fetchViewerProjects(): Promise<ProjectData[]>;
+  // createdAt, so the capture cursor never sees a raw provider shape. The
+  // linked repositories ride alongside: under the repo-only connection model a
+  // board is capturable only through exactly one linked repository, so the
+  // capture derives the github connection's project from that list and
+  // collects an error when it is empty or ambiguous.
+  fetchViewerProjects(): Promise<RemoteBoardData[]>;
   // Creates a new issue from a vault-born task's canonical view. The adapter
   // renders the vault-owned type as the `type:*` label, so the issue is
   // immediately tracked. Returns the issue's mirror handle.
@@ -89,12 +113,7 @@ export interface ProjectManagementPort {
   ): Promise<CodeHostTaskData>;
   setTaskState(url: string, state: 'open' | 'closed'): Promise<CodeHostTaskData>;
   fetchBoardItems(projectNodeId: string): Promise<BoardItemData[]>;
-  setBoardStatus(
-    projectNodeId: string,
-    statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void>;
+  setBoardStatus(status: BoardStatusData): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
   // Removes the issue's card from the project's board. An issue with no card is
   // a no-op, so a sweep can call it unconditionally.

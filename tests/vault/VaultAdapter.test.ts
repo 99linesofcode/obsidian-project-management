@@ -261,3 +261,99 @@ describe('VaultAdapter.moveFolder', () => {
     expect(vault.renames).toEqual([]);
   });
 });
+
+// A fake vault with a folder set and a file map, so createNote's mkdir -p
+// chain can be exercised: Obsidian's create throws on a missing parent, so the
+// adapter builds the chain first.
+class CreateVault {
+  folders = new Set<string>();
+  files = new Map<string, string>();
+
+  getFolderByPath(path: string): unknown {
+    return this.folders.has(path) ? {} : null;
+  }
+
+  async createFolder(path: string): Promise<void> {
+    this.folders.add(path);
+  }
+
+  async create(path: string, content: string): Promise<void> {
+    this.files.set(path, content);
+  }
+}
+
+function createSetup() {
+  const vault = new CreateVault();
+  const app = { vault } as unknown as App;
+  const adapter = new VaultAdapter(app, () => {});
+  return { vault, adapter };
+}
+
+describe('VaultAdapter.createNote', () => {
+  it('creates the missing parent folder before writing the file', async () => {
+    const { vault, adapter } = createSetup();
+
+    await adapter.createNote('Templates/Task.md', 'starter');
+
+    expect(vault.folders.has('Templates')).toBe(true);
+    expect(vault.files.get('Templates/Task.md')).toBe('starter');
+  });
+
+  it('creates each level of a nested folder chain', async () => {
+    const { vault, adapter } = createSetup();
+
+    await adapter.createNote('Bases/My/Projects.base', 'x');
+
+    expect([...vault.folders].sort()).toEqual(['Bases', 'Bases/My']);
+  });
+});
+
+// A fake app with a file map and a fileManager, so trashNote's delegation to
+// FileManager.trashFile (which respects the user's deletion preference) can be
+// exercised.
+class TrashVault {
+  files: TFileInstance[];
+  trashed: string[] = [];
+
+  constructor(paths: string[]) {
+    this.files = paths.map(
+      (path) => new TFile(path, path.split('.').pop() ?? ''),
+    );
+  }
+
+  getAbstractFileByPath(path: string): TFileInstance | null {
+    return this.files.find((file) => file.path === path) ?? null;
+  }
+
+  fileManager = {
+    trashFile: async (file: TFileInstance): Promise<void> => {
+      this.trashed.push(file.path);
+    },
+  };
+}
+
+describe('VaultAdapter.trashNote', () => {
+  it('delegates to FileManager.trashFile so the user preference is respected', async () => {
+    const vault = new TrashVault([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+    const app = { vault, fileManager: vault.fileManager } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    await adapter.trashNote('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
+
+    expect(vault.trashed).toEqual([
+      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    ]);
+  });
+
+  it('is a no-op for an unknown path', async () => {
+    const vault = new TrashVault([]);
+    const app = { vault, fileManager: vault.fileManager } as unknown as App;
+    const adapter = new VaultAdapter(app, () => {});
+
+    await adapter.trashNote('Projecten/missing.md');
+
+    expect(vault.trashed).toEqual([]);
+  });
+});

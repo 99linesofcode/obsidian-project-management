@@ -3,6 +3,9 @@ import type { EntityRecord, SyncStatePort } from '../shared/SyncStatePort.js';
 
 export interface LockArchivedProjectIssuesInput {
   projectName: string;
+  // The code-host connection whose issues are locked. Null when the project has
+  // no code-host connection.
+  connectionSlug: string | null;
 }
 
 // On a genuine archive transition, lock every tracked issue that is not yet
@@ -18,13 +21,16 @@ export class LockArchivedProjectIssuesAction {
   ) {}
 
   async execute(input: LockArchivedProjectIssuesInput): Promise<void> {
+    if (input.connectionSlug === null) {
+      return;
+    }
     const githubByEntity = new Map<
       string,
       { handle: string; base: { status: string } | null }
     >();
     for (const { handle, item } of await this.syncState.listMirrorItems(
       input.projectName,
-      'github',
+      input.connectionSlug,
     )) {
       githubByEntity.set(item.entityId, { handle, base: item.base });
     }

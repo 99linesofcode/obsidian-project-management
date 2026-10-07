@@ -28,6 +28,8 @@ export interface ApplyTaskToTodoistInput {
   labels: string[];
   // The vault note the task mirrors, for the registry record.
   notePath: string;
+  // The connection whose mirror this write advances.
+  connectionSlug: string;
   syncedAt: string;
   // The registry record the caller already resolved, when it has one. Falls
   // back to a note-path lookup so the writer stays usable on its own.
@@ -51,6 +53,8 @@ export interface ApplyToDoToTodoistInput {
   sectionId?: string | null;
   projectName: string;
   notePath: string;
+  // The connection whose mirror this write advances.
+  connectionSlug: string;
   syncedAt: string;
   record?: EntityRecord | null;
   // The todoist mirror handle the caller resolved from the registry's port
@@ -78,8 +82,8 @@ export class ApplyTaskToTodoistAction {
   async executeTask(input: ApplyTaskToTodoistInput): Promise<string> {
     const record = await this.resolveRecord(input.record, input.notePath);
     const handle =
-      input.handle ?? (await this.lookupHandle(record));
-    const base = await this.mirrorBase(handle);
+      input.handle ?? (await this.lookupHandle(input.connectionSlug, record));
+    const base = await this.mirrorBase(input.connectionSlug, handle);
     const desired = {
       content: input.task.title,
       labels: input.labels,
@@ -172,7 +176,7 @@ export class ApplyTaskToTodoistAction {
   async executeToDo(input: ApplyToDoToTodoistInput): Promise<string> {
     const record = await this.resolveRecord(input.record, input.notePath);
     const handle =
-      input.handle ?? (await this.lookupHandle(record));
+      input.handle ?? (await this.lookupHandle(input.connectionSlug, record));
     // A to-do's identity is its note in the project's to-do folder. Anything
     // else — a legacy bare-stem path above all — must never create, stamp or
     // write, or the twin is re-created and re-captured every tick. Refuse and
@@ -197,7 +201,7 @@ export class ApplyTaskToTodoistAction {
       isCompleted: input.todo.status === 'completed',
     };
     const current = input.current;
-    const base = await this.mirrorBase(handle);
+    const base = await this.mirrorBase(input.connectionSlug, handle);
     const baseCompleted = hasCompletionStamp(base);
 
     if (handle === null) {
@@ -296,12 +300,15 @@ export class ApplyTaskToTodoistAction {
   // The entity's todoist handle, resolved from the registry's port items when
   // the caller did not pass one. The entity no longer carries the handle, so a
   // standalone call still anchors correctly.
-  private async lookupHandle(record: EntityRecord | null): Promise<string | null> {
+  private async lookupHandle(
+    connectionSlug: string,
+    record: EntityRecord | null,
+  ): Promise<string | null> {
     if (record === null) {
       return null;
     }
     return (
-      (await this.syncState.findMirrorItemByEntity('todoist', record.id))
+      (await this.syncState.findMirrorItemByEntity(connectionSlug, record.id))
         ?.handle ?? null
     );
   }
@@ -324,15 +331,25 @@ export class ApplyTaskToTodoistAction {
       lane: string | null;
     },
   ): Promise<void> {
-    const parent = await parentUuid(this.syncState, desired.parentId);
-    await this.writeBase(record, input.notePath, handle, {
-      title: desired.content,
-      status: desired.lane ?? '',
-      completedAt: desired.isCompleted ? (input.task.completedAt ?? '') : null,
-      parent,
-      createdAt: input.task.createdAt,
-      updatedAt: input.task.updatedAt,
-    });
+    const parent = await parentUuid(
+      this.syncState,
+      input.connectionSlug,
+      desired.parentId,
+    );
+    await this.writeBase(
+      input.connectionSlug,
+      record,
+      input.notePath,
+      handle,
+      {
+        title: desired.content,
+        status: desired.lane ?? '',
+        completedAt: desired.isCompleted ? (input.task.completedAt ?? '') : null,
+        parent,
+        createdAt: input.task.createdAt,
+        updatedAt: input.task.updatedAt,
+      },
+    );
   }
 
   private async advanceToDoBase(
@@ -347,23 +364,34 @@ export class ApplyTaskToTodoistAction {
       isCompleted: boolean;
     },
   ): Promise<void> {
-    const parent = await parentUuid(this.syncState, desired.parentId);
-    await this.writeBase(record, input.notePath, handle, {
-      title: desired.content,
-      // A to-do is always a subtask: it inherits its parent's section, so its
-      // status carries the to-do vocabulary (open/completed), not a lane.
-      status: desired.isCompleted ? 'completed' : 'open',
-      completedAt: desired.isCompleted ? (input.todo.completedAt ?? '') : null,
-      parent,
-      createdAt: input.todo.createdAt,
-      updatedAt: input.todo.updatedAt,
-    });
+    const parent = await parentUuid(
+      this.syncState,
+      input.connectionSlug,
+      desired.parentId,
+    );
+    await this.writeBase(
+      input.connectionSlug,
+      record,
+      input.notePath,
+      handle,
+      {
+        title: desired.content,
+        // A to-do is always a subtask: it inherits its parent's section, so its
+        // status carries the to-do vocabulary (open/completed), not a lane.
+        status: desired.isCompleted ? 'completed' : 'open',
+        completedAt: desired.isCompleted ? (input.todo.completedAt ?? '') : null,
+        parent,
+        createdAt: input.todo.createdAt,
+        updatedAt: input.todo.updatedAt,
+      },
+    );
   }
 
   // Persists the todoist mirror item, creating the hub entity when the writer
   // is the first to mirror the note (a vault to-do). The base is a DIFF VIEW
   // (body = digest), matching what the next diff reads.
   private async writeBase(
+    connectionSlug: string,
     record: EntityRecord | null,
     notePath: string,
     handle: string,
@@ -398,24 +426,29 @@ export class ApplyTaskToTodoistAction {
     // Skip the write when the stored base already carries this diff view: the
     // no-op skip path advances the base only to repair a stale digest, never to
     // rewrite an unchanged one on every pass.
-    const existing = await this.mirrorBase(handle);
+    const existing = await this.mirrorBase(connectionSlug, handle);
     if (existing !== null && existing.canonical() === base.canonical()) {
       return;
     }
     await this.syncState.setMirrorItem(
       projectFromNotePath(notePath),
-      'todoist',
+      connectionSlug,
       handle,
       { entityId: id, base },
     );
   }
 
   // The todoist mirror's stored base for a handle, or null when no item exists.
-  private async mirrorBase(handle: string | null): Promise<TaskData | null> {
+  private async mirrorBase(
+    connectionSlug: string,
+    handle: string | null,
+  ): Promise<TaskData | null> {
     if (handle === null) {
       return null;
     }
-    return (await this.syncState.findMirrorItem('todoist', handle))?.base ?? null;
+    return (
+      (await this.syncState.findMirrorItem(connectionSlug, handle))?.base ?? null
+    );
   }
 }
 

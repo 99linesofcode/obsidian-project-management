@@ -1,42 +1,54 @@
 import { describe, expect, it } from 'vitest';
 import { projectNoteFromCache } from '../../src/vault/projectNoteFromCache.js';
 
+const github = { tool: 'github', project: 'https://github.com/acme/widgets' };
+
 describe('DISC-1 — the project note is read from the cache', () => {
-  it('maps an active or archived note to a project note keyed by its folder', () => {
+  it('maps a note declaring a non-empty connections map to a project note keyed by its folder', () => {
     const active = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
-      pm: 'github',
-      url: 'https://github.com/acme/widgets',
-      board: 'https://github.com/orgs/acme/projects/1',
+      connections: {
+        github,
+        todoist: { tool: 'todoist', project: 'P1' },
+      },
     });
     expect(active).toEqual({
       path: 'Projecten/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
       archivedAt: null,
-      pm: 'github',
-      url: 'https://github.com/acme/widgets',
-      board: 'https://github.com/orgs/acme/projects/1',
+      connections: {
+        github,
+        todoist: { tool: 'todoist', project: 'P1' },
+      },
+      connectionErrors: [],
     });
 
     const archived = projectNoteFromCache('Archief/Acme Widgets/_home.md', {
-      pm: 'github',
+      connections: { github },
     });
     expect(archived).toEqual({
       path: 'Archief/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
       archivedAt: '',
-      pm: 'github',
-      url: '',
-      board: '',
+      connections: { github },
+      connectionErrors: [],
     });
   });
 
-  it('returns null for a note that is not a project home', () => {
+  it('returns null for a note that is not a project home or declares no connections', () => {
     const cases: Array<[string, Record<string, unknown> | undefined]> = [
-      ['Notes/Acme Widgets/_home.md', { pm: 'github' }],
+      ['Notes/Acme Widgets/_home.md', { connections: { github } }],
       ['Projecten/Acme Widgets/_home.md', { tags: ['project'] }],
       ['Projecten/Acme Widgets/_home.md', undefined],
-      ['Projecten/Acme Widgets/sub/note.md', { pm: 'github' }],
-      ['Projecten/loose.md', { pm: 'github' }],
+      ['Projecten/Acme Widgets/_home.md', { connections: {} }],
+      ['Projecten/Acme Widgets/_home.md', { connections: 'nope' }],
+      ['Projecten/Acme Widgets/sub/note.md', { connections: { github } }],
+      ['Projecten/loose.md', { connections: { github } }],
+      // A note carrying only the legacy properties is not a project note until
+      // the migration rewrites it.
+      [
+        'Projecten/Acme Widgets/_home.md',
+        { pm: 'github', url: 'https://github.com/acme/widgets' },
+      ],
     ];
     for (const [path, frontmatter] of cases) {
       expect(projectNoteFromCache(path, frontmatter), path).toBeNull();
@@ -53,9 +65,37 @@ describe('DISC-1 — the project note is read from the cache', () => {
     ];
     for (const [path, projectName] of cases) {
       expect(
-        projectNoteFromCache(path, { pm: 'github' })?.projectName,
+        projectNoteFromCache(path, { connections: { github } })?.projectName,
         path,
       ).toBe(projectName);
     }
+  });
+
+  it('drops invalid entries with a collected error', () => {
+    const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
+      connections: {
+        'Bad Slug': { tool: 'github', project: 'x' },
+        work: { tool: 'linear', project: 'x' },
+        empty: { tool: 'todoist', project: '' },
+        good: github,
+      },
+    });
+
+    expect(note?.connections).toEqual({ good: github });
+    expect(note?.connectionErrors).toHaveLength(3);
+  });
+
+  it('rejects a second connection of the same tool, keeping the first', () => {
+    const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
+      connections: {
+        first: { tool: 'github', project: 'https://github.com/acme/one' },
+        second: { tool: 'github', project: 'https://github.com/acme/two' },
+      },
+    });
+
+    expect(note?.connections).toEqual({
+      first: { tool: 'github', project: 'https://github.com/acme/one' },
+    });
+    expect(note?.connectionErrors).toHaveLength(1);
   });
 });

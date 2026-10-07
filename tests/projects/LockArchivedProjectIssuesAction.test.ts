@@ -39,7 +39,7 @@ describe('ARC-1 — archiving locks every unshipped issue', () => {
       },
     );
 
-    await h.action.execute({ projectName: 'Acme Widgets' });
+    await h.action.execute({ projectName: 'Acme Widgets', connectionSlug: 'github' });
 
     expect(h.lockedNodeIds).toEqual(['I_42']);
   });
@@ -56,7 +56,7 @@ describe('ARC-1 — archiving locks every unshipped issue', () => {
       },
     );
 
-    await h.action.execute({ projectName: 'Acme Widgets' });
+    await h.action.execute({ projectName: 'Acme Widgets', connectionSlug: 'github' });
 
     expect(h.lockedNodeIds).toEqual([]);
   });
@@ -68,7 +68,7 @@ describe('ARC-1 — archiving locks every unshipped issue', () => {
       notePath: 'Projecten/Acme Widgets/todos/42.md',
     });
 
-    await h.action.execute({ projectName: 'Acme Widgets' });
+    await h.action.execute({ projectName: 'Acme Widgets', connectionSlug: 'github' });
 
     expect(h.lockedNodeIds).toEqual([]);
   });

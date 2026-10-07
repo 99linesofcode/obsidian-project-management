@@ -23,6 +23,11 @@ import type { RelocateTaskStatusAction } from '../tasks/RelocateTaskStatusAction
 
 export interface ApplyTodoistRemoteChangesInput {
   projectName: string;
+  // The connection whose mirror this pass advances.
+  connectionSlug: string;
+  // The project's code-host connection slug, when it has one. A remote lane
+  // drag propagates onto that connection's issue and board card.
+  githubConnectionSlug: string | null;
   syncedAt: string;
   // The pass's shared Todoist snapshot. The half fetched the active and
   // completed sets once; this absorber never lists the project itself.
@@ -39,6 +44,8 @@ interface VaultFields {
 // Everything the per-item verdict needs beyond the item itself.
 interface VerdictContext {
   projectName: string;
+  // The connection whose mirror this pass advances.
+  connectionSlug: string;
   syncedAt: string;
   sections: Record<string, string>;
   defaultLane: string | null;
@@ -53,6 +60,9 @@ interface VerdictContext {
   // An entity's github handle, so a lane pull can propagate the move onto
   // GitHub. The handle no longer lives on the entity.
   githubHandleByEntity: Map<string, string>;
+  // The code-host connection the lane pull propagates onto, when the project
+  // has one.
+  githubConnectionSlug: string | null;
 }
 
 // UC: apply Todoist -> vault verdicts for anchored items (t5). An anchored item
@@ -90,7 +100,7 @@ export class ApplyTodoistRemoteChangesAction {
   async execute(input: ApplyTodoistRemoteChangesInput): Promise<void> {
     const portState = await this.syncState.getPortState(
       input.projectName,
-      'todoist',
+      input.connectionSlug,
     );
     const sections = portState?.lanes ?? {};
 
@@ -109,7 +119,11 @@ export class ApplyTodoistRemoteChangesAction {
     const hasLanes = (identity?.statusOptions.length ?? 0) > 0;
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 
-    const records = await todoistEntries(this.syncState, input.projectName);
+    const records = await todoistEntries(
+      this.syncState,
+      input.connectionSlug,
+      input.projectName,
+    );
     const stemByTwinId = new Map<string, string>();
     const uuidByTwinId = new Map<string, string>();
     for (const entry of records) {
@@ -119,15 +133,18 @@ export class ApplyTodoistRemoteChangesAction {
     // The github handle an entity holds, so a remote lane drag can mirror onto
     // GitHub. The handle is a port item now, not an entity field.
     const githubHandleByEntity = new Map<string, string>();
-    for (const { handle, item } of await this.syncState.listMirrorItems(
-      input.projectName,
-      'github',
-    )) {
-      githubHandleByEntity.set(item.entityId, handle);
+    if (input.githubConnectionSlug !== null) {
+      for (const { handle, item } of await this.syncState.listMirrorItems(
+        input.projectName,
+        input.githubConnectionSlug,
+      )) {
+        githubHandleByEntity.set(item.entityId, handle);
+      }
     }
 
     const context: VerdictContext = {
       projectName: input.projectName,
+      connectionSlug: input.connectionSlug,
       syncedAt: input.syncedAt,
       sections,
       defaultLane,
@@ -136,6 +153,7 @@ export class ApplyTodoistRemoteChangesAction {
       stemByTwinId,
       uuidByTwinId,
       githubHandleByEntity,
+      githubConnectionSlug: input.githubConnectionSlug,
     };
 
     for (const entry of records) {
@@ -246,6 +264,7 @@ export class ApplyTodoistRemoteChangesAction {
         remoteLane,
         remoteParent,
         context.projectName,
+        context.connectionSlug,
       );
       return;
     }
@@ -269,6 +288,7 @@ export class ApplyTodoistRemoteChangesAction {
         remoteLane,
         remoteParent,
         context.projectName,
+        context.connectionSlug,
       );
     }
   }
@@ -319,12 +339,13 @@ export class ApplyTodoistRemoteChangesAction {
     await this.vault.writeNote(notePath, withStatus(note.content, lane));
 
     const url = context.githubHandleByEntity.get(record.id) ?? '';
-    if (url !== '') {
+    if (url !== '' && context.githubConnectionSlug !== null) {
       await this.propagateStatus.execute({
         url,
         statusName: lane,
         notePath,
         projectName: context.projectName,
+        connectionSlug: context.githubConnectionSlug,
       });
     }
   }
@@ -389,6 +410,7 @@ export class ApplyTodoistRemoteChangesAction {
     remoteLane: string | null,
     remoteParent: string | null,
     projectName: string,
+    connectionSlug: string,
   ): Promise<void> {
     const view = toDiffViewWithBody(
       new TaskData({
@@ -405,7 +427,7 @@ export class ApplyTodoistRemoteChangesAction {
         updatedAt: twin.updatedAt || null,
       }),
     );
-    await this.syncState.setMirrorItem(projectName, 'todoist', handle, {
+    await this.syncState.setMirrorItem(projectName, connectionSlug, handle, {
       entityId: record.id,
       base: view,
     });

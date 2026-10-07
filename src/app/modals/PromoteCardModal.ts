@@ -4,11 +4,12 @@ import type { BoardItemData } from '../../shared/BoardItemData.js';
 import type { ProjectManagementPort } from '../../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../../shared/SyncStatePort.js';
 
-// Obsidian runs in a browser where MouseEvent/KeyboardEvent are DOM globals;
-// the node type environment does not declare them. Alias them so the modal's
-// onChooseItem override can name them, as SyncScheduler does for window.
-type MouseEvent = unknown;
-type KeyboardEvent = unknown;
+// The event type the base FuzzySuggestModal hands onChooseItem. The DOM lib is
+// not in the type environment, so it is derived from the base signature rather
+// than named directly.
+type ChooseEvent = Parameters<
+  FuzzySuggestModal<PromoteCardSuggestion>['onChooseItem']
+>[1];
 
 // A candidate in the promote-card modal: the draft card plus the project it
 // belongs to and the repo to convert it into, so the display can be prefixed
@@ -55,7 +56,7 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
       }
     }
     this.items = items;
-    super.onOpen();
+    await super.onOpen();
   }
 
   getItems(): PromoteCardSuggestion[] {
@@ -70,7 +71,7 @@ export class PromoteCardModal extends FuzzySuggestModal<PromoteCardSuggestion> {
   // pick only needs the chosen card.
   onChooseItem(
     item: PromoteCardSuggestion,
-    _evt: MouseEvent | KeyboardEvent,
+    _evt: ChooseEvent,
   ): void {
     void this.promote.execute({
       itemId: item.item.itemId,

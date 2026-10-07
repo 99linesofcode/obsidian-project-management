@@ -9,6 +9,8 @@ export interface PropagateStatusInput {
   statusName: string;
   notePath: string;
   projectName: string;
+  // The code-host connection whose issue and board card this write advances.
+  connectionSlug: string;
 }
 
 // UC6/UC7: propagate a task note's status onto its code-host issue and mirror it
@@ -28,7 +30,10 @@ export class PropagateStatusAction {
   ) {}
 
   async execute(input: PropagateStatusInput): Promise<void> {
-    const item = await this.syncState.findMirrorItem('github', input.url);
+    const item = await this.syncState.findMirrorItem(
+      input.connectionSlug,
+      input.url,
+    );
     const next = stateFromStatus(input.statusName, this.doneOptionName);
     const base = item?.base ?? null;
     const baseLane = base?.status ?? '';
@@ -43,6 +48,7 @@ export class PropagateStatusAction {
 
     await this.boardStatus.execute({
       projectName: input.projectName,
+      connectionSlug: input.connectionSlug,
       url: input.url,
       statusName: input.statusName,
     });
@@ -56,10 +62,15 @@ export class PropagateStatusAction {
     if (base !== null) {
       base.status = input.statusName;
       base.completedAt = next === 'closed' ? (base.completedAt ?? '') : null;
-      await this.syncState.setMirrorItem(input.projectName, 'github', input.url, {
-        entityId: item.entityId,
-        base,
-      });
+      await this.syncState.setMirrorItem(
+        input.projectName,
+        input.connectionSlug,
+        input.url,
+        {
+          entityId: item.entityId,
+          base,
+        },
+      );
     }
   }
 }

@@ -159,6 +159,7 @@ export function mapPortState(
 ): PortState {
   return {
     provider: typeof raw.provider === 'string' ? raw.provider : portId,
+    project: typeof raw.project === 'string' ? raw.project : '',
     lastPoll: stringOrNull(raw.lastPoll),
     lanes: stringMap(raw.lanes),
   };

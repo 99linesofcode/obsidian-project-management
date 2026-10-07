@@ -1,9 +1,12 @@
 import { boardOptionIDByName } from './boardOptionIDByName.js';
+import { BoardStatusData } from '../shared/BoardStatusData.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 export interface BoardStatusInput {
   projectName: string;
+  // The code-host connection whose board card this write moves.
+  connectionSlug: string;
   url: string;
   // The project's Status option name to move the card to.
   statusName: string;
@@ -38,7 +41,10 @@ export class BoardStatusAction {
     // option, the card is already in step. An absent base (a pre-first-sync
     // record) or a lane the board no longer carries has no option to compare,
     // so the write proceeds.
-    const item = await this.syncState.findMirrorItem('github', input.url);
+    const item = await this.syncState.findMirrorItem(
+      input.connectionSlug,
+      input.url,
+    );
     const currentStatus = item?.base?.status ?? '';
     const current = identity.statusOptions.find(
       (option) => option.name === currentStatus,
@@ -48,10 +54,12 @@ export class BoardStatusAction {
     }
 
     await this.projectManagement.setBoardStatus(
-      identity.projectNodeId,
-      identity.statusFieldId,
-      input.url,
-      optionId,
+      new BoardStatusData({
+        projectNodeId: identity.projectNodeId,
+        statusFieldId: identity.statusFieldId,
+        issueUrl: input.url,
+        statusOptionId: optionId,
+      }),
     );
   }
 }

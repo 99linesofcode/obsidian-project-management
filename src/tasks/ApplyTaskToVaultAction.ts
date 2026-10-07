@@ -20,6 +20,8 @@ export interface ApplyTaskToVaultInput {
   // The vault's current canonical task, or null when no note exists yet.
   current: TaskData | null;
   projectName: string;
+  // The connection whose mirror this write advances.
+  connectionSlug: string;
   syncedAt: string;
   // Which side won the diff. A pull advances the github base after the durable
   // write; a push leaves the base to the code-host writer, which knows what it
@@ -67,6 +69,7 @@ export class ApplyTaskToVaultAction {
         body: input.task.body,
         type: input.task.type,
         projectName: input.projectName,
+        connectionSlug: input.connectionSlug,
         syncedAt: input.syncedAt,
         statusName: input.task.status,
         ...(parentLink === null ? {} : { parentLink }),
@@ -155,14 +158,17 @@ export class ApplyTaskToVaultAction {
     }
     return record === null
       ? ''
-      : ((await this.githubHandle(record.id)) ?? '');
+      : ((await this.githubHandle(input.connectionSlug, record.id)) ?? '');
   }
 
   // The github handle an entity holds, read from the port-grouped registry
   // because the handle no longer lives on the entity.
-  private async githubHandle(entityId: string): Promise<string | null> {
+  private async githubHandle(
+    connectionSlug: string,
+    entityId: string,
+  ): Promise<string | null> {
     return (
-      (await this.syncState.findMirrorItemByEntity('github', entityId))
+      (await this.syncState.findMirrorItemByEntity(connectionSlug, entityId))
         ?.handle ?? null
     );
   }
@@ -176,7 +182,10 @@ export class ApplyTaskToVaultAction {
   ): Promise<EntityRecord | null> {
     const url = await this.issueUrl(input, record);
     if (url !== '') {
-      const item = await this.syncState.findMirrorItem('github', url);
+      const item = await this.syncState.findMirrorItem(
+        input.connectionSlug,
+        url,
+      );
       return item === null ? null : this.syncState.getEntity(item.entityId);
     }
     return await this.syncState.findByNotePath(this.mappedPath(input));
@@ -369,10 +378,15 @@ export class ApplyTaskToVaultAction {
         // remote against a base that already claims the new state, so the
         // remote's still-stale value reads as a fresh change and reverts the
         // vault (the revert bug).
-        await this.syncState.setMirrorItem(input.projectName, 'github', handle, {
-          entityId: id,
-          base: toDiffViewWithBody(applied),
-        });
+        await this.syncState.setMirrorItem(
+          input.projectName,
+          input.connectionSlug,
+          handle,
+          {
+            entityId: id,
+            base: toDiffViewWithBody(applied),
+          },
+        );
       }
     }
   }

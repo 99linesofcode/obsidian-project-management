@@ -184,6 +184,7 @@ function seedRecord(
 
 const base = {
   projectId: 'P1',
+  connectionSlug: 'todoist',
   sectionId: 'S1',
   parentId: null,
   labels: ['task'],
@@ -479,6 +480,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -515,6 +517,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9p',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -540,6 +543,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9p',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -561,6 +565,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9',
         projectName,
+        connectionSlug: 'todoist',
         notePath: 'note-edit-step-one',
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -584,6 +589,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         parentId: null,
         sectionId: 'S2',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -638,6 +644,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
           parentId: null,
           sectionId: 'S2',
           projectName,
+          connectionSlug: 'todoist',
           notePath: todoPath,
           syncedAt: '2026-09-18T12:00:00Z',
         });

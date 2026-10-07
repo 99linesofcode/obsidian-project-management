@@ -4,12 +4,13 @@ import type { SyncStatePort } from '../shared/SyncStatePort.js';
 // unanchored parent. The twin id is the todoist mirror handle.
 export async function parentUuid(
   syncState: SyncStatePort,
+  connectionSlug: string,
   parentId: string | null,
 ): Promise<string | null> {
   if (parentId === null) {
     return null;
   }
   return (
-    (await syncState.findMirrorItem('todoist', parentId))?.entityId ?? null
+    (await syncState.findMirrorItem(connectionSlug, parentId))?.entityId ?? null
   );
 }

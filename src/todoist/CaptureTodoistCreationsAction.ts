@@ -22,6 +22,8 @@ import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface CaptureTodoistCreationsInput {
   projectName: string;
+  // The connection whose mirror this pass advances.
+  connectionSlug: string;
   syncedAt: string;
   // The pass's shared Todoist snapshot. The half fetched the active and
   // completed sets once; this absorber never lists the project itself.
@@ -59,7 +61,7 @@ export class CaptureTodoistCreationsAction {
   async execute(input: CaptureTodoistCreationsInput): Promise<void> {
     const portState = await this.syncState.getPortState(
       input.projectName,
-      'todoist',
+      input.connectionSlug,
     );
     const sections = portState?.lanes ?? {};
 
@@ -76,7 +78,11 @@ export class CaptureTodoistCreationsAction {
     // The project's anchored todoist items: their handles are the twins already
     // in the registry, so a fetched item matching one is not a creation. The
     // item's entityId resolves the note path through the hub entity.
-    const entries = await todoistEntries(this.syncState, input.projectName);
+    const entries = await todoistEntries(
+      this.syncState,
+      input.connectionSlug,
+      input.projectName,
+    );
     const anchored = new Set(entries.map((entry) => entry.handle));
     const notePathById = new Map(
       entries.map((entry) => [entry.handle, entry.record.notePath] as const),
@@ -166,7 +172,7 @@ export class CaptureTodoistCreationsAction {
     // The lane is controlled only for a top-level task (a subtask inherits its
     // parent's section, dt-02).
     const lane = hasLanes && item.parentId === null ? statusName : null;
-    await this.stampCreation(path, item, lane, input.syncedAt, input.projectName);
+    await this.stampCreation(path, item, lane, input.syncedAt, input.projectName, input.connectionSlug);
     return path;
   }
 
@@ -223,7 +229,7 @@ export class CaptureTodoistCreationsAction {
       path,
     );
     // A to-do is a subtask: its lane is inherited, so it is never controlled.
-    await this.stampCreation(path, item, null, input.syncedAt, input.projectName);
+    await this.stampCreation(path, item, null, input.syncedAt, input.projectName, input.connectionSlug);
     return path;
   }
 
@@ -263,12 +269,17 @@ export class CaptureTodoistCreationsAction {
     lane: string | null,
     syncedAt: string,
     projectName: string,
+    connectionSlug: string,
   ): Promise<void> {
     const id = await ensureEntity(this.syncState, notePath);
     if (id === '') {
       return;
     }
-    const parent = await parentUuid(this.syncState, item.parentId);
+    const parent = await parentUuid(
+      this.syncState,
+      connectionSlug,
+      item.parentId,
+    );
     const base = toDiffViewWithBody(
       new TaskData({
         id: id,
@@ -285,7 +296,7 @@ export class CaptureTodoistCreationsAction {
       }),
     );
     await this.syncState.setEntity({ id, notePath });
-    await this.syncState.setMirrorItem(projectName, 'todoist', item.id, {
+    await this.syncState.setMirrorItem(projectName, connectionSlug, item.id, {
       entityId: id,
       base,
     });

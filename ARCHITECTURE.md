@@ -55,9 +55,10 @@ or concept exists. Modules split when they outgrow grasp, not before.
 
 ## 2. High-Level System Diagram
 
-The vault is the origin of truth. Project notes and task/to-do notes are the
-system of record; the code host (a repository plus a Projects v2 board) and the
-task manager are mirrors the plugin keeps honest. A serialized sync pass reads
+The vault is the origin of truth. Project notes (a home note declaring a
+non-empty `connections` map) and task/to-do notes are the system of record; the
+code host (a repository plus a Projects v2 board) and the task manager are
+mirrors the plugin keeps honest. A serialized sync pass reads
 the vault, reconciles it against each mirror through a three-way diff, and
 writes the winner back to whichever side is behind. The registry in `data.json`
 is the memory that makes the diff possible: it holds each entity's identity and
@@ -94,12 +95,12 @@ provider actions. A provider's name never appears in the chain.
 | Component | Responsibility | Technology | Target |
 |---|---|---|---|
 | `src/main.ts` | The composition root: plugin lifecycle, settings load and migration, wiring, startup discovery and remote-project capture | host plugin API | the vault |
-| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema | host plugin API, `Component` | the vault |
+| `src/app/` | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, and the SecretStorage-backed token store | host plugin API, `Component` | the vault |
 | `src/sync/` | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep | TypeScript | in-process |
 | `src/github/` | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer) | GraphQL + REST | the code host |
 | `src/todoist/` | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers | REST v1 | the task manager |
-| `src/vault/` | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`) | host vault API | the vault |
-| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper | TypeScript | in-process |
+| `src/vault/` | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec) | host vault API | the vault |
+| `src/projects/` | Project discovery, attach, board creation, lifecycle freeze, remote capture, connection migration and the project mapper | TypeScript | in-process |
 | `src/registry/` | The `SyncStatePort` adapter, its schema and its migration chain | `data.json` | the vault |
 | `src/tasks/` | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation | TypeScript | in-process |
 | `src/todos/` | Checklist ⇄ to-do note consistency in both directions | TypeScript | the vault |
@@ -115,7 +116,8 @@ registers from its own module.
   project note's repository/board identity, fetch the whole project (issues
   with bodies + board cards with lanes) in one round trip, probe every project
   cheaply, read and update a single issue, set its open/closed state, lock its
-  conversation, drive the board (cards, Status, membership), and watch a
+  conversation, drive the board (cards, Status, membership), list the viewer's
+  boards (each with its linked repositories) for the capture, and watch a
   repository's newest issue through a conditional read. Adapter:
   `GitHubAdapter`.
 - **`TaskManagerPort`** — the core's need for a personal task mirror: resolve,
@@ -135,21 +137,30 @@ registers from its own module.
 A component that reaches around a port is a defect. The provider modules never
 import each other; the two sync halves meet only through `shared/` and `sync/`.
 
+The API tokens are not settings and not a port: they live in Obsidian's
+SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
+composition root reads at adapter construction and the settings tab sets and
+clears. `data.json` is secret-free; the legacy plaintext fields are migrated
+into the store and stripped on first load.
+
 ## 4. Data Stores
 
 - **The vault** — the system of record; markdown notes, not a database.
-  Project notes live under `Projecten/<name>/` (or `Archief/` when archived);
-  task notes under `taken/`; to-do notes under `todos/`. Identity is a
+  Project notes live under `Projecten/<name>/` (or `Archief/` when archived)
+  and declare their tool connections in a non-empty `connections` map; task
+  notes under `taken/`; to-do notes under `todos/`. Identity is a
   vault-owned uuid held in the registry — filenames and frontmatter carry no
   machine id.
 - **`data.json`** — the plugin's data file and the registry. One `syncState`
   container (schema version 3) holding `entities` (uuid → note path),
-  `projects.<name>.ports.<portId>.items.<handle>` (each mirror's last-synced
-  base, a diff view whose body is a digest), `ports` (provider, last poll,
-  lane names), project identities, watch state, the per-project
-  `fullScanPending` marker, and the per-surface `projectCursors`. Written only
-  through `SyncStateAdapter`, behind a serialization mutex it shares with the
-  settings save.
+  `projects.<name>.ports.<connectionSlug>.items.<handle>` (each mirror's
+  last-synced base, a diff view whose body is a digest), `ports` (provider,
+  project, last poll, lane names), project identities, watch state, the
+  per-project `fullScanPending` marker, and the per-surface `projectCursors`.
+  Ports are keyed by the note's connection slug, so a project can hold two
+  connections of the same tool; a slug rename re-keys the port in lockstep.
+  Written only through `SyncStateAdapter`, behind a serialization mutex it
+  shares with the settings save.
 - **`main.js`** — the built bundle; never authored.
 
 No other persistent store. The mirrors hold copies, never authority.
@@ -253,7 +264,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-06
+Date of Last Update: 2026-10-07
 
 ## 11. Glossary / Acronyms
 
@@ -277,7 +288,12 @@ Date of Last Update: 2026-10-06
 - **Outward materialization** — creating a mirror for a vault-born task,
   registry-first.
 - **Capture** — adopting a remote-born project into the vault, guarded by a
-  per-surface creation cursor.
+  per-surface creation cursor. The home note is born with the connection
+  envelope: a task-manager-born project declares a todoist connection, a
+  board-born project a github connection derived from the board's single linked
+  repository. Zero or several linked repositories is a collected error, never a
+  silent capture; the legacy `pm`/`url`/`board`/`todoist` properties are never
+  written.
 
 ## 12. Conventions & Boundaries
 

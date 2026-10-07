@@ -4,6 +4,9 @@ import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
   projectName: string;
+  // The code-host connection whose issue and card a deleted note closes. Null
+  // when the project has no code-host connection.
+  connectionSlug: string | null;
 }
 
 // The chain's deletion sweep: a registry entity whose note is gone is a
@@ -29,6 +32,7 @@ export class SweepDeletedNotesAction {
           await this.handleDeletedNote.execute({
             notePath: record.notePath,
             projectName: input.projectName,
+            connectionSlug: input.connectionSlug,
           });
         } catch (error) {
           console.error(

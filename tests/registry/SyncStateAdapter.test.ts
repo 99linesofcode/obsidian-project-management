@@ -308,6 +308,7 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     const adapter = new SyncStateAdapter(storage);
     const state = {
       provider: 'todoist',
+      project: 'P1',
       lastPoll: '2026-09-18T10:00:00Z',
       lanes: { Unshaped: 'S1' },
     };
@@ -321,6 +322,67 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
       unknown
     >;
     expect(ports['todoist']).toEqual(state);
+  });
+
+  it('keys two connections of the same tool independently', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.setPortState('Acme Widgets', 'todoist-work', {
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: { Unshaped: 'S1' },
+    });
+    await adapter.setPortState('Acme Widgets', 'todoist-personal', {
+      provider: 'todoist',
+      project: 'P2',
+      lastPoll: '2026-09-18T11:00:00Z',
+      lanes: { Unshaped: 'S9' },
+    });
+
+    expect(await adapter.getPortState('Acme Widgets', 'todoist-work')).toEqual({
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: { Unshaped: 'S1' },
+    });
+    expect(
+      await adapter.getPortState('Acme Widgets', 'todoist-personal'),
+    ).toEqual({
+      provider: 'todoist',
+      project: 'P2',
+      lastPoll: '2026-09-18T11:00:00Z',
+      lanes: { Unshaped: 'S9' },
+    });
+  });
+
+  it('re-keys a port to a new slug in one write, moving its items', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity({ id: 'uuid-1', notePath });
+    await adapter.setPortState('Acme Widgets', 'todoist', {
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: {},
+    });
+    await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T1', {
+      entityId: 'uuid-1',
+      base: null,
+    });
+
+    await adapter.rekeyPortState('Acme Widgets', 'todoist', 'todoist-work');
+
+    expect(await adapter.getPortState('Acme Widgets', 'todoist')).toBeNull();
+    expect(await adapter.getPortState('Acme Widgets', 'todoist-work')).toEqual({
+      provider: 'todoist',
+      project: 'P1',
+      lastPoll: '2026-09-18T10:00:00Z',
+      lanes: {},
+    });
+    expect(await adapter.findMirrorItem('todoist-work', 'T1')).not.toBeNull();
+    expect(await adapter.findMirrorItem('todoist', 'T1')).toBeNull();
   });
 });
 
@@ -547,6 +609,7 @@ describe('SyncStateAdapter migration', () => {
     const adapter = new SyncStateAdapter(storage);
     expect(await adapter.getPortState('Acme Widgets', 'todoist')).toEqual({
       provider: 'todoist',
+      project: '',
       lastPoll: '2026-09-18T10:00:00Z',
       lanes: { Unshaped: 'S1' },
     });

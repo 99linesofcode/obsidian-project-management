@@ -5,6 +5,11 @@ import type { VaultPort } from '../shared/VaultPort.js';
 
 export interface PropagateTodoistDeletionsInput {
   projectName: string;
+  // The connection whose mirror this pass advances.
+  connectionSlug: string;
+  // The project's code-host connection slug, when it has one. A hub entity that
+  // still carries a code-host mirror is removed by the chain's code-host sweep.
+  githubConnectionSlug: string | null;
 }
 
 // One tracked record's todoist mirror: the hub entity, its twin handle and the
@@ -44,18 +49,23 @@ export class PropagateTodoistDeletionsAction {
   async execute(input: PropagateTodoistDeletionsInput): Promise<void> {
     // The project's todoist items joined to their hub entities: the item's
     // entityId is the hub reference now that the entity carries no handle.
-    const records = await this.todoistRecords(input.projectName);
+    const records = await this.todoistRecords(
+      input.projectName,
+      input.connectionSlug,
+    );
     if (records.length === 0) {
       return;
     }
     // A hub entity that still carries a github mirror is removed by the chain's
     // GitHub deletion sweep; its record removal is deferred below.
     const githubEntityIds = new Set<string>();
-    for (const { item } of await this.syncState.listMirrorItems(
-      input.projectName,
-      'github',
-    )) {
-      githubEntityIds.add(item.entityId);
+    if (input.githubConnectionSlug !== null) {
+      for (const { item } of await this.syncState.listMirrorItems(
+        input.projectName,
+        input.githubConnectionSlug,
+      )) {
+        githubEntityIds.add(item.entityId);
+      }
     }
 
     // A missing note is a vault deletion; a present one belongs to the
@@ -88,11 +98,12 @@ export class PropagateTodoistDeletionsAction {
   // The project's todoist items joined to their hub entities.
   private async todoistRecords(
     projectName: string,
+    connectionSlug: string,
   ): Promise<TrackedRecord[]> {
     const result: TrackedRecord[] = [];
     for (const { handle, item } of await this.syncState.listMirrorItems(
       projectName,
-      'todoist',
+      connectionSlug,
     )) {
       const record = await this.syncState.getEntity(item.entityId);
       if (record !== null) {

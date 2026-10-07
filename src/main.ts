@@ -4,10 +4,21 @@ import {
   settingsFromData,
   type ProjectManagementSettings,
 } from './app/settings/settings.js';
+import {
+  GITHUB_TOKEN_KEY,
+  SecretStorageAdapter,
+  TODOIST_TOKEN_KEY,
+  type SecretStore,
+} from './app/settings/SecretStorageAdapter.js';
+import { migrateLegacyTokens } from './app/settings/migrateLegacyTokens.js';
+import { transportFromSecret } from './app/settings/transportFromSecret.js';
 import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
+import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
+import { SeedTypeLabelsAction } from './app/SeedTypeLabelsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
+import { MigrateProjectConnectionsAction } from './projects/MigrateProjectConnectionsAction.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
 import { ApplyTaskToGithubAction } from './github/ApplyTaskToGithubAction.js';
 import { ApplyTaskToTodoistAction } from './todoist/ApplyTaskToTodoistAction.js';
@@ -36,6 +47,7 @@ import { RelocateTaskStatusAction } from './tasks/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
 import { SyncGithubTasksAction } from './github/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
+import type { SyncHalfFactory } from './sync/SyncHalves.js';
 import { SyncTodoistTasksAction } from './todoist/SyncTodoistTasksAction.js';
 import { VerdictResolver } from './shared/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
@@ -113,17 +125,35 @@ function createTransport(token: string): Transport {
 function composePlugin(
   plugin: ProjectManagementPlugin,
   syncState: SyncStateAdapter,
+  secrets: SecretStore,
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
   captureRemoteProjects: CaptureRemoteProjectsAction;
+  migrateProjectConnections: MigrateProjectConnectionsAction;
+  seedArtifacts: SeedVaultArtifactsAction;
+  seedTypeLabels: SeedTypeLabelsAction;
 } {
-  const transport = createTransport(plugin.settings.githubToken);
+  const transport = transportFromSecret(
+    secrets,
+    GITHUB_TOKEN_KEY,
+    createTransport,
+  );
   const vault = new VaultAdapter(plugin.app, (eventRef) =>
     plugin.registerEvent(eventRef),
   );
+  // Seeds the six vault-owned templates and Bases files on first run. The
+  // action only writes when a configured path is genuinely absent, so it is
+  // safe on every init and the settings tab reuses it to scaffold on demand.
+  const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
+  // Migrates the legacy pm/url/board/todoist frontmatter to the connection
+  // envelope before discovery reads any note.
+  const migrateProjectConnections = new MigrateProjectConnectionsAction(vault);
 
   const github = new GitHubAdapter(transport);
+  // Seeds the configured type-label vocabulary onto an arbitrary repository,
+  // driven by the settings tab's label-seed button.
+  const seedTypeLabels = new SeedTypeLabelsAction(github);
   // The frontmatter cleanup runs at the chain start, per project, before any
   // half reads notes: it strips the legacy `id:`/`url:` fields (dt-20).
   const cleanupNoteFrontmatter = new CleanupNoteFrontmatterAction(vault);
@@ -162,25 +192,17 @@ function composePlugin(
     plugin.settings.taskTemplatePath,
     completeTaskCascade,
   );
-  const syncGithubTasks = new SyncGithubTasksAction(
-    github,
-    syncState,
-    vault,
-    applyTaskToGithub,
-    applyTaskToVault,
-    new VerdictResolver(plugin.settings.doneOptionName),
-    plugin.settings.doneOptionName,
-  );
   const discoverProjects = new DiscoverProjectsAction(
     vault,
     new AttachProjectAction(github),
+    syncState,
   );
   const probeProjects = new ProbeProjectsAction(github, syncState);
 
   // The Todoist half of the tick: the adapter is token-bound through its
   // transport, so a missing token surfaces as a failed request, not a crash.
   const todoist = new TodoistAdapter(
-    createTodoistTransport(plugin.settings.todoistToken),
+    transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
   );
   // t4: ONE lifecycle action with ONE freeze verdict. It merges the former
   // archive-state, Todoist-project and archived-watch actions: folder ⇄
@@ -250,11 +272,16 @@ function composePlugin(
   );
   const ensureProjectBoard = new EnsureProjectBoardAction(
     github,
-    vault,
     syncState,
+    plugin.settings.statusOptions,
   );
 
-  const promoteIssue = new PromoteIssueAction(github, syncState, createTaskNote);
+  const promoteIssue = new PromoteIssueAction(
+    github,
+    syncState,
+    createTaskNote,
+    vault,
+  );
   const promoteToTask = new PromoteToTaskCommand(
     () => plugin.projectNames,
     syncState,
@@ -263,7 +290,12 @@ function composePlugin(
   );
   promoteToTask.register(plugin);
 
-  const promoteCard = new PromoteCardAction(github, syncState, createTaskNote);
+  const promoteCard = new PromoteCardAction(
+    github,
+    syncState,
+    createTaskNote,
+    vault,
+  );
   const promoteCardToIssue = new PromoteCardToIssueCommand(
     () => plugin.projectNames,
     syncState,
@@ -274,19 +306,45 @@ function composePlugin(
 
   // t4: the chain composes the rebuilt halves; the queue serialises every
   // project; the scheduler is discovery + timing policies only.
-  const syncTodoistTasks = new SyncTodoistTasksAction(
-    todoist,
-    github,
-    vault,
-    syncState,
-    new EnsureTodoistSectionsAction(todoist),
-    applyTaskToTodoist,
-    applyTodoistRemoteChanges,
-    captureTodoistCreations,
-    applyTodoistCompletion,
-    propagateTodoistDeletions,
-    plugin.settings.doneOptionName,
-  );
+  //
+  // The half factory builds ONE half per connection declared in a note, each
+  // bound to its own adapter and port state. A project with two task-manager
+  // connections therefore runs the task-manager half twice, once per
+  // connection, with that connection's project id.
+  const halfFactory: SyncHalfFactory = {
+    create: (slug, connection) => {
+      if (connection.tool === 'github') {
+        return new SyncGithubTasksAction(
+          slug,
+          github,
+          syncState,
+          vault,
+          applyTaskToGithub,
+          applyTaskToVault,
+          new VerdictResolver(plugin.settings.doneOptionName),
+          plugin.settings.doneOptionName,
+        );
+      }
+      if (connection.tool === 'todoist') {
+        return new SyncTodoistTasksAction(
+          slug,
+          connection.project,
+          todoist,
+          github,
+          vault,
+          syncState,
+          new EnsureTodoistSectionsAction(todoist),
+          applyTaskToTodoist,
+          applyTodoistRemoteChanges,
+          captureTodoistCreations,
+          applyTodoistCompletion,
+          propagateTodoistDeletions,
+          plugin.settings.doneOptionName,
+        );
+      }
+      return null;
+    },
+  };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
   const syncProject = new SyncProjectAction(
     vault,
@@ -294,11 +352,10 @@ function composePlugin(
     probeProjects,
     reconcileProjectLifecycle,
     detectNoteRenames,
-    syncGithubTasks,
+    halfFactory,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
-    syncTodoistTasks,
     handleDeletedNote,
     cleanupNoteFrontmatter,
     ensureProjectBoard,
@@ -310,18 +367,41 @@ function composePlugin(
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
     () =>
-      captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
+      captureRemoteProjects
+        .execute({ syncedAt: new Date().toISOString() })
+        .then((result) => {
+          if (result.errors.length > 0) {
+            console.error('Project capture collected errors', result.errors);
+          }
+          return result.captured;
+        }),
   );
 
-  return { scheduler, discoverProjects, captureRemoteProjects };
+  return {
+    scheduler,
+    discoverProjects,
+    captureRemoteProjects,
+    migrateProjectConnections,
+    seedArtifacts,
+    seedTypeLabels,
+  };
 }
 
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
+  // The plugin's secret store, retained so the settings tab can read the
+  // stored/not-set state and set or clear a token.
+  secrets!: SecretStore;
   projectNames: string[] = [];
   // The registry adapter, retained so a settings save can share its
   // serialization chain (REG-3).
   private syncState!: SyncStateAdapter;
+  // Retained so the settings tab can scaffold a single missing artifact on
+  // demand, with the same create-if-missing semantics as the onload seed.
+  seedArtifacts!: SeedVaultArtifactsAction;
+  // Retained so the settings tab's label-seed button can apply the configured
+  // type labels to an arbitrary repository.
+  seedTypeLabels!: SeedTypeLabelsAction;
 
   override async onload(): Promise<void> {
     // Read the root through the safe loader: a corrupt data.json is quarantined
@@ -337,6 +417,14 @@ export default class ProjectManagementPlugin extends Plugin {
     if (migrateLegacyState(raw)) {
       await this.saveData(raw);
     }
+    // Move the legacy plaintext tokens into SecretStorage before any adapter is
+    // built, then strip them from the root so they cannot round-trip. A profile
+    // that never set a token is left untouched (no secret write, no save).
+    const secrets = new SecretStorageAdapter(this.app.secretStorage);
+    if (migrateLegacyTokens(raw, secrets)) {
+      await this.saveData(raw);
+    }
+    this.secrets = secrets;
     // The registry container is stripped out of the settings merge: a stale
     // registry snapshot in settings would be written back over every registry
     // write made since onload (REG-3).
@@ -354,10 +442,24 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const { scheduler, discoverProjects, captureRemoteProjects } = composePlugin(
-      this,
-      syncState,
-    );
+    const {
+      scheduler,
+      discoverProjects,
+      captureRemoteProjects,
+      migrateProjectConnections,
+      seedArtifacts,
+      seedTypeLabels,
+    } = composePlugin(this, syncState, this.secrets);
+    this.seedArtifacts = seedArtifacts;
+    this.seedTypeLabels = seedTypeLabels;
+    // Seed the vault-owned templates and Bases files before any note is
+    // created: a fresh vault gets all six at their configured paths, and an
+    // existing file is never overwritten.
+    await seedArtifacts.execute();
+    // Migrate the legacy project frontmatter to the connection envelope before
+    // discovery reads any note, so a pre-envelope vault is discovered in the
+    // same startup.
+    await migrateProjectConnections.execute();
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
@@ -382,7 +484,7 @@ export default class ProjectManagementPlugin extends Plugin {
     captureRemoteProjects: CaptureRemoteProjectsAction,
   ): Promise<void> {
     try {
-      const { projects, errors } = await discoverProjects.execute();
+      const { projects, errors, warnings } = await discoverProjects.execute();
       for (const project of projects) {
         await syncState.setIdentity(project.projectName, project.identity);
       }
@@ -392,12 +494,22 @@ export default class ProjectManagementPlugin extends Plugin {
           `Project discovery: ${errors.length} project(s) could not be attached`,
         );
       }
+      if (warnings.length > 0) {
+        new Notice(
+          `Project discovery: ${warnings.length} connection(s) no longer have a matching connection`,
+        );
+      }
       // Capture remote-born projects AFTER discovery, so a just-created vault
       // project is not re-attached this startup. The captured names are picked
       // up by the scheduler's next tick.
-      await captureRemoteProjects.execute({
+      const capture = await captureRemoteProjects.execute({
         syncedAt: new Date().toISOString(),
       });
+      if (capture.errors.length > 0) {
+        new Notice(
+          `Project capture: ${capture.errors.length} board(s) could not be captured`,
+        );
+      }
     } catch (error) {
       new Notice(
         `Project discovery failed: ${error instanceof Error ? error.message : String(error)}`,

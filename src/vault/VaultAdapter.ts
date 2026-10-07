@@ -94,8 +94,10 @@ export class VaultAdapter implements VaultPort {
   async trashNote(path: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (file instanceof TFile) {
-      // system: false keeps the file in the vault-internal .trash, recoverable.
-      await this.app.vault.trash(file, false);
+      // FileManager.trashFile respects the user's file-deletion preference
+      // (system trash, vault .trash, or permanent), unlike Vault.trash which
+      // always forces one destination.
+      await this.app.fileManager.trashFile(file);
     }
   }
 

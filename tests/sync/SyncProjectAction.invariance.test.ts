@@ -23,9 +23,11 @@ import { RelocateTaskStatusAction } from '../../src/tasks/RelocateTaskStatusActi
 import { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
 import { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
+import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
 import { hash } from '../../src/shared/hash.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
@@ -167,17 +169,14 @@ class FakeProjectManagement implements ProjectManagementPort {
   async fetchBoardItems(): Promise<BoardItemData[]> {
     return this.detail.cards;
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    statusOptionId: string,
-  ): Promise<void> {
-    this.mutations.push(`setBoardStatus:${issueUrl}:${statusOptionId}`);
-    const card = this.detail.cards.find(
-      (candidate) => candidate.issueUrl === issueUrl,
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.mutations.push(
+      `setBoardStatus:${status.issueUrl}:${status.statusOptionId}`,
     );
-    const name = this.optionNames[statusOptionId];
+    const card = this.detail.cards.find(
+      (candidate) => candidate.issueUrl === status.issueUrl,
+    );
+    const name = this.optionNames[status.statusOptionId];
     if (card && name !== undefined) {
       card.statusOptionName = name;
     }
@@ -225,6 +224,18 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 
   async createProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
     throw new Error('not used in this test');
   }
   async fetchViewerProjects(): Promise<never> {
@@ -409,9 +420,11 @@ function projectNote(
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_${projectName}.md`,
     projectName,
     archivedAt,
-    pm: 'github',
-    url: 'https://github.com/acme/widgets',
-    board: 'https://github.com/orgs/acme/projects/1',
+    connections: {
+      github: { tool: 'github', project: 'https://github.com/acme/widgets' },
+      todoist: { tool: 'todoist', project: 'P1' },
+    },
+    connectionErrors: [],
   };
 }
 
@@ -547,15 +560,6 @@ function harness(): Harness {
     '',
     completeTaskCascade,
   );
-  const syncGithubTasks = new SyncGithubTasksAction(
-    github,
-    syncState,
-    vault,
-    applyToGithub,
-    applyToVault,
-    new VerdictResolver(DONE_LANE),
-    DONE_LANE,
-  );
   const applyToTodoist = new ApplyTaskToTodoistAction(todoist, syncState);
   const applyTodoistCompletion = new ApplyTodoistCompletionAction(
     vault,
@@ -584,19 +588,40 @@ function harness(): Harness {
     '',
     DONE_LANE,
   );
-  const syncTodoistTasks = new SyncTodoistTasksAction(
-    todoist,
-    github,
-    vault,
-    syncState,
-    new EnsureTodoistSectionsAction(todoist),
-    applyToTodoist,
-    applyTodoistRemoteChanges,
-    captureTodoistCreations,
-    applyTodoistCompletion,
-    propagateTodoistDeletions,
-    DONE_LANE,
-  );
+  const halfFactory: SyncHalfFactory = {
+    create: (slug, connection) => {
+      if (connection.tool === 'github') {
+        return new SyncGithubTasksAction(
+          slug,
+          github,
+          syncState,
+          vault,
+          applyToGithub,
+          applyToVault,
+          new VerdictResolver(DONE_LANE),
+          DONE_LANE,
+        );
+      }
+      if (connection.tool === 'todoist') {
+        return new SyncTodoistTasksAction(
+          slug,
+          connection.project,
+          todoist,
+          github,
+          vault,
+          syncState,
+          new EnsureTodoistSectionsAction(todoist),
+          applyToTodoist,
+          applyTodoistRemoteChanges,
+          captureTodoistCreations,
+          applyTodoistCompletion,
+          propagateTodoistDeletions,
+          DONE_LANE,
+        );
+      }
+      return null;
+    },
+  };
   const lifecycle = new ReconcileProjectLifecycleAction(
     github,
     todoist,
@@ -619,11 +644,10 @@ function harness(): Harness {
     new ProbeProjectsAction(github, syncState),
     lifecycle,
     renames,
-    syncGithubTasks,
+    halfFactory,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
-    syncTodoistTasks,
     handleDeletedNote,
     cleanupNoteFrontmatter,
   );
