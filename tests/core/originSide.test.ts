@@ -138,8 +138,8 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
     expect(record.advanced).toContain('vault');
   });
 
-  it('trashes the origin note and removes the mirror entity on a delete (NWM-25)', async () => {
-    const { adapter, registered } = mirrorAdapter('conformance');
+  it('trashes the origin note when a mirror reports the entity deleted (NWM-25)', async () => {
+    const { registered } = mirrorAdapter('conformance');
     const origin = new FakeOrigin('status: Building');
 
     const pass = new MirrorSyncPass({
@@ -155,6 +155,26 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
     expect(record.result.outcome).toBe('delete');
     expect(origin.trashed).toEqual(['t1']);
     expect(origin.note).toBeNull();
+    expect(record.advanced).toContain('vault');
+    expect(record.advanced).toContain('conformance');
+  });
+
+  it("removes the mirror entity when the origin's note is deleted (NWM-25, NWM-27)", async () => {
+    const { adapter, registered } = mirrorAdapter('conformance');
+    adapter.seed(task('t1', 'Review'));
+    const origin = new FakeOrigin(null);
+
+    const pass = new MirrorSyncPass({
+      entityId: 't1',
+      field: 'Status',
+      origin: originSide(null, new Baseline('Building', false)),
+      mirrors: [registered],
+      baselines: new Map([['conformance', new Baseline('Building', false)]]),
+    });
+
+    const record = await new MirrorSyncAction(origin).invoke(pass);
+
+    expect(record.result.outcome).toBe('delete');
     expect(adapter.currentTask('t1')).toBeNull();
     expect(record.advanced).toContain('vault');
     expect(record.advanced).toContain('conformance');
