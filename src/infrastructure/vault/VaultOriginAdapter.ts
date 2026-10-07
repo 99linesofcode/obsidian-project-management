@@ -66,10 +66,14 @@ export class VaultOriginAdapter implements OriginPort {
     if (title === null) {
       return;
     }
-    const folder = file.path.slice(0, file.path.lastIndexOf('/'));
+    const slug = slugify(title);
+    if (slug === '') {
+      throw new Error(`origin note has no usable title: ${file.path}`);
+    }
+    const folder = folderOf(file.path);
     await this.app.fileManager.renameFile(
       file,
-      `${folder}/${slugify(title)}.md`,
+      folder === null ? `${slug}.md` : `${folder}/${slug}.md`,
     );
   }
 }
@@ -240,6 +244,11 @@ function withParent(content: string, parent: string | null): string {
 
 function renderLine(key: string, value: string | null): string {
   return value === null ? `${key}:` : `${key}: ${value}`;
+}
+
+function folderOf(path: string): string | null {
+  const slash = path.lastIndexOf('/');
+  return slash === -1 ? null : path.slice(0, slash);
 }
 
 function slugify(title: string): string {

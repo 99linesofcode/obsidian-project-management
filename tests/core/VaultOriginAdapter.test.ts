@@ -86,16 +86,31 @@ class FakeVault {
   remove(path: string): void {
     this.notes.delete(path);
   }
+
+  rename(from: string, to: string): void {
+    const note = this.notes.get(from);
+    if (note === undefined) {
+      return;
+    }
+    this.notes.delete(from);
+    this.notes.set(to, note);
+  }
 }
 
 class FakeFileManager {
   readonly trashed: string[] = [];
+  readonly renamed: Array<{ from: string; to: string }> = [];
 
   constructor(private readonly vault: FakeVault) {}
 
   async trashFile(file: TFileInstance): Promise<void> {
     this.trashed.push(file.path);
     this.vault.remove(file.path);
+  }
+
+  async renameFile(file: TFileInstance, newPath: string): Promise<void> {
+    this.renamed.push({ from: file.path, to: newPath });
+    this.vault.rename(file.path, newPath);
   }
 }
 
@@ -162,6 +177,55 @@ describe('VaultOriginAdapter — the origin write (F02 NWM-3)', () => {
 
     expect(vault.content(NOTE_PATH)).toContain('status: Done');
     expect(vault.content(NOTE_PATH)).toContain('Body text');
+  });
+});
+
+describe('VaultOriginAdapter — the origin rename (F02 NWM-3)', () => {
+  it('renames a nested note within its folder', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, NOTE, MTIME);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: NOTE_PATH,
+        field: 'title',
+        value: 'Fix it now',
+      }),
+    );
+
+    expect(vault.has(NOTE_PATH)).toBe(false);
+    expect(vault.has('Projecten/Acme/taken/fix-it-now.md')).toBe(true);
+  });
+
+  it('renames a root-level note without dropping its last character', async () => {
+    const { vault, adapter } = setup();
+    vault.seed('fix-the-bug.md', NOTE, MTIME);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'fix-the-bug.md',
+        field: 'title',
+        value: 'Fix it now',
+      }),
+    );
+
+    expect(vault.has('fix-the-bug.md')).toBe(false);
+    expect(vault.has('fix-it-now.md')).toBe(true);
+  });
+
+  it('refuses to rename a note to an empty slug', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, NOTE, MTIME);
+
+    await expect(
+      adapter.applyField(
+        new CanonicalFieldWrite({
+          handle: NOTE_PATH,
+          field: 'title',
+          value: '!!!',
+        }),
+      ),
+    ).rejects.toThrow();
   });
 });
 
