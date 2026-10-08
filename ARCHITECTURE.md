@@ -193,7 +193,9 @@ is unchanged. It consists of the port layer and the pure core:
   the one generic write entry. It also writes the reconciled value back to the
   origin (or trashes the note on a delete), and advances the baseline of every
   side written or already matching — a skipped write advances too; a failed
-  write advances nothing (NWM-17).
+  write advances nothing (NWM-17). A mirror write that throws is recorded on the
+  pass record's failed sides and fan-out continues to the remaining mirrors, so
+  one failing connection never abandons the rest.
 - **The origin port** (`OriginPort`). The core's need for the origin: observe a
   note's field as a canonical value plus its edit time, trusted by default
   (NWM-28); apply a canonical field write to the note; trash the note (never a
@@ -226,18 +228,24 @@ is unchanged. It consists of the port layer and the pure core:
   assembles the origin side through `OriginPort` and each mirror's baseline
   through the baseline store, runs `MirrorSyncAction` once per (entity,
   canonical value field) against a per-connection `MirrorSide`, and persists the
-  advanced baselines. Two connections to the same application stay distinct
+  advanced baselines. The project source enumerates note paths, so a mirror side
+  is keyed `mirror:<slug>` — disjoint from the origin side's `origin` key, so a
+  connection slug of `origin` cannot collide — while the origin keeps the note
+  path as its handle. Two connections to the same application stay distinct
   sides; a connection whose entity has no resolved handle is skipped.
-- **The mirror-handle port** (`MirrorHandlePort`). The core's need to resolve an
-  entity to the handle a given connection's application uses for it (an issue
+- **The mirror-handle port** (`MirrorHandlePort`). The core's need to resolve a
+  note path to the handle a given connection's application uses for it (an issue
   URL, a task id). Its adapter
-  (`infrastructure/registry/RegistryMirrorHandleAdapter`) reads the registry's
-  per-connection item map through the existing `findMirrorItemByEntity` lookup.
+  (`infrastructure/registry/RegistryMirrorHandleAdapter`) first maps the note
+  path to the registry entity's id (`findByNotePath`), then reads that entity's
+  per-connection item through the existing `findMirrorItemByEntity` lookup.
 - **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
   need to build a mirror adapter for an application and a connection target. The
   composition root implements it over the provider adapters, so one adapter
   instance serves exactly one connection.
-- **The gated cutover.** When `multiAdapterEngine` is on, `SyncProjectAction`
+- **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
+  time through a reconciler provider, so toggling `multiAdapterEngine` takes
+  effect on the next sync without a reload. When it is on, `SyncProjectAction`
   runs the assembled pass for task-field reconciliation and skips the legacy
   code-host and task halves; probe, board-ensure, capture, lifecycle, vault
   consistency and the deletion sweep still run. When it is off, the legacy
@@ -347,10 +355,10 @@ over HTTPS.
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
     are the `src/` module folders plus the src root (the composition root);
     `core/` is the inner block and imports no module; `infrastructure/` may
-    import `core/` only, with one transitional, file-scoped exception — the
+    import `core/` only, with two transitional, file-scoped exceptions — the
     vault project-source adapter reuses the legacy `vault/` connections codec
-    and note reads while the old chain is retired; `shared/` imports from no
-    module; provider modules
+    and note reads, and the shared `projectHomePath` convention, while the old
+    chain is retired; `shared/` imports from no module; provider modules
     never import each other; neutral modules consume the kernel and the ports
     that live in it, never a provider adapter directly; the composition root
     wires everything. An unlisted import edge fails the lint, so the dependency
