@@ -1,5 +1,6 @@
 import type { CanonicalField } from './canonicalField.js';
 import { Baseline } from './data/Baseline.js';
+import type { CanonicalTask } from './data/CanonicalTask.js';
 import type { DeclaredConnection } from './data/DeclaredConnection.js';
 import { MirrorSide } from './data/MirrorSide.js';
 import { MirrorSyncPass } from './data/MirrorSyncPass.js';
@@ -15,6 +16,16 @@ import type { OriginPort } from './ports/OriginPort.js';
 import type { ProjectSourcePort } from './ports/ProjectSourcePort.js';
 
 const ORIGIN_SIDE = 'origin';
+
+const PENDING_CREATION_PREFIX = 'pendingCreation:';
+
+function pendingCreationHandle(notePath: string): string {
+  return `${PENDING_CREATION_PREFIX}${notePath}`;
+}
+
+function isPendingCreationHandle(handle: string): boolean {
+  return handle.startsWith(PENDING_CREATION_PREFIX);
+}
 
 const MERGED_FIELDS: readonly CanonicalField[] = [
   'title',
@@ -106,11 +117,17 @@ export class AssembleProjectPassAction {
     project: string,
   ): Promise<string | null> {
     const handle = await this.handles.resolve(connection.slug, notePath);
-    if (handle !== null) {
+    if (handle !== null && !isPendingCreationHandle(handle)) {
       return handle;
     }
     try {
-      return await this.materialize(connection, adapter, notePath, project);
+      return await this.materialize(
+        connection,
+        adapter,
+        notePath,
+        project,
+        handle,
+      );
     } catch (error) {
       console.error(
         `AssembleProjectPassAction: materialization failed for ${notePath}`,
@@ -125,11 +142,30 @@ export class AssembleProjectPassAction {
     adapter: RegisteredAdapter,
     notePath: string,
     project: string,
+    pending: string | null,
   ): Promise<string | null> {
     const task = await this.origin.readTask(notePath);
     if (task === null) {
       return null;
     }
+    if (pending !== null) {
+      const adopted = await this.adopt(
+        connection,
+        adapter,
+        notePath,
+        project,
+        task,
+      );
+      if (adopted !== null) {
+        return adopted;
+      }
+    }
+    await this.handles.record(
+      project,
+      connection.slug,
+      notePath,
+      pendingCreationHandle(notePath),
+    );
     const created = await adapter.tasks.createTask(
       connection.envelope.target,
       task,
@@ -141,6 +177,26 @@ export class AssembleProjectPassAction {
       created.handle,
     );
     return created.handle;
+  }
+
+  private async adopt(
+    connection: DeclaredConnection,
+    adapter: RegisteredAdapter,
+    notePath: string,
+    project: string,
+    task: CanonicalTask,
+  ): Promise<string | null> {
+    const candidates = await adapter.tasks.readTasks(
+      connection.envelope.target,
+    );
+    const match = candidates.find(
+      (candidate) => candidate.title === task.title,
+    );
+    if (match === undefined) {
+      return null;
+    }
+    await this.handles.record(project, connection.slug, notePath, match.handle);
+    return match.handle;
   }
 
   private async runField(

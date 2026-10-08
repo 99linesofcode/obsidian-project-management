@@ -16,6 +16,11 @@ export interface MirrorItemRecorder {
     handle: string,
     item: { entityId: string; base: null },
   ): Promise<void>;
+  removeMirrorItem(
+    project: string,
+    connection: string,
+    handle: string,
+  ): Promise<void>;
 }
 
 export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
@@ -45,6 +50,17 @@ export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
     const entityId = entity?.id ?? crypto.randomUUID();
     if (entity === null) {
       await this.registry.setEntity({ id: entityId, notePath });
+    }
+    const existing = await this.registry.findMirrorItemByEntity(
+      connection,
+      entityId,
+    );
+    if (existing !== null && existing.handle !== handle) {
+      await this.registry.removeMirrorItem(
+        project,
+        connection,
+        existing.handle,
+      );
     }
     await this.registry.setMirrorItem(project, connection, handle, {
       entityId,

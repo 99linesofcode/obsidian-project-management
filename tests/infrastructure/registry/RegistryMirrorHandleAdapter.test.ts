@@ -12,6 +12,11 @@ class FakeRegistry implements MirrorItemLookup {
     handle: string;
     entityId: string;
   }> = [];
+  readonly removedItems: Array<{
+    project: string;
+    connection: string;
+    handle: string;
+  }> = [];
 
   seedEntity(notePath: string, id: string): void {
     this.entities.set(notePath, id);
@@ -52,6 +57,19 @@ class FakeRegistry implements MirrorItemLookup {
       handle,
       entityId: item.entityId,
     });
+  }
+
+  async removeMirrorItem(
+    project: string,
+    connection: string,
+    handle: string,
+  ): Promise<void> {
+    for (const [key, value] of this.items) {
+      if (value === handle && key.startsWith(`${connection}\u0000`)) {
+        this.items.delete(key);
+      }
+    }
+    this.removedItems.push({ project, connection, handle });
   }
 }
 
@@ -144,5 +162,35 @@ describe('RegistryMirrorHandleAdapter — entity to per-connection handle (F02 N
         entityId: 'uuid-1',
       },
     ]);
+  });
+
+  it('replaces a placeholder handle with the real one', async () => {
+    const registry = new FakeRegistry();
+    registry.seedEntity('Projecten/Acme/taken/fix.md', 'uuid-1');
+    const handles = new RegistryMirrorHandleAdapter(registry);
+
+    await handles.record(
+      'Acme',
+      'gh-main',
+      'Projecten/Acme/taken/fix.md',
+      'pendingCreation:Projecten/Acme/taken/fix.md',
+    );
+    await handles.record(
+      'Acme',
+      'gh-main',
+      'Projecten/Acme/taken/fix.md',
+      'issue-1',
+    );
+
+    expect(registry.removedItems).toEqual([
+      {
+        project: 'Acme',
+        connection: 'gh-main',
+        handle: 'pendingCreation:Projecten/Acme/taken/fix.md',
+      },
+    ]);
+    expect(
+      await handles.resolve('gh-main', 'Projecten/Acme/taken/fix.md'),
+    ).toBe('issue-1');
   });
 });
