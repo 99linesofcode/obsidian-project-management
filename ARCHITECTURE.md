@@ -197,6 +197,14 @@ consists of the port layer and the pure core:
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
+- **The infrastructure adapters.** `infrastructure/` is the driven-adapter
+  block: one namespace per application (`infrastructure/<vendor>/`), each
+  carrying the provider's own vocabulary, its transport boundary, its opaque
+  target and its descriptor. The conformance adapter is the reference
+  implementation; a real mirror adapter is a new namespace beside it, with no
+  core edit. `infrastructure/` imports `core/` only, and the
+  provider-vocabulary gate keeps each namespace the sole home for its
+  provider's name.
 
 ## 4. Data Stores
 
@@ -283,12 +291,18 @@ over HTTPS.
     every source file must belong to an element and every local import must
     resolve to one, so a new top-level module (including `core/` and
     `infrastructure/`) cannot slip in unclassified.
-  - **`pnpm run lint:boundaries`** — a vocabulary grep: provider names
-    (`GitHub`, `Github`, `Todoist`) may appear only in their own provider
-    module and the composition root, so shared and cross-cutting vocabulary
-    stays neutral. The grep is strengthened with a case-insensitive pass scoped
-    to `core/` and `infrastructure/` (a future per-vendor adapter folder is
-    exempt), so a provider name in the core fails the gate.
+  - **`pnpm run lint:boundaries`** (`scripts/lint-boundaries.mjs`) — the
+    provider-vocabulary gate. A provider name may appear only in the provider's
+    own module (`github/`, `todoist/`, `infrastructure/<vendor>/`), the
+    composition root (`main.ts`) and the driving side (`app/`); a capitalized
+    provider name anywhere else fails. Inside the neutral architecture
+    (`core/`, `infrastructure/`) the check is case-insensitive, so any provider
+    name in the core fails. The gate is bite-tested
+    (`tests/scripts/lint-boundaries.test.ts`): a deliberate core violation exits
+    non-zero while the legitimate provider path exits zero, so a green gate on
+    an empty tree cannot pass unnoticed. The legacy chain predates the core and
+    its pre-existing provider vocabulary is grandfathered until that chain is
+    retired.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
     compile error.
   - **`pnpm test`** — behavioral tests per module, including the sync chain's
@@ -314,8 +328,10 @@ over HTTPS.
 **Known debt / open items:** `ProjectManagementPort` still carries
 `fetchTrackedIssues` / `fetchBoardItems` alongside the canonical
 `fetchProjectDetail`, kept for the promote UI until it migrates to the
-canonical read. The developer manual records the remaining code-vs-brief
-discrepancies.
+canonical read. The legacy chain carries pre-existing provider vocabulary
+(`shared/`, `projects/`, `sync/`, `tasks/`, `vault/`, `registry/`); the
+provider-vocabulary gate grandfathers it until that chain is retired. The
+developer manual records the remaining code-vs-brief discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is a walking skeleton:
 the shape is built and proven on the `Status` field through the conformance
@@ -380,10 +396,14 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
   (`github`, `todoist`) never import each other; neutral modules consume the
   kernel and the ports that live in it, never a provider adapter directly; the
   composition root wires everything; no circular module dependencies.
-- **Provider neutrality**: provider names appear only in provider modules and
-  the composition root; shared and cross-cutting vocabulary is neutral (a
-  provider name is a value argument, never a namespace key). Enforced by the
-  `lint:boundaries` grep.
+- **Provider neutrality**: provider names appear only in the provider's own
+  module (the legacy `github/`/`todoist/` and the `infrastructure/<vendor>/`
+  adapters), the composition root, and the driving side; shared and
+  cross-cutting vocabulary is neutral (a provider name is a value argument,
+  never a namespace key). The neutral architecture (`core/`, `infrastructure/`)
+  is checked case-insensitively, so any provider name in the core fails.
+  Enforced by `lint:boundaries`; the legacy chain's pre-existing vocabulary is
+  grandfathered until it is retired.
 - **Canonical DTOs**: one canonical shape per domain concept, owned by the
   core; diff/merge logic operates on canonical fields only. A DTO mimicking a
   provider's structure is a provider shape, whatever its file name.
