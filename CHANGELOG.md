@@ -1,3 +1,12 @@
+## [0.13.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.0...0.13.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **infrastructure:** derive the code-host board from the repository target ([2388c13](https://github.com/99linesofcode/obsidian-project-management/commit/2388c13933766e1b8a4d832e435213448978690c))
+
+
+
 # [0.13.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.12.0...0.13.0) (2026-10-08)
 
 
@@ -50,24 +59,6 @@
 ### Features
 
 * **infrastructure:** add the GitHub mirror adapter and its descriptor ([b06eb7a](https://github.com/99linesofcode/obsidian-project-management/commit/b06eb7a80b935532ce5d872a9bdc227586eed961))
-
-
-
-# [0.9.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.8.0...0.9.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **infrastructure:** fail the origin write when the note cannot accept it ([6c75ccd](https://github.com/99linesofcode/obsidian-project-management/commit/6c75ccd89dee8a780e52d899bab6125292d4fd24))
-* **infrastructure:** keep the origin rename inside the note's folder ([0935337](https://github.com/99linesofcode/obsidian-project-management/commit/0935337138d7d91a11da2895f4dcc936704d0a9d))
-
-
-### Features
-
-* **core:** add the origin port and its observation ([6db5c7a](https://github.com/99linesofcode/obsidian-project-management/commit/6db5c7af0bff625bc1bc9c7158ef4434a076e5a7))
-* **core:** carry the origin's mtime into the merge side ([7a8e3c5](https://github.com/99linesofcode/obsidian-project-management/commit/7a8e3c5b74e52b2714fc686f53c0a3b3336b50fb))
-* **core:** write reconciled values back to the origin and advance baselines ([06aca0d](https://github.com/99linesofcode/obsidian-project-management/commit/06aca0d38ed90795c1e29343658ee79208bdcf80))
-* **infrastructure:** add the vault origin adapter ([dda408d](https://github.com/99linesofcode/obsidian-project-management/commit/dda408d0e1c35e44c738e0fd1aaac190e34d4788))
 
 
 
