@@ -1,3 +1,5 @@
 export interface ProjectLifecycleReconciler {
-  reconcile(project: string): Promise<{ frozen: boolean }>;
+  reconcile(
+    project: string,
+  ): Promise<{ frozen: boolean; wasFrozen: boolean }>;
 }

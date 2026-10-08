@@ -15,6 +15,7 @@ import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
 import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
+import type { ProjectTaskLocksReconciler } from './ProjectTaskLocksReconciler.js';
 import type { TaskCaptureReconciler } from './TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
@@ -43,6 +44,7 @@ export class SyncProjectAction {
     private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
     private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
     private readonly taskCaptureReconciler?: () => TaskCaptureReconciler | undefined,
+    private readonly projectTaskLocksReconciler?: () => ProjectTaskLocksReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -64,6 +66,7 @@ export class SyncProjectAction {
     const lifecycleReconciler = this.projectLifecycleReconciler?.();
     const taskFieldReconciler = this.taskFieldReconciler?.();
     const taskCaptureReconciler = this.taskCaptureReconciler?.();
+    const projectTaskLocksReconciler = this.projectTaskLocksReconciler?.();
     if (lifecycleReconciler !== undefined) {
       await this.step('migrate home note', async () => {
         await this.migrateProjectHomeNote.execute({
@@ -100,15 +103,30 @@ export class SyncProjectAction {
 
     const boardState = await this.probe(project, note.connections);
 
-    const verdict =
-      lifecycleReconciler === undefined
-        ? await this.runLifecycle(project, note, boardState, syncedAt)
-        : await this.runNewLifecycle(
-            project,
-            note,
-            boardState,
-            lifecycleReconciler,
-          );
+    let wasFrozen = false;
+    let verdict: ProjectLifecycleVerdict;
+    if (lifecycleReconciler === undefined) {
+      verdict = await this.runLifecycle(project, note, boardState, syncedAt);
+    } else {
+      const result = await this.runNewLifecycle(
+        project,
+        note,
+        boardState,
+        lifecycleReconciler,
+      );
+      verdict = result.verdict;
+      wasFrozen = result.wasFrozen;
+    }
+
+    if (projectTaskLocksReconciler !== undefined) {
+      await this.step('task locks', () =>
+        projectTaskLocksReconciler.reconcile({
+          project,
+          frozen: verdict.frozen,
+          wasFrozen,
+        }),
+      );
+    }
 
     await this.step('renames', () =>
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
@@ -222,14 +240,17 @@ export class SyncProjectAction {
     note: ProjectNoteData,
     boardState: ProjectStateData | undefined,
     reconciler: ProjectLifecycleReconciler,
-  ): Promise<ProjectLifecycleVerdict> {
+  ): Promise<{ verdict: ProjectLifecycleVerdict; wasFrozen: boolean }> {
     try {
-      const { frozen } = await reconciler.reconcile(project);
+      const { frozen, wasFrozen } = await reconciler.reconcile(project);
       return {
-        remoteProjectId: null,
-        frozen,
-        notePath: note.path,
-        archivedAt: frozen ? '' : null,
+        verdict: {
+          remoteProjectId: null,
+          frozen,
+          notePath: note.path,
+          archivedAt: frozen ? '' : null,
+        },
+        wasFrozen,
       };
     } catch (error) {
       console.error(
@@ -237,10 +258,13 @@ export class SyncProjectAction {
         error,
       );
       return {
-        remoteProjectId: null,
-        frozen: note.archivedAt !== null || (boardState?.closed ?? false),
-        notePath: note.path,
-        archivedAt: note.archivedAt,
+        verdict: {
+          remoteProjectId: null,
+          frozen: note.archivedAt !== null || (boardState?.closed ?? false),
+          notePath: note.path,
+          archivedAt: note.archivedAt,
+        },
+        wasFrozen: false,
       };
     }
   }

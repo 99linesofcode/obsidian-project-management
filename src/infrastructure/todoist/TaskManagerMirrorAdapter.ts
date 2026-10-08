@@ -192,6 +192,14 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     ensureSuccess(response);
   }
 
+  async lockTask(_handle: string): Promise<void> {
+    throw new Error('task manager: does not support task locking');
+  }
+
+  async unlockTask(_handle: string): Promise<void> {
+    throw new Error('task manager: does not support task unlocking');
+  }
+
   async capture(target: string): Promise<CanonicalTask[]> {
     const connection = TaskManagerTarget.parse(target);
     const sections = await this.sections(connection.projectId);

@@ -239,6 +239,22 @@ const RENAME_PROJECT_MUTATION = `
   }
 `;
 
+const LOCK_TASK_MUTATION = `
+  mutation LockTask($nodeId: ID!) {
+    lockLockable(input: { lockableId: $nodeId }) {
+      lockedRecord { ... on Issue { locked } }
+    }
+  }
+`;
+
+const UNLOCK_TASK_MUTATION = `
+  mutation UnlockTask($nodeId: ID!) {
+    unlockLockable(input: { lockableId: $nodeId }) {
+      unlockedRecord { ... on Issue { locked } }
+    }
+  }
+`;
+
 const ADD_SUB_ISSUE_MUTATION = `
   mutation AddSubIssue($issueId: ID!, $subIssueId: ID!) {
     addSubIssue(input: { issueId: $issueId, subIssueId: $subIssueId }) {
@@ -493,6 +509,16 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
       projectId: board.projectNodeId,
       title: name,
     });
+  }
+
+  async lockTask(handle: string): Promise<void> {
+    const nodeId = await this.issueNodeId(handle);
+    await this.graphql(LOCK_TASK_MUTATION, { nodeId });
+  }
+
+  async unlockTask(handle: string): Promise<void> {
+    const nodeId = await this.issueNodeId(handle);
+    await this.graphql(UNLOCK_TASK_MUTATION, { nodeId });
   }
 
   async archivedTime(_target: string): Promise<string | null> {

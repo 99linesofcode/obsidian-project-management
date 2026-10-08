@@ -16,6 +16,7 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly throwingTasks = new Set<string>();
   readonly createCalls: string[] = [];
   readonly createTaskCalls: string[] = [];
+  readonly lockedHandles = new Set<string>();
   private readonly fieldTimes = new Map<
     string,
     Partial<Record<CanonicalField, string>>
@@ -146,6 +147,14 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   async deleteTask(handle: string): Promise<void> {
     this.tasks.delete(handle);
+  }
+
+  async lockTask(handle: string): Promise<void> {
+    this.lockedHandles.add(handle);
+  }
+
+  async unlockTask(handle: string): Promise<void> {
+    this.lockedHandles.delete(handle);
   }
 
   async capture(): Promise<CanonicalTask[]> {

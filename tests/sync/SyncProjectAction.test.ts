@@ -13,6 +13,7 @@ import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
+import type { ProjectTaskLocksReconciler } from '../../src/sync/ProjectTaskLocksReconciler.js';
 import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
@@ -133,11 +134,12 @@ function reconcileRecorder(events: string[]): TaskFieldReconciler {
 function projectLifecycleRecorder(
   events: string[],
   frozen: boolean,
+  wasFrozen = false,
 ): ProjectLifecycleReconciler {
   return {
     reconcile: async () => {
       events.push('lifecycle');
-      return { frozen };
+      return { frozen, wasFrozen };
     },
   };
 }
@@ -146,6 +148,14 @@ function taskCaptureRecorder(events: string[]): TaskCaptureReconciler {
   return {
     capture: async (project) => {
       events.push(`capture:${project}`);
+    },
+  };
+}
+
+function taskLocksRecorder(events: string[]): ProjectTaskLocksReconciler {
+  return {
+    reconcile: async (input) => {
+      events.push(`taskLocks:${input.frozen}:${input.wasFrozen}`);
     },
   };
 }
@@ -278,6 +288,9 @@ function harness(options: HarnessOptions = {}) {
   const taskCapture: { current: TaskCaptureReconciler | undefined } = {
     current: options.engine ? taskCaptureRecorder(events) : undefined,
   };
+  const taskLocks: { current: ProjectTaskLocksReconciler | undefined } = {
+    current: options.engine ? taskLocksRecorder(events) : undefined,
+  };
 
   const action = new SyncProjectAction(
     vault,
@@ -295,6 +308,7 @@ function harness(options: HarnessOptions = {}) {
     () => reconciler.current,
     () => newLifecycle.current,
     () => taskCapture.current,
+    () => taskLocks.current,
   );
 
   return {
@@ -308,6 +322,7 @@ function harness(options: HarnessOptions = {}) {
     reconciler,
     newLifecycle,
     taskCapture,
+    taskLocks,
   };
 }
 
@@ -636,7 +651,7 @@ describe('the setting-gated cutover', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).not.toContain('reconcile:Acme Widgets');
-    expect(h.events).toEqual(['lifecycle', 'renames']);
+    expect(h.events).toEqual(['lifecycle', 'taskLocks:true:false', 'renames']);
   });
 
   it('sweeps a gone note while the engine is on', async () => {
@@ -702,6 +717,27 @@ describe('the setting-gated lifecycle cutover', () => {
 
     expect(h.lifecycle.calls).toEqual([]);
     expect(h.events).toContain('lifecycle');
+  });
+
+  it('runs the task-lock step with the freeze transition when the engine is on', async () => {
+    const h = harness({
+      projectNotes: [projectNote('Acme Widgets', '')],
+      engine: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('taskLocks:true:false');
+  });
+
+  it('does not run the task-lock step when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events.some((event) => event.startsWith('taskLocks:'))).toBe(
+      false,
+    );
   });
 
   it('skips the task-field pass when the new lifecycle freezes the project', async () => {

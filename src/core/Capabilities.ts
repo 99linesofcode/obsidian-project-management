@@ -9,6 +9,7 @@ export const CAPABILITIES = [
   'subtasks',
   'completion',
   'capture',
+  'task-locking',
   'trustworthy per-field timestamps',
   'complete-fetch',
 ] as const;

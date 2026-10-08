@@ -39,6 +39,31 @@ class FakeRegistry implements MirrorItemLookup {
     return handle === undefined ? null : { handle };
   }
 
+  async listMirrorItems(
+    _project: string,
+    connection: string,
+  ): Promise<Array<{ handle: string; item: { entityId: string } }>> {
+    const prefix = `${connection}\u0000`;
+    const listed: Array<{ handle: string; item: { entityId: string } }> = [];
+    for (const [key, handle] of this.items) {
+      if (key.startsWith(prefix)) {
+        listed.push({ handle, item: { entityId: key.slice(prefix.length) } });
+      }
+    }
+    return listed;
+  }
+
+  async getEntity(
+    id: string,
+  ): Promise<{ id: string; notePath: string } | null> {
+    for (const [notePath, entityId] of this.entities) {
+      if (entityId === id) {
+        return { id, notePath };
+      }
+    }
+    return null;
+  }
+
   async setEntity(record: { id: string; notePath: string }): Promise<void> {
     this.entities.set(record.notePath, record.id);
     this.setEntities.push(record);
@@ -192,5 +217,20 @@ describe('RegistryMirrorHandleAdapter — entity to per-connection handle (F02 N
     expect(
       await handles.resolve('gh-main', 'Projecten/Acme/taken/fix.md'),
     ).toBe('issue-1');
+  });
+
+  it('lists the handles a connection holds with their note paths', async () => {
+    const registry = new FakeRegistry();
+    registry.seedEntity('Projecten/Acme/taken/fix.md', 'uuid-1');
+    registry.seedEntity('Projecten/Acme/taken/ship.md', 'uuid-2');
+    registry.seedItem('gh-main', 'uuid-1', 'issue-1');
+    registry.seedItem('gh-main', 'uuid-2', 'issue-2');
+    registry.seedItem('td-work', 'uuid-1', 'task-9');
+    const handles = new RegistryMirrorHandleAdapter(registry);
+
+    expect(await handles.list('Acme', 'gh-main')).toEqual([
+      { handle: 'issue-1', notePath: 'Projecten/Acme/taken/fix.md' },
+      { handle: 'issue-2', notePath: 'Projecten/Acme/taken/ship.md' },
+    ]);
   });
 });

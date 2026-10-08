@@ -75,6 +75,31 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
     );
   });
 
+  it('exposes the task-lock port only when the adapter declares the capability (ACM-8)', () => {
+    const capable = registerAdapters([
+      new AdapterRegistration(
+        conformanceDescriptor('capable'),
+        new ConformanceMirrorAdapter(),
+      ),
+    ]).adapters.get('capable')!;
+    const base = conformanceDescriptor('plain');
+    const withoutLock = new AdapterDescriptor({
+      applicationId: base.applicationId,
+      capabilities: base.capabilities.filter(
+        (capability) => capability !== 'task-locking',
+      ),
+      representations: base.representations,
+      secretKeys: base.secretKeys,
+      settingsRows: base.settingsRows,
+    });
+    const plain = registerAdapters([
+      new AdapterRegistration(withoutLock, new ConformanceMirrorAdapter()),
+    ]).adapters.get('plain')!;
+
+    expect(capable.taskLock).toBeDefined();
+    expect(plain.taskLock).toBeUndefined();
+  });
+
   it('rejects an adapter that cannot represent the mandatory surface (ACM-8, ACM-9)', () => {
     const descriptor = new AdapterDescriptor({
       applicationId: 'acme',

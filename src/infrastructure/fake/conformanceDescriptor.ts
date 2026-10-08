@@ -11,6 +11,7 @@ export function conformanceDescriptor(applicationId: string): AdapterDescriptor 
       ...UNIVERSAL_CAPABILITIES,
       ...MANDATORY_FIELD_CAPABILITIES,
       'capture',
+      'task-locking',
       'trustworthy per-field timestamps',
       'complete-fetch',
     ],

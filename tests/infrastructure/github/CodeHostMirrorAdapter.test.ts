@@ -490,6 +490,39 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(transport.bodies[0]).toContain('"projectId":"PVT_123"');
   });
 
+  it('locks a task conversation through lockLockable', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { node_id: 'I_kwDOAAAA42' } },
+      {
+        status: 200,
+        json: { data: { lockLockable: { lockedRecord: { locked: true } } } },
+      },
+    ]);
+
+    await adapter.lockTask(ISSUE_URL);
+
+    expect(transport.paths[0]).toBe('/repos/acme/widgets/issues/42');
+    expect(transport.bodies[0]).toContain('LockTask');
+    expect(transport.bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
+  });
+
+  it('unlocks a task conversation through unlockLockable', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { node_id: 'I_kwDOAAAA42' } },
+      {
+        status: 200,
+        json: {
+          data: { unlockLockable: { unlockedRecord: { locked: false } } },
+        },
+      },
+    ]);
+
+    await adapter.unlockTask(ISSUE_URL);
+
+    expect(transport.bodies[0]).toContain('UnlockTask');
+    expect(transport.bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
+  });
+
   it('returns the decisive per-field time', async () => {
     const { adapter } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
@@ -989,6 +1022,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
     const handles: MirrorHandlePort = {
       resolve: async (connection, entity) =>
         connection === 'gh' && entity === entityId ? ISSUE_URL : null,
+      list: async () => [],
       record: async () => {},
     };
     const action = new AssembleProjectPassAction(

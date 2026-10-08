@@ -6,6 +6,11 @@ export interface MirrorItemLookup {
     connection: string,
     entityId: string,
   ): Promise<{ handle: string } | null>;
+  listMirrorItems(
+    project: string,
+    connection: string,
+  ): Promise<Array<{ handle: string; item: { entityId: string } }>>;
+  getEntity(id: string): Promise<{ id: string; notePath: string } | null>;
 }
 
 export interface MirrorItemRecorder {
@@ -38,6 +43,21 @@ export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
       entity.id,
     );
     return item?.handle ?? null;
+  }
+
+  async list(
+    project: string,
+    connection: string,
+  ): Promise<readonly { handle: string; notePath: string }[]> {
+    const items = await this.registry.listMirrorItems(project, connection);
+    const resolved: Array<{ handle: string; notePath: string }> = [];
+    for (const { handle, item } of items) {
+      const entity = await this.registry.getEntity(item.entityId);
+      if (entity !== null) {
+        resolved.push({ handle, notePath: entity.notePath });
+      }
+    }
+    return resolved;
   }
 
   async record(

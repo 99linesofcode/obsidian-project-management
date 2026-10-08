@@ -3,6 +3,7 @@ import type { CapturePort } from '../ports/CapturePort.js';
 import type { CompleteFetchPort } from '../ports/CompleteFetchPort.js';
 import type { ProjectCapturePort } from '../ports/ProjectCapturePort.js';
 import type { ProjectPort } from '../ports/ProjectPort.js';
+import type { TaskLockPort } from '../ports/TaskLockPort.js';
 import type { TaskSurfacePort } from '../ports/TaskSurfacePort.js';
 import type { TimestampedPort } from '../ports/TimestampedPort.js';
 
@@ -14,6 +15,7 @@ export class RegisteredAdapter {
   readonly projectCapture: ProjectCapturePort | undefined;
   readonly completeFetch: CompleteFetchPort | undefined;
   readonly timestamps: TimestampedPort | undefined;
+  readonly taskLock: TaskLockPort | undefined;
 
   constructor(init: {
     descriptor: AdapterDescriptor;
@@ -23,6 +25,7 @@ export class RegisteredAdapter {
     projectCapture: ProjectCapturePort | undefined;
     completeFetch: CompleteFetchPort | undefined;
     timestamps: TimestampedPort | undefined;
+    taskLock: TaskLockPort | undefined;
   }) {
     this.descriptor = init.descriptor;
     this.project = init.project;
@@ -31,5 +34,6 @@ export class RegisteredAdapter {
     this.projectCapture = init.projectCapture;
     this.completeFetch = init.completeFetch;
     this.timestamps = init.timestamps;
+    this.taskLock = init.taskLock;
   }
 }
