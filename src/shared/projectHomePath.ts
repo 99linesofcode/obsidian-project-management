@@ -20,3 +20,14 @@ export function projectHomePath(
   const root = archived ? 'Archief' : 'Projecten';
   return `${root}/${projectName}/${projectHomeStem(projectName)}.md`;
 }
+
+export function chooseHomeNotePath(
+  paths: readonly string[],
+  projectName: string,
+): string | null {
+  const conventionalStem = `${projectHomeStem(projectName)}.md`;
+  const conventional = paths.find(
+    (path) => path.split('/').pop() === conventionalStem,
+  );
+  return conventional ?? paths[0] ?? null;
+}

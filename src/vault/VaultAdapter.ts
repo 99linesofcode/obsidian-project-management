@@ -1,6 +1,7 @@
 import { App, EventRef, TFile } from 'obsidian';
 import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
 import type { VaultPort } from '../shared/VaultPort.js';
+import { chooseHomeNotePath } from '../shared/projectHomePath.js';
 import { folderChainForPath } from './folderChainForPath.js';
 import { projectNoteFromCache } from './projectNoteFromCache.js';
 
@@ -99,8 +100,13 @@ export class VaultAdapter implements VaultPort {
   }
 
   async findHomeNotePath(project: string): Promise<string | null> {
-    const notes = await this.findProjectNotes();
-    return notes.find((note) => note.projectName === project)?.path ?? null;
+    const notes = (await this.findProjectNotes()).filter(
+      (note) => note.projectName === project,
+    );
+    return chooseHomeNotePath(
+      notes.map((note) => note.path),
+      project,
+    );
   }
 
   onNoteChanged(cb: (path: string) => void): void {
