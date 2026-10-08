@@ -7,8 +7,11 @@ import { PassRecord } from './data/PassRecord.js';
 import type { RegisteredAdapter } from './data/RegisteredAdapter.js';
 import { SideObservation } from './data/SideObservation.js';
 import { mergeField } from './mergeField.js';
+import type { OriginPort } from './ports/OriginPort.js';
 
 export class MirrorSyncAction {
+  constructor(private readonly origin: OriginPort | undefined = undefined) {}
+
   async invoke(pass: MirrorSyncPass): Promise<PassRecord> {
     const capable = pass.mirrors.filter((mirror) =>
       mirror.descriptor.represents(pass.field),
@@ -23,9 +26,26 @@ export class MirrorSyncAction {
     }
 
     const result = mergeField(pass.origin, observations);
-    const written = await fanOut(capable, pass, result);
+    const mirrors = await fanOut(capable, pass, result);
+    const originResult = await applyToOrigin(this.origin, pass, result);
 
-    return new PassRecord({ field: pass.field, result, written, skipped });
+    const advanced = [...mirrors.advanced];
+    const failed: string[] = [];
+    if (originResult.advanced) {
+      advanced.push(pass.origin.side);
+    }
+    if (originResult.failed) {
+      failed.push(pass.origin.side);
+    }
+
+    return new PassRecord({
+      field: pass.field,
+      result,
+      written: mirrors.written,
+      skipped,
+      advanced,
+      failed,
+    });
   }
 }
 
@@ -58,13 +78,15 @@ async function fanOut(
   capable: readonly RegisteredAdapter[],
   pass: MirrorSyncPass,
   result: MergeResult,
-): Promise<string[]> {
+): Promise<{ written: string[]; advanced: string[] }> {
   const written: string[] = [];
+  const advanced: string[] = [];
 
   if (result.outcome === 'value') {
     for (const mirror of capable) {
       const task = await mirror.tasks.readTask(pass.entityId);
       if (task !== null && canonicalValue(task, pass.field) === result.value) {
+        advanced.push(mirror.descriptor.applicationId);
         continue;
       }
       await mirror.tasks.applyField(
@@ -75,19 +97,60 @@ async function fanOut(
         }),
       );
       written.push(mirror.descriptor.applicationId);
+      advanced.push(mirror.descriptor.applicationId);
     }
   } else if (result.outcome === 'delete') {
     for (const mirror of capable) {
       const task = await mirror.tasks.readTask(pass.entityId);
       if (task === null) {
+        advanced.push(mirror.descriptor.applicationId);
         continue;
       }
       await mirror.tasks.deleteTask(pass.entityId);
       written.push(mirror.descriptor.applicationId);
+      advanced.push(mirror.descriptor.applicationId);
     }
   }
 
-  return written;
+  return { written, advanced };
+}
+
+async function applyToOrigin(
+  origin: OriginPort | undefined,
+  pass: MirrorSyncPass,
+  result: MergeResult,
+): Promise<{ advanced: boolean; failed: boolean }> {
+  if (origin === undefined || result.outcome === 'unchanged') {
+    return { advanced: false, failed: false };
+  }
+
+  if (result.outcome === 'value') {
+    if (pass.origin.current === result.value) {
+      return { advanced: true, failed: false };
+    }
+    try {
+      await origin.applyField(
+        new CanonicalFieldWrite({
+          handle: pass.entityId,
+          field: pass.field,
+          value: result.value,
+        }),
+      );
+      return { advanced: true, failed: false };
+    } catch {
+      return { advanced: false, failed: true };
+    }
+  }
+
+  if (pass.origin.current === null) {
+    return { advanced: true, failed: false };
+  }
+  try {
+    await origin.trash(pass.entityId);
+    return { advanced: true, failed: false };
+  } catch {
+    return { advanced: false, failed: true };
+  }
 }
 
 function canonicalValue(
