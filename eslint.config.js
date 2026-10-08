@@ -213,21 +213,11 @@ const transitionalPolicies = [
 const PROVIDER_SURFACE = {
   github: [
     'GitHubAdapter.ts',
-    'ApplyTaskToGithubAction.ts',
     // The promote modal lists unpromoted issues from the provider's transport
     // shape; the type is part of what the app is allowed to see.
     'GithubTaskData.ts',
   ],
-  todoist: [
-    'TodoistAdapter.ts',
-    'ApplyTaskToTodoistAction.ts',
-    'ApplyTodoistCompletionAction.ts',
-    'ApplyTodoistRemoteChangesAction.ts',
-    'CaptureTodoistCreationsAction.ts',
-    'EnsureTodoistSectionsAction.ts',
-    'PropagateTodoistDeletionsAction.ts',
-    'RelinkRenamedTodoAction.ts',
-  ],
+  todoist: ['TodoistAdapter.ts'],
 };
 
 // The elements the matrix lets import a provider; the surface narrows those

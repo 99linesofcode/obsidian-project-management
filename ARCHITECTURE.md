@@ -25,12 +25,12 @@ obsidian-project-management/
 │   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action, the pass assembler
 │   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake, the vault origin + project-source adapters, the registry baseline store, and the GitHub and Todoist mirror adapters)
 │   ├── app/          # driving side: plugin lifecycle, scheduler, queue, commands, modals, settings
-│   ├── github/       # code-host provider: adapter, mapper, writer
-│   ├── todoist/      # task-manager provider: adapter, mapper, writers, absorbers
+│   ├── github/       # code-host provider: adapter, mapper
+│   ├── todoist/      # task-manager provider: adapter, mapper
 │   ├── vault/        # the vault adapter and the note mappers/parsers
 │   ├── projects/     # discovery, attach, board creation, lifecycle, remote capture
 │   ├── registry/     # the data.json-backed SyncStatePort adapter and schema
-│   ├── tasks/        # task actions: the vault writer, cascade, promote, status
+│   ├── tasks/        # task actions: note creation, cascade, promote
 │   ├── todos/        # checklist ⇄ to-do note consistency
 │   ├── sync/         # the chain, the probe, renames, deletion sweep
 │   ├── shared/       # the kernel: ports, canonical DTOs, pure arithmetic — imports from no module
@@ -47,7 +47,7 @@ obsidian-project-management/
 meaningful responsibility, named `*Action`. Adapters map raw provider payloads
 onto canonical DTOs at the boundary; the core never sees a provider shape.
 Pure calculations live in `shared/` as one-function files or pure classes
-(`toDiffView`, `hasCompletionStamp`). Delivery mechanics — the
+(`hash`, `projectHomePath`). Delivery mechanics — the
 scheduler, the queue, timers — belong to `app/` and make no business
 decisions. Persistence is owned by the registry adapter; nothing else touches
 `data.json`.
@@ -56,8 +56,8 @@ decisions. Persistence is owned by the registry adapter; nothing else touches
 the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and
 the generic mirror-sync action. `infrastructure/` holds the driven adapters
 that implement those ports, one namespace per vendor. The composition root
-wires them. The core runs unconditionally; the legacy halves and the old pure
-verdict are deleted, and the legacy writers remain until they are retired.
+wires them. The core runs unconditionally; the legacy halves, the old pure
+verdict and the legacy writers are deleted.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
 or concept exists. Modules split when they outgrow grasp, not before.
@@ -107,12 +107,12 @@ the chain.
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                                                                      | host plugin API              | the vault        |
 | `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions                                             | host plugin API, `Component` | the vault        |
 | `src/sync/`           | The chain: `SyncProjectAction` runs the assembled core pass; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                                                                                                  | TypeScript                   | in-process       |
-| `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `ApplyTaskToGithubAction` (the code-host writer)                                                                                                                                                                    | GraphQL + REST               | the code host    |
-| `src/todoist/`        | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, the writer and the absorbers                                                                                                                                                                                   | REST v1                      | the task manager |
-| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                                                                       | host vault API               | the vault        |
+| `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`                                                                                                                                                                                                                      | GraphQL + REST               | the code host    |
+| `src/todoist/`        | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`                                                                                                                                                                                                                 | REST v1                      | the task manager |
+| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                                                                                 | host vault API               | the vault        |
 | `src/projects/`       | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper                                                                                                                                                                               | TypeScript                   | in-process       |
 | `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
-| `src/tasks/`          | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                                                               | TypeScript                   | in-process       |
+| `src/tasks/`          | Task actions: note creation, the completion cascade, promote                                                                                                                                                                                                                     | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
 | `src/shared/`         | The kernel: the four ports, canonical DTOs and the pure helpers                                                                                                                                                                                                                  | TypeScript                   | in-process       |
 | `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store, project-source, mirror-handle and adapter-factory ports, and the pass assembler | TypeScript                   | in-process       |
@@ -158,8 +158,8 @@ clears. `data.json` is secret-free.
 
 The `core/` block is the target shape of ADR-001, proven end to end on one thin
 path (the `Status` field). It runs in the runtime unconditionally; the legacy
-halves and the old pure verdict are deleted, and the legacy writers remain until
-they are retired. It consists of the port layer and the pure core:
+halves, the old pure verdict and the legacy writers are deleted. It consists of
+the port layer and the pure core:
 
 - **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
   `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
@@ -523,8 +523,7 @@ unconditional: the chain builds the origin and the per-connection mirror
 adapters from the project's connections and the stored secrets, runs the
 reactivation action, the assembled lifecycle pass for the freeze verdict, the
 task-lock action and the assembled pass for task-field reconciliation. The
-legacy halves and the old pure verdict are deleted; the legacy writers remain
-until they are retired.
+legacy halves, the old pure verdict and the legacy writers are deleted.
 
 ## 10. Project Identification
 
@@ -582,7 +581,7 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
   the name locates the role.
 - **File naming**: PascalCase classes with role suffixes (`*Action`,
   `*Adapter`, `*Port`, `*Mapper`, `*Data`, `*Parser`); camelCase pure
-  functions, one per file (`toDiffView.ts`, `projectHomePath.ts`). Tests
+  functions, one per file (`hash.ts`, `projectHomePath.ts`). Tests
   mirror the tree: `tests/<module>/…`.
 - **Entry point**: `src/main.ts` — above the modules, never inside one; the
   composition root.
