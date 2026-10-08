@@ -1,5 +1,5 @@
 import { TaskData } from '../shared/TaskData.js';
-import { hasCompletionStamp } from '../shared/Reconciliation.js';
+import { hasCompletionStamp } from '../shared/hasCompletionStamp.js';
 import type { TodoistTaskSnapshotData } from './TodoistTaskSnapshotData.js';
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { VaultTaskMapper } from '../vault/VaultTaskMapper.js';
