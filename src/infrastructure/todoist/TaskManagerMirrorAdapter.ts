@@ -10,6 +10,8 @@ import type {
 } from './TaskManagerTransport.js';
 import { TaskManagerTarget } from './TaskManagerTarget.js';
 
+const COMPLETED_SINCE = '1970-01-01T00:00:00Z';
+
 interface RawTask {
   id: string;
   projectId: string;
@@ -34,6 +36,7 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
   constructor(
     private readonly transport: TaskManagerTransport,
     target = '',
+    private readonly now: () => Date = () => new Date(),
   ) {
     this.rawTarget = target;
   }
@@ -183,7 +186,10 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
   async capture(target: string): Promise<CanonicalTask[]> {
     const connection = TaskManagerTarget.parse(target);
     const sections = await this.sections(connection.projectId);
-    const tasks = await this.listTasks(connection.projectId);
+    const tasks = dedupeById([
+      ...(await this.listTasks(connection.projectId)),
+      ...(await this.listCompletedTasks(connection.projectId)),
+    ]);
     return tasks
       .filter((task) => !hasTypeLabel(task.labels))
       .map((task) =>
@@ -287,6 +293,16 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     return raw.map(parseTask);
   }
 
+  private async listCompletedTasks(projectId: string): Promise<RawTask[]> {
+    const path =
+      '/tasks/completed/by_completion_date' +
+      `?since=${encodeURIComponent(COMPLETED_SINCE)}` +
+      `&until=${encodeURIComponent(this.now().toISOString())}` +
+      `&project_id=${encodeURIComponent(projectId)}`;
+    const raw = await this.getList(path);
+    return raw.map((task) => ({ ...parseTask(task), completed: true }));
+  }
+
   private async getList(path: string): Promise<Record<string, unknown>[]> {
     const items: Record<string, unknown>[] = [];
     let cursor: string | null = null;
@@ -358,6 +374,14 @@ function parseTask(raw: Record<string, unknown>): RawTask {
     updatedAt: stringOrEmpty(raw.updated_at),
     completedAt: nullableString(raw.completed_at),
   };
+}
+
+function dedupeById(tasks: readonly RawTask[]): RawTask[] {
+  const byId = new Map<string, RawTask>();
+  for (const task of tasks) {
+    byId.set(task.id, task);
+  }
+  return [...byId.values()];
 }
 
 function parseSection(raw: Record<string, unknown>): RawSection {

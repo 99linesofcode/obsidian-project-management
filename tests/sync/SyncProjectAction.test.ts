@@ -13,6 +13,7 @@ import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
+import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
@@ -137,6 +138,14 @@ function projectLifecycleRecorder(
     reconcile: async () => {
       events.push('lifecycle');
       return { frozen };
+    },
+  };
+}
+
+function taskCaptureRecorder(events: string[]): TaskCaptureReconciler {
+  return {
+    capture: async (project) => {
+      events.push(`capture:${project}`);
     },
   };
 }
@@ -266,6 +275,9 @@ function harness(options: HarnessOptions = {}) {
       ? projectLifecycleRecorder(events, lifecycleFrozen)
       : undefined,
   };
+  const taskCapture: { current: TaskCaptureReconciler | undefined } = {
+    current: options.engine ? taskCaptureRecorder(events) : undefined,
+  };
 
   const action = new SyncProjectAction(
     vault,
@@ -282,6 +294,7 @@ function harness(options: HarnessOptions = {}) {
     undefined,
     () => reconciler.current,
     () => newLifecycle.current,
+    () => taskCapture.current,
   );
 
   return {
@@ -294,6 +307,7 @@ function harness(options: HarnessOptions = {}) {
     lifecycle,
     reconciler,
     newLifecycle,
+    taskCapture,
   };
 }
 
@@ -574,6 +588,22 @@ describe('the setting-gated cutover', () => {
     expect(h.events).toContain('reconcile:Acme Widgets');
     expect(h.events).not.toContain('sweep');
     expect(h.events).not.toContain('todoist');
+  });
+
+  it('runs the new task capture when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('capture:Acme Widgets');
+  });
+
+  it('skips the new task capture when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).not.toContain('capture:Acme Widgets');
   });
 
   it('keeps probe, board-ensure and lifecycle when the engine is on', async () => {
