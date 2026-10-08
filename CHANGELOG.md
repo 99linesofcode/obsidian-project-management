@@ -1,3 +1,19 @@
+# [0.18.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.17.0...0.18.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** record a task's mirror handle before creating the item ([820928c](https://github.com/99linesofcode/obsidian-project-management/commit/820928c5a8631518847a8b55680cb578ae72648b))
+* **vault:** materialize only typed task notes ([6d398b6](https://github.com/99linesofcode/obsidian-project-management/commit/6d398b6e9a7266b52d4887ac764475f1363673b0))
+* **vault:** stop passing the vault link as the mirror's parent ([bb20b0b](https://github.com/99linesofcode/obsidian-project-management/commit/bb20b0b4058f15f5993c0baf2473cd0a6c3589d8))
+
+
+### Features
+
+* **core:** create a vault task note's missing mirror item ([12ad30d](https://github.com/99linesofcode/obsidian-project-management/commit/12ad30d69e56f0a36e164fa186fd2800e9178d17))
+
+
+
 # [0.17.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.16.0...0.17.0) (2026-10-08)
 
 
@@ -53,15 +69,6 @@
 
 * **core:** carry the archived timestamp through the project port ([5e4e6bb](https://github.com/99linesofcode/obsidian-project-management/commit/5e4e6bba73a7fa585ae03371bbf04ea2e33aad27))
 * **core:** reconcile project lifecycle through the multi-adapter core ([2a6d99d](https://github.com/99linesofcode/obsidian-project-management/commit/2a6d99da91582d58efc63c3a750357468d04cacc))
-
-
-
-## [0.13.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.0...0.13.1) (2026-10-08)
-
-
-### Bug Fixes
-
-* **infrastructure:** derive the code-host board from the repository target ([2388c13](https://github.com/99linesofcode/obsidian-project-management/commit/2388c13933766e1b8a4d832e435213448978690c))
 
 
 
