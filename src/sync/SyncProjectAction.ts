@@ -36,7 +36,7 @@ export class SyncProjectAction {
     handleDeletedNote: HandleDeletedNoteAction,
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
-    private readonly taskFieldReconciler?: TaskFieldReconciler,
+    private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -94,7 +94,7 @@ export class SyncProjectAction {
     const halves = Object.entries(note.connections)
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
-    const taskFieldReconciler = this.taskFieldReconciler;
+    const taskFieldReconciler = this.taskFieldReconciler?.();
 
     if (taskFieldReconciler === undefined) {
       await this.step('code host half', () =>

@@ -117,6 +117,14 @@ class FakeSweep {
   }
 }
 
+function reconcileRecorder(events: string[]): TaskFieldReconciler {
+  return {
+    reconcile: async (project) => {
+      events.push(`reconcile:${project}`);
+    },
+  };
+}
+
 function projectNote(
   projectName: string,
   archivedAt: string | null,
@@ -231,13 +239,9 @@ function harness(options: HarnessOptions = {}) {
     },
   };
 
-  const reconciler: TaskFieldReconciler | undefined = options.engine
-    ? {
-        reconcile: async (project) => {
-          events.push(`reconcile:${project}`);
-        },
-      }
-    : undefined;
+  const reconciler: { current: TaskFieldReconciler | undefined } = {
+    current: options.engine ? reconcileRecorder(events) : undefined,
+  };
 
   const action = new SyncProjectAction(
     vault,
@@ -252,10 +256,19 @@ function harness(options: HarnessOptions = {}) {
     handleDeleted,
     ensureBoard,
     undefined,
-    reconciler,
+    () => reconciler.current,
   );
 
-  return { action, events, vault, syncState, probe, sweep, lifecycle };
+  return {
+    action,
+    events,
+    vault,
+    syncState,
+    probe,
+    sweep,
+    lifecycle,
+    reconciler,
+  };
 }
 
 const openState: ProjectStateData = {
@@ -558,5 +571,34 @@ describe('the setting-gated cutover', () => {
 
     expect(h.events).not.toContain('reconcile:Acme Widgets');
     expect(h.events).toEqual(['lifecycle', 'renames']);
+  });
+
+  it('sweeps a gone note while the engine is on', async () => {
+    const h = harness({
+      state: openState,
+      engine: true,
+      statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).toContain(
+      'delete:Projecten/Acme Widgets/taken/42-gone.md',
+    );
+  });
+
+  it('reads the engine setting at execute time, so a toggle needs no reload', async () => {
+    const h = harness({ state: openState });
+    await h.action.execute('Acme Widgets');
+    expect(h.events).toContain('todoist');
+    expect(h.events).not.toContain('reconcile:Acme Widgets');
+
+    h.events.length = 0;
+    h.reconciler.current = reconcileRecorder(h.events);
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).not.toContain('todoist');
   });
 });

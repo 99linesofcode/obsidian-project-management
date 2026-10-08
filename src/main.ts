@@ -387,15 +387,20 @@ function composePlugin(
     },
   };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
-  const taskFieldReconciler = plugin.settings.multiAdapterEngine
-    ? composeTaskFieldReconciler(
-        plugin,
-        vault,
-        syncState,
-        secrets,
-        baselineStorage,
-      )
-    : undefined;
+  let composedTaskFieldReconciler: TaskFieldReconciler | undefined;
+  const taskFieldReconciler = (): TaskFieldReconciler | undefined => {
+    if (!plugin.settings.multiAdapterEngine) {
+      return undefined;
+    }
+    composedTaskFieldReconciler ??= composeTaskFieldReconciler(
+      plugin,
+      vault,
+      syncState,
+      secrets,
+      baselineStorage,
+    );
+    return composedTaskFieldReconciler;
+  };
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
