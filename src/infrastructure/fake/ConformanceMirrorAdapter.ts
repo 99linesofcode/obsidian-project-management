@@ -2,6 +2,7 @@ import type { CanonicalField } from '../../core/canonicalField.js';
 import { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/data/CapturedProject.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 
 export class ConformanceMirrorAdapter implements MirrorAdapter {
@@ -125,6 +126,10 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   }
 
   async capture(): Promise<CanonicalTask[]> {
+    return [];
+  }
+
+  async captureProjects(): Promise<CapturedProject[]> {
     return [];
   }
 

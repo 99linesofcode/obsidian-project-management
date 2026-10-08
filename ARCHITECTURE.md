@@ -274,7 +274,22 @@ is unchanged. It consists of the port layer and the pure core:
 - **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
   need to build a mirror adapter for an application and a connection target. The
   composition root implements it over the provider adapters, so one adapter
-  instance serves exactly one connection.
+  instance serves exactly one connection. Its optional `captureSources` exposes
+  the capture-capable adapters, built once at the composition root and gated by
+  the `capture` capability.
+- **The project-capture surface** (`ProjectCapturePort` +
+  `CaptureProjectsAction`). A capture-capable adapter enumerates the
+  application-born projects it can see (`captureProjects`), each carrying its
+  name, its candidate connection targets and its creation clock. The core action
+  reads each source's projects in creation order, adopts every project after
+  that source's stored cursor that the vault does not already declare — writing
+  the home note with its connection envelope through the vault capture adapter,
+  which reuses the legacy home-note path and connections codec — and advances
+  the cursor only over the projects it handled. A first sight adopts the newest
+  clock and captures nothing; a project that links zero or several targets stops
+  the watermark with a collected error. An already-declared project is never
+  re-created, so the pass is idempotent. The cursor store and the vault sink are
+  infrastructure peers; the core names no provider.
 - **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
   time through two reconciler providers, so toggling `multiAdapterEngine` takes
   effect on the next sync without a reload. When it is on, `SyncProjectAction`
@@ -282,9 +297,10 @@ is unchanged. It consists of the port layer and the pure core:
   pass for task-field reconciliation, migrates the project's home note through
   the legacy migration action (which the skipped legacy lifecycle would
   otherwise have run), and skips the legacy lifecycle step and the legacy
-  code-host and task halves; probe, board-ensure, capture, vault consistency and
-  the deletion sweep still run. When it is off, the legacy chain runs exactly as
-  before.
+  code-host and task halves; probe, board-ensure, vault consistency and the
+  deletion sweep still run, and the capture pre-tick runs the assembled core
+  capture instead of the legacy capture action. When it is off, the legacy chain
+  runs exactly as before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.

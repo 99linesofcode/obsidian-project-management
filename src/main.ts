@@ -25,7 +25,15 @@ import { ApplyTodoistCompletionAction } from './todoist/ApplyTodoistCompletionAc
 import { ApplyTodoistRemoteChangesAction } from './todoist/ApplyTodoistRemoteChangesAction.js';
 import { BoardStatusAction } from './projects/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './todoist/CaptureTodoistCreationsAction.js';
-import { CaptureRemoteProjectsAction } from './projects/CaptureRemoteProjectsAction.js';
+import {
+  CaptureRemoteProjectsAction,
+  type CaptureResult,
+} from './projects/CaptureRemoteProjectsAction.js';
+import { gatedProjectCapture } from './app/gatedProjectCapture.js';
+import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
+import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
+import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
+import type { CaptureSource } from './core/ports/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
@@ -148,9 +156,14 @@ function createTransport(token: string): Transport {
   };
 }
 
+interface ProjectCaptureReconciler {
+  capture(syncedAt: string): Promise<CaptureResult>;
+}
+
 interface CoreReconcilers {
   taskFields: TaskFieldReconciler;
   lifecycle: ProjectLifecycleReconciler;
+  capture: ProjectCaptureReconciler;
 }
 
 function composeCoreReconcilers(
@@ -192,6 +205,12 @@ function composeCoreReconcilers(
     new RegistryMirrorProjectAdapter(syncState),
   );
 
+  const capture = new CaptureProjectsAction(
+    mirrorAdapters,
+    new VaultProjectCaptureAdapter(vault),
+    new RegistryProjectCursorAdapter(syncState),
+  );
+
   return {
     taskFields: {
       reconcile: async (project) => {
@@ -203,6 +222,9 @@ function composeCoreReconcilers(
         frozen: (await lifecyclePass.invoke(project)).frozen,
       }),
     },
+    capture: {
+      capture: (syncedAt) => capture.invoke(syncedAt),
+    },
   };
 }
 
@@ -212,6 +234,7 @@ function mirrorAdapterFactory(
   taskManager: TaskManagerTransport,
   statusOptions: readonly string[],
 ): MirrorAdapterFactoryPort {
+  const captureSources = buildCaptureSources(codeHost, taskManager);
   return {
     create: (application, target, connectionSlug, projectName) =>
       createMirrorAdapter(
@@ -222,7 +245,27 @@ function mirrorAdapterFactory(
         taskManager,
         statusOptions,
       ),
+    captureSources: () => captureSources,
   };
+}
+
+function buildCaptureSources(
+  codeHost: CodeHostTransport,
+  taskManager: TaskManagerTransport,
+): readonly CaptureSource[] {
+  const sources: CaptureSource[] = [];
+  const registrations: Array<[string, AdapterDescriptor, MirrorAdapter]> = [
+    ['todoist', todoistDescriptor(), new TaskManagerMirrorAdapter(taskManager)],
+    ['github', githubDescriptor(), new CodeHostMirrorAdapter(codeHost)],
+  ];
+  for (const [application, descriptor, adapter] of registrations) {
+    const registered = gateMirror(descriptor, adapter);
+    const capture = registered?.projectCapture;
+    if (capture !== undefined) {
+      sources.push({ application, capture });
+    }
+  }
+  return sources;
 }
 
 function createMirrorAdapter(
@@ -267,7 +310,7 @@ function composePlugin(
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
-  captureRemoteProjects: CaptureRemoteProjectsAction;
+  projectCapture: () => Promise<CaptureResult>;
   seedArtifacts: SeedVaultArtifactsAction;
   seedTypeLabels: SeedTypeLabelsAction;
   adapters: RegistrationResult;
@@ -474,26 +517,31 @@ function composePlugin(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,
     );
   });
+  const projectCapture = gatedProjectCapture(
+    () => plugin.settings.multiAdapterEngine,
+    () => captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
+    () =>
+      coreReconcilers()?.capture.capture(new Date().toISOString()) ??
+      Promise.resolve({ captured: [], errors: [] }),
+  );
   const scheduler = new SyncScheduler(
     vault,
     queue,
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
     () =>
-      captureRemoteProjects
-        .execute({ syncedAt: new Date().toISOString() })
-        .then((result) => {
-          if (result.errors.length > 0) {
-            console.error('Project capture collected errors', result.errors);
-          }
-          return result.captured;
-        }),
+      projectCapture().then((result) => {
+        if (result.errors.length > 0) {
+          console.error('Project capture collected errors', result.errors);
+        }
+        return result.captured;
+      }),
   );
 
   return {
     scheduler,
     discoverProjects,
-    captureRemoteProjects,
+    projectCapture,
     seedArtifacts,
     seedTypeLabels,
     adapters: registerAdapters([
@@ -549,7 +597,7 @@ export default class ProjectManagementPlugin extends Plugin {
     const {
       scheduler,
       discoverProjects,
-      captureRemoteProjects,
+      projectCapture,
       seedArtifacts,
       seedTypeLabels,
       adapters,
@@ -561,11 +609,7 @@ export default class ProjectManagementPlugin extends Plugin {
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
-      void this.discoverAndSync(
-        discoverProjects,
-        syncState,
-        captureRemoteProjects,
-      );
+      void this.discoverAndSync(discoverProjects, syncState, projectCapture);
     });
 
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
@@ -574,7 +618,7 @@ export default class ProjectManagementPlugin extends Plugin {
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
-    captureRemoteProjects: CaptureRemoteProjectsAction,
+    projectCapture: () => Promise<CaptureResult>,
   ): Promise<void> {
     try {
       const { projects, errors } = await discoverProjects.execute();
@@ -591,9 +635,7 @@ export default class ProjectManagementPlugin extends Plugin {
           `Project discovery: ${errors.length} project(s) could not be attached`,
         );
       }
-      const capture = await captureRemoteProjects.execute({
-        syncedAt: new Date().toISOString(),
-      });
+      const capture = await projectCapture();
       if (capture.errors.length > 0) {
         new Notice(
           `Project capture: ${capture.errors.length} board(s) could not be captured`,

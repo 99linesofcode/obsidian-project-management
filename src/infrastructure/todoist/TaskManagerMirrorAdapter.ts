@@ -2,6 +2,7 @@ import type { CanonicalField } from '../../core/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/data/CapturedProject.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 import type {
   TaskManagerResponse,
@@ -28,13 +29,17 @@ interface RawSection {
 }
 
 export class TaskManagerMirrorAdapter implements MirrorAdapter {
-  private readonly target: TaskManagerTarget;
+  private readonly rawTarget: string;
 
   constructor(
     private readonly transport: TaskManagerTransport,
-    target: string,
+    target = '',
   ) {
-    this.target = TaskManagerTarget.parse(target);
+    this.rawTarget = target;
+  }
+
+  private get target(): TaskManagerTarget {
+    return TaskManagerTarget.parse(this.rawTarget);
   }
 
   async readProject(target: string): Promise<CanonicalProject | null> {
@@ -184,6 +189,18 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
       .map((task) =>
         toCanonicalTask(task, sectionName(sections, task.sectionId)),
       );
+  }
+
+  async captureProjects(): Promise<CapturedProject[]> {
+    const raw = await this.getList('/projects');
+    return raw.map(
+      (project) =>
+        new CapturedProject({
+          name: stringOrEmpty(project.name),
+          targets: [stringOrEmpty(project.id)],
+          createdAt: nullableString(project.created_at),
+        }),
+    );
   }
 
   fetchComplete(): boolean {
