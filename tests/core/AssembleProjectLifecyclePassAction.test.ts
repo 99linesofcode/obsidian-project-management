@@ -311,4 +311,40 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
     expect(mirror.currentProject('board-b')?.archived).toBe(true);
   });
+
+  it('skips a mirror whose project read returns null', async () => {
+    const { mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    mirror.seedMissingProject('board-b');
+    await seedBaselines(baselines, false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(true);
+    expect(record.advanced).not.toContain('mirror:b');
+    expect(mirror.currentProject('board-b')?.archived).toBe(false);
+    const baseline = await baselines.read(PROJECT, 'lifecycle', 'mirror:b');
+    expect(baseline?.value).toBe('false');
+  });
+
+  it('resolves two disagreeing mirrors to the vault tie-break without a decisive timestamp (NWM-12)', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    await seedBaseline(baselines, 'origin', false);
+    await seedBaseline(baselines, 'mirror:a', false);
+    await seedBaseline(baselines, 'mirror:b', true);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(false);
+    expect(vault.has(ACTIVE_HOME)).toBe(true);
+    expect(mirror.currentProject('board-a')?.archived).toBe(false);
+    expect(mirror.currentProject('board-b')?.archived).toBe(false);
+  });
 });
