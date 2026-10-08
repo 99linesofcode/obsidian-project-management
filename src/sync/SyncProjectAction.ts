@@ -14,6 +14,7 @@ import type {
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
+import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
 import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
@@ -37,6 +38,7 @@ export class SyncProjectAction {
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
     private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
+    private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -80,12 +82,16 @@ export class SyncProjectAction {
 
     const boardState = await this.probe(project, note.connections);
 
-    const verdict = await this.runLifecycle(
-      project,
-      note,
-      boardState,
-      syncedAt,
-    );
+    const lifecycleReconciler = this.projectLifecycleReconciler?.();
+    const verdict =
+      lifecycleReconciler === undefined
+        ? await this.runLifecycle(project, note, boardState, syncedAt)
+        : await this.runNewLifecycle(
+            project,
+            note,
+            boardState,
+            lifecycleReconciler,
+          );
 
     await this.step('renames', () =>
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
@@ -176,6 +182,34 @@ export class SyncProjectAction {
         syncedAt,
         ...(boardState === undefined ? {} : { closed: boardState.closed }),
       });
+    } catch (error) {
+      console.error(
+        `SyncProjectAction: lifecycle failed for ${project}`,
+        error,
+      );
+      return {
+        remoteProjectId: null,
+        frozen: note.archivedAt !== null || (boardState?.closed ?? false),
+        notePath: note.path,
+        archivedAt: note.archivedAt,
+      };
+    }
+  }
+
+  private async runNewLifecycle(
+    project: string,
+    note: ProjectNoteData,
+    boardState: ProjectStateData | undefined,
+    reconciler: ProjectLifecycleReconciler,
+  ): Promise<ProjectLifecycleVerdict> {
+    try {
+      const { frozen } = await reconciler.reconcile(project);
+      return {
+        remoteProjectId: null,
+        frozen,
+        notePath: note.path,
+        archivedAt: frozen ? '' : null,
+      };
     } catch (error) {
       console.error(
         `SyncProjectAction: lifecycle failed for ${project}`,

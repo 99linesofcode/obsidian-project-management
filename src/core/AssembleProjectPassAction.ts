@@ -5,6 +5,7 @@ import { MirrorSide } from './data/MirrorSide.js';
 import { MirrorSyncPass } from './data/MirrorSyncPass.js';
 import type { PassRecord } from './data/PassRecord.js';
 import type { RegisteredAdapter } from './data/RegisteredAdapter.js';
+import { mirrorSideKey } from './mirrorSideKey.js';
 import { MirrorSyncAction } from './MirrorSyncAction.js';
 import { originSideObservation } from './originSideObservation.js';
 import type { BaselineStorePort } from './ports/BaselineStorePort.js';
@@ -148,10 +149,6 @@ export class AssembleProjectPassAction {
       );
     }
   }
-}
-
-function mirrorSideKey(slug: string): string {
-  return `mirror:${slug}`;
 }
 
 function completedValue(field: CanonicalField, value: string | null): boolean {

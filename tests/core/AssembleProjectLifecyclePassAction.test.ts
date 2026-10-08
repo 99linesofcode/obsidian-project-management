@@ -1,0 +1,258 @@
+import { describe, expect, it } from 'vitest';
+import { AssembleProjectLifecyclePassAction } from '../../src/core/AssembleProjectLifecyclePassAction.js';
+import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js';
+import { Baseline } from '../../src/core/data/Baseline.js';
+import { ConnectionEnvelope } from '../../src/core/data/ConnectionEnvelope.js';
+import { DeclaredConnection } from '../../src/core/data/DeclaredConnection.js';
+import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
+import type { MirrorAdapterFactoryPort } from '../../src/core/ports/MirrorAdapterFactoryPort.js';
+import type { ProjectSourcePort } from '../../src/core/ports/ProjectSourcePort.js';
+import { registerAdapters } from '../../src/core/registerAdapters.js';
+import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
+import { conformanceDescriptor } from '../../src/infrastructure/fake/conformanceDescriptor.js';
+import { CoreBaselineStoreAdapter } from '../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
+import { VaultProjectLifecycleAdapter } from '../../src/infrastructure/vault/VaultProjectLifecycleAdapter.js';
+
+const PROJECT = 'Acme';
+const ACTIVE_HOME = 'Projecten/Acme/_Acme.md';
+const ARCHIVED_HOME = 'Archief/Acme/_Acme.md';
+const TASK_PATH = 'Projecten/Acme/taken/fix-the-bug.md';
+const MTIME = Date.parse('2026-10-08T10:00:00Z');
+
+const HOME = [
+  '---',
+  'type: project',
+  'connections:',
+  '  a:',
+  '    tool: conformance',
+  '    project: board-a',
+  '  b:',
+  '    tool: conformance',
+  '    project: board-b',
+  '---',
+].join('\n');
+
+class FakeVault {
+  private readonly notes = new Map<
+    string,
+    { content: string; mtime: number }
+  >();
+
+  seed(path: string, content: string, mtime: number): void {
+    this.notes.set(path, { content, mtime });
+  }
+
+  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+    const note = this.notes.get(path);
+    return note === undefined ? null : { content: note.content };
+  }
+
+  async modifiedTime(path: string): Promise<string | null> {
+    const note = this.notes.get(path);
+    return note === undefined ? null : new Date(note.mtime).toISOString();
+  }
+
+  async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
+    const from = `${fromPrefix}/`;
+    const to = `${toPrefix}/`;
+    for (const [path, note] of [...this.notes.entries()]) {
+      if (path.startsWith(from)) {
+        this.notes.delete(path);
+        this.notes.set(`${to}${path.slice(from.length)}`, note);
+      }
+    }
+  }
+
+  has(path: string): boolean {
+    return this.notes.has(path);
+  }
+}
+
+class FakeRegistry {
+  records: Array<{ id: string; notePath: string }> = [];
+
+  async listEntities(): Promise<Array<{ id: string; notePath: string }>> {
+    return this.records;
+  }
+
+  async setEntity(record: { id: string; notePath: string }): Promise<void> {
+    this.records = this.records.map((candidate) =>
+      candidate.id === record.id ? record : candidate,
+    );
+  }
+}
+
+class FakeProjectSource implements ProjectSourcePort {
+  connections: DeclaredConnection[] = [];
+
+  async readConnections(): Promise<readonly DeclaredConnection[]> {
+    return this.connections;
+  }
+
+  async listEntities(): Promise<readonly string[]> {
+    return [];
+  }
+}
+
+function memoryStorage() {
+  let data: Record<string, unknown> = {};
+  return {
+    storage: {
+      async load() {
+        return data;
+      },
+      async save(next: unknown) {
+        data = next as Record<string, unknown>;
+      },
+    },
+  };
+}
+
+function connection(slug: string, target: string): DeclaredConnection {
+  return new DeclaredConnection({
+    slug,
+    envelope: new ConnectionEnvelope({ application: 'conformance', target }),
+  });
+}
+
+interface SetupOptions {
+  vaultArchived: boolean;
+  mirrorA: boolean;
+  mirrorB: boolean;
+}
+
+function setup(options: SetupOptions) {
+  const vault = new FakeVault();
+  vault.seed(options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME, HOME, MTIME);
+  const registry = new FakeRegistry();
+  registry.records = [{ id: 'e1', notePath: TASK_PATH }];
+
+  const projectSource = new FakeProjectSource();
+  projectSource.connections = [
+    connection('a', 'board-a'),
+    connection('b', 'board-b'),
+  ];
+
+  const mirror = new ConformanceMirrorAdapter();
+  mirror.seedProject('board-a', options.mirrorA);
+  mirror.seedProject('board-b', options.mirrorB);
+  const registered: RegisteredAdapter = registerAdapters([
+    new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
+  ]).adapters.get('conformance')!;
+  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
+
+  const { storage } = memoryStorage();
+  const baselines = new CoreBaselineStoreAdapter(storage);
+  const origin = new VaultProjectLifecycleAdapter(vault, registry);
+  const action = new AssembleProjectLifecyclePassAction(
+    projectSource,
+    origin,
+    baselines,
+    mirrorAdapters,
+  );
+
+  return { vault, registry, mirror, baselines, action };
+}
+
+async function seedBaselines(
+  baselines: CoreBaselineStoreAdapter,
+  archived: boolean,
+): Promise<void> {
+  const value = archived ? 'true' : 'false';
+  for (const side of ['origin', 'mirror:a', 'mirror:b']) {
+    await baselines.write(
+      PROJECT,
+      'lifecycle',
+      side,
+      new Baseline(value, false),
+    );
+  }
+}
+
+describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', () => {
+  it('freezes the vault and the other mirrors when a mirror starts the archive', async () => {
+    const { vault, registry, mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    await seedBaselines(baselines, false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(true);
+    expect(vault.has(ARCHIVED_HOME)).toBe(true);
+    expect(vault.has(ACTIVE_HOME)).toBe(false);
+    expect(registry.records[0]?.notePath).toBe(
+      'Archief/Acme/taken/fix-the-bug.md',
+    );
+    expect(mirror.currentProject('board-a')?.archived).toBe(true);
+    expect(mirror.currentProject('board-b')?.archived).toBe(true);
+  });
+
+  it('freezes the mirrors when the vault starts the archive', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: true,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    await seedBaselines(baselines, false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(true);
+    expect(vault.has(ARCHIVED_HOME)).toBe(true);
+    expect(mirror.currentProject('board-a')?.archived).toBe(true);
+    expect(mirror.currentProject('board-b')?.archived).toBe(true);
+  });
+
+  it('unfreezes the vault and the mirrors when a mirror starts the unfreeze', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: true,
+      mirrorA: false,
+      mirrorB: true,
+    });
+    await seedBaselines(baselines, true);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(false);
+    expect(vault.has(ACTIVE_HOME)).toBe(true);
+    expect(vault.has(ARCHIVED_HOME)).toBe(false);
+    expect(mirror.currentProject('board-a')?.archived).toBe(false);
+    expect(mirror.currentProject('board-b')?.archived).toBe(false);
+  });
+
+  it('advances every side baseline after the freeze settles (NWM-17)', async () => {
+    const { baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    await seedBaselines(baselines, false);
+
+    await action.invoke(PROJECT);
+
+    for (const side of ['origin', 'mirror:a', 'mirror:b']) {
+      const baseline = await baselines.read(PROJECT, 'lifecycle', side);
+      expect(baseline?.value).toBe('true');
+    }
+  });
+
+  it('writes nothing on a second pass once the freeze has settled (NWM-24)', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    await seedBaselines(baselines, false);
+    await action.invoke(PROJECT);
+
+    const second = await action.invoke(PROJECT);
+
+    expect(second.written).toEqual([]);
+    expect(second.advanced).toEqual([]);
+    expect(vault.has(ARCHIVED_HOME)).toBe(true);
+    expect(mirror.currentProject('board-b')?.archived).toBe(true);
+  });
+});

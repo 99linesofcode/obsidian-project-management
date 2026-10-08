@@ -12,6 +12,7 @@ import type {
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
+import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
@@ -121,6 +122,18 @@ function reconcileRecorder(events: string[]): TaskFieldReconciler {
   return {
     reconcile: async (project) => {
       events.push(`reconcile:${project}`);
+    },
+  };
+}
+
+function projectLifecycleRecorder(
+  events: string[],
+  frozen: boolean,
+): ProjectLifecycleReconciler {
+  return {
+    reconcile: async () => {
+      events.push('lifecycle');
+      return { frozen };
     },
   };
 }
@@ -242,6 +255,14 @@ function harness(options: HarnessOptions = {}) {
   const reconciler: { current: TaskFieldReconciler | undefined } = {
     current: options.engine ? reconcileRecorder(events) : undefined,
   };
+  const lifecycleFrozen =
+    (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
+    (options.state?.closed ?? false);
+  const newLifecycle: { current: ProjectLifecycleReconciler | undefined } = {
+    current: options.engine
+      ? projectLifecycleRecorder(events, lifecycleFrozen)
+      : undefined,
+  };
 
   const action = new SyncProjectAction(
     vault,
@@ -257,6 +278,7 @@ function harness(options: HarnessOptions = {}) {
     ensureBoard,
     undefined,
     () => reconciler.current,
+    () => newLifecycle.current,
   );
 
   return {
@@ -268,6 +290,7 @@ function harness(options: HarnessOptions = {}) {
     sweep,
     lifecycle,
     reconciler,
+    newLifecycle,
   };
 }
 
@@ -600,5 +623,45 @@ describe('the setting-gated cutover', () => {
 
     expect(h.events).toContain('reconcile:Acme Widgets');
     expect(h.events).not.toContain('todoist');
+  });
+});
+
+describe('the setting-gated lifecycle cutover', () => {
+  it('runs the legacy lifecycle step when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.lifecycle.calls).toHaveLength(1);
+    expect(h.newLifecycle.current).toBeUndefined();
+  });
+
+  it('runs the new lifecycle and skips the legacy step when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.lifecycle.calls).toEqual([]);
+    expect(h.events).toContain('lifecycle');
+  });
+
+  it('skips the task-field pass when the new lifecycle freezes the project', async () => {
+    const h = harness({
+      projectNotes: [projectNote('Acme Widgets', '')],
+      state: { ...openState, closed: true },
+      engine: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).not.toContain('reconcile:Acme Widgets');
+  });
+
+  it('runs the task-field pass when the new lifecycle leaves the project active', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
   });
 });
