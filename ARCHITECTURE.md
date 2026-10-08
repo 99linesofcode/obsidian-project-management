@@ -22,8 +22,8 @@ axis is carried by file-name role suffixes (`Action`, `Adapter`, `Port`,
 ```
 obsidian-project-management/
 ├── src/
-│   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action
-│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake, the vault origin adapter, and the GitHub and Todoist mirror adapters)
+│   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action, the pass assembler
+│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake, the vault origin + project-source adapters, the registry baseline store, and the GitHub and Todoist mirror adapters)
 │   ├── app/          # driving side: plugin lifecycle, scheduler, queue, commands, modals, settings
 │   ├── github/       # code-host provider: adapter, mapper, sync half, writer
 │   ├── todoist/      # task-manager provider: adapter, mapper, sync half, writers, absorbers
@@ -115,8 +115,8 @@ provider actions. A provider's name never appears in the chain.
 | `src/tasks/`          | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
 | `src/shared/`         | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
-| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and the generic mirror-sync action                                                       | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin adapter, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
+| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store and project-source ports, and the pass assembler                                                       | TypeScript                   | in-process       |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -207,6 +207,22 @@ consists of the port layer and the pure core:
   implements `OriginPort` over the host vault API: it reads a task note into
   the canonical fields, writes a reconciled value back, and trashes the note.
   It is an infrastructure peer, not a capability adapter.
+- **The baseline store port** (`BaselineStorePort`). The core's need to read and
+  write one side's baseline for an entity + field — the memory the merge diffs
+  against. Its adapter (`infrastructure/registry/CoreBaselineStoreAdapter`)
+  persists to `data.json` under the registry's new `syncState.coreBaselines`
+  key, leaving the existing chain's per-mirror bases untouched.
+- **The project source port** (`ProjectSourcePort`). The core's need to read a
+  project's declared connections as `{application, target}` envelopes and to
+  enumerate the project's task notes. Its adapter
+  (`infrastructure/vault/VaultProjectSourceAdapter`) reuses the legacy vault
+  module's connections codec and note reads.
+- **The pass assembler** (`AssembleProjectPassAction`). Given a project, it
+  resolves each connection envelope to its registered adapter, assembles the
+  origin side through `OriginPort` and each mirror's baseline through the
+  baseline store, runs `MirrorSyncAction` once per (entity, canonical value
+  field), and persists the advanced baselines. It is inert until a test (or a
+  later slice) drives it; the existing chain remains the runtime.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -247,7 +263,9 @@ consists of the port layer and the pure core:
   last-synced base, a diff view whose body is a digest), `ports` (provider,
   project, last poll, lane names), per-connection identities
   (`projects.<name>.identities.<connectionSlug>`), watch state, the
-  per-project `fullScanPending` marker, and the per-surface `projectCursors`.
+  per-project `fullScanPending` marker, the per-surface `projectCursors`, and
+  `coreBaselines` (the new core's per-side, per-entity, per-field baselines,
+  separate from the existing chain's `items.<handle>.base`).
   Ports are keyed by the note's connection slug, so a project can hold two
   connections of the same tool; a slug rename re-keys the port in lockstep.
   Written only through `SyncStateAdapter`, behind a serialization mutex it
@@ -309,7 +327,10 @@ over HTTPS.
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
     are the `src/` module folders plus the src root (the composition root);
     `core/` is the inner block and imports no module; `infrastructure/` may
-    import `core/` only; `shared/` imports from no module; provider modules
+    import `core/` only, with one transitional, file-scoped exception — the
+    vault project-source adapter reuses the legacy `vault/` connections codec
+    and note reads while the old chain is retired; `shared/` imports from no
+    module; provider modules
     never import each other; neutral modules consume the kernel and the ports
     that live in it, never a provider adapter directly; the composition root
     wires everything. An unlisted import edge fails the lint, so the dependency
@@ -362,9 +383,12 @@ developer manual records the remaining code-vs-brief discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is a walking skeleton:
 the shape is built and proven on the `Status` field through the conformance
-adapter, and GitHub and Todoist mirror adapters now implement the capability
-ports. Neither adapter is wired at the composition root; moving the vault onto
-the origin side is a later slice, and the existing chain is unchanged.
+adapter, GitHub and Todoist mirror adapters now implement the capability
+ports, the vault origin adapter completes the origin round-trip, and the pass
+assembler plus the core baseline store assemble a whole project pass and
+persist its baselines. None of it is wired at the composition root; running
+the assembled pass in the runtime is a later slice, and the existing chain is
+unchanged.
 
 ## 10. Project Identification
 
