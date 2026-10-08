@@ -75,7 +75,10 @@ import {
 import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
 import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
 import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
-import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
+import {
+  CodeHostMirrorAdapter,
+  type BoardIdentity,
+} from './infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
 import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
@@ -157,10 +160,11 @@ function composeTaskFieldReconciler(
     createTodoistTransport,
   );
   const mirrorAdapters: MirrorAdapterFactoryPort = {
-    create: (application, target) =>
+    create: (application, target, connectionSlug, projectName) =>
       createMirrorAdapter(
         application,
         target,
+        () => syncState.getIdentity(projectName, connectionSlug),
         codeHostTransport,
         taskManagerTransport,
       ),
@@ -183,13 +187,14 @@ function composeTaskFieldReconciler(
 function createMirrorAdapter(
   application: string,
   target: string,
+  boardIdentity: () => Promise<BoardIdentity | null>,
   codeHost: CodeHostTransport,
   taskManager: TaskManagerTransport,
 ): RegisteredAdapter | null {
   if (application === 'github') {
     return gateMirror(
       githubDescriptor(),
-      new CodeHostMirrorAdapter(codeHost, target),
+      new CodeHostMirrorAdapter(codeHost, target, boardIdentity),
     );
   }
   if (application === 'todoist') {
