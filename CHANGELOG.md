@@ -1,3 +1,18 @@
+# [0.14.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.1...0.14.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** discover the project home note name-agnostically ([6bc4e72](https://github.com/99linesofcode/obsidian-project-management/commit/6bc4e72febfe17ede353a3e325dde5858400bbac))
+
+
+### Features
+
+* **core:** carry the archived timestamp through the project port ([5e4e6bb](https://github.com/99linesofcode/obsidian-project-management/commit/5e4e6bba73a7fa585ae03371bbf04ea2e33aad27))
+* **core:** reconcile project lifecycle through the multi-adapter core ([2a6d99d](https://github.com/99linesofcode/obsidian-project-management/commit/2a6d99da91582d58efc63c3a750357468d04cacc))
+
+
+
 ## [0.13.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.0...0.13.1) (2026-10-08)
 
 
@@ -50,15 +65,6 @@
 ### Features
 
 * **infrastructure:** add the Todoist mirror adapter and its descriptor ([c37c897](https://github.com/99linesofcode/obsidian-project-management/commit/c37c8972589e4855736a3ba65c90969da15d378b))
-
-
-
-# [0.10.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.9.0...0.10.0) (2026-10-08)
-
-
-### Features
-
-* **infrastructure:** add the GitHub mirror adapter and its descriptor ([b06eb7a](https://github.com/99linesofcode/obsidian-project-management/commit/b06eb7a80b935532ce5d872a9bdc227586eed961))
 
 
 
