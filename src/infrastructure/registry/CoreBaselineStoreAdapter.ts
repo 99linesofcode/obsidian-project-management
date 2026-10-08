@@ -19,9 +19,13 @@ export class CoreBaselineStoreAdapter implements BaselineStorePort {
     side: string,
   ): Promise<Baseline | null> {
     const data = await this.storage.load();
-    const raw = baselinesOf(data)[entityId];
-    const fieldNode = isRecord(raw) ? raw[field] : undefined;
-    const entry = isRecord(fieldNode) ? fieldNode[side] : undefined;
+    const entry = readPath(data, [
+      SYNC_STATE_KEY,
+      CORE_BASELINES_KEY,
+      entityId,
+      field,
+      side,
+    ]);
     if (!isRecord(entry)) {
       return null;
     }
@@ -35,22 +39,27 @@ export class CoreBaselineStoreAdapter implements BaselineStorePort {
     baseline: Baseline,
   ): Promise<void> {
     const data = await this.storage.load();
-    const entity = ensureRecord(baselinesOf(data), entityId);
+    const syncState = ensureRecord(data, SYNC_STATE_KEY);
+    const baselines = ensureRecord(syncState, CORE_BASELINES_KEY);
+    const entity = ensureRecord(baselines, entityId);
     const fieldNode = ensureRecord(entity, field);
     fieldNode[side] = { value: baseline.value, completed: baseline.completed };
     await this.storage.save(data);
   }
 }
 
-function baselinesOf(data: Record<string, unknown>): Record<string, unknown> {
-  const syncState = isRecord(data[SYNC_STATE_KEY]) ? data[SYNC_STATE_KEY] : {};
-  if (!isRecord(data[SYNC_STATE_KEY])) {
-    data[SYNC_STATE_KEY] = syncState;
+function readPath(
+  data: Record<string, unknown>,
+  keys: readonly string[],
+): unknown {
+  let current: unknown = data;
+  for (const key of keys) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+    current = current[key];
   }
-  if (!isRecord(syncState[CORE_BASELINES_KEY])) {
-    syncState[CORE_BASELINES_KEY] = {};
-  }
-  return syncState[CORE_BASELINES_KEY] as Record<string, unknown>;
+  return current;
 }
 
 function ensureRecord(
