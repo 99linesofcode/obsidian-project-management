@@ -1,3 +1,12 @@
+# [0.10.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.9.0...0.10.0) (2026-10-08)
+
+
+### Features
+
+* **infrastructure:** add the GitHub mirror adapter and its descriptor ([b06eb7a](https://github.com/99linesofcode/obsidian-project-management/commit/b06eb7a80b935532ce5d872a9bdc227586eed961))
+
+
+
 # [0.9.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.8.0...0.9.0) (2026-10-08)
 
 
@@ -61,30 +70,6 @@
 ### Bug Fixes
 
 * **lint:** classify the composition root and arm the unknown-file gate ([cfdcb32](https://github.com/99linesofcode/obsidian-project-management/commit/cfdcb3275626b5f76c0b964f75472e51ed0697e1))
-
-
-
-# [0.5.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.4.0...v0.5.0) (2026-10-06)
-
-
-### Bug Fixes
-
-* registry invariants — handle re-pointing, notePath eviction, cross-project item relocation, version-gated migrations, conformance suite (t15) ([db97b47](https://github.com/99linesofcode/obsidian-project-management/commit/db97b4764db87d8ae5d10831a60fa58f807e2190))
-* the final verification findings — registry-first creation, cursor watermark, settings mutex ([75254cf](https://github.com/99linesofcode/obsidian-project-management/commit/75254cfad5da9f08d717cd146443efaf81bf3cce))
-* the outward placeholder coexistence window — heal the stale placeholder, scan all refs ([22a32e8](https://github.com/99linesofcode/obsidian-project-management/commit/22a32e8a9aabc1b89674d7e17b0e881530989398))
-* the probe gate discovers GitHub-side issue relations — one-time full scan per project ([f2c511a](https://github.com/99linesofcode/obsidian-project-management/commit/f2c511ae77e5f5f3a85e7785e6924f92070a343d))
-* the review's blocking findings — registry integrity, settings isolation, the ladder fallback ([8f2b09d](https://github.com/99linesofcode/obsidian-project-management/commit/8f2b09da8c4afd10d19ce0c31fbb899fe28894da))
-
-
-### Features
-
-* GitHub sub-issues become Todoist subtasks via affiliation seeding (t8) ([210fea7](https://github.com/99linesofcode/obsidian-project-management/commit/210fea73511f4cbff9f44e63206fb27ae41fbbc2))
-* outward materialization and project propagation across surfaces ([0eaf0f7](https://github.com/99linesofcode/obsidian-project-management/commit/0eaf0f7557b21831af427761a9b6a6f1304a1f29))
-* slices never materialize in Todoist — flatten-before-delete retirement ([44d8a51](https://github.com/99linesofcode/obsidian-project-management/commit/44d8a516cf6e575db47d61df5a02c6cf50c5c7b7))
-* the canonical identity core — TaskData, Mirror, the uuid registry with per-mirror bases ([fd1d220](https://github.com/99linesofcode/obsidian-project-management/commit/fd1d220e7f9c32beb973ab852babfc15d7b5f3c0))
-* the project home note renamed to _<folder> ([fb3bf1d](https://github.com/99linesofcode/obsidian-project-management/commit/fb3bf1d1d7d045afb0769ad7f68a8bc4be019ed1))
-* the project layer — archivedAt, the home-note convention, the dead-code sweep ([024c246](https://github.com/99linesofcode/obsidian-project-management/commit/024c2468119adad22df252aea4fb31b4dc1b4fc5))
-* the vault identity layer and both sync halves on the registry ([4c4eb16](https://github.com/99linesofcode/obsidian-project-management/commit/4c4eb1608e141aa77deb5cf2dbd597848e1e74b3))
 
 
 
