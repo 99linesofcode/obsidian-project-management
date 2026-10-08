@@ -23,7 +23,7 @@ axis is carried by file-name role suffixes (`Action`, `Adapter`, `Port`,
 obsidian-project-management/
 ├── src/
 │   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action
-│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake and the vault origin adapter)
+│   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake, the vault origin adapter and the GitHub mirror adapter)
 │   ├── app/          # driving side: plugin lifecycle, scheduler, queue, commands, modals, settings
 │   ├── github/       # code-host provider: adapter, mapper, sync half, writer
 │   ├── todoist/      # task-manager provider: adapter, mapper, sync half, writers, absorbers
@@ -116,7 +116,7 @@ provider actions. A provider's name never appears in the chain.
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
 | `src/shared/`         | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
 | `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and the generic mirror-sync action                                                       | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter and the vault origin adapter                                                                                                              | TypeScript                   | external tools   |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin adapter and the GitHub mirror adapter                                                                                    | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -218,6 +218,13 @@ consists of the port layer and the pure core:
   core edit. `infrastructure/` imports `core/` only, and the
   provider-vocabulary gate keeps each namespace the sole home for its
   provider's name.
+- **The GitHub mirror adapter** (`infrastructure/github/`) implements the
+  capability ports for the code host: title and body as the issue, Status as the
+  board card's lane, completion as the issue state (kept separate from the
+  lane), subtasks as the sub-issue relation, label as the issue labels, and the
+  project, capture, complete-fetch and per-field-timestamp surfaces. Its
+  descriptor registers under the application id `github`. It is not wired at the
+  composition root; the existing GitHub half is unchanged.
 
 ## 4. Data Stores
 
@@ -348,9 +355,10 @@ developer manual records the remaining code-vs-brief discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is a walking skeleton:
 the shape is built and proven on the `Status` field through the conformance
-adapter, but no real adapter is migrated. Moving the GitHub and Todoist
-providers onto the capability ports, and the vault onto the origin side, are
-later slices; the existing chain is unchanged.
+adapter, and a GitHub mirror adapter now implements the capability ports. The
+GitHub adapter is not wired at the composition root; moving the Todoist
+provider onto the capability ports, and the vault onto the origin side, are
+later slices, and the existing chain is unchanged.
 
 ## 10. Project Identification
 
