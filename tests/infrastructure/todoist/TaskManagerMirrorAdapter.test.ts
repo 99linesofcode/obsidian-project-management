@@ -427,6 +427,20 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
     expect(project!.archived).toBe(true);
     expect(transport.calls[1]!.path).toBe('/projects/P1/archive');
   });
+
+  it('renames the project', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { id: 'P1', name: 'New Name' } },
+    ]);
+
+    await adapter.renameProject(target(), 'New Name');
+
+    expect(transport.calls[0]).toEqual({
+      method: 'POST',
+      path: '/projects/P1',
+      body: JSON.stringify({ name: 'New Name' }),
+    });
+  });
 });
 
 describe('todoistDescriptor — registers with the core (F01 ACM-8, ACM-9)', () => {

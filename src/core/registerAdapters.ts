@@ -91,5 +91,11 @@ function gatePorts(registration: AdapterRegistration): RegisteredAdapter {
     )
       ? adapter
       : undefined,
+    taskLock: descriptor.capabilities.includes('task-locking')
+      ? adapter
+      : undefined,
+    activity: descriptor.capabilities.includes('project-activity')
+      ? adapter
+      : undefined,
   });
 }

@@ -75,8 +75,21 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     );
   }
 
+  async renameProject(target: string, name: string): Promise<void> {
+    const connection = TaskManagerTarget.parse(target);
+    await this.postOk(
+      `/projects/${connection.projectId}`,
+      { name },
+      'rename project',
+    );
+  }
+
   async archivedTime(_target: string): Promise<string | null> {
     return null;
+  }
+
+  async latestActivity(): Promise<never> {
+    throw new Error('task manager: does not support project activity');
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
@@ -181,6 +194,14 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
       return;
     }
     ensureSuccess(response);
+  }
+
+  async lockTask(_handle: string): Promise<void> {
+    throw new Error('task manager: does not support task locking');
+  }
+
+  async unlockTask(_handle: string): Promise<void> {
+    throw new Error('task manager: does not support task unlocking');
   }
 
   async capture(target: string): Promise<CanonicalTask[]> {

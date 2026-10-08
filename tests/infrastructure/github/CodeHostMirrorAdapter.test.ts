@@ -83,11 +83,15 @@ class FakeTransport implements CodeHostTransport {
   readonly bodies: string[] = [];
   readonly paths: string[] = [];
   readonly derivationBodies: string[] = [];
-  private readonly responses: Array<{ status: number; json: unknown }>;
+  private readonly responses: Array<{
+    status: number;
+    json: unknown;
+    etag?: string;
+  }>;
   private readonly derivation: Array<{ status: number; json: unknown }>;
 
   constructor(
-    responses: Array<{ status: number; json: unknown }>,
+    responses: Array<{ status: number; json: unknown; etag?: string }>,
     derivation: Array<{ status: number; json: unknown }> = [
       repoBoardsResponse(),
       projectFieldsResponse(),
@@ -107,6 +111,14 @@ class FakeTransport implements CodeHostTransport {
   }
 
   async get(path: string): Promise<{ status: number; json: unknown }> {
+    this.paths.push(path);
+    return this.next();
+  }
+
+  async getConditional(
+    path: string,
+    _etag?: string,
+  ): Promise<{ status: number; json: unknown; etag?: string }> {
     this.paths.push(path);
     return this.next();
   }
@@ -138,7 +150,7 @@ class FakeTransport implements CodeHostTransport {
     return this.next();
   }
 
-  private next(): { status: number; json: unknown } {
+  private next(): { status: number; json: unknown; etag?: string } {
     const response = this.responses.shift();
     if (response === undefined) {
       throw new Error('fake transport: no more responses queued');
@@ -220,7 +232,9 @@ function restIssue(
   };
 }
 
-function adapterWith(responses: Array<{ status: number; json: unknown }>): {
+function adapterWith(
+  responses: Array<{ status: number; json: unknown; etag?: string }>,
+): {
   adapter: CodeHostMirrorAdapter;
   transport: FakeTransport;
 } {
@@ -475,12 +489,90 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(transport.bodies[1]).toContain('"projectId":"PVT_123"');
   });
 
+  it('renames the board through updateProjectV2', async () => {
+    const { adapter, transport } = adapterWith([
+      {
+        status: 200,
+        json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
+      },
+    ]);
+
+    await adapter.renameProject(target(), 'New Name');
+
+    expect(transport.bodies[0]).toContain('RenameProject');
+    expect(transport.bodies[0]).toContain('"title":"New Name"');
+    expect(transport.bodies[0]).toContain('"projectId":"PVT_123"');
+  });
+
+  it('locks a task conversation through lockLockable', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { node_id: 'I_kwDOAAAA42' } },
+      {
+        status: 200,
+        json: { data: { lockLockable: { lockedRecord: { locked: true } } } },
+      },
+    ]);
+
+    await adapter.lockTask(ISSUE_URL);
+
+    expect(transport.paths[0]).toBe('/repos/acme/widgets/issues/42');
+    expect(transport.bodies[0]).toContain('LockTask');
+    expect(transport.bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
+  });
+
+  it('unlocks a task conversation through unlockLockable', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { node_id: 'I_kwDOAAAA42' } },
+      {
+        status: 200,
+        json: {
+          data: { unlockLockable: { unlockedRecord: { locked: false } } },
+        },
+      },
+    ]);
+
+    await adapter.unlockTask(ISSUE_URL);
+
+    expect(transport.bodies[0]).toContain('UnlockTask');
+    expect(transport.bodies[0]).toContain('"nodeId":"I_kwDOAAAA42"');
+  });
+
+  it('reads the newest issue activity, ignoring pull requests', async () => {
+    const { adapter, transport } = adapterWith([
+      {
+        status: 200,
+        json: [
+          { created_at: '2026-09-25T10:00:00Z' },
+          { created_at: '2026-09-24T10:00:00Z', pull_request: {} },
+        ],
+        etag: 'etag-2',
+      },
+    ]);
+
+    const observation = await adapter.latestActivity(target(), 'etag-1');
+
+    expect(transport.paths[0]).toBe(
+      '/repos/acme/widgets/issues?state=all&sort=created&direction=desc&per_page=10',
+    );
+    expect(observation.changed).toBe(true);
+    expect(observation.newestCreatedAt).toBe('2026-09-25T10:00:00Z');
+    expect(observation.etag).toBe('etag-2');
+  });
+
+  it('reports no change when the conditional read answers 304', async () => {
+    const { adapter } = adapterWith([{ status: 304, json: null }]);
+
+    const observation = await adapter.latestActivity(target(), 'etag-1');
+
+    expect(observation.changed).toBe(false);
+    expect(observation.newestCreatedAt).toBeNull();
+  });
+
   it('returns the decisive per-field time', async () => {
     const { adapter } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
     ]);
     const title = await adapter.fieldTime(ISSUE_URL, 'title');
-
     const { adapter: second } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
     ]);
@@ -975,6 +1067,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
     const handles: MirrorHandlePort = {
       resolve: async (connection, entity) =>
         connection === 'gh' && entity === entityId ? ISSUE_URL : null,
+      list: async () => [],
       record: async () => {},
     };
     const action = new AssembleProjectPassAction(

@@ -3,6 +3,7 @@ import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
 import { CapturedProject } from '../../core/data/CapturedProject.js';
+import { ProjectActivityObservation } from '../../core/data/ProjectActivityObservation.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 import type {
   CodeHostResponse,
@@ -227,6 +228,30 @@ const SET_PROJECT_CLOSED_MUTATION = `
   mutation SetProjectClosed($projectId: ID!, $closed: Boolean!) {
     updateProjectV2(input: { projectId: $projectId, closed: $closed }) {
       projectV2 { id }
+    }
+  }
+`;
+
+const RENAME_PROJECT_MUTATION = `
+  mutation RenameProject($projectId: ID!, $title: String!) {
+    updateProjectV2(input: { projectId: $projectId, title: $title }) {
+      projectV2 { id }
+    }
+  }
+`;
+
+const LOCK_TASK_MUTATION = `
+  mutation LockTask($nodeId: ID!) {
+    lockLockable(input: { lockableId: $nodeId }) {
+      lockedRecord { ... on Issue { locked } }
+    }
+  }
+`;
+
+const UNLOCK_TASK_MUTATION = `
+  mutation UnlockTask($nodeId: ID!) {
+    unlockLockable(input: { lockableId: $nodeId }) {
+      unlockedRecord { ... on Issue { locked } }
     }
   }
 `;
@@ -478,8 +503,65 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     });
   }
 
+  async renameProject(target: string, name: string): Promise<void> {
+    const connection = CodeHostTarget.parse(target);
+    const board = await this.requireBoard(connection.repoUrl);
+    await this.graphql(RENAME_PROJECT_MUTATION, {
+      projectId: board.projectNodeId,
+      title: name,
+    });
+  }
+
+  async lockTask(handle: string): Promise<void> {
+    const nodeId = await this.issueNodeId(handle);
+    await this.graphql(LOCK_TASK_MUTATION, { nodeId });
+  }
+
+  async unlockTask(handle: string): Promise<void> {
+    const nodeId = await this.issueNodeId(handle);
+    await this.graphql(UNLOCK_TASK_MUTATION, { nodeId });
+  }
+
   async archivedTime(_target: string): Promise<string | null> {
     return null;
+  }
+
+  async latestActivity(
+    target: string,
+    etag?: string,
+  ): Promise<ProjectActivityObservation> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const path = `/repos/${repo.owner}/${repo.name}/issues?state=all&sort=created&direction=desc&per_page=10`;
+    const response = await this.transport.getConditional(path, etag);
+    if (response.status === 304) {
+      return new ProjectActivityObservation({
+        changed: false,
+        newestCreatedAt: null,
+        etag: null,
+      });
+    }
+    if (response.status !== 200) {
+      throw new Error(
+        `code host: REST request failed with status ${response.status}`,
+      );
+    }
+    if (!Array.isArray(response.json)) {
+      throw new Error('code host: unexpected REST response shape');
+    }
+    const issues = response.json
+      .filter(isRecord)
+      .filter((entry) => !('pull_request' in entry));
+    const newest = issues[0];
+    const newestCreatedAt =
+      newest !== undefined && typeof newest.created_at === 'string'
+        ? newest.created_at
+        : null;
+    return new ProjectActivityObservation({
+      changed: true,
+      newestCreatedAt,
+      etag: response.etag ?? null,
+    });
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {

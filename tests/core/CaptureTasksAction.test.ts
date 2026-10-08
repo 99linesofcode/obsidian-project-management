@@ -83,6 +83,8 @@ function registered(capture: CapturePort): RegisteredAdapter {
     projectCapture: undefined,
     completeFetch: undefined,
     timestamps: undefined,
+    taskLock: undefined,
+    activity: undefined,
   });
 }
 

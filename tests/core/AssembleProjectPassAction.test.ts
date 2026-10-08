@@ -185,6 +185,7 @@ function setup() {
   const handles: MirrorHandlePort = {
     resolve: async (connection, entityId) =>
       connection === 'conformance' && entityId === TASK_PATH ? TASK_PATH : null,
+    list: async () => [],
     record: async () => {},
   };
   const mirrorAdapters: MirrorAdapterFactoryPort = {

@@ -34,6 +34,7 @@ export class ProjectLifecycleSyncAction {
 
     return new ProjectLifecycleRecord({
       frozen: result.value === 'true',
+      wasFrozen: pass.origin.baseline?.value === 'true',
       result,
       written: mirrors.written,
       advanced,

@@ -100,6 +100,11 @@ import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js
 import type { TaskFieldReconciler } from './sync/TaskFieldReconciler.js';
 import type { TaskCaptureReconciler } from './sync/TaskCaptureReconciler.js';
 import type { ProjectLifecycleReconciler } from './sync/ProjectLifecycleReconciler.js';
+import type { ProjectTaskLocksReconciler } from './sync/ProjectTaskLocksReconciler.js';
+import type { ProjectReactivationReconciler } from './sync/ProjectReactivationReconciler.js';
+import { ReconcileProjectTaskLocksAction } from './core/ReconcileProjectTaskLocksAction.js';
+import { ReactivateFrozenProjectAction } from './core/ReactivateFrozenProjectAction.js';
+import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
 
 async function request(
   token: string,
@@ -126,6 +131,24 @@ function createCodeHostTransport(token: string): CodeHostTransport {
   return {
     post: (body) => request(token, 'POST', '/graphql', body),
     get: (path) => request(token, 'GET', path),
+    async getConditional(path, etag) {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (etag) {
+        headers['If-None-Match'] = etag;
+      }
+      const response = await requestUrl({
+        url: `https://api.github.com${path}`,
+        method: 'GET',
+        headers,
+        throw: false,
+      });
+      const responseEtag = response.headers['etag'];
+      return responseEtag === undefined
+        ? { status: response.status, json: response.json }
+        : { status: response.status, json: response.json, etag: responseEtag };
+    },
     patch: (path, body) => request(token, 'PATCH', path, body),
     postPath: (path, body) => request(token, 'POST', path, body),
     putPath: (path, body) => request(token, 'PUT', path, body),
@@ -166,6 +189,8 @@ interface ProjectCaptureReconciler {
 interface CoreReconcilers {
   taskFields: TaskFieldReconciler;
   lifecycle: ProjectLifecycleReconciler;
+  taskLocks: ProjectTaskLocksReconciler;
+  reactivation: ProjectReactivationReconciler;
   capture: ProjectCaptureReconciler;
   taskCapture: TaskCaptureReconciler;
 }
@@ -195,19 +220,36 @@ function composeCoreReconcilers(
     plugin.settings.statusOptions,
   );
 
+  const origin = new VaultOriginAdapter(plugin.app);
+  const handles = new RegistryMirrorHandleAdapter(syncState);
   const taskFieldPass = new AssembleProjectPassAction(
     projectSource,
-    new VaultOriginAdapter(plugin.app),
+    origin,
     baselines,
-    new RegistryMirrorHandleAdapter(syncState),
+    handles,
     mirrorAdapters,
   );
+  const lifecycleOrigin = new VaultProjectLifecycleAdapter(vault, syncState);
   const lifecyclePass = new AssembleProjectLifecyclePassAction(
     projectSource,
-    new VaultProjectLifecycleAdapter(vault, syncState),
+    lifecycleOrigin,
     baselines,
     mirrorAdapters,
     new RegistryMirrorProjectAdapter(syncState),
+  );
+  const taskLocks = new ReconcileProjectTaskLocksAction(
+    projectSource,
+    origin,
+    handles,
+    mirrorAdapters,
+    plugin.settings.doneOptionName,
+  );
+  const reactivation = new ReactivateFrozenProjectAction(
+    projectSource,
+    lifecycleOrigin,
+    baselines,
+    mirrorAdapters,
+    new CoreProjectWatchAdapter(baselineStorage),
   );
 
   const capture = new CaptureProjectsAction(
@@ -233,9 +275,16 @@ function composeCoreReconcilers(
       },
     },
     lifecycle: {
-      reconcile: async (project) => ({
-        frozen: (await lifecyclePass.invoke(project)).frozen,
-      }),
+      reconcile: async (project) => {
+        const record = await lifecyclePass.invoke(project);
+        return { frozen: record.frozen, wasFrozen: record.wasFrozen };
+      },
+    },
+    taskLocks: {
+      reconcile: (input) => taskLocks.invoke(input),
+    },
+    reactivation: {
+      reactivate: (project) => reactivation.invoke(project),
     },
     capture: {
       capture: (syncedAt) => capture.invoke(syncedAt),
@@ -519,6 +568,12 @@ function composePlugin(
     | undefined => coreReconcilers()?.lifecycle;
   const taskCaptureReconciler = (): TaskCaptureReconciler | undefined =>
     coreReconcilers()?.taskCapture;
+  const projectTaskLocksReconciler = ():
+    | ProjectTaskLocksReconciler
+    | undefined => coreReconcilers()?.taskLocks;
+  const projectReactivationReconciler = ():
+    | ProjectReactivationReconciler
+    | undefined => coreReconcilers()?.reactivation;
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
@@ -535,6 +590,8 @@ function composePlugin(
     taskFieldReconciler,
     projectLifecycleReconciler,
     taskCaptureReconciler,
+    projectTaskLocksReconciler,
+    projectReactivationReconciler,
   );
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(

@@ -116,6 +116,19 @@ class RecordingHandles implements MirrorHandlePort {
     return this.handles.get(`${connection}\u0000${notePath}`) ?? null;
   }
 
+  async list(
+    _project: string,
+    connection: string,
+  ): Promise<readonly { handle: string; notePath: string }[]> {
+    const prefix = `${connection}\u0000`;
+    return [...this.handles.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, handle]) => ({
+        handle,
+        notePath: key.slice(prefix.length),
+      }));
+  }
+
   async record(
     project: string,
     connection: string,

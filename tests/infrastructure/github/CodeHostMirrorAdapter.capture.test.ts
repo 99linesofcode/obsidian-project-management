@@ -39,6 +39,9 @@ class ViewerBoardsTransport implements CodeHostTransport {
   async get(): Promise<never> {
     throw new Error('not used');
   }
+  async getConditional(): Promise<never> {
+    throw new Error('not used');
+  }
   async patch(): Promise<never> {
     throw new Error('not used');
   }
