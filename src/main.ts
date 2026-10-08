@@ -147,13 +147,18 @@ function createTransport(token: string): Transport {
   };
 }
 
-function composeTaskFieldReconciler(
+interface CoreReconcilers {
+  taskFields: TaskFieldReconciler;
+  lifecycle: ProjectLifecycleReconciler;
+}
+
+function composeCoreReconcilers(
   plugin: ProjectManagementPlugin,
   vault: VaultAdapter,
   syncState: SyncStateAdapter,
   secrets: SecretStore,
   baselineStorage: CoreBaselineStorage,
-): TaskFieldReconciler {
+): CoreReconcilers {
   const codeHostTransport = createCodeHostTransport(
     secrets.load(GITHUB_TOKEN_KEY) ?? '',
   );
@@ -162,46 +167,39 @@ function composeTaskFieldReconciler(
     TODOIST_TOKEN_KEY,
     createTodoistTransport,
   );
-  const assemblePass = new AssembleProjectPassAction(
-    new VaultProjectSourceAdapter(vault),
+  const projectSource = new VaultProjectSourceAdapter(vault);
+  const baselines = new CoreBaselineStoreAdapter(baselineStorage);
+  const mirrorAdapters = mirrorAdapterFactory(
+    syncState,
+    codeHostTransport,
+    taskManagerTransport,
+  );
+
+  const taskFieldPass = new AssembleProjectPassAction(
+    projectSource,
     new VaultOriginAdapter(plugin.app),
-    new CoreBaselineStoreAdapter(baselineStorage),
+    baselines,
     new RegistryMirrorHandleAdapter(syncState),
-    mirrorAdapterFactory(syncState, codeHostTransport, taskManagerTransport),
+    mirrorAdapters,
   );
-
-  return {
-    reconcile: async (project) => {
-      await assemblePass.invoke(project);
-    },
-  };
-}
-
-function composeProjectLifecycleReconciler(
-  vault: VaultAdapter,
-  syncState: SyncStateAdapter,
-  secrets: SecretStore,
-  baselineStorage: CoreBaselineStorage,
-): ProjectLifecycleReconciler {
-  const codeHostTransport = createCodeHostTransport(
-    secrets.load(GITHUB_TOKEN_KEY) ?? '',
-  );
-  const taskManagerTransport = transportFromSecret(
-    secrets,
-    TODOIST_TOKEN_KEY,
-    createTodoistTransport,
-  );
-  const assemblePass = new AssembleProjectLifecyclePassAction(
-    new VaultProjectSourceAdapter(vault),
+  const lifecyclePass = new AssembleProjectLifecyclePassAction(
+    projectSource,
     new VaultProjectLifecycleAdapter(vault, syncState),
-    new CoreBaselineStoreAdapter(baselineStorage),
-    mirrorAdapterFactory(syncState, codeHostTransport, taskManagerTransport),
+    baselines,
+    mirrorAdapters,
   );
 
   return {
-    reconcile: async (project) => ({
-      frozen: (await assemblePass.invoke(project)).frozen,
-    }),
+    taskFields: {
+      reconcile: async (project) => {
+        await taskFieldPass.invoke(project);
+      },
+    },
+    lifecycle: {
+      reconcile: async (project) => ({
+        frozen: (await lifecyclePass.invoke(project)).frozen,
+      }),
+    },
   };
 }
 
@@ -430,35 +428,25 @@ function composePlugin(
     },
   };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
-  let composedTaskFieldReconciler: TaskFieldReconciler | undefined;
-  const taskFieldReconciler = (): TaskFieldReconciler | undefined => {
+  let composedCoreReconcilers: CoreReconcilers | undefined;
+  const coreReconcilers = (): CoreReconcilers | undefined => {
     if (!plugin.settings.multiAdapterEngine) {
       return undefined;
     }
-    composedTaskFieldReconciler ??= composeTaskFieldReconciler(
+    composedCoreReconcilers ??= composeCoreReconcilers(
       plugin,
       vault,
       syncState,
       secrets,
       baselineStorage,
     );
-    return composedTaskFieldReconciler;
+    return composedCoreReconcilers;
   };
-  let composedProjectLifecycleReconciler: ProjectLifecycleReconciler | undefined;
+  const taskFieldReconciler = (): TaskFieldReconciler | undefined =>
+    coreReconcilers()?.taskFields;
   const projectLifecycleReconciler = ():
     | ProjectLifecycleReconciler
-    | undefined => {
-    if (!plugin.settings.multiAdapterEngine) {
-      return undefined;
-    }
-    composedProjectLifecycleReconciler ??= composeProjectLifecycleReconciler(
-      vault,
-      syncState,
-      secrets,
-      baselineStorage,
-    );
-    return composedProjectLifecycleReconciler;
-  };
+    | undefined => coreReconcilers()?.lifecycle;
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
