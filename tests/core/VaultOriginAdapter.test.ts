@@ -176,7 +176,7 @@ describe('VaultOriginAdapter — the origin read (F02 NWM-28)', () => {
         body: 'Body text',
         status: 'Building',
         completed: true,
-        parent: 'Slice',
+        parent: null,
         labels: ['alpha', 'beta'],
       }),
     );

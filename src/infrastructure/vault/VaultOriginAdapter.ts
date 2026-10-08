@@ -55,7 +55,7 @@ export class VaultOriginAdapter implements OriginPort {
       body: note.body,
       status: note.status,
       completed: note.completed,
-      parent: note.parent,
+      parent: null,
       labels: note.labels,
     });
   }
