@@ -64,6 +64,10 @@ class FieldOrigin implements OriginPort {
     });
   }
 
+  async readTask(): Promise<CanonicalTask | null> {
+    return null;
+  }
+
   async applyField(): Promise<void> {}
   async trash(): Promise<void> {}
 }
@@ -95,6 +99,8 @@ class FixedHandles implements MirrorHandlePort {
   async resolve(connection: string, entityId: string): Promise<string | null> {
     return this.handles.get(`${connection}\u0000${entityId}`) ?? null;
   }
+
+  async record(): Promise<void> {}
 }
 
 function registeredMirror(applicationId: string): {
@@ -176,13 +182,13 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     );
   });
 
-  it('skips a connection whose entity has no resolved handle', async () => {
+  it('skips a connection whose entity has no origin task', async () => {
     const first = registeredMirror('mirror-a');
     first.adapter.seed(seededTask('handle-a', 'Building'));
 
     const projectSource = new FixedProjectSource();
     projectSource.connections = [connection('gh-main', 'target-a')];
-    const origin = mirrorLikeOrigin('Done');
+    const origin = new FieldOrigin();
     const factory = new RecordingFactory(
       new Map([['target-a', first.registered]]),
     );

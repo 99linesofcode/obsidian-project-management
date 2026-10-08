@@ -2,6 +2,7 @@ import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
 import type { CanonicalField } from '../../core/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../core/data/CanonicalTask.js';
 import { OriginObservation } from '../../core/data/OriginObservation.js';
 import type { OriginPort } from '../../core/ports/OriginPort.js';
 
@@ -37,6 +38,25 @@ export class VaultOriginAdapter implements OriginPort {
       currentCompleted: note.completed,
       fieldTime: new Date(file.stat.mtime).toISOString(),
       trustworthy: true,
+    });
+  }
+
+  async readTask(handle: string): Promise<CanonicalTask | null> {
+    const file = this.app.vault.getAbstractFileByPath(handle);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+
+    const note = parseTaskNote(await this.app.vault.read(file), handle);
+    return new CanonicalTask({
+      handle,
+      entityId: handle,
+      title: note.title,
+      body: note.body,
+      status: note.status,
+      completed: note.completed,
+      parent: note.parent,
+      labels: note.labels,
     });
   }
 

@@ -46,7 +46,7 @@ export class AssembleProjectPassAction {
 
     const records: PassRecord[] = [];
     for (const notePath of notePaths) {
-      const mirrors = await this.resolveMirrors(scoped, notePath);
+      const mirrors = await this.resolveMirrors(scoped, notePath, project);
       for (const field of MERGED_FIELDS) {
         records.push(await this.runField(notePath, field, mirrors));
       }
@@ -76,10 +76,16 @@ export class AssembleProjectPassAction {
   private async resolveMirrors(
     scoped: readonly ScopedMirror[],
     notePath: string,
+    project: string,
   ): Promise<MirrorSide[]> {
     const mirrors: MirrorSide[] = [];
     for (const { connection, adapter } of scoped) {
-      const handle = await this.handles.resolve(connection.slug, notePath);
+      const handle = await this.resolveHandle(
+        connection,
+        adapter,
+        notePath,
+        project,
+      );
       if (handle !== null) {
         mirrors.push(
           new MirrorSide({
@@ -91,6 +97,50 @@ export class AssembleProjectPassAction {
       }
     }
     return mirrors;
+  }
+
+  private async resolveHandle(
+    connection: DeclaredConnection,
+    adapter: RegisteredAdapter,
+    notePath: string,
+    project: string,
+  ): Promise<string | null> {
+    const handle = await this.handles.resolve(connection.slug, notePath);
+    if (handle !== null) {
+      return handle;
+    }
+    try {
+      return await this.materialize(connection, adapter, notePath, project);
+    } catch (error) {
+      console.error(
+        `AssembleProjectPassAction: materialization failed for ${notePath}`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  private async materialize(
+    connection: DeclaredConnection,
+    adapter: RegisteredAdapter,
+    notePath: string,
+    project: string,
+  ): Promise<string | null> {
+    const task = await this.origin.readTask(notePath);
+    if (task === null) {
+      return null;
+    }
+    const created = await adapter.tasks.createTask(
+      connection.envelope.target,
+      task,
+    );
+    await this.handles.record(
+      project,
+      connection.slug,
+      notePath,
+      created.handle,
+    );
+    return created.handle;
   }
 
   private async runField(

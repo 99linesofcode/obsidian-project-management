@@ -895,6 +895,10 @@ class FieldOrigin implements OriginPort {
     });
   }
 
+  async readTask(): Promise<CanonicalTask | null> {
+    return null;
+  }
+
   async applyField(write: CanonicalFieldWrite): Promise<void> {
     this.applied.push(write);
   }
@@ -971,6 +975,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
     const handles: MirrorHandlePort = {
       resolve: async (connection, entity) =>
         connection === 'gh' && entity === entityId ? ISSUE_URL : null,
+      record: async () => {},
     };
     const action = new AssembleProjectPassAction(
       projectSource,
