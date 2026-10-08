@@ -164,10 +164,11 @@ is unchanged. It consists of the port layer and the pure core:
 - **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
   `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
   `completion`, `Status`, `label`), and the optional `CapturePort`,
-  `CompleteFetchPort`, `TimestampedPort`. An adapter implements only the groups
-  it declares; an undeclared optional port is absent, so a capability the
-  adapter lacks has no interface to call. `TaskSurfacePort` carries one generic
-  write entry, `applyField`, that dispatches a canonical field to the
+  `CompleteFetchPort`, `TimestampedPort`, `TaskLockPort` (`task-locking`) and
+  `ProjectActivityPort` (`project-activity`). An adapter implements only the
+  groups it declares; an undeclared optional port is absent, so a capability
+  the adapter lacks has no interface to call. `TaskSurfacePort` carries one
+  generic write entry, `applyField`, that dispatches a canonical field to the
   adapter's own representation; the completion fact is a separate canonical
   field from the `Status` representation.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
@@ -281,7 +282,27 @@ is unchanged. It consists of the port layer and the pure core:
   (`infrastructure/vault/VaultProjectLifecycleAdapter`) discovers the home note
   name-agnostically — the same discovery the legacy chain uses, so an
   unmigrated note is never misread as archived — moves the project folder on a
-  freeze/unfreeze, and relocates the registry's entity paths in lockstep.
+  freeze/unfreeze, and relocates the registry's entity paths in lockstep. The
+  pass also renames a mirror project whose name drifted from the vault project
+  through `ProjectPort.renameProject`.
+- **The task-lock port** (`TaskLockPort`) and the task-lock action
+  (`ReconcileProjectTaskLocksAction`). The core's need to close a task's
+  conversation while its project is frozen and reopen it on unfreeze; the code
+  host declares `task-locking` and the task manager does not. On a lifecycle
+  transition the action enumerates the project's tracked mirror items through
+  the mirror-handle port, skips the tasks whose vault status is the done lane,
+  and locks the rest — or unlocks every tracked task on the unfreeze. The
+  lifecycle record carries the prior frozen state so the transition is known.
+- **The project-activity port** (`ProjectActivityPort`) and the reactivation
+  action (`ReactivateFrozenProjectAction`). The core's need to notice that new
+  work appeared on a frozen project's mirror; the code host declares
+  `project-activity`. The action runs before the lifecycle pass: when the origin
+  was already frozen and the mirror's newest item provably postdates the stored
+  watch cursor, it unfreezes the origin, so the lifecycle pass fans the unfreeze
+  out to every mirror. The first watch adopts the newest item as the cursor; a
+  quiet conditional read writes nothing. The watch state (`ProjectWatchPort` +
+  `infrastructure/registry/CoreProjectWatchAdapter`) is per project and
+  connection, persisted under a top-level `coreWatches` key.
 - **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
   need to build a mirror adapter for an application and a connection target. The
   composition root implements it over the provider adapters, so one adapter
@@ -315,16 +336,19 @@ is unchanged. It consists of the port layer and the pure core:
   spec's open questions). The vault sink is an infrastructure peer; the core
   names no provider.
 - **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
-  time through three reconciler providers, so toggling `multiAdapterEngine` takes
+  time through five reconciler providers, so toggling `multiAdapterEngine` takes
   effect on the next sync without a reload. When it is on, `SyncProjectAction`
-  runs the assembled lifecycle pass for the freeze verdict, the assembled task
-  capture for application-born tasks, and the assembled pass for task-field
-  reconciliation, migrates the project's home note through the legacy migration
-  action (which the skipped legacy lifecycle would otherwise have run), and skips
-  the legacy lifecycle step and the legacy code-host and task halves; probe,
-  board-ensure, vault consistency and the deletion sweep still run, and the
-  capture pre-tick runs the assembled core capture instead of the legacy capture
-  action. When it is off, the legacy chain runs exactly as before.
+  runs the reactivation action before the assembled lifecycle pass (unfreezing
+  the origin when newer mirror work appears), the assembled lifecycle pass for
+  the freeze verdict, the task-lock action on the freeze/unfreeze transition,
+  the assembled task capture for application-born tasks, and the assembled pass
+  for task-field reconciliation, migrates the project's home note through the
+  legacy migration action (which the skipped legacy lifecycle would otherwise
+  have run), and skips the legacy lifecycle step and the legacy code-host and
+  task halves; probe, board-ensure, vault consistency and the deletion sweep
+  still run, and the capture pre-tick runs the assembled core capture instead of
+  the legacy capture action. When it is off, the legacy chain runs exactly as
+  before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -372,7 +396,10 @@ is unchanged. It consists of the port layer and the pure core:
   shares with the settings save. A top-level `coreBaselines` key — a sibling
   of `syncState`, like the settings root writes — holds the new core's
   per-side, per-entity, per-field baselines, separate from the existing
-  chain's `items.<handle>.base`, so a registry write cannot clobber it.
+  chain's `items.<handle>.base`, so a registry write cannot clobber it. A
+  sibling `coreWatches` key holds the new core's per-project, per-connection
+  reactivation watch (the conditional read's etag and its newest-item cursor),
+  separate from the legacy chain's per-project watch state.
 - **`main.js`** — the built bundle; never authored.
 
 No other persistent store. The mirrors hold copies, never authority.
@@ -492,13 +519,17 @@ plus the core baseline store assemble a whole project pass and persist its
 baselines. Project lifecycle (archive/unarchive) reconciles through the same
 core: the lifecycle pass assembler reads the origin's and each mirror's
 archived state, runs the same N-way ladder, and fans the freeze out. The
-runtime cutover is gated by the `multiAdapterEngine` plugin setting (default
-off): with it on, the chain builds the origin and the per-connection mirror
-adapters from the project's connections and the stored secrets, runs the
-assembled lifecycle pass for the freeze verdict and the assembled pass for
-task-field reconciliation, and skips the legacy lifecycle step and the legacy
-task halves; with it off the legacy chain runs exactly as before. The legacy
-chain is not yet retired.
+lifecycle bookkeeping that surrounded the legacy freeze also moved onto the new
+path: a drifted mirror project is renamed, a frozen project's unfinished task
+conversations are locked (and unlocked on unfreeze), and a frozen project
+reactivates when newer mirror work appears. The runtime cutover is gated by the
+`multiAdapterEngine` plugin setting (default off): with it on, the chain builds
+the origin and the per-connection mirror adapters from the project's
+connections and the stored secrets, runs the reactivation action, the assembled
+lifecycle pass for the freeze verdict, the task-lock action and the assembled
+pass for task-field reconciliation, and skips the legacy lifecycle step and the
+legacy task halves; with it off the legacy chain runs exactly as before. The
+legacy chain is not yet retired.
 
 ## 10. Project Identification
 
@@ -508,7 +539,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-08
+Date of Last Update: 2026-10-09
 
 ## 11. Glossary / Acronyms
 
