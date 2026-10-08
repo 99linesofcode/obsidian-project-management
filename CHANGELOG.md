@@ -1,3 +1,12 @@
+# [0.16.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.15.0...0.16.0) (2026-10-08)
+
+
+### Features
+
+* **core:** adopt remote-born projects on the new sync engine ([2d3983f](https://github.com/99linesofcode/obsidian-project-management/commit/2d3983f7fafd5e23a2f2b499d4d26a2943dc25bc))
+
+
+
 # [0.15.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.14.0...0.15.0) (2026-10-08)
 
 
@@ -57,24 +66,6 @@
 * **infrastructure:** resolve mirror handles through the registry ([ae3b8c8](https://github.com/99linesofcode/obsidian-project-management/commit/ae3b8c8f16418eef0f2fea4139819bb780a2fe80))
 * **settings:** add the multi-adapter engine toggle, default off ([bcb9c41](https://github.com/99linesofcode/obsidian-project-management/commit/bcb9c4170abf962543bae9c72fae54856f74acfc))
 * **sync:** run the multi-adapter pass behind a setting ([4602d87](https://github.com/99linesofcode/obsidian-project-management/commit/4602d870fc049cf38839418bd0134e39571cef56))
-
-
-
-# [0.12.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.11.0...0.12.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **eslint:** scope the vault project-source edge to the imported codec ([2ad5b6c](https://github.com/99linesofcode/obsidian-project-management/commit/2ad5b6c99db72bce895cbffc31147c9f9ffbccec))
-* **registry:** keep core baselines at the data root so registry writes survive ([7240649](https://github.com/99linesofcode/obsidian-project-management/commit/72406499371156ba05f6d428939e5212030049e5))
-* **registry:** reject prototype-polluting keys in the core baseline store ([6f38bc0](https://github.com/99linesofcode/obsidian-project-management/commit/6f38bc058d958c2189ce1ec994a1a5d3de2ae36c))
-
-
-### Features
-
-* **core:** add the baseline store port and its registry adapter ([9bdd84d](https://github.com/99linesofcode/obsidian-project-management/commit/9bdd84d252c4356bcc6ffba1512e0191a205d289))
-* **core:** add the project source port and its vault adapter ([eb55958](https://github.com/99linesofcode/obsidian-project-management/commit/eb55958d427e4718c4b822107ad10e41da83c664))
-* **core:** assemble a project pass and persist its baselines ([88561a7](https://github.com/99linesofcode/obsidian-project-management/commit/88561a7d693c5943057e125be29a29e8a6919023))
 
 
 
