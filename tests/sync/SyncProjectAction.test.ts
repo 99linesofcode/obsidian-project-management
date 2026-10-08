@@ -590,6 +590,16 @@ describe('the setting-gated cutover', () => {
     expect(h.events).not.toContain('todoist');
   });
 
+  it('gates the task-field pass (and its materialization) on the engine setting', async () => {
+    const on = harness({ state: openState, engine: true });
+    await on.action.execute('Acme Widgets');
+    expect(on.events).toContain('reconcile:Acme Widgets');
+
+    const off = harness({ state: openState });
+    await off.action.execute('Acme Widgets');
+    expect(off.events).not.toContain('reconcile:Acme Widgets');
+  });
+
   it('runs the new task capture when the engine is on', async () => {
     const h = harness({ state: openState, engine: true });
 

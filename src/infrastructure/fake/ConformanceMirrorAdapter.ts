@@ -12,7 +12,9 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly missingProjects = new Set<string>();
   private readonly absentProjects = new Set<string>();
   private readonly throwingProjects = new Set<string>();
+  private readonly throwingTasks = new Set<string>();
   readonly createCalls: string[] = [];
+  readonly createTaskCalls: string[] = [];
   private readonly fieldTimes = new Map<
     string,
     Partial<Record<CanonicalField, string>>
@@ -36,6 +38,10 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   seedThrowingProject(target: string): void {
     this.throwingProjects.add(target);
+  }
+
+  seedThrowingTask(target: string): void {
+    this.throwingTasks.add(target);
   }
 
   setProjectTime(target: string, time: string | null): void {
@@ -108,7 +114,14 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
     return this.tasks.get(handle) ?? null;
   }
 
-  async createTask(_target: string, task: CanonicalTask): Promise<CanonicalTask> {
+  async createTask(
+    target: string,
+    task: CanonicalTask,
+  ): Promise<CanonicalTask> {
+    if (this.throwingTasks.has(target)) {
+      throw new Error(`conformance: task creation for ${target} failed`);
+    }
+    this.createTaskCalls.push(task.handle);
     this.tasks.set(task.handle, task);
     return task;
   }

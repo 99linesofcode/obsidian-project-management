@@ -42,6 +42,10 @@ class FakeOrigin {
     };
   }
 
+  async readTask(): Promise<CanonicalTask | null> {
+    return null;
+  }
+
   async applyField(write: CanonicalFieldWrite): Promise<void> {
     if (this.failWrites) {
       throw new Error('origin write failed');

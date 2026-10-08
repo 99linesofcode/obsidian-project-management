@@ -8,8 +8,25 @@ export interface MirrorItemLookup {
   ): Promise<{ handle: string } | null>;
 }
 
+export interface MirrorItemRecorder {
+  setEntity(record: { id: string; notePath: string }): Promise<void>;
+  setMirrorItem(
+    project: string,
+    connection: string,
+    handle: string,
+    item: { entityId: string; base: null },
+  ): Promise<void>;
+  removeMirrorItem(
+    project: string,
+    connection: string,
+    handle: string,
+  ): Promise<void>;
+}
+
 export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
-  constructor(private readonly registry: MirrorItemLookup) {}
+  constructor(
+    private readonly registry: MirrorItemLookup & MirrorItemRecorder,
+  ) {}
 
   async resolve(connection: string, notePath: string): Promise<string | null> {
     const entity = await this.registry.findByNotePath(notePath);
@@ -21,5 +38,33 @@ export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
       entity.id,
     );
     return item?.handle ?? null;
+  }
+
+  async record(
+    project: string,
+    connection: string,
+    notePath: string,
+    handle: string,
+  ): Promise<void> {
+    const entity = await this.registry.findByNotePath(notePath);
+    const entityId = entity?.id ?? crypto.randomUUID();
+    if (entity === null) {
+      await this.registry.setEntity({ id: entityId, notePath });
+    }
+    const existing = await this.registry.findMirrorItemByEntity(
+      connection,
+      entityId,
+    );
+    if (existing !== null && existing.handle !== handle) {
+      await this.registry.removeMirrorItem(
+        project,
+        connection,
+        existing.handle,
+      );
+    }
+    await this.registry.setMirrorItem(project, connection, handle, {
+      entityId,
+      base: null,
+    });
   }
 }
