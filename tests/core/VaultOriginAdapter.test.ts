@@ -182,6 +182,17 @@ describe('VaultOriginAdapter — the origin read (F02 NWM-28)', () => {
     );
   });
 
+  it('reports a note without a type as no task', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(
+      NOTE_PATH,
+      ['---', 'status: Building', '---', 'Body text'].join('\n'),
+      MTIME,
+    );
+
+    expect(await adapter.readTask(NOTE_PATH)).toBeNull();
+  });
+
   it('reports an absent note as no task', async () => {
     const { adapter } = setup();
 

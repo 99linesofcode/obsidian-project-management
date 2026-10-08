@@ -7,6 +7,7 @@ import { OriginObservation } from '../../core/data/OriginObservation.js';
 import type { OriginPort } from '../../core/ports/OriginPort.js';
 
 interface TaskNote {
+  type: string;
   title: string;
   status: string;
   body: string;
@@ -48,6 +49,9 @@ export class VaultOriginAdapter implements OriginPort {
     }
 
     const note = parseTaskNote(await this.app.vault.read(file), handle);
+    if (note.type === '') {
+      return null;
+    }
     return new CanonicalTask({
       handle,
       entityId: handle,
@@ -107,6 +111,7 @@ export class VaultOriginAdapter implements OriginPort {
 function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
   return {
+    type: fields.get('type') ?? '',
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
     body: bodyOf(content),
