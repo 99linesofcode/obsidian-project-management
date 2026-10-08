@@ -235,13 +235,19 @@ is unchanged. It consists of the port layer and the pure core:
   is keyed `mirror:<slug>` — disjoint from the origin side's `origin` key, so a
   connection slug of `origin` cannot collide — while the origin keeps the note
   path as its handle. Two connections to the same application stay distinct
-  sides; a connection whose entity has no resolved handle is skipped.
+  sides. A connection whose entity has no resolved handle is materialized: the
+  origin task is read through `OriginPort.readTask`, created on the mirror
+  through `TaskSurfacePort.createTask`, its handle recorded through the
+  mirror-handle port, and reconciled in the same pass; a connection whose entity
+  has no origin task is skipped.
 - **The mirror-handle port** (`MirrorHandlePort`). The core's need to resolve a
   note path to the handle a given connection's application uses for it (an issue
-  URL, a task id). Its adapter
+  URL, a task id), and to record a handle it just materialized. Its adapter
   (`infrastructure/registry/RegistryMirrorHandleAdapter`) first maps the note
   path to the registry entity's id (`findByNotePath`), then reads that entity's
-  per-connection item through the existing `findMirrorItemByEntity` lookup.
+  per-connection item through the existing `findMirrorItemByEntity` lookup; on
+  record it reuses the note path's entity or creates one, then stamps the
+  per-connection item through `setMirrorItem`.
 - **The mirror-project port** (`MirrorProjectPort`). The core's need to resolve
   and record the handle a connection's application uses for the mirror project
   (a board, a project id). Its adapter
@@ -519,7 +525,8 @@ Date of Last Update: 2026-10-08
   a stale board lane.
 - **Lane** — a board column / task-manager section.
 - **Outward materialization** — creating a mirror for a vault-born task,
-  registry-first.
+  registry-first: the task-field pass creates the missing item through the
+  adapter, records its handle, and reconciles it in the same pass.
 - **Capture** — adopting a remote-born project or task into the vault. A project
   capture is guarded by a per-surface creation watermark; a task capture scans
   the whole application listing and skips the mirror items already stamped, so it
