@@ -25,11 +25,7 @@ import { ApplyTodoistCompletionAction } from './todoist/ApplyTodoistCompletionAc
 import { ApplyTodoistRemoteChangesAction } from './todoist/ApplyTodoistRemoteChangesAction.js';
 import { BoardStatusAction } from './projects/BoardStatusAction.js';
 import { CaptureTodoistCreationsAction } from './todoist/CaptureTodoistCreationsAction.js';
-import {
-  CaptureRemoteProjectsAction,
-  type CaptureResult,
-} from './projects/CaptureRemoteProjectsAction.js';
-import { gatedProjectCapture } from './app/gatedProjectCapture.js';
+import type { CaptureResult } from './projects/CaptureRemoteProjectsAction.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/CaptureTasksAction.js';
 import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
@@ -476,13 +472,6 @@ function composePlugin(
     plugin.settings.todoTemplatePath,
     plugin.settings.doneOptionName,
   );
-  const captureRemoteProjects = new CaptureRemoteProjectsAction(
-    github,
-    todoist,
-    vault,
-    syncState,
-    plugin.settings.doneOptionName,
-  );
   const ensureProjectBoard = new EnsureProjectBoardAction(
     github,
     syncState,
@@ -547,10 +536,7 @@ function composePlugin(
   };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
   let composedCoreReconcilers: CoreReconcilers | undefined;
-  const coreReconcilers = (): CoreReconcilers | undefined => {
-    if (!plugin.settings.multiAdapterEngine) {
-      return undefined;
-    }
+  const coreReconcilers = (): CoreReconcilers => {
     composedCoreReconcilers ??= composeCoreReconcilers(
       plugin,
       vault,
@@ -561,19 +547,16 @@ function composePlugin(
     );
     return composedCoreReconcilers;
   };
-  const taskFieldReconciler = (): TaskFieldReconciler | undefined =>
-    coreReconcilers()?.taskFields;
-  const projectLifecycleReconciler = ():
-    | ProjectLifecycleReconciler
-    | undefined => coreReconcilers()?.lifecycle;
-  const taskCaptureReconciler = (): TaskCaptureReconciler | undefined =>
-    coreReconcilers()?.taskCapture;
-  const projectTaskLocksReconciler = ():
-    | ProjectTaskLocksReconciler
-    | undefined => coreReconcilers()?.taskLocks;
-  const projectReactivationReconciler = ():
-    | ProjectReactivationReconciler
-    | undefined => coreReconcilers()?.reactivation;
+  const taskFieldReconciler = (): TaskFieldReconciler =>
+    coreReconcilers().taskFields;
+  const projectLifecycleReconciler = (): ProjectLifecycleReconciler =>
+    coreReconcilers().lifecycle;
+  const taskCaptureReconciler = (): TaskCaptureReconciler =>
+    coreReconcilers().taskCapture;
+  const projectTaskLocksReconciler = (): ProjectTaskLocksReconciler =>
+    coreReconcilers().taskLocks;
+  const projectReactivationReconciler = (): ProjectReactivationReconciler =>
+    coreReconcilers().reactivation;
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
@@ -598,13 +581,8 @@ function composePlugin(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,
     );
   });
-  const projectCapture = gatedProjectCapture(
-    () => plugin.settings.multiAdapterEngine,
-    () => captureRemoteProjects.execute({ syncedAt: new Date().toISOString() }),
-    () =>
-      coreReconcilers()?.capture.capture(new Date().toISOString()) ??
-      Promise.resolve({ captured: [], errors: [] }),
-  );
+  const projectCapture = (): Promise<CaptureResult> =>
+    coreReconcilers().capture.capture(new Date().toISOString());
   const scheduler = new SyncScheduler(
     vault,
     queue,

@@ -12,7 +12,6 @@ export interface ProjectManagementSettings {
   todosBasePath: string;
   statusOptions: string[];
   typeLabels: string[];
-  multiAdapterEngine: boolean;
 }
 
 export const DEFAULT_SETTINGS: ProjectManagementSettings = {
@@ -33,7 +32,6 @@ export const DEFAULT_SETTINGS: ProjectManagementSettings = {
     'type: slice',
     'type: task',
   ],
-  multiAdapterEngine: false,
 };
 
 export function settingsFromData(
