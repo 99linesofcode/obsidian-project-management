@@ -434,4 +434,32 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
 
     expect(mirror.createCalls).toEqual([]);
   });
+
+  it('renames a mirror project whose name drifted from the vault project', async () => {
+    const { mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    mirror.seedProjectName('board-a', 'Old Name');
+    await seedBaselines(baselines, false);
+
+    await action.invoke(PROJECT);
+
+    expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
+  });
+
+  it('leaves a mirror project whose name already matches the vault project', async () => {
+    const { mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    mirror.seedProjectName('board-a', PROJECT);
+    await seedBaselines(baselines, false);
+
+    await action.invoke(PROJECT);
+
+    expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
+  });
 });

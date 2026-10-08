@@ -8,6 +8,7 @@ import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly tasks = new Map<string, CanonicalTask>();
   private readonly archived = new Map<string, boolean>();
+  private readonly names = new Map<string, string>();
   private readonly projectTimes = new Map<string, string>();
   private readonly missingProjects = new Set<string>();
   private readonly absentProjects = new Set<string>();
@@ -26,6 +27,10 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   seedProject(target: string, archived: boolean): void {
     this.archived.set(target, archived);
+  }
+
+  seedProjectName(target: string, name: string): void {
+    this.names.set(target, name);
   }
 
   seedMissingProject(target: string): void {
@@ -87,7 +92,12 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   async createProject(target: string, name: string): Promise<CanonicalProject> {
     this.createCalls.push(target);
     this.absentProjects.delete(target);
+    this.names.set(target, name);
     return new CanonicalProject({ handle: target, name, archived: false });
+  }
+
+  async renameProject(target: string, name: string): Promise<void> {
+    this.names.set(target, name);
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
@@ -101,7 +111,7 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readProjectSync(target: string): CanonicalProject {
     return new CanonicalProject({
       handle: target,
-      name: target,
+      name: this.names.get(target) ?? target,
       archived: this.archived.get(target) ?? false,
     });
   }

@@ -475,12 +475,26 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(transport.bodies[1]).toContain('"projectId":"PVT_123"');
   });
 
+  it('renames the board through updateProjectV2', async () => {
+    const { adapter, transport } = adapterWith([
+      {
+        status: 200,
+        json: { data: { updateProjectV2: { projectV2: { id: 'PVT_123' } } } },
+      },
+    ]);
+
+    await adapter.renameProject(target(), 'New Name');
+
+    expect(transport.bodies[0]).toContain('RenameProject');
+    expect(transport.bodies[0]).toContain('"title":"New Name"');
+    expect(transport.bodies[0]).toContain('"projectId":"PVT_123"');
+  });
+
   it('returns the decisive per-field time', async () => {
     const { adapter } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
     ]);
     const title = await adapter.fieldTime(ISSUE_URL, 'title');
-
     const { adapter: second } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
     ]);

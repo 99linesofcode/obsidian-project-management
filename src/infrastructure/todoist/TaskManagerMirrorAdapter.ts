@@ -75,6 +75,15 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     );
   }
 
+  async renameProject(target: string, name: string): Promise<void> {
+    const connection = TaskManagerTarget.parse(target);
+    await this.postOk(
+      `/projects/${connection.projectId}`,
+      { name },
+      'rename project',
+    );
+  }
+
   async archivedTime(_target: string): Promise<string | null> {
     return null;
   }

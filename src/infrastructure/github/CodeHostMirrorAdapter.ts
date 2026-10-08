@@ -231,6 +231,14 @@ const SET_PROJECT_CLOSED_MUTATION = `
   }
 `;
 
+const RENAME_PROJECT_MUTATION = `
+  mutation RenameProject($projectId: ID!, $title: String!) {
+    updateProjectV2(input: { projectId: $projectId, title: $title }) {
+      projectV2 { id }
+    }
+  }
+`;
+
 const ADD_SUB_ISSUE_MUTATION = `
   mutation AddSubIssue($issueId: ID!, $subIssueId: ID!) {
     addSubIssue(input: { issueId: $issueId, subIssueId: $subIssueId }) {
@@ -475,6 +483,15 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     await this.graphql(SET_PROJECT_CLOSED_MUTATION, {
       projectId: board.projectNodeId,
       closed: archived,
+    });
+  }
+
+  async renameProject(target: string, name: string): Promise<void> {
+    const connection = CodeHostTarget.parse(target);
+    const board = await this.requireBoard(connection.repoUrl);
+    await this.graphql(RENAME_PROJECT_MUTATION, {
+      projectId: board.projectNodeId,
+      title: name,
     });
   }
 

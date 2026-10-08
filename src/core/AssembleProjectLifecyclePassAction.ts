@@ -97,6 +97,9 @@ export class AssembleProjectLifecyclePassAction {
       connection.envelope.target,
     );
     if (existing !== null) {
+      if (existing.name !== project) {
+        await adapter.project.renameProject(connection.envelope.target, project);
+      }
       await this.record(connection, project, connection.envelope.target);
       return connection.envelope.target;
     }
