@@ -1,9 +1,11 @@
-import type { VaultPort } from '../shared/VaultPort.js';
+export interface FreePathVault {
+  getNoteByPath(path: string): Promise<{ content: string } | null>;
+}
 
 // Suffixes -2, -3, … until the note path is free. Shared by the checklist sync
 // and the task-manager capture so both handle a slug collision the same way.
 export async function freePath(
-  vault: VaultPort,
+  vault: FreePathVault,
   base: string,
 ): Promise<string> {
   if (!(await vault.getNoteByPath(base))) {

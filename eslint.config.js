@@ -97,10 +97,10 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
       : `the ${type} module may not import that element`,
 }));
 
-// Transitional reuse: the new core's vault adapter reuses the legacy vault
-// module's connections codec while the old chain is retired. The edge is
-// scoped to that one adapter file and to the one helper it imports, so the
-// infrastructure block still imports core only in general.
+// Transitional reuse: the new core's vault adapters reuse the legacy vault and
+// task modules' note codecs while the old chain is retired. Each edge is scoped
+// to one adapter file and the helpers it imports, so the infrastructure block
+// still imports core only in general.
 const transitionalPolicies = [
   {
     from: {
@@ -146,6 +146,54 @@ const transitionalPolicies = [
         element: {
           type: 'shared',
           fileInternalPath: ['projectHomePath.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'vault',
+          fileInternalPath: ['CapturedTaskNoteMapper.ts', 'freePath.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'tasks',
+          fileInternalPath: ['CreateTaskNoteAction.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'shared',
+          fileInternalPath: ['typeFromLabels.ts'],
         },
       },
     },

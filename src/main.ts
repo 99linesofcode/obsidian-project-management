@@ -31,8 +31,11 @@ import {
 } from './projects/CaptureRemoteProjectsAction.js';
 import { gatedProjectCapture } from './app/gatedProjectCapture.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
+import { CaptureTasksAction } from './core/CaptureTasksAction.js';
 import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
+import { VaultTaskCaptureAdapter } from './infrastructure/vault/VaultTaskCaptureAdapter.js';
 import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
+import { RegistryTaskCursorAdapter } from './infrastructure/registry/RegistryTaskCursorAdapter.js';
 import type { CaptureSource } from './core/ports/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
@@ -96,6 +99,7 @@ import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMi
 import type { TaskManagerTransport } from './infrastructure/todoist/TaskManagerTransport.js';
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
 import type { TaskFieldReconciler } from './sync/TaskFieldReconciler.js';
+import type { TaskCaptureReconciler } from './sync/TaskCaptureReconciler.js';
 import type { ProjectLifecycleReconciler } from './sync/ProjectLifecycleReconciler.js';
 
 async function request(
@@ -164,6 +168,7 @@ interface CoreReconcilers {
   taskFields: TaskFieldReconciler;
   lifecycle: ProjectLifecycleReconciler;
   capture: ProjectCaptureReconciler;
+  taskCapture: TaskCaptureReconciler;
 }
 
 function composeCoreReconcilers(
@@ -172,6 +177,7 @@ function composeCoreReconcilers(
   syncState: SyncStateAdapter,
   secrets: SecretStore,
   baselineStorage: CoreBaselineStorage,
+  createTaskNote: CreateTaskNoteAction,
 ): CoreReconcilers {
   const codeHostTransport = createCodeHostTransport(
     secrets.load(GITHUB_TOKEN_KEY) ?? '',
@@ -210,6 +216,15 @@ function composeCoreReconcilers(
     new VaultProjectCaptureAdapter(vault),
     new RegistryProjectCursorAdapter(syncState),
   );
+  const captureTasks = new CaptureTasksAction(
+    projectSource,
+    mirrorAdapters,
+    new VaultTaskCaptureAdapter(vault, syncState, createTaskNote),
+    new RegistryTaskCursorAdapter({
+      read: (key) => syncState.getProjectCursor(key),
+      write: (key, value) => syncState.setProjectCursor(key, value),
+    }),
+  );
 
   return {
     taskFields: {
@@ -224,6 +239,11 @@ function composeCoreReconcilers(
     },
     capture: {
       capture: (syncedAt) => capture.invoke(syncedAt),
+    },
+    taskCapture: {
+      capture: async (project) => {
+        await captureTasks.invoke(project, new Date().toISOString());
+      },
     },
   };
 }
@@ -488,6 +508,7 @@ function composePlugin(
       syncState,
       secrets,
       baselineStorage,
+      createTaskNote,
     );
     return composedCoreReconcilers;
   };
@@ -496,6 +517,8 @@ function composePlugin(
   const projectLifecycleReconciler = ():
     | ProjectLifecycleReconciler
     | undefined => coreReconcilers()?.lifecycle;
+  const taskCaptureReconciler = (): TaskCaptureReconciler | undefined =>
+    coreReconcilers()?.taskCapture;
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
@@ -511,6 +534,7 @@ function composePlugin(
     new RekeyRenamedConnectionsAction(syncState),
     taskFieldReconciler,
     projectLifecycleReconciler,
+    taskCaptureReconciler,
   );
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(

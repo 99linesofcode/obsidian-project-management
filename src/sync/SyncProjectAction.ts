@@ -15,6 +15,7 @@ import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
 import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
+import type { TaskCaptureReconciler } from './TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
@@ -41,6 +42,7 @@ export class SyncProjectAction {
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
     private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
     private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
+    private readonly taskCaptureReconciler?: () => TaskCaptureReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -61,6 +63,7 @@ export class SyncProjectAction {
 
     const lifecycleReconciler = this.projectLifecycleReconciler?.();
     const taskFieldReconciler = this.taskFieldReconciler?.();
+    const taskCaptureReconciler = this.taskCaptureReconciler?.();
     if (lifecycleReconciler !== undefined) {
       await this.step('migrate home note', async () => {
         await this.migrateProjectHomeNote.execute({
@@ -138,6 +141,11 @@ export class SyncProjectAction {
           this.runTaskHalves(project, note.connections, halves, syncedAt),
         );
       } else {
+        if (taskCaptureReconciler !== undefined) {
+          await this.step('task capture', () =>
+            taskCaptureReconciler.capture(project),
+          );
+        }
         await this.step('task fields', () =>
           taskFieldReconciler.reconcile(project),
         );

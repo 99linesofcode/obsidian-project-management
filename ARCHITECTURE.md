@@ -290,17 +290,27 @@ is unchanged. It consists of the port layer and the pure core:
   the watermark with a collected error. An already-declared project is never
   re-created, so the pass is idempotent. The cursor store and the vault sink are
   infrastructure peers; the core names no provider.
+- **The task-capture surface** (`CapturePort` + `CaptureTasksAction`). For each
+  declared connection whose adapter declares `capture`, the core action reads the
+  application-born tasks the adapter can see (`capture`) and adopts every task
+  the vault does not already hold as a task note. The vault sink reuses the
+  legacy note writers — the code-host task note for a URL handle, the captured
+  draft note for a task-manager handle — and stamps the mirror item, so an
+  already-adopted task is never re-created. A per-connection cursor records the
+  last adopted handle; a failed adoption stops the watermark at the last
+  success, so the remaining tasks are retried on the next pass. The cursor store
+  and the vault sink are infrastructure peers; the core names no provider.
 - **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
-  time through two reconciler providers, so toggling `multiAdapterEngine` takes
+  time through three reconciler providers, so toggling `multiAdapterEngine` takes
   effect on the next sync without a reload. When it is on, `SyncProjectAction`
-  runs the assembled lifecycle pass for the freeze verdict and the assembled
-  pass for task-field reconciliation, migrates the project's home note through
-  the legacy migration action (which the skipped legacy lifecycle would
-  otherwise have run), and skips the legacy lifecycle step and the legacy
-  code-host and task halves; probe, board-ensure, vault consistency and the
-  deletion sweep still run, and the capture pre-tick runs the assembled core
-  capture instead of the legacy capture action. When it is off, the legacy chain
-  runs exactly as before.
+  runs the assembled lifecycle pass for the freeze verdict, the assembled task
+  capture for application-born tasks, and the assembled pass for task-field
+  reconciliation, migrates the project's home note through the legacy migration
+  action (which the skipped legacy lifecycle would otherwise have run), and skips
+  the legacy lifecycle step and the legacy code-host and task halves; probe,
+  board-ensure, vault consistency and the deletion sweep still run, and the
+  capture pre-tick runs the assembled core capture instead of the legacy capture
+  action. When it is off, the legacy chain runs exactly as before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -507,12 +517,15 @@ Date of Last Update: 2026-10-08
 - **Lane** — a board column / task-manager section.
 - **Outward materialization** — creating a mirror for a vault-born task,
   registry-first.
-- **Capture** — adopting a remote-born project into the vault, guarded by a
-  per-surface creation cursor. The home note is born with the connection
-  envelope: a task-manager-born project declares a todoist connection, a
-  board-born project a github connection derived from the board's single linked
-  repository. Zero or several linked repositories is a collected error, never a
-  silent capture; the home note declares only the connection envelope.
+- **Capture** — adopting a remote-born project or task into the vault, guarded
+  by a per-surface watermark. A captured project's home note is born with the
+  connection envelope: a task-manager-born project declares a todoist
+  connection, a board-born project a github connection derived from the board's
+  single linked repository. Zero or several linked repositories is a collected
+  error, never a silent capture; the home note declares only the connection
+  envelope. A captured task is born as a task note — a code-host issue through
+  the task-note writer, a task-manager task as a captured draft — and its mirror
+  item is stamped so it is never re-created.
 
 ## 12. Conventions & Boundaries
 
