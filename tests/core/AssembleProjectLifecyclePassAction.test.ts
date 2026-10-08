@@ -6,6 +6,7 @@ import { ConnectionEnvelope } from '../../src/core/data/ConnectionEnvelope.js';
 import { DeclaredConnection } from '../../src/core/data/DeclaredConnection.js';
 import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../src/core/ports/MirrorAdapterFactoryPort.js';
+import type { MirrorProjectPort } from '../../src/core/ports/MirrorProjectPort.js';
 import type { ProjectSourcePort } from '../../src/core/ports/ProjectSourcePort.js';
 import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
@@ -124,6 +125,23 @@ function connection(slug: string, target: string): DeclaredConnection {
   });
 }
 
+class FakeMirrorProjects implements MirrorProjectPort {
+  readonly recorded = new Map<string, string>();
+
+  async resolve(project: string, connection: string): Promise<string | null> {
+    return this.recorded.get(`${project}\u0000${connection}`) ?? null;
+  }
+
+  async record(
+    project: string,
+    connection: string,
+    _application: string,
+    handle: string,
+  ): Promise<void> {
+    this.recorded.set(`${project}\u0000${connection}`, handle);
+  }
+}
+
 interface SetupOptions {
   vaultArchived: boolean;
   mirrorA: boolean;
@@ -157,14 +175,16 @@ function setup(options: SetupOptions) {
   const { storage } = memoryStorage();
   const baselines = new CoreBaselineStoreAdapter(storage);
   const origin = new VaultProjectLifecycleAdapter(vault, registry);
+  const mirrorProjects = new FakeMirrorProjects();
   const action = new AssembleProjectLifecyclePassAction(
     projectSource,
     origin,
     baselines,
     mirrorAdapters,
+    mirrorProjects,
   );
 
-  return { vault, registry, mirror, baselines, action };
+  return { vault, registry, mirror, baselines, mirrorProjects, action };
 }
 
 async function seedBaseline(
@@ -346,5 +366,52 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(vault.has(ACTIVE_HOME)).toBe(true);
     expect(mirror.currentProject('board-a')?.archived).toBe(false);
     expect(mirror.currentProject('board-b')?.archived).toBe(false);
+  });
+
+  it('onboards a connection with no mirror project and syncs it in the same pass', async () => {
+    const vault = new FakeVault();
+    vault.seed(ARCHIVED_HOME, HOME, MTIME);
+    const registry = new FakeRegistry();
+    const projectSource = new FakeProjectSource();
+    projectSource.connections = [connection('a', 'board-new')];
+    const mirror = new ConformanceMirrorAdapter();
+    mirror.seedAbsentProject('board-new');
+    const registered: RegisteredAdapter = registerAdapters([
+      new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
+    ]).adapters.get('conformance')!;
+    const mirrorAdapters: MirrorAdapterFactoryPort = {
+      create: () => registered,
+    };
+    const { storage } = memoryStorage();
+    const mirrorProjects = new FakeMirrorProjects();
+    const action = new AssembleProjectLifecyclePassAction(
+      projectSource,
+      new VaultProjectLifecycleAdapter(vault, registry),
+      new CoreBaselineStoreAdapter(storage),
+      mirrorAdapters,
+      mirrorProjects,
+    );
+
+    const record = await action.invoke(PROJECT);
+
+    expect(mirror.createCalls).toEqual(['board-new']);
+    expect(await mirrorProjects.resolve(PROJECT, 'a')).toBe('board-new');
+    expect(record.frozen).toBe(true);
+    expect(mirror.currentProject('board-new')?.archived).toBe(true);
+  });
+
+  it('resolves a recorded mirror project without creating it again', async () => {
+    const { mirror, mirrorProjects, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    mirrorProjects.recorded.set(`${PROJECT}\u0000a`, 'board-a');
+    mirrorProjects.recorded.set(`${PROJECT}\u0000b`, 'board-b');
+    await seedBaselines(baselines, false);
+
+    await action.invoke(PROJECT);
+
+    expect(mirror.createCalls).toEqual([]);
   });
 });

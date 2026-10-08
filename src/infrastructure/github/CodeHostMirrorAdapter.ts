@@ -281,7 +281,7 @@ interface BoardSnapshot {
 
 export class CodeHostMirrorAdapter implements MirrorAdapter {
   private readonly target: CodeHostTarget;
-  private readonly boards = new Map<string, Promise<BoardIdentity>>();
+  private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
   constructor(
     private readonly transport: CodeHostTransport,
@@ -291,7 +291,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     this.target = CodeHostTarget.parse(target);
   }
 
-  private board(repoUrl: string): Promise<BoardIdentity> {
+  private board(repoUrl: string): Promise<BoardIdentity | null> {
     let board = this.boards.get(repoUrl);
     if (board === undefined) {
       board = this.resolveBoard(repoUrl);
@@ -300,7 +300,17 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     return board;
   }
 
-  private async resolveBoard(repoUrl: string): Promise<BoardIdentity> {
+  private async requireBoard(repoUrl: string): Promise<BoardIdentity> {
+    const board = await this.board(repoUrl);
+    if (board === null) {
+      throw new Error(
+        `code host: repository ${repoParts(repoUrl).name} has no board`,
+      );
+    }
+    return board;
+  }
+
+  private async resolveBoard(repoUrl: string): Promise<BoardIdentity | null> {
     const cached = await this.boardIdentity?.();
     if (cached !== undefined && cached !== null && cached.projectNodeId !== '') {
       return cached;
@@ -308,7 +318,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     return this.deriveBoard(repoUrl);
   }
 
-  private async deriveBoard(repoUrl: string): Promise<BoardIdentity> {
+  private async deriveBoard(repoUrl: string): Promise<BoardIdentity | null> {
     const repo = repoParts(repoUrl);
     const data = await this.graphql(REPO_BOARDS_QUERY, {
       owner: repo.owner,
@@ -324,6 +334,9 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
       .filter(isRecord)
       .flatMap(parseRepoBoard);
     const board = chooseBoard(repo.name, boards);
+    if (board === null) {
+      return null;
+    }
     const fields = await this.graphql(PROJECT_FIELDS_QUERY, {
       projectId: board.projectNodeId,
     });
@@ -343,6 +356,9 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
   async readProject(target: string): Promise<CanonicalProject | null> {
     const connection = CodeHostTarget.parse(target);
     const board = await this.board(connection.repoUrl);
+    if (board === null) {
+      return null;
+    }
     const data = await this.graphql(PROJECT_CONTENT_QUERY, {
       projectId: board.projectNodeId,
     });
@@ -380,12 +396,16 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
         description: '',
       })),
     });
-    return new CanonicalProject({ handle: projectId, name, archived: false });
+    return new CanonicalProject({
+      handle: connection.repoUrl,
+      name,
+      archived: false,
+    });
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
     const connection = CodeHostTarget.parse(target);
-    const board = await this.board(connection.repoUrl);
+    const board = await this.requireBoard(connection.repoUrl);
     await this.graphql(SET_PROJECT_CLOSED_MUTATION, {
       projectId: board.projectNodeId,
       closed: archived,
@@ -422,7 +442,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     const repo = repoParts(connection.repoUrl);
     const repositoryId = await this.repoNodeId(repo);
     const labelIds = await this.labelIds(repo, task.labels);
-    const board = await this.board(connection.repoUrl);
+    const board = await this.requireBoard(connection.repoUrl);
     const created = await this.graphql(CREATE_ISSUE_MUTATION, {
       repositoryId,
       title: task.title,
@@ -481,7 +501,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     if (item === null) {
       return;
     }
-    const board = await this.board(this.target.repoUrl);
+    const board = await this.requireBoard(this.target.repoUrl);
     await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
       projectId: board.projectNodeId,
       itemId: item.itemId,
@@ -556,7 +576,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
   }
 
   private async setLane(itemId: string, status: string): Promise<void> {
-    const board = await this.board(this.target.repoUrl);
+    const board = await this.requireBoard(this.target.repoUrl);
     await this.graphql(SET_BOARD_STATUS_MUTATION, {
       projectId: board.projectNodeId,
       itemId,
@@ -605,7 +625,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     connection: CodeHostTarget,
   ): Promise<BoardSnapshot> {
     const repo = repoParts(connection.repoUrl);
-    const board = await this.board(connection.repoUrl);
+    const board = await this.requireBoard(connection.repoUrl);
     const data = await this.graphql(PROJECT_DETAIL_QUERY, {
       owner: repo.owner,
       name: repo.name,
@@ -830,9 +850,9 @@ function parseRepoBoard(node: Record<string, unknown>): RepoBoard[] {
 function chooseBoard(
   repoName: string,
   boards: readonly RepoBoard[],
-): RepoBoard {
+): RepoBoard | null {
   if (boards.length === 0) {
-    throw new Error(`code host: repository ${repoName} has no board`);
+    return null;
   }
   if (boards.length === 1) {
     return boards[0]!;

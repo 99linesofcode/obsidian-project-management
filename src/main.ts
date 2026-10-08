@@ -74,6 +74,7 @@ import {
   type CoreBaselineStorage,
 } from './infrastructure/registry/CoreBaselineStoreAdapter.js';
 import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
+import { RegistryMirrorProjectAdapter } from './infrastructure/registry/RegistryMirrorProjectAdapter.js';
 import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
 import { VaultProjectLifecycleAdapter } from './infrastructure/vault/VaultProjectLifecycleAdapter.js';
 import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
@@ -187,6 +188,7 @@ function composeCoreReconcilers(
     new VaultProjectLifecycleAdapter(vault, syncState),
     baselines,
     mirrorAdapters,
+    new RegistryMirrorProjectAdapter(syncState),
   );
 
   return {
