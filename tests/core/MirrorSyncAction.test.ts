@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js';
 import { Baseline } from '../../src/core/data/Baseline.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
+import { MirrorSide } from '../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../src/core/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../src/core/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
@@ -40,6 +41,10 @@ function mirrorAdapter(applicationId: string): {
   return { adapter, registered: result.adapters.get(applicationId)! };
 }
 
+function side(name: string, registered: RegisteredAdapter): MirrorSide {
+  return new MirrorSide({ side: name, handle: 't1', adapter: registered });
+}
+
 function vaultOrigin(
   status: string,
   baseline: Baseline,
@@ -66,7 +71,7 @@ describe('MirrorSyncAction — the Status field end to end (F02 NWM-2, NWM-3)', 
       entityId: 't1',
       field: 'Status',
       origin: vaultOrigin('Done', new Baseline('Building', false), true),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -93,7 +98,11 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
       entityId: 't1',
       field: 'Status',
       origin: vaultOrigin('Building', new Baseline('Building', false)),
-      mirrors: [alpha.registered, beta.registered, gamma.registered],
+      mirrors: [
+        side('alpha', alpha.registered),
+        side('beta', beta.registered),
+        side('gamma', gamma.registered),
+      ],
       baselines: new Map([
         ['alpha', new Baseline('Building', false)],
         ['beta', new Baseline('Building', false)],

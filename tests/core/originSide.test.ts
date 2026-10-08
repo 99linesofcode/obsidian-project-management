@@ -4,6 +4,7 @@ import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js'
 import { Baseline } from '../../src/core/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../src/core/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
+import { MirrorSide } from '../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../src/core/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../src/core/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
@@ -95,6 +96,10 @@ function mirrorAdapter(applicationId: string): {
   return { adapter, registered: result.adapters.get(applicationId)! };
 }
 
+function side(name: string, registered: RegisteredAdapter): MirrorSide {
+  return new MirrorSide({ side: name, handle: 't1', adapter: registered });
+}
+
 describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
   it('writes a mirror-won value back to the origin and advances both baselines', async () => {
     const { adapter, registered } = mirrorAdapter('conformance');
@@ -105,7 +110,7 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
       entityId: 't1',
       field: 'Status',
       origin: originSide('Building', new Baseline('Building', false)),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -128,7 +133,7 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
       entityId: 't1',
       field: 'Status',
       origin: originSide('Done', new Baseline('Building', false)),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -148,7 +153,7 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
       entityId: 't1',
       field: 'Status',
       origin: originSide('Building', new Baseline('Building', false)),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -170,7 +175,7 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
       entityId: 't1',
       field: 'Status',
       origin: originSide(null, new Baseline('Building', false)),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -192,7 +197,7 @@ describe('MirrorSyncAction — the origin write (F02 NWM-3, NWM-17)', () => {
       entityId: 't1',
       field: 'Status',
       origin: originSide('Building', new Baseline('Building', false)),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 

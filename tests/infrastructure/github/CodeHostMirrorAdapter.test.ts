@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { AssembleProjectPassAction } from '../../../src/core/AssembleProjectPassAction.js';
 import { AdapterRegistration } from '../../../src/core/data/AdapterRegistration.js';
 import { Baseline } from '../../../src/core/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/data/CanonicalTask.js';
+import { ConnectionEnvelope } from '../../../src/core/data/ConnectionEnvelope.js';
+import { DeclaredConnection } from '../../../src/core/data/DeclaredConnection.js';
+import { MirrorSide } from '../../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/data/MirrorSyncPass.js';
+import { OriginObservation } from '../../../src/core/data/OriginObservation.js';
+import type { RegisteredAdapter } from '../../../src/core/data/RegisteredAdapter.js';
+import type { BaselineStorePort } from '../../../src/core/ports/BaselineStorePort.js';
+import type { MirrorAdapterFactoryPort } from '../../../src/core/ports/MirrorAdapterFactoryPort.js';
+import type { MirrorHandlePort } from '../../../src/core/ports/MirrorHandlePort.js';
+import type { OriginPort } from '../../../src/core/ports/OriginPort.js';
+import type { ProjectSourcePort } from '../../../src/core/ports/ProjectSourcePort.js';
 import { SideObservation } from '../../../src/core/data/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/registerAdapters.js';
@@ -577,7 +588,9 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
         completeFetch: true,
         currentCompleted: false,
       }),
-      mirrors: [registered],
+      mirrors: [
+        new MirrorSide({ side: 'github', handle: ISSUE_URL, adapter: registered }),
+      ],
       baselines: new Map([['github', new Baseline('Building', false)]]),
     });
 
@@ -587,5 +600,118 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
     expect(record.written).toEqual(['github']);
     expect(transport.bodies[4]).toContain('SetBoardStatus');
     expect(transport.bodies[4]).toContain('"optionId":"PVTSSF_2"');
+  });
+});
+
+class FieldOrigin implements OriginPort {
+  readonly values = new Map<string, string | null>();
+  readonly applied: CanonicalFieldWrite[] = [];
+
+  async observe(_handle: string, field: string): Promise<OriginObservation> {
+    return new OriginObservation({
+      current: this.values.get(field) ?? null,
+      currentCompleted: false,
+      fieldTime: null,
+      trustworthy: true,
+    });
+  }
+
+  async applyField(write: CanonicalFieldWrite): Promise<void> {
+    this.applied.push(write);
+  }
+
+  async trash(): Promise<void> {}
+}
+
+class MemoryBaselines implements BaselineStorePort {
+  private readonly baselines = new Map<string, Baseline>();
+
+  async read(
+    entityId: string,
+    field: string,
+    side: string,
+  ): Promise<Baseline | null> {
+    return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
+  }
+
+  async write(
+    entityId: string,
+    field: string,
+    side: string,
+    baseline: Baseline,
+  ): Promise<void> {
+    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
+  }
+}
+
+describe('AssembleProjectPassAction drives the code host through a resolved handle (F02 NWM-2, NWM-3)', () => {
+  it('reads the issue by its resolved handle and reconciles its Status', async () => {
+    const entityId = 'Projecten/Acme/taken/fix-the-bug.md';
+    const transport = new FakeTransport(
+      Array.from({ length: 30 }, () =>
+        boardResponse([issueNode()], [cardNode()]),
+      ),
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const registered = registerAdapters([
+      new AdapterRegistration(githubDescriptor(), adapter),
+    ]).adapters.get('github')!;
+
+    const projectSource: ProjectSourcePort = {
+      readConnections: async () => [
+        new DeclaredConnection({
+          slug: 'gh',
+          envelope: new ConnectionEnvelope({
+            application: 'github',
+            target: target(),
+          }),
+        }),
+      ],
+      listEntities: async () => [entityId],
+    };
+    const origin = new FieldOrigin();
+    origin.values.set('title', 'Fix the bug');
+    origin.values.set('body', 'The bug happens on resize.');
+    origin.values.set('completion', 'false');
+    origin.values.set('Status', 'Todo');
+    origin.values.set('label', 'type: task');
+    origin.values.set('subtasks', PARENT_URL);
+    const baselines = new MemoryBaselines();
+    for (const [field, value] of origin.values) {
+      await baselines.write(
+        entityId,
+        field,
+        'origin',
+        new Baseline(value, false),
+      );
+    }
+    const mirrorAdapters: MirrorAdapterFactoryPort = {
+      create: (application): RegisteredAdapter | null =>
+        application === 'github' ? registered : null,
+    };
+    const handles: MirrorHandlePort = {
+      resolve: async (connection, entity) =>
+        connection === 'gh' && entity === entityId ? ISSUE_URL : null,
+    };
+    const action = new AssembleProjectPassAction(
+      projectSource,
+      origin,
+      baselines,
+      handles,
+      mirrorAdapters,
+    );
+
+    const records = await action.invoke('Acme');
+    const status = records.find((record) => record.field === 'Status')!;
+
+    expect(status.result.value).toBe('Building');
+    expect(status.result.winner).toBe('gh');
+    expect(origin.applied).toEqual([
+      new CanonicalFieldWrite({
+        handle: entityId,
+        field: 'Status',
+        value: 'Building',
+      }),
+    ]);
   });
 });

@@ -2,9 +2,9 @@ import type { CanonicalField } from './canonicalField.js';
 import { CanonicalFieldWrite } from './data/CanonicalFieldWrite.js';
 import type { CanonicalTask } from './data/CanonicalTask.js';
 import type { MergeResult } from './data/MergeResult.js';
+import type { MirrorSide } from './data/MirrorSide.js';
 import type { MirrorSyncPass } from './data/MirrorSyncPass.js';
 import { PassRecord } from './data/PassRecord.js';
-import type { RegisteredAdapter } from './data/RegisteredAdapter.js';
 import { SideObservation } from './data/SideObservation.js';
 import { mergeField } from './mergeField.js';
 import type { OriginPort } from './ports/OriginPort.js';
@@ -14,11 +14,11 @@ export class MirrorSyncAction {
 
   async invoke(pass: MirrorSyncPass): Promise<PassRecord> {
     const capable = pass.mirrors.filter((mirror) =>
-      mirror.descriptor.represents(pass.field),
+      mirror.adapter.descriptor.represents(pass.field),
     );
     const skipped = pass.mirrors
-      .filter((mirror) => !mirror.descriptor.represents(pass.field))
-      .map((mirror) => mirror.descriptor.applicationId);
+      .filter((mirror) => !mirror.adapter.descriptor.represents(pass.field))
+      .map((mirror) => mirror.side);
 
     const observations: SideObservation[] = [];
     for (const mirror of capable) {
@@ -50,32 +50,32 @@ export class MirrorSyncAction {
 }
 
 async function observeMirror(
-  mirror: RegisteredAdapter,
+  mirror: MirrorSide,
   pass: MirrorSyncPass,
 ): Promise<SideObservation> {
-  const task = await mirror.tasks.readTask(pass.entityId);
-  const fieldTime = mirror.timestamps
-    ? await mirror.timestamps.fieldTime(pass.entityId, pass.field)
+  const task = await mirror.adapter.tasks.readTask(mirror.handle);
+  const fieldTime = mirror.adapter.timestamps
+    ? await mirror.adapter.timestamps.fieldTime(mirror.handle, pass.field)
     : null;
 
   return new SideObservation({
-    side: mirror.descriptor.applicationId,
+    side: mirror.side,
     role: 'mirror',
     current: task === null ? null : canonicalValue(task, pass.field),
-    baseline: pass.baselines.get(mirror.descriptor.applicationId) ?? null,
+    baseline: pass.baselines.get(mirror.side) ?? null,
     fieldTime,
-    timestampTrustworthy: mirror.descriptor.capabilities.includes(
+    timestampTrustworthy: mirror.adapter.descriptor.capabilities.includes(
       'trustworthy per-field timestamps',
     ),
-    completeFetch: mirror.completeFetch
-      ? mirror.completeFetch.fetchComplete()
+    completeFetch: mirror.adapter.completeFetch
+      ? mirror.adapter.completeFetch.fetchComplete()
       : false,
     currentCompleted: task === null ? false : task.completed,
   });
 }
 
 async function fanOut(
-  capable: readonly RegisteredAdapter[],
+  capable: readonly MirrorSide[],
   pass: MirrorSyncPass,
   result: MergeResult,
 ): Promise<{ written: string[]; advanced: string[] }> {
@@ -84,31 +84,31 @@ async function fanOut(
 
   if (result.outcome === 'value') {
     for (const mirror of capable) {
-      const task = await mirror.tasks.readTask(pass.entityId);
+      const task = await mirror.adapter.tasks.readTask(mirror.handle);
       if (task !== null && canonicalValue(task, pass.field) === result.value) {
-        advanced.push(mirror.descriptor.applicationId);
+        advanced.push(mirror.side);
         continue;
       }
-      await mirror.tasks.applyField(
+      await mirror.adapter.tasks.applyField(
         new CanonicalFieldWrite({
-          handle: pass.entityId,
+          handle: mirror.handle,
           field: pass.field,
           value: result.value,
         }),
       );
-      written.push(mirror.descriptor.applicationId);
-      advanced.push(mirror.descriptor.applicationId);
+      written.push(mirror.side);
+      advanced.push(mirror.side);
     }
   } else if (result.outcome === 'delete') {
     for (const mirror of capable) {
-      const task = await mirror.tasks.readTask(pass.entityId);
+      const task = await mirror.adapter.tasks.readTask(mirror.handle);
       if (task === null) {
-        advanced.push(mirror.descriptor.applicationId);
+        advanced.push(mirror.side);
         continue;
       }
-      await mirror.tasks.deleteTask(pass.entityId);
-      written.push(mirror.descriptor.applicationId);
-      advanced.push(mirror.descriptor.applicationId);
+      await mirror.adapter.tasks.deleteTask(mirror.handle);
+      written.push(mirror.side);
+      advanced.push(mirror.side);
     }
   }
 

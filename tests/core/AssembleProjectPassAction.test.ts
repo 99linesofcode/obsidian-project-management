@@ -22,6 +22,9 @@ import type { App } from 'obsidian';
 import { AssembleProjectPassAction } from '../../src/core/AssembleProjectPassAction.js';
 import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
+import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
+import type { MirrorAdapterFactoryPort } from '../../src/core/ports/MirrorAdapterFactoryPort.js';
+import type { MirrorHandlePort } from '../../src/core/ports/MirrorHandlePort.js';
 import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../src/infrastructure/fake/conformanceDescriptor.js';
@@ -161,9 +164,18 @@ function setup() {
   const mirror = new ConformanceMirrorAdapter();
   mirror.seed(mirrorTask('Building', 'Mirror body'));
   mirror.setFieldTime(TASK_PATH, 'body', '2026-10-08T11:00:00Z');
-  const adapters = registerAdapters([
+  const registered = registerAdapters([
     new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-  ]).adapters;
+  ]).adapters.get('conformance')!;
+
+  const handles: MirrorHandlePort = {
+    resolve: async (connection, entityId) =>
+      connection === 'conformance' && entityId === TASK_PATH ? TASK_PATH : null,
+  };
+  const mirrorAdapters: MirrorAdapterFactoryPort = {
+    create: (application): RegisteredAdapter | null =>
+      application === 'conformance' ? registered : null,
+  };
 
   const { storage, snapshot } = fakeStorage();
   const baselines = new CoreBaselineStoreAdapter(storage);
@@ -171,7 +183,8 @@ function setup() {
     projectSource,
     origin,
     baselines,
-    adapters,
+    handles,
+    mirrorAdapters,
   );
 
   return { vault, mirror, baselines, action, snapshot };

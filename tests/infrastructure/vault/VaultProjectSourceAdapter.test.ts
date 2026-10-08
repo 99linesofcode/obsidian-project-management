@@ -33,7 +33,7 @@ const HOME = [
 ].join('\n');
 
 describe('VaultProjectSourceAdapter — the project source', () => {
-  it('reads the declared connections as application/target envelopes', async () => {
+  it('reads the declared connections as slugged application/target envelopes', async () => {
     const notes = new FakeNotes();
     notes.seed('Projecten/Acme/_Acme.md', HOME);
     const source = new VaultProjectSourceAdapter(notes);
@@ -41,8 +41,14 @@ describe('VaultProjectSourceAdapter — the project source', () => {
     const connections = await source.readConnections('Acme');
 
     expect(connections).toEqual([
-      { application: 'conformance', target: 'board-1' },
-      { application: 'conformance', target: 'board-2' },
+      {
+        slug: 'conformance',
+        envelope: { application: 'conformance', target: 'board-1' },
+      },
+      {
+        slug: 'second',
+        envelope: { application: 'conformance', target: 'board-2' },
+      },
     ]);
   });
 

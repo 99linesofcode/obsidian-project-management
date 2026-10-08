@@ -23,6 +23,7 @@ import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js'
 import { Baseline } from '../../src/core/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../src/core/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
+import { MirrorSide } from '../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../src/core/data/MirrorSyncPass.js';
 import { SideObservation } from '../../src/core/data/SideObservation.js';
 import { MirrorSyncAction } from '../../src/core/MirrorSyncAction.js';
@@ -304,7 +305,13 @@ describe('VaultOriginAdapter — the origin round-trip (F02 NWM-3, NWM-17)', () 
         completeFetch: true,
         currentCompleted: false,
       }),
-      mirrors: [registered],
+      mirrors: [
+        new MirrorSide({
+          side: 'conformance',
+          handle: NOTE_PATH,
+          adapter: registered,
+        }),
+      ],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -347,7 +354,13 @@ describe('VaultOriginAdapter — the origin timestamp reaches the merge (F02 NWM
         new Baseline('Todo', false),
         observed,
       ),
-      mirrors: [registered],
+      mirrors: [
+        new MirrorSide({
+          side: 'conformance',
+          handle: NOTE_PATH,
+          adapter: registered,
+        }),
+      ],
       baselines: new Map([['conformance', new Baseline('Todo', false)]]),
     });
 

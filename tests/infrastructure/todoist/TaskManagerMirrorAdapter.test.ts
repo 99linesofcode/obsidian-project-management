@@ -3,6 +3,7 @@ import { AdapterRegistration } from '../../../src/core/data/AdapterRegistration.
 import { Baseline } from '../../../src/core/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/data/CanonicalTask.js';
+import { MirrorSide } from '../../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/data/MirrorSyncPass.js';
 import { SideObservation } from '../../../src/core/data/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/MirrorSyncAction.js';
@@ -470,7 +471,9 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
         completeFetch: true,
         currentCompleted: false,
       }),
-      mirrors: [registered],
+      mirrors: [
+        new MirrorSide({ side: 'todoist', handle: 'T1', adapter: registered }),
+      ],
       baselines: new Map([['todoist', new Baseline('Building', false)]]),
     });
 
