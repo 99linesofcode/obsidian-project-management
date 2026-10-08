@@ -98,9 +98,9 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
 }));
 
 // Transitional reuse: the new core's vault adapter reuses the legacy vault
-// module's connections codec and note reads while the old chain is retired.
-// The edge is scoped to that one adapter file, so the infrastructure block
-// still imports core only in general.
+// module's connections codec while the old chain is retired. The edge is
+// scoped to that one adapter file and to the one codec it imports, so the
+// infrastructure block still imports core only in general.
 const transitionalPolicies = [
   {
     from: {
@@ -109,7 +109,14 @@ const transitionalPolicies = [
         fileInternalPath: ['vault/VaultProjectSourceAdapter.ts'],
       },
     },
-    allow: { to: { element: { type: 'vault' } } },
+    allow: {
+      to: {
+        element: {
+          type: 'vault',
+          fileInternalPath: ['connectionsOf.ts'],
+        },
+      },
+    },
   },
 ];
 
