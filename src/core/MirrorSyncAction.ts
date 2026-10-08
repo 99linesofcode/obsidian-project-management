@@ -30,7 +30,7 @@ export class MirrorSyncAction {
     const originResult = await applyToOrigin(this.origin, pass, result);
 
     const advanced = [...mirrors.advanced];
-    const failed: string[] = [];
+    const failed = [...mirrors.failed];
     if (originResult.advanced) {
       advanced.push(pass.origin.side);
     }
@@ -78,9 +78,10 @@ async function fanOut(
   capable: readonly MirrorSide[],
   pass: MirrorSyncPass,
   result: MergeResult,
-): Promise<{ written: string[]; advanced: string[] }> {
+): Promise<{ written: string[]; advanced: string[]; failed: string[] }> {
   const written: string[] = [];
   const advanced: string[] = [];
+  const failed: string[] = [];
 
   if (result.outcome === 'value') {
     for (const mirror of capable) {
@@ -89,15 +90,19 @@ async function fanOut(
         advanced.push(mirror.side);
         continue;
       }
-      await mirror.adapter.tasks.applyField(
-        new CanonicalFieldWrite({
-          handle: mirror.handle,
-          field: pass.field,
-          value: result.value,
-        }),
-      );
-      written.push(mirror.side);
-      advanced.push(mirror.side);
+      try {
+        await mirror.adapter.tasks.applyField(
+          new CanonicalFieldWrite({
+            handle: mirror.handle,
+            field: pass.field,
+            value: result.value,
+          }),
+        );
+        written.push(mirror.side);
+        advanced.push(mirror.side);
+      } catch {
+        failed.push(mirror.side);
+      }
     }
   } else if (result.outcome === 'delete') {
     for (const mirror of capable) {
@@ -106,13 +111,17 @@ async function fanOut(
         advanced.push(mirror.side);
         continue;
       }
-      await mirror.adapter.tasks.deleteTask(mirror.handle);
-      written.push(mirror.side);
-      advanced.push(mirror.side);
+      try {
+        await mirror.adapter.tasks.deleteTask(mirror.handle);
+        written.push(mirror.side);
+        advanced.push(mirror.side);
+      } catch {
+        failed.push(mirror.side);
+      }
     }
   }
 
-  return { written, advanced };
+  return { written, advanced, failed };
 }
 
 async function applyToOrigin(

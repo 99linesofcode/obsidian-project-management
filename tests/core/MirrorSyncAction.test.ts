@@ -41,6 +41,23 @@ function mirrorAdapter(applicationId: string): {
   return { adapter, registered: result.adapters.get(applicationId)! };
 }
 
+class FailingMirrorAdapter extends ConformanceMirrorAdapter {
+  override async applyField(): Promise<void> {
+    throw new Error('mirror write failed');
+  }
+}
+
+function failingMirrorAdapter(applicationId: string): {
+  adapter: FailingMirrorAdapter;
+  registered: RegisteredAdapter;
+} {
+  const adapter = new FailingMirrorAdapter();
+  const result = registerAdapters([
+    new AdapterRegistration(conformanceDescriptor(applicationId), adapter),
+  ]);
+  return { adapter, registered: result.adapters.get(applicationId)! };
+}
+
 function side(name: string, registered: RegisteredAdapter): MirrorSide {
   return new MirrorSide({ side: name, handle: 't1', adapter: registered });
 }
@@ -117,5 +134,32 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
     expect(alpha.adapter.currentTask('t1')?.status).toBe('Review');
     expect(beta.adapter.currentTask('t1')?.status).toBe('Review');
     expect(gamma.adapter.currentTask('t1')?.status).toBe('Review');
+  });
+});
+
+describe('MirrorSyncAction — a failed mirror write (F02)', () => {
+  it('records the failed side and keeps fanning out to the rest', async () => {
+    const boom = failingMirrorAdapter('boom');
+    const alpha = mirrorAdapter('alpha');
+    boom.adapter.seed(task('t1', 'Building'));
+    alpha.adapter.seed(task('t1', 'Building'));
+
+    const pass = new MirrorSyncPass({
+      entityId: 't1',
+      field: 'Status',
+      origin: vaultOrigin('Done', new Baseline('Building', false), true),
+      mirrors: [side('boom', boom.registered), side('alpha', alpha.registered)],
+      baselines: new Map([
+        ['boom', new Baseline('Building', false)],
+        ['alpha', new Baseline('Building', false)],
+      ]),
+    });
+
+    const record = await new MirrorSyncAction().invoke(pass);
+
+    expect(record.failed).toEqual(['boom']);
+    expect(record.written).toEqual(['alpha']);
+    expect(record.advanced).toEqual(['alpha']);
+    expect(alpha.adapter.currentTask('t1')?.status).toBe('Done');
   });
 });
