@@ -97,12 +97,12 @@ class FakeWatches implements ProjectWatchPort {
   }
 }
 
-function connection(slug: string): DeclaredConnection {
+function connection(slug: string, target: string = TARGET): DeclaredConnection {
   return new DeclaredConnection({
     slug,
     envelope: new ConnectionEnvelope({
       application: 'conformance',
-      target: TARGET,
+      target,
     }),
   });
 }
@@ -125,7 +125,7 @@ function setup() {
     mirrorAdapters,
     watches,
   );
-  return { action, origin, baselines, watches, mirror };
+  return { action, origin, baselines, watches, mirror, projectSource };
 }
 
 function activity(
@@ -136,7 +136,7 @@ function activity(
   return new ProjectActivityObservation({ changed, newestCreatedAt, etag });
 }
 
-describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen project', () => {
+describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen project (F02 NWM-30)', () => {
   it('unfreezes the origin and clears the watch when a newer item appears', async () => {
     const { action, origin, baselines, watches, mirror } = setup();
     baselines.seed(PROJECT, 'origin', 'true');
@@ -221,5 +221,44 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
 
     expect(reactivated).toBe(false);
     expect(origin.moves).toEqual([]);
+  });
+
+  it('refreshes every connection watch when one reactivates (NWM-30)', async () => {
+    const { action, origin, baselines, watches, mirror, projectSource } =
+      setup();
+    projectSource.connections = [
+      connection('a', 'board-a'),
+      connection('b', 'board-b'),
+    ];
+    baselines.seed(PROJECT, 'origin', 'true');
+    watches.seed(PROJECT, 'a', {
+      etag: 'etag-a1',
+      cursor: '2026-09-20T10:00:00Z',
+    });
+    watches.seed(PROJECT, 'b', {
+      etag: 'etag-b1',
+      cursor: '2026-09-20T10:00:00Z',
+    });
+    mirror.seedActivity(
+      'board-a',
+      activity(true, '2026-09-25T10:00:00Z', 'etag-a2'),
+    );
+    mirror.seedActivity(
+      'board-b',
+      activity(true, '2026-09-20T10:00:00Z', 'etag-b2'),
+    );
+
+    const reactivated = await action.invoke(PROJECT);
+
+    expect(reactivated).toBe(true);
+    expect(origin.moves).toEqual([{ project: PROJECT, archived: false }]);
+    expect(await watches.read(PROJECT, 'a')).toEqual({
+      etag: null,
+      cursor: null,
+    });
+    expect(await watches.read(PROJECT, 'b')).toEqual({
+      etag: 'etag-b2',
+      cursor: '2026-09-20T10:00:00Z',
+    });
   });
 });

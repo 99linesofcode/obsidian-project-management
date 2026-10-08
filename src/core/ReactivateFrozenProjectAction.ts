@@ -23,6 +23,7 @@ export class ReactivateFrozenProjectAction {
       return false;
     }
     const connections = await this.projectSource.readConnections(project);
+    let reactivated = false;
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
         connection.envelope.application,
@@ -34,10 +35,10 @@ export class ReactivateFrozenProjectAction {
         continue;
       }
       if (await this.reactivateOnNewerWork(project, connection, adapter.activity)) {
-        return true;
+        reactivated = true;
       }
     }
-    return false;
+    return reactivated;
   }
 
   private async wasFrozen(project: string): Promise<boolean> {
