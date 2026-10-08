@@ -60,6 +60,7 @@ export class SyncProjectAction {
     }
 
     const lifecycleReconciler = this.projectLifecycleReconciler?.();
+    const taskFieldReconciler = this.taskFieldReconciler?.();
     if (lifecycleReconciler !== undefined) {
       await this.step('migrate home note', async () => {
         await this.migrateProjectHomeNote.execute({
@@ -113,7 +114,6 @@ export class SyncProjectAction {
     const halves = Object.entries(note.connections)
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
-    const taskFieldReconciler = this.taskFieldReconciler?.();
 
     if (taskFieldReconciler === undefined) {
       await this.step('code host half', () =>

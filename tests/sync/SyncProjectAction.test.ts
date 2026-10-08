@@ -627,6 +627,22 @@ describe('the setting-gated cutover', () => {
     expect(h.events).toContain('reconcile:Acme Widgets');
     expect(h.events).not.toContain('todoist');
   });
+
+  it('snapshots the engine once so a mid-run toggle cannot mix the chain', async () => {
+    const h = harness({ state: openState, engine: true });
+    const lifecycle = h.newLifecycle.current!;
+    h.newLifecycle.current = {
+      reconcile: async (project) => {
+        h.reconciler.current = undefined;
+        return lifecycle.reconcile(project);
+      },
+    };
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).not.toContain('todoist');
+  });
 });
 
 describe('the setting-gated lifecycle cutover', () => {
