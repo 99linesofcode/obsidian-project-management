@@ -2,6 +2,7 @@ import type { CanonicalField } from '../../core/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/data/CapturedProject.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 import type {
   CodeHostResponse,
@@ -172,7 +173,8 @@ const VIEWER_BOARDS_QUERY = `
         nodes {
           id
           title
-          repositories(first: 1) { nodes { id } }
+          createdAt
+          repositories(first: 100) { nodes { url } }
         }
       }
     }
@@ -294,16 +296,20 @@ interface BoardSnapshot {
 }
 
 export class CodeHostMirrorAdapter implements MirrorAdapter {
-  private readonly target: CodeHostTarget;
+  private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
   constructor(
     private readonly transport: CodeHostTransport,
-    target: string,
+    target = '',
     private readonly boardIdentity?: () => Promise<BoardIdentity | null>,
     private readonly statusOptions: readonly string[] = [],
   ) {
-    this.target = CodeHostTarget.parse(target);
+    this.rawTarget = target;
+  }
+
+  private get target(): CodeHostTarget {
+    return CodeHostTarget.parse(this.rawTarget);
   }
 
   private board(repoUrl: string): Promise<BoardIdentity | null> {
@@ -574,6 +580,21 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
       .filter((issue) => issue.state === 'open' && !hasTypeLabel(issue.labels))
       .map((issue) =>
         toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null),
+      );
+  }
+
+  async captureProjects(): Promise<CapturedProject[]> {
+    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
+    return nodesOf(data.viewer, 'projectsV2')
+      .filter(isRecord)
+      .map(
+        (node) =>
+          new CapturedProject({
+            name: typeof node.title === 'string' ? node.title : '',
+            targets: repoUrlsOf(node),
+            createdAt:
+              typeof node.createdAt === 'string' ? node.createdAt : null,
+          }),
       );
   }
 
@@ -893,6 +914,16 @@ function nodesOf(container: unknown, key: string): unknown[] {
     return [];
   }
   return inner.nodes;
+}
+
+function repoUrlsOf(node: Record<string, unknown>): readonly string[] {
+  return nodesOf(node, 'repositories')
+    .filter(isRecord)
+    .flatMap((repository) =>
+      typeof repository.url === 'string' && repository.url !== ''
+        ? [repository.url]
+        : [],
+    );
 }
 
 function parseRepoBoard(node: Record<string, unknown>): RepoBoard[] {

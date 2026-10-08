@@ -118,6 +118,38 @@ const transitionalPolicies = [
       },
     },
   },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultProjectCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'vault',
+          fileInternalPath: ['renderConnectionsBlock.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultProjectCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'shared',
+          fileInternalPath: ['projectHomePath.ts'],
+        },
+      },
+    },
+  },
 ];
 
 // The public surface of each provider module: the only files another element

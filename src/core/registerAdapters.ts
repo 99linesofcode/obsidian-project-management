@@ -80,6 +80,9 @@ function gatePorts(registration: AdapterRegistration): RegisteredAdapter {
     project: adapter,
     tasks: adapter,
     capture: descriptor.capabilities.includes('capture') ? adapter : undefined,
+    projectCapture: descriptor.capabilities.includes('capture')
+      ? adapter
+      : undefined,
     completeFetch: descriptor.capabilities.includes('complete-fetch')
       ? adapter
       : undefined,
