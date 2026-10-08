@@ -239,15 +239,33 @@ is unchanged. It consists of the port layer and the pure core:
   (`infrastructure/registry/RegistryMirrorHandleAdapter`) first maps the note
   path to the registry entity's id (`findByNotePath`), then reads that entity's
   per-connection item through the existing `findMirrorItemByEntity` lookup.
+- **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction` +
+  `AssembleProjectLifecyclePassAction`). The project-level peer of the
+  mirror-sync action: it reads the origin's archived state through
+  `ProjectLifecycleOriginPort` and each mirror's through `ProjectPort`, runs the
+  same pure `mergeField` ladder over the archived fact, and fans the reconciled
+  freeze out to the origin and every capable mirror. Any side can start the
+  freeze or the unfreeze (NWM-15); the reconciled freeze is the pass's `frozen`
+  verdict, which gates the task-field pass (NWM-16). Its per-side baselines live
+  in the same `coreBaselines` store under the `lifecycle` field. The archived
+  fact carries a timestamp: the origin's is the home note's edit time, trusted
+  by default (NWM-28), and each mirror's is read through `ProjectPort`'s
+  `archivedTime` — a provider that exposes none returns null, so the ladder
+  falls through to the vault tie-break. The origin adapter
+  (`infrastructure/vault/VaultProjectLifecycleAdapter`) discovers the home note
+  name-agnostically — the same discovery the legacy chain uses, so an
+  unmigrated note is never misread as archived — moves the project folder on a
+  freeze/unfreeze, and relocates the registry's entity paths in lockstep.
 - **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
   need to build a mirror adapter for an application and a connection target. The
   composition root implements it over the provider adapters, so one adapter
   instance serves exactly one connection.
 - **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
-  time through a reconciler provider, so toggling `multiAdapterEngine` takes
+  time through two reconciler providers, so toggling `multiAdapterEngine` takes
   effect on the next sync without a reload. When it is on, `SyncProjectAction`
-  runs the assembled pass for task-field reconciliation and skips the legacy
-  code-host and task halves; probe, board-ensure, capture, lifecycle, vault
+  runs the assembled lifecycle pass for the freeze verdict and the assembled
+  pass for task-field reconciliation, and skips the legacy lifecycle step and
+  the legacy code-host and task halves; probe, board-ensure, capture, vault
   consistency and the deletion sweep still run. When it is off, the legacy
   chain runs exactly as before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
@@ -414,12 +432,16 @@ the shape is built and proven on the `Status` field through the conformance
 adapter, GitHub and Todoist mirror adapters implement the capability ports, the
 vault origin adapter completes the origin round-trip, and the pass assembler
 plus the core baseline store assemble a whole project pass and persist its
-baselines. The runtime cutover is gated by the `multiAdapterEngine` plugin
-setting (default off): with it on, the chain builds the origin and the
-per-connection mirror adapters from the project's connections and the stored
-secrets, runs the assembled pass for task-field reconciliation, and skips the
-legacy task halves; with it off the legacy chain runs exactly as before. The
-legacy chain is not yet retired.
+baselines. Project lifecycle (archive/unarchive) reconciles through the same
+core: the lifecycle pass assembler reads the origin's and each mirror's
+archived state, runs the same N-way ladder, and fans the freeze out. The
+runtime cutover is gated by the `multiAdapterEngine` plugin setting (default
+off): with it on, the chain builds the origin and the per-connection mirror
+adapters from the project's connections and the stored secrets, runs the
+assembled lifecycle pass for the freeze verdict and the assembled pass for
+task-field reconciliation, and skips the legacy lifecycle step and the legacy
+task halves; with it off the legacy chain runs exactly as before. The legacy
+chain is not yet retired.
 
 ## 10. Project Identification
 

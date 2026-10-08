@@ -64,6 +64,7 @@ import { registerAdapters } from './core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
 import { AssembleProjectPassAction } from './core/AssembleProjectPassAction.js';
+import { AssembleProjectLifecyclePassAction } from './core/AssembleProjectLifecyclePassAction.js';
 import type { AdapterDescriptor } from './core/AdapterDescriptor.js';
 import type { RegisteredAdapter } from './core/data/RegisteredAdapter.js';
 import type { MirrorAdapter } from './core/ports/MirrorAdapter.js';
@@ -74,6 +75,7 @@ import {
 } from './infrastructure/registry/CoreBaselineStoreAdapter.js';
 import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
 import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
+import { VaultProjectLifecycleAdapter } from './infrastructure/vault/VaultProjectLifecycleAdapter.js';
 import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
 import {
   CodeHostMirrorAdapter,
@@ -85,6 +87,7 @@ import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMi
 import type { TaskManagerTransport } from './infrastructure/todoist/TaskManagerTransport.js';
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
 import type { TaskFieldReconciler } from './sync/TaskFieldReconciler.js';
+import type { ProjectLifecycleReconciler } from './sync/ProjectLifecycleReconciler.js';
 
 async function request(
   token: string,
@@ -144,13 +147,18 @@ function createTransport(token: string): Transport {
   };
 }
 
-function composeTaskFieldReconciler(
+interface CoreReconcilers {
+  taskFields: TaskFieldReconciler;
+  lifecycle: ProjectLifecycleReconciler;
+}
+
+function composeCoreReconcilers(
   plugin: ProjectManagementPlugin,
   vault: VaultAdapter,
   syncState: SyncStateAdapter,
   secrets: SecretStore,
   baselineStorage: CoreBaselineStorage,
-): TaskFieldReconciler {
+): CoreReconcilers {
   const codeHostTransport = createCodeHostTransport(
     secrets.load(GITHUB_TOKEN_KEY) ?? '',
   );
@@ -159,28 +167,56 @@ function composeTaskFieldReconciler(
     TODOIST_TOKEN_KEY,
     createTodoistTransport,
   );
-  const mirrorAdapters: MirrorAdapterFactoryPort = {
+  const projectSource = new VaultProjectSourceAdapter(vault);
+  const baselines = new CoreBaselineStoreAdapter(baselineStorage);
+  const mirrorAdapters = mirrorAdapterFactory(
+    syncState,
+    codeHostTransport,
+    taskManagerTransport,
+  );
+
+  const taskFieldPass = new AssembleProjectPassAction(
+    projectSource,
+    new VaultOriginAdapter(plugin.app),
+    baselines,
+    new RegistryMirrorHandleAdapter(syncState),
+    mirrorAdapters,
+  );
+  const lifecyclePass = new AssembleProjectLifecyclePassAction(
+    projectSource,
+    new VaultProjectLifecycleAdapter(vault, syncState),
+    baselines,
+    mirrorAdapters,
+  );
+
+  return {
+    taskFields: {
+      reconcile: async (project) => {
+        await taskFieldPass.invoke(project);
+      },
+    },
+    lifecycle: {
+      reconcile: async (project) => ({
+        frozen: (await lifecyclePass.invoke(project)).frozen,
+      }),
+    },
+  };
+}
+
+function mirrorAdapterFactory(
+  syncState: SyncStateAdapter,
+  codeHost: CodeHostTransport,
+  taskManager: TaskManagerTransport,
+): MirrorAdapterFactoryPort {
+  return {
     create: (application, target, connectionSlug, projectName) =>
       createMirrorAdapter(
         application,
         target,
         () => syncState.getIdentity(projectName, connectionSlug),
-        codeHostTransport,
-        taskManagerTransport,
+        codeHost,
+        taskManager,
       ),
-  };
-  const assemblePass = new AssembleProjectPassAction(
-    new VaultProjectSourceAdapter(vault),
-    new VaultOriginAdapter(plugin.app),
-    new CoreBaselineStoreAdapter(baselineStorage),
-    new RegistryMirrorHandleAdapter(syncState),
-    mirrorAdapters,
-  );
-
-  return {
-    reconcile: async (project) => {
-      await assemblePass.invoke(project);
-    },
   };
 }
 
@@ -392,20 +428,25 @@ function composePlugin(
     },
   };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
-  let composedTaskFieldReconciler: TaskFieldReconciler | undefined;
-  const taskFieldReconciler = (): TaskFieldReconciler | undefined => {
+  let composedCoreReconcilers: CoreReconcilers | undefined;
+  const coreReconcilers = (): CoreReconcilers | undefined => {
     if (!plugin.settings.multiAdapterEngine) {
       return undefined;
     }
-    composedTaskFieldReconciler ??= composeTaskFieldReconciler(
+    composedCoreReconcilers ??= composeCoreReconcilers(
       plugin,
       vault,
       syncState,
       secrets,
       baselineStorage,
     );
-    return composedTaskFieldReconciler;
+    return composedCoreReconcilers;
   };
+  const taskFieldReconciler = (): TaskFieldReconciler | undefined =>
+    coreReconcilers()?.taskFields;
+  const projectLifecycleReconciler = ():
+    | ProjectLifecycleReconciler
+    | undefined => coreReconcilers()?.lifecycle;
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
@@ -420,6 +461,7 @@ function composePlugin(
     ensureProjectBoard,
     new RekeyRenamedConnectionsAction(syncState),
     taskFieldReconciler,
+    projectLifecycleReconciler,
   );
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(

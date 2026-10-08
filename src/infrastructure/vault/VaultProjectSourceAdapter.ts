@@ -15,7 +15,7 @@ export class VaultProjectSourceAdapter implements ProjectSourcePort {
   async readConnections(
     project: string,
   ): Promise<readonly DeclaredConnection[]> {
-    const note = await this.notes.getNoteByPath(projectHomePath(project, false));
+    const note = await this.homeNote(project);
     if (note === null) {
       return [];
     }
@@ -33,5 +33,14 @@ export class VaultProjectSourceAdapter implements ProjectSourcePort {
 
   async listEntities(project: string): Promise<readonly string[]> {
     return this.notes.listNotesInFolder(`Projecten/${project}/taken`);
+  }
+
+  private async homeNote(
+    project: string,
+  ): Promise<{ content: string } | null> {
+    return (
+      (await this.notes.getNoteByPath(projectHomePath(project, false))) ??
+      (await this.notes.getNoteByPath(projectHomePath(project, true)))
+    );
   }
 }

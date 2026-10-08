@@ -6,6 +6,9 @@ import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 
 export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly tasks = new Map<string, CanonicalTask>();
+  private readonly archived = new Map<string, boolean>();
+  private readonly projectTimes = new Map<string, string>();
+  private readonly missingProjects = new Set<string>();
   private readonly fieldTimes = new Map<
     string,
     Partial<Record<CanonicalField, string>>
@@ -13,6 +16,26 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   seed(task: CanonicalTask): void {
     this.tasks.set(task.handle, task);
+  }
+
+  seedProject(target: string, archived: boolean): void {
+    this.archived.set(target, archived);
+  }
+
+  seedMissingProject(target: string): void {
+    this.missingProjects.add(target);
+  }
+
+  setProjectTime(target: string, time: string | null): void {
+    if (time === null) {
+      this.projectTimes.delete(target);
+    } else {
+      this.projectTimes.set(target, time);
+    }
+  }
+
+  currentProject(target: string): CanonicalProject | null {
+    return this.readProjectSync(target);
   }
 
   setFieldTime(
@@ -34,18 +57,31 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   }
 
   async readProject(target: string): Promise<CanonicalProject | null> {
-    return new CanonicalProject({
-      handle: target,
-      name: target,
-      archived: false,
-    });
+    if (this.missingProjects.has(target)) {
+      return null;
+    }
+    return this.readProjectSync(target);
   }
 
   async createProject(target: string, name: string): Promise<CanonicalProject> {
     return new CanonicalProject({ handle: target, name, archived: false });
   }
 
-  async setArchived(): Promise<void> {}
+  async setArchived(target: string, archived: boolean): Promise<void> {
+    this.archived.set(target, archived);
+  }
+
+  async archivedTime(target: string): Promise<string | null> {
+    return this.projectTimes.get(target) ?? null;
+  }
+
+  private readProjectSync(target: string): CanonicalProject {
+    return new CanonicalProject({
+      handle: target,
+      name: target,
+      archived: this.archived.get(target) ?? false,
+    });
+  }
 
   async readTasks(): Promise<CanonicalTask[]> {
     return [...this.tasks.values()];
