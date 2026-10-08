@@ -63,6 +63,13 @@ class FakeVault {
     string,
     { content: string; mtime: number }
   >();
+  readonly frontmatter = new Map<string, unknown>();
+
+  readonly metadataCache = {
+    getFileCache: (file: { path: string }) => ({
+      frontmatter: this.frontmatter.get(file.path),
+    }),
+  };
 
   seed(path: string, content: string, mtime: number): void {
     this.notes.set(path, { content, mtime });
@@ -153,8 +160,15 @@ function setup() {
   const vault = new FakeVault();
   vault.seed(HOME_PATH, HOME, MTIME);
   vault.seed(TASK_PATH, TASK, MTIME);
+  vault.frontmatter.set(HOME_PATH, {
+    connections: { conformance: { tool: 'conformance', project: 'board-1' } },
+  });
   const fileManager = new FakeFileManager(vault);
-  const app = { vault, fileManager } as unknown as App;
+  const app = {
+    vault,
+    fileManager,
+    metadataCache: vault.metadataCache,
+  } as unknown as App;
 
   const origin = new VaultOriginAdapter(app);
   const projectSource = new VaultProjectSourceAdapter(

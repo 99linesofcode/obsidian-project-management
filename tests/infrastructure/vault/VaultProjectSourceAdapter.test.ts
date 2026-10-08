@@ -17,6 +17,20 @@ class FakeNotes {
     const prefix = `${folder}/`;
     return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
   }
+
+  async findHomeNotePath(project: string): Promise<string | null> {
+    for (const path of this.notes.keys()) {
+      const segments = path.split('/');
+      if (
+        (segments[0] === 'Projecten' || segments[0] === 'Archief') &&
+        segments[1] === project &&
+        segments.length === 3
+      ) {
+        return path;
+      }
+    }
+    return null;
+  }
 }
 
 const HOME = [
@@ -51,6 +65,28 @@ describe('VaultProjectSourceAdapter — the project source', () => {
       },
     ]);
   });
+
+  it.each([
+    'Projecten/Acme/_home.md',
+    'Projecten/Acme/Acme.md',
+    'Projecten/Acme/home.md',
+  ])(
+    'scopes the connections of a legacy-named home note at %s',
+    async (homePath) => {
+      const notes = new FakeNotes();
+      notes.seed(homePath, HOME);
+      const source = new VaultProjectSourceAdapter(notes);
+
+      const connections = await source.readConnections('Acme');
+
+      expect(connections).toHaveLength(2);
+      expect(connections[0]?.slug).toBe('conformance');
+      expect(connections[0]?.envelope).toEqual({
+        application: 'conformance',
+        target: 'board-1',
+      });
+    },
+  );
 
   it('returns no connections when the project note is absent', async () => {
     const source = new VaultProjectSourceAdapter(new FakeNotes());

@@ -30,6 +30,7 @@ class FakeVault implements VaultPort {
   projectNotes: ProjectNoteData[] = [];
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
+  renames: Array<{ from: string; to: string }> = [];
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
@@ -37,7 +38,9 @@ class FakeVault implements VaultPort {
   }
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
-  async renameNote(): Promise<void> {}
+  async renameNote(from: string, to: string): Promise<void> {
+    this.renames.push({ from, to });
+  }
   async moveFolder(): Promise<void> {}
   async listNotesInFolder(folder: string): Promise<string[]> {
     return this.folders.get(folder) ?? [];
@@ -624,6 +627,22 @@ describe('the setting-gated cutover', () => {
     expect(h.events).toContain('reconcile:Acme Widgets');
     expect(h.events).not.toContain('todoist');
   });
+
+  it('snapshots the engine once so a mid-run toggle cannot mix the chain', async () => {
+    const h = harness({ state: openState, engine: true });
+    const lifecycle = h.newLifecycle.current!;
+    h.newLifecycle.current = {
+      reconcile: async (project) => {
+        h.reconciler.current = undefined;
+        return lifecycle.reconcile(project);
+      },
+    };
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).not.toContain('todoist');
+  });
 });
 
 describe('the setting-gated lifecycle cutover', () => {
@@ -663,5 +682,28 @@ describe('the setting-gated lifecycle cutover', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toContain('reconcile:Acme Widgets');
+  });
+});
+
+describe('the setting-gated migration cutover', () => {
+  it('migrates a legacy-named home note when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.vault.renames).toEqual([
+      {
+        from: 'Projecten/Acme Widgets/_home.md',
+        to: 'Projecten/Acme Widgets/_Acme Widgets.md',
+      },
+    ]);
+  });
+
+  it('leaves migration to the legacy lifecycle when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.vault.renames).toEqual([]);
   });
 });

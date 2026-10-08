@@ -3,11 +3,13 @@ import type { DeclaredConnection } from './data/DeclaredConnection.js';
 import { MirrorSide } from './data/MirrorSide.js';
 import { ProjectLifecyclePass } from './data/ProjectLifecyclePass.js';
 import type { ProjectLifecycleRecord } from './data/ProjectLifecycleRecord.js';
+import type { RegisteredAdapter } from './data/RegisteredAdapter.js';
 import { mirrorSideKey } from './mirrorSideKey.js';
 import { originSideObservation } from './originSideObservation.js';
 import { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
 import type { BaselineStorePort } from './ports/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from './ports/MirrorAdapterFactoryPort.js';
+import type { MirrorProjectPort } from './ports/MirrorProjectPort.js';
 import type { ProjectLifecycleOriginPort } from './ports/ProjectLifecycleOriginPort.js';
 import type { ProjectSourcePort } from './ports/ProjectSourcePort.js';
 
@@ -20,11 +22,12 @@ export class AssembleProjectLifecyclePassAction {
     private readonly origin: ProjectLifecycleOriginPort,
     private readonly baselines: BaselineStorePort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
+    private readonly mirrorProjects: MirrorProjectPort,
   ) {}
 
   async invoke(project: string): Promise<ProjectLifecycleRecord> {
     const connections = await this.projectSource.readConnections(project);
-    const mirrors = this.scopeMirrors(connections, project);
+    const mirrors = await this.scopeMirrors(connections, project);
     const origin = originSideObservation(
       ORIGIN_SIDE,
       await this.baselines.read(project, LIFECYCLE_FIELD, ORIGIN_SIDE),
@@ -45,10 +48,10 @@ export class AssembleProjectLifecyclePassAction {
     return record;
   }
 
-  private scopeMirrors(
+  private async scopeMirrors(
     connections: readonly DeclaredConnection[],
     project: string,
-  ): MirrorSide[] {
+  ): Promise<MirrorSide[]> {
     const mirrors: MirrorSide[] = [];
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
@@ -58,16 +61,65 @@ export class AssembleProjectLifecyclePassAction {
         project,
       );
       if (adapter !== null) {
-        mirrors.push(
-          new MirrorSide({
-            side: mirrorSideKey(connection.slug),
-            handle: connection.envelope.target,
-            adapter,
-          }),
-        );
+        try {
+          mirrors.push(
+            new MirrorSide({
+              side: mirrorSideKey(connection.slug),
+              handle: await this.resolveProject(connection, adapter, project),
+              adapter,
+            }),
+          );
+        } catch (error) {
+          console.error(
+            `AssembleProjectLifecyclePassAction: connection ${connection.slug} failed`,
+            error,
+          );
+        }
       }
     }
     return mirrors;
+  }
+
+  private async resolveProject(
+    connection: DeclaredConnection,
+    adapter: RegisteredAdapter,
+    project: string,
+  ): Promise<string> {
+    const recorded = await this.mirrorProjects.resolve(
+      project,
+      connection.slug,
+    );
+    if (recorded !== null) {
+      return recorded;
+    }
+
+    const existing = await adapter.project.readProject(
+      connection.envelope.target,
+    );
+    if (existing !== null) {
+      await this.record(connection, project, connection.envelope.target);
+      return connection.envelope.target;
+    }
+
+    const created = await adapter.project.createProject(
+      connection.envelope.target,
+      project,
+    );
+    await this.record(connection, project, created.handle);
+    return created.handle;
+  }
+
+  private async record(
+    connection: DeclaredConnection,
+    project: string,
+    handle: string,
+  ): Promise<void> {
+    await this.mirrorProjects.record(
+      project,
+      connection.slug,
+      connection.envelope.application,
+      handle,
+    );
   }
 
   private async readMirrorBaselines(

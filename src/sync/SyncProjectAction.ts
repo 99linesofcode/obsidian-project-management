@@ -18,10 +18,12 @@ import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js
 import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
+import { MigrateProjectHomeNoteAction } from '../projects/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 
 export class SyncProjectAction {
   private readonly sweepDeletedNotes: SweepDeletedNotesAction;
+  private readonly migrateProjectHomeNote: MigrateProjectHomeNoteAction;
   private stepErrors: unknown[] = [];
 
   constructor(
@@ -45,6 +47,7 @@ export class SyncProjectAction {
       syncState,
       handleDeletedNote,
     );
+    this.migrateProjectHomeNote = new MigrateProjectHomeNoteAction(vault);
   }
 
   async execute(project: string): Promise<unknown[]> {
@@ -54,6 +57,18 @@ export class SyncProjectAction {
     const note = await this.resolveProject(project);
     if (!note) {
       return this.stepErrors;
+    }
+
+    const lifecycleReconciler = this.projectLifecycleReconciler?.();
+    const taskFieldReconciler = this.taskFieldReconciler?.();
+    if (lifecycleReconciler !== undefined) {
+      await this.step('migrate home note', async () => {
+        await this.migrateProjectHomeNote.execute({
+          projectName: project,
+          notePath: note.path,
+          locationArchived: note.archivedAt !== null,
+        });
+      });
     }
 
     if (this.rekeyRenamedConnections) {
@@ -82,7 +97,6 @@ export class SyncProjectAction {
 
     const boardState = await this.probe(project, note.connections);
 
-    const lifecycleReconciler = this.projectLifecycleReconciler?.();
     const verdict =
       lifecycleReconciler === undefined
         ? await this.runLifecycle(project, note, boardState, syncedAt)
@@ -100,7 +114,6 @@ export class SyncProjectAction {
     const halves = Object.entries(note.connections)
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
-    const taskFieldReconciler = this.taskFieldReconciler?.();
 
     if (taskFieldReconciler === undefined) {
       await this.step('code host half', () =>

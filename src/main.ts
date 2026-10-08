@@ -74,6 +74,7 @@ import {
   type CoreBaselineStorage,
 } from './infrastructure/registry/CoreBaselineStoreAdapter.js';
 import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
+import { RegistryMirrorProjectAdapter } from './infrastructure/registry/RegistryMirrorProjectAdapter.js';
 import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
 import { VaultProjectLifecycleAdapter } from './infrastructure/vault/VaultProjectLifecycleAdapter.js';
 import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
@@ -173,6 +174,7 @@ function composeCoreReconcilers(
     syncState,
     codeHostTransport,
     taskManagerTransport,
+    plugin.settings.statusOptions,
   );
 
   const taskFieldPass = new AssembleProjectPassAction(
@@ -187,6 +189,7 @@ function composeCoreReconcilers(
     new VaultProjectLifecycleAdapter(vault, syncState),
     baselines,
     mirrorAdapters,
+    new RegistryMirrorProjectAdapter(syncState),
   );
 
   return {
@@ -207,6 +210,7 @@ function mirrorAdapterFactory(
   syncState: SyncStateAdapter,
   codeHost: CodeHostTransport,
   taskManager: TaskManagerTransport,
+  statusOptions: readonly string[],
 ): MirrorAdapterFactoryPort {
   return {
     create: (application, target, connectionSlug, projectName) =>
@@ -216,6 +220,7 @@ function mirrorAdapterFactory(
         () => syncState.getIdentity(projectName, connectionSlug),
         codeHost,
         taskManager,
+        statusOptions,
       ),
   };
 }
@@ -226,11 +231,12 @@ function createMirrorAdapter(
   boardIdentity: () => Promise<BoardIdentity | null>,
   codeHost: CodeHostTransport,
   taskManager: TaskManagerTransport,
+  statusOptions: readonly string[],
 ): RegisteredAdapter | null {
   if (application === 'github') {
     return gateMirror(
       githubDescriptor(),
-      new CodeHostMirrorAdapter(codeHost, target, boardIdentity),
+      new CodeHostMirrorAdapter(codeHost, target, boardIdentity, statusOptions),
     );
   }
   if (application === 'todoist') {

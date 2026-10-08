@@ -219,8 +219,11 @@ is unchanged. It consists of the port layer and the pure core:
 - **The project source port** (`ProjectSourcePort`). The core's need to read a
   project's declared connections as `{application, target}` envelopes and to
   enumerate the project's task notes. Its adapter
-  (`infrastructure/vault/VaultProjectSourceAdapter`) reuses the legacy vault
-  module's connections codec and note reads.
+  (`infrastructure/vault/VaultProjectSourceAdapter`) discovers the home note
+  name-agnostically through the vault's project-note scan — the same discovery
+  the legacy chain and the lifecycle adapter use — so an unmigrated legacy-named
+  home note still scopes its mirrors, and reuses the legacy vault module's
+  connections codec and note reads.
 - **The pass assembler** (`AssembleProjectPassAction`). Given a project, it
   reads each declared connection with its slug, builds the connection's mirror
   adapter through the factory (scoped by the connection's target), resolves the
@@ -239,14 +242,26 @@ is unchanged. It consists of the port layer and the pure core:
   (`infrastructure/registry/RegistryMirrorHandleAdapter`) first maps the note
   path to the registry entity's id (`findByNotePath`), then reads that entity's
   per-connection item through the existing `findMirrorItemByEntity` lookup.
+- **The mirror-project port** (`MirrorProjectPort`). The core's need to resolve
+  and record the handle a connection's application uses for the mirror project
+  (a board, a project id). Its adapter
+  (`infrastructure/registry/RegistryMirrorProjectAdapter`) stores the handle in
+  the existing per-connection port state, preserving the rest of the
+  bookkeeping. A connection with no recorded handle and no readable mirror
+  project is onboarded: the lifecycle pass creates it through
+  `ProjectPort.createProject`, records the returned handle, and reconciles it in
+  the same pass rather than skipping it.
 - **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction` +
   `AssembleProjectLifecyclePassAction`). The project-level peer of the
-  mirror-sync action: it reads the origin's archived state through
-  `ProjectLifecycleOriginPort` and each mirror's through `ProjectPort`, runs the
-  same pure `mergeField` ladder over the archived fact, and fans the reconciled
-  freeze out to the origin and every capable mirror. Any side can start the
-  freeze or the unfreeze (NWM-15); the reconciled freeze is the pass's `frozen`
-  verdict, which gates the task-field pass (NWM-16). Its per-side baselines live
+  mirror-sync action: it resolves each connection's mirror project through
+  `MirrorProjectPort`, onboarding a missing one via `ProjectPort.createProject`
+  so a newly-connected project is onboarded in the same pass, then reads the
+  origin's archived state through `ProjectLifecycleOriginPort` and each
+  mirror's through `ProjectPort`, runs the same pure `mergeField` ladder over
+  the archived fact, and fans the reconciled freeze out to the origin and every
+  capable mirror. Any side can start the freeze or the unfreeze (NWM-15); the
+  reconciled freeze is the pass's `frozen` verdict, which gates the task-field
+  pass (NWM-16). Its per-side baselines live
   in the same `coreBaselines` store under the `lifecycle` field. The archived
   fact carries a timestamp: the origin's is the home note's edit time, trusted
   by default (NWM-28), and each mirror's is read through `ProjectPort`'s
@@ -264,10 +279,12 @@ is unchanged. It consists of the port layer and the pure core:
   time through two reconciler providers, so toggling `multiAdapterEngine` takes
   effect on the next sync without a reload. When it is on, `SyncProjectAction`
   runs the assembled lifecycle pass for the freeze verdict and the assembled
-  pass for task-field reconciliation, and skips the legacy lifecycle step and
-  the legacy code-host and task halves; probe, board-ensure, capture, vault
-  consistency and the deletion sweep still run. When it is off, the legacy
-  chain runs exactly as before.
+  pass for task-field reconciliation, migrates the project's home note through
+  the legacy migration action (which the skipped legacy lifecycle would
+  otherwise have run), and skips the legacy lifecycle step and the legacy
+  code-host and task halves; probe, board-ensure, capture, vault consistency and
+  the deletion sweep still run. When it is off, the legacy chain runs exactly as
+  before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.

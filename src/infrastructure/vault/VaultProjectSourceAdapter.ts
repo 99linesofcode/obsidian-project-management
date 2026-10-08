@@ -1,12 +1,12 @@
 import { ConnectionEnvelope } from '../../core/data/ConnectionEnvelope.js';
 import { DeclaredConnection } from '../../core/data/DeclaredConnection.js';
 import type { ProjectSourcePort } from '../../core/ports/ProjectSourcePort.js';
-import { projectHomePath } from '../../shared/projectHomePath.js';
 import { connectionsOf } from '../../vault/connectionsOf.js';
 
 export interface NoteSource {
   getNoteByPath(path: string): Promise<{ content: string } | null>;
   listNotesInFolder(folder: string): Promise<string[]>;
+  findHomeNotePath(project: string): Promise<string | null>;
 }
 
 export class VaultProjectSourceAdapter implements ProjectSourcePort {
@@ -15,7 +15,11 @@ export class VaultProjectSourceAdapter implements ProjectSourcePort {
   async readConnections(
     project: string,
   ): Promise<readonly DeclaredConnection[]> {
-    const note = await this.homeNote(project);
+    const path = await this.notes.findHomeNotePath(project);
+    if (path === null) {
+      return [];
+    }
+    const note = await this.notes.getNoteByPath(path);
     if (note === null) {
       return [];
     }
@@ -33,14 +37,5 @@ export class VaultProjectSourceAdapter implements ProjectSourcePort {
 
   async listEntities(project: string): Promise<readonly string[]> {
     return this.notes.listNotesInFolder(`Projecten/${project}/taken`);
-  }
-
-  private async homeNote(
-    project: string,
-  ): Promise<{ content: string } | null> {
-    return (
-      (await this.notes.getNoteByPath(projectHomePath(project, false))) ??
-      (await this.notes.getNoteByPath(projectHomePath(project, true)))
-    );
   }
 }
