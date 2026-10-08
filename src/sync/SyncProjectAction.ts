@@ -143,7 +143,7 @@ export class SyncProjectAction {
       } else {
         if (taskCaptureReconciler !== undefined) {
           await this.step('task capture', () =>
-            taskCaptureReconciler.capture(project),
+            taskCaptureReconciler.capture(project, syncedAt),
           );
         }
         await this.step('task fields', () =>

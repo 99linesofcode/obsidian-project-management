@@ -31,6 +31,7 @@ export class VaultTaskCaptureAdapter implements TaskCaptureVaultPort {
     private readonly vault: TaskCaptureVault,
     private readonly state: TaskCaptureState,
     private readonly createTaskNote: CreateTaskNoteAction,
+    private readonly isCodeHost: (application: string) => boolean,
   ) {}
 
   async listAdopted(project: string, slug: string): Promise<readonly string[]> {
@@ -40,7 +41,10 @@ export class VaultTaskCaptureAdapter implements TaskCaptureVaultPort {
   }
 
   async adopt(input: AdoptTaskInput): Promise<void> {
-    if (isCodeHostHandle(input.task.handle)) {
+    if (input.task.handle === '') {
+      throw new Error('cannot adopt a task with an empty handle');
+    }
+    if (this.isCodeHost(input.application)) {
       await this.adoptCodeHostTask(input);
       return;
     }
@@ -80,8 +84,4 @@ export class VaultTaskCaptureAdapter implements TaskCaptureVaultPort {
       { entityId: id, base: null },
     );
   }
-}
-
-function isCodeHostHandle(handle: string): boolean {
-  return handle.startsWith('http://') || handle.startsWith('https://');
 }

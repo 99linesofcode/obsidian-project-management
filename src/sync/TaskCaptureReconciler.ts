@@ -1,3 +1,3 @@
 export interface TaskCaptureReconciler {
-  capture(project: string): Promise<void>;
+  capture(project: string, syncedAt: string): Promise<void>;
 }

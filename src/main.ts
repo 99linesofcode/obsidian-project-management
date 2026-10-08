@@ -35,7 +35,6 @@ import { CaptureTasksAction } from './core/CaptureTasksAction.js';
 import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
 import { VaultTaskCaptureAdapter } from './infrastructure/vault/VaultTaskCaptureAdapter.js';
 import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
-import { RegistryTaskCursorAdapter } from './infrastructure/registry/RegistryTaskCursorAdapter.js';
 import type { CaptureSource } from './core/ports/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
@@ -219,11 +218,12 @@ function composeCoreReconcilers(
   const captureTasks = new CaptureTasksAction(
     projectSource,
     mirrorAdapters,
-    new VaultTaskCaptureAdapter(vault, syncState, createTaskNote),
-    new RegistryTaskCursorAdapter({
-      read: (key) => syncState.getProjectCursor(key),
-      write: (key, value) => syncState.setProjectCursor(key, value),
-    }),
+    new VaultTaskCaptureAdapter(
+      vault,
+      syncState,
+      createTaskNote,
+      (application) => application === 'github',
+    ),
   );
 
   return {
@@ -241,8 +241,8 @@ function composeCoreReconcilers(
       capture: (syncedAt) => capture.invoke(syncedAt),
     },
     taskCapture: {
-      capture: async (project) => {
-        await captureTasks.invoke(project, new Date().toISOString());
+      capture: async (project, syncedAt) => {
+        await captureTasks.invoke(project, syncedAt);
       },
     },
   };

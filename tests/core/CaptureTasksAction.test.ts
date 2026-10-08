@@ -9,7 +9,6 @@ import type { MirrorAdapterFactoryPort } from '../../src/core/ports/MirrorAdapte
 import type { ProjectPort } from '../../src/core/ports/ProjectPort.js';
 import type { ProjectSourcePort } from '../../src/core/ports/ProjectSourcePort.js';
 import type { TaskSurfacePort } from '../../src/core/ports/TaskSurfacePort.js';
-import type { TaskCaptureCursorPort } from '../../src/core/ports/TaskCaptureCursorPort.js';
 import type {
   AdoptTaskInput,
   TaskCaptureVaultPort,
@@ -36,18 +35,6 @@ class FakeVault implements TaskCaptureVaultPort {
     const handles = this.adopted.get(key) ?? new Set<string>();
     handles.add(input.task.handle);
     this.adopted.set(key, handles);
-  }
-}
-
-class FakeCursor implements TaskCaptureCursorPort {
-  readonly cursors = new Map<string, string>();
-
-  async read(project: string, slug: string): Promise<string | null> {
-    return this.cursors.get(`${project}/${slug}`) ?? null;
-  }
-
-  async write(project: string, slug: string, handle: string): Promise<void> {
-    this.cursors.set(`${project}/${slug}`, handle);
   }
 }
 
@@ -107,22 +94,21 @@ function harness(
 ): {
   action: CaptureTasksAction;
   vault: FakeVault;
-  cursor: FakeCursor;
+  listing: { tasks: CanonicalTask[] };
 } {
   const vault = new FakeVault();
-  const cursor = new FakeCursor();
+  const listing = { tasks };
   const factory: MirrorAdapterFactoryPort = {
-    create: () => registered({ capture: async () => tasks }),
+    create: () => registered({ capture: async () => listing.tasks }),
   };
   return {
     action: new CaptureTasksAction(
       new FakeProjectSource(connections),
       factory,
       vault,
-      cursor,
     ),
     vault,
-    cursor,
+    listing,
   };
 }
 
@@ -136,6 +122,17 @@ describe('CaptureTasksAction — adopting application-born tasks', () => {
     expect(first.captured).toEqual(['A']);
     expect(second.captured).toEqual([]);
     expect(h.vault.adoptCalls.map((call) => call.handle)).toEqual(['A']);
+  });
+
+  it('adopts a task ordered before a previously adopted one', async () => {
+    const h = harness([task('A')]);
+    await h.action.invoke('Acme', SYNCED_AT);
+    h.listing.tasks = [task('N'), task('A')];
+
+    const result = await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(result.captured).toEqual(['N']);
+    expect(h.vault.adoptCalls.map((call) => call.handle)).toEqual(['A', 'N']);
   });
 
   it('skips a task the vault already declares', async () => {
@@ -168,13 +165,11 @@ describe('CaptureTasksAction — adopting application-born tasks', () => {
 
   it('skips a connection whose adapter declares no capture', async () => {
     const vault = new FakeVault();
-    const cursor = new FakeCursor();
     const factory: MirrorAdapterFactoryPort = { create: () => null };
     const action = new CaptureTasksAction(
       new FakeProjectSource([connection('acme', 'T1', 'acme')]),
       factory,
       vault,
-      cursor,
     );
 
     const result = await action.invoke('Acme', SYNCED_AT);
@@ -185,7 +180,6 @@ describe('CaptureTasksAction — adopting application-born tasks', () => {
 
   it('captures each connection independently', async () => {
     const vault = new FakeVault();
-    const cursor = new FakeCursor();
     const factory: MirrorAdapterFactoryPort = {
       create: (application) =>
         registered({
@@ -199,7 +193,6 @@ describe('CaptureTasksAction — adopting application-born tasks', () => {
       ]),
       factory,
       vault,
-      cursor,
     );
 
     const result = await action.invoke('Acme', SYNCED_AT);
@@ -209,5 +202,34 @@ describe('CaptureTasksAction — adopting application-born tasks', () => {
       { handle: 'A', slug: 'acme' },
       { handle: 'B', slug: 'other' },
     ]);
+  });
+
+  it('isolates a connection whose listing fails and captures the rest', async () => {
+    const vault = new FakeVault();
+    const factory: MirrorAdapterFactoryPort = {
+      create: (application) =>
+        registered({
+          capture: async () => {
+            if (application === 'acme') {
+              throw new Error('listing failed');
+            }
+            return [task('B')];
+          },
+        }),
+    };
+    const action = new CaptureTasksAction(
+      new FakeProjectSource([
+        connection('acme', 'T1', 'acme'),
+        connection('other', 'T2', 'other'),
+      ]),
+      factory,
+      vault,
+    );
+
+    const result = await action.invoke('Acme', SYNCED_AT);
+
+    expect(result.captured).toEqual(['B']);
+    expect(result.errors).toHaveLength(1);
+    expect(vault.adoptCalls).toEqual([{ handle: 'B', slug: 'other' }]);
   });
 });

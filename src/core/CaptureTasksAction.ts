@@ -2,7 +2,6 @@ import type { DeclaredConnection } from './data/DeclaredConnection.js';
 import type { CapturePort } from './ports/CapturePort.js';
 import type { MirrorAdapterFactoryPort } from './ports/MirrorAdapterFactoryPort.js';
 import type { ProjectSourcePort } from './ports/ProjectSourcePort.js';
-import type { TaskCaptureCursorPort } from './ports/TaskCaptureCursorPort.js';
 import type { TaskCaptureVaultPort } from './ports/TaskCaptureVaultPort.js';
 
 export interface CaptureTasksResult {
@@ -15,7 +14,6 @@ export class CaptureTasksAction {
     private readonly projectSource: ProjectSourcePort,
     private readonly factory: MirrorAdapterFactoryPort,
     private readonly vault: TaskCaptureVaultPort,
-    private readonly cursor: TaskCaptureCursorPort,
   ) {}
 
   async invoke(project: string, syncedAt: string): Promise<CaptureTasksResult> {
@@ -33,14 +31,18 @@ export class CaptureTasksAction {
       if (capture === undefined) {
         continue;
       }
-      const result = await this.captureConnection(
-        project,
-        connection,
-        capture,
-        syncedAt,
-      );
-      captured.push(...result.captured);
-      errors.push(...result.errors);
+      try {
+        const result = await this.captureConnection(
+          project,
+          connection,
+          capture,
+          syncedAt,
+        );
+        captured.push(...result.captured);
+        errors.push(...result.errors);
+      } catch (error) {
+        errors.push(error);
+      }
     }
     return { captured, errors };
   }
@@ -55,15 +57,11 @@ export class CaptureTasksAction {
     const adopted = new Set(
       await this.vault.listAdopted(project, connection.slug),
     );
-    const cursor = await this.cursor.read(project, connection.slug);
-    const start = resumeIndex(tasks, cursor);
 
     const captured: string[] = [];
     const errors: unknown[] = [];
-    let next = cursor;
-    for (const task of tasks.slice(start)) {
+    for (const task of tasks) {
       if (adopted.has(task.handle)) {
-        next = task.handle;
         continue;
       }
       try {
@@ -80,22 +78,7 @@ export class CaptureTasksAction {
       }
       captured.push(task.handle);
       adopted.add(task.handle);
-      next = task.handle;
-    }
-
-    if (next !== null && next !== cursor) {
-      await this.cursor.write(project, connection.slug, next);
     }
     return { captured, errors };
   }
-}
-
-function resumeIndex(
-  tasks: readonly { handle: string }[],
-  cursor: string | null,
-): number {
-  if (cursor === null) {
-    return 0;
-  }
-  return tasks.findIndex((task) => task.handle === cursor) + 1;
 }

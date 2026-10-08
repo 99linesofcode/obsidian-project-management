@@ -67,7 +67,12 @@ function harness(): {
   const syncState = new FakeSyncState();
   const createTaskNote = new CreateTaskNoteAction(vault, syncState, '');
   return {
-    adapter: new VaultTaskCaptureAdapter(vault, syncState, createTaskNote),
+    adapter: new VaultTaskCaptureAdapter(
+      vault,
+      syncState,
+      createTaskNote,
+      (application) => application === 'github',
+    ),
     vault,
     syncState,
   };
@@ -115,6 +120,23 @@ describe('VaultTaskCaptureAdapter — adopting a captured task', () => {
     expect(content).not.toContain('url:');
     const record = h.syncState.setCalls[0]!;
     expect(h.syncState.handleOf(record.id, 'todoist')).toBe('T1');
+  });
+
+  it('refuses a task whose handle is empty', async () => {
+    const h = harness();
+
+    await expect(
+      h.adapter.adopt({
+        task: task('', 'Nameless'),
+        application: 'todoist',
+        slug: 'todoist',
+        projectName: 'Acme Widgets',
+        syncedAt: SYNCED_AT,
+      }),
+    ).rejects.toThrow('empty handle');
+
+    expect(h.vault.created).toEqual([]);
+    expect(h.syncState.setCalls).toEqual([]);
   });
 
   it('lists the handles already adopted for a connection', async () => {
