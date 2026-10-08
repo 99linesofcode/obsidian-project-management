@@ -10,6 +10,7 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly projectTimes = new Map<string, string>();
   private readonly missingProjects = new Set<string>();
   private readonly absentProjects = new Set<string>();
+  private readonly throwingProjects = new Set<string>();
   readonly createCalls: string[] = [];
   private readonly fieldTimes = new Map<
     string,
@@ -30,6 +31,10 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   seedAbsentProject(target: string): void {
     this.absentProjects.add(target);
+  }
+
+  seedThrowingProject(target: string): void {
+    this.throwingProjects.add(target);
   }
 
   setProjectTime(target: string, time: string | null): void {
@@ -63,6 +68,9 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   }
 
   async readProject(target: string): Promise<CanonicalProject | null> {
+    if (this.throwingProjects.has(target)) {
+      throw new Error(`conformance: project ${target} read failed`);
+    }
     if (this.missingProjects.has(target) || this.absentProjects.has(target)) {
       return null;
     }

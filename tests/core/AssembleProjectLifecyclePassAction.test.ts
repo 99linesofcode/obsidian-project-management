@@ -332,8 +332,8 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(mirror.currentProject('board-b')?.archived).toBe(true);
   });
 
-  it('skips a mirror whose project read returns null', async () => {
-    const { mirror, baselines, action } = setup({
+  it('onboards a mirror whose project read returns null, then skips observing it', async () => {
+    const { mirror, mirrorProjects, baselines, action } = setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
@@ -343,11 +343,31 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
 
     const record = await action.invoke(PROJECT);
 
+    expect(mirror.createCalls).toEqual(['board-b']);
+    expect(await mirrorProjects.resolve(PROJECT, 'b')).toBe('board-b');
     expect(record.frozen).toBe(true);
     expect(record.advanced).not.toContain('mirror:b');
     expect(mirror.currentProject('board-b')?.archived).toBe(false);
     const baseline = await baselines.read(PROJECT, 'lifecycle', 'mirror:b');
     expect(baseline?.value).toBe('false');
+  });
+
+  it('skips a connection whose project read throws and still reconciles the rest', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: true,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    mirror.seedThrowingProject('board-a');
+    await seedBaselines(baselines, false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(mirror.createCalls).not.toContain('board-a');
+    expect(record.frozen).toBe(true);
+    expect(record.advanced).toContain('mirror:b');
+    expect(vault.has(ARCHIVED_HOME)).toBe(true);
+    expect(mirror.currentProject('board-b')?.archived).toBe(true);
   });
 
   it('resolves two disagreeing mirrors to the vault tie-break without a decisive timestamp (NWM-12)', async () => {

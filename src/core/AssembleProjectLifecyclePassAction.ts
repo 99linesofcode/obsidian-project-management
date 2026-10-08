@@ -61,13 +61,20 @@ export class AssembleProjectLifecyclePassAction {
         project,
       );
       if (adapter !== null) {
-        mirrors.push(
-          new MirrorSide({
-            side: mirrorSideKey(connection.slug),
-            handle: await this.resolveProject(connection, adapter, project),
-            adapter,
-          }),
-        );
+        try {
+          mirrors.push(
+            new MirrorSide({
+              side: mirrorSideKey(connection.slug),
+              handle: await this.resolveProject(connection, adapter, project),
+              adapter,
+            }),
+          );
+        } catch (error) {
+          console.error(
+            `AssembleProjectLifecyclePassAction: connection ${connection.slug} failed`,
+            error,
+          );
+        }
       }
     }
     return mirrors;
