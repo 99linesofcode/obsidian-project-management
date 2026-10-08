@@ -1,3 +1,18 @@
+# [0.17.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.16.0...0.17.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** scan the whole task listing and isolate failing connections ([6b3a1f0](https://github.com/99linesofcode/obsidian-project-management/commit/6b3a1f0a9ae5a996b1ecf0439d102ba7d04b4c6c))
+* **todoist:** capture completed tasks alongside active ones ([5ec5842](https://github.com/99linesofcode/obsidian-project-management/commit/5ec5842557b6962d58534e9937ee49996aedccd9))
+
+
+### Features
+
+* **core:** adopt application-born tasks on the new sync engine ([7f4ec1e](https://github.com/99linesofcode/obsidian-project-management/commit/7f4ec1e81242d8f0577191e8408ed8fc03672c80))
+
+
+
 # [0.16.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.15.0...0.16.0) (2026-10-08)
 
 
@@ -47,25 +62,6 @@
 ### Bug Fixes
 
 * **infrastructure:** derive the code-host board from the repository target ([2388c13](https://github.com/99linesofcode/obsidian-project-management/commit/2388c13933766e1b8a4d832e435213448978690c))
-
-
-
-# [0.13.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.12.0...0.13.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **core:** record a failed mirror write and keep fanning out ([c210efc](https://github.com/99linesofcode/obsidian-project-management/commit/c210efc191da29290100602df7d0f18e0cb2f025))
-* **core:** resolve mirror handles from note paths and namespace sides ([8e5aabc](https://github.com/99linesofcode/obsidian-project-management/commit/8e5aabc3daa857bcb5b480e958743b64ce97e775))
-* **sync:** keep the multi-adapter cutover live and sweep-covered ([07f2c8e](https://github.com/99linesofcode/obsidian-project-management/commit/07f2c8e10129983d555f8a74d4872fd44d12e4eb))
-
-
-### Features
-
-* **core:** resolve mirror handles per connection ([65955a3](https://github.com/99linesofcode/obsidian-project-management/commit/65955a3dab641cb7cf4519199710d748b6d5fbb0))
-* **infrastructure:** resolve mirror handles through the registry ([ae3b8c8](https://github.com/99linesofcode/obsidian-project-management/commit/ae3b8c8f16418eef0f2fea4139819bb780a2fe80))
-* **settings:** add the multi-adapter engine toggle, default off ([bcb9c41](https://github.com/99linesofcode/obsidian-project-management/commit/bcb9c4170abf962543bae9c72fae54856f74acfc))
-* **sync:** run the multi-adapter pass behind a setting ([4602d87](https://github.com/99linesofcode/obsidian-project-management/commit/4602d870fc049cf38839418bd0134e39571cef56))
 
 
 

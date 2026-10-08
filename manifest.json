@@ -1,7 +1,7 @@
 {
   "id": "project-management",
   "name": "Project Management",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "minAppVersion": "1.11.4",
   "description": "Sync vault projects with GitHub Projects — the vault is the system of record.",
   "author": "Jordy Schreuders",
