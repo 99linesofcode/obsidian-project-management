@@ -41,7 +41,7 @@ export class AssembleProjectPassAction {
   async invoke(project: string): Promise<PassRecord[]> {
     const connections = await this.projectSource.readConnections(project);
     const notePaths = await this.projectSource.listEntities(project);
-    const scoped = this.scopeMirrors(connections);
+    const scoped = this.scopeMirrors(connections, project);
 
     const records: PassRecord[] = [];
     for (const notePath of notePaths) {
@@ -55,12 +55,15 @@ export class AssembleProjectPassAction {
 
   private scopeMirrors(
     connections: readonly DeclaredConnection[],
+    project: string,
   ): ScopedMirror[] {
     const scoped: ScopedMirror[] = [];
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
         connection.envelope.application,
         connection.envelope.target,
+        connection.slug,
+        project,
       );
       if (adapter !== null) {
         scoped.push({ connection, adapter });

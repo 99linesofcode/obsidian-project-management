@@ -10,14 +10,13 @@ import { MirrorSyncAction } from '../../../src/core/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/registerAdapters.js';
 import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
-import { TaskManagerTarget } from '../../../src/infrastructure/todoist/TaskManagerTarget.js';
 import { todoistDescriptor } from '../../../src/infrastructure/todoist/todoistDescriptor.js';
 import { TodoistTaskMapper } from '../../../src/todoist/TodoistTaskMapper.js';
 import { typeFromLabels } from '../../../src/shared/typeFromLabels.js';
 import { todoistTask } from '../../helpers/records.js';
 
 function target(): string {
-  return new TaskManagerTarget({ projectId: 'P1' }).serialize();
+  return 'P1';
 }
 
 interface RecordedCall {
