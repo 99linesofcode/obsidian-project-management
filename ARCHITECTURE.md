@@ -157,9 +157,9 @@ clears. `data.json` is secret-free.
 ### The multi-adapter core (walking skeleton)
 
 The `core/` block is the target shape of ADR-001, proven end to end on one thin
-path (the `Status` field). It runs in the runtime only when the
-`multiAdapterEngine` setting is on (default off); with it off the legacy chain
-is unchanged. It consists of the port layer and the pure core:
+path (the `Status` field). It runs in the runtime unconditionally; the legacy
+chain is retained but no longer selected. It consists of the port layer and the
+pure core:
 
 - **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
   `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
@@ -335,20 +335,17 @@ is unchanged. It consists of the port layer and the pure core:
   first sight backfills the application's whole untyped backlog (recorded in the
   spec's open questions). The vault sink is an infrastructure peer; the core
   names no provider.
-- **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
-  time through five reconciler providers, so toggling `multiAdapterEngine` takes
-  effect on the next sync without a reload. When it is on, `SyncProjectAction`
-  runs the reactivation action before the assembled lifecycle pass (unfreezing
-  the origin when newer mirror work appears), the assembled lifecycle pass for
-  the freeze verdict, the task-lock action on the freeze/unfreeze transition,
-  the assembled task capture for application-born tasks, and the assembled pass
-  for task-field reconciliation, migrates the project's home note through the
-  legacy migration action (which the skipped legacy lifecycle would otherwise
-  have run), and skips the legacy lifecycle step and the legacy code-host and
-  task halves; probe, board-ensure, vault consistency and the deletion sweep
-  still run, and the capture pre-tick runs the assembled core capture instead of
-  the legacy capture action. When it is off, the legacy chain runs exactly as
-  before.
+- **The cutover.** `SyncProjectAction` reads five reconciler providers at
+  execute time. It runs the reactivation action before the assembled lifecycle
+  pass (unfreezing the origin when newer mirror work appears), the assembled
+  lifecycle pass for the freeze verdict, the task-lock action on the
+  freeze/unfreeze transition, the assembled task capture for application-born
+  tasks, and the assembled pass for task-field reconciliation, migrates the
+  project's home note through the legacy migration action (which the skipped
+  legacy lifecycle would otherwise have run), and skips the legacy lifecycle
+  step and the legacy code-host and task halves; probe, board-ensure, vault
+  consistency and the deletion sweep still run, and the capture pre-tick runs
+  the assembled core capture instead of the legacy capture action.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -522,14 +519,13 @@ archived state, runs the same N-way ladder, and fans the freeze out. The
 lifecycle bookkeeping that surrounded the legacy freeze also moved onto the new
 path: a drifted mirror project is renamed, a frozen project's unfinished task
 conversations are locked (and unlocked on unfreeze), and a frozen project
-reactivates when newer mirror work appears. The runtime cutover is gated by the
-`multiAdapterEngine` plugin setting (default off): with it on, the chain builds
-the origin and the per-connection mirror adapters from the project's
-connections and the stored secrets, runs the reactivation action, the assembled
-lifecycle pass for the freeze verdict, the task-lock action and the assembled
-pass for task-field reconciliation, and skips the legacy lifecycle step and the
-legacy task halves; with it off the legacy chain runs exactly as before. The
-legacy chain is not yet retired.
+reactivates when newer mirror work appears. The runtime cutover is
+unconditional: the chain builds the origin and the per-connection mirror
+adapters from the project's connections and the stored secrets, runs the
+reactivation action, the assembled lifecycle pass for the freeze verdict, the
+task-lock action and the assembled pass for task-field reconciliation, and skips
+the legacy lifecycle step and the legacy task halves. The legacy chain is
+retained but no longer selected, and is not yet retired.
 
 ## 10. Project Identification
 

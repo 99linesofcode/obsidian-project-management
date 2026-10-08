@@ -62,20 +62,6 @@ describe('settings are secret-free', () => {
   });
 });
 
-describe('the multi-adapter engine is opt-in', () => {
-  it('defaults off', () => {
-    expect(DEFAULT_SETTINGS.multiAdapterEngine).toBe(false);
-    expect(settingsFromData({}).multiAdapterEngine).toBe(false);
-  });
-
-  it('round-trips an enabled value', () => {
-    const settings = settingsFromData({ multiAdapterEngine: true });
-
-    expect(settings.multiAdapterEngine).toBe(true);
-    expect(mergeSettingsIntoData({}, settings).multiAdapterEngine).toBe(true);
-  });
-});
-
 describe('the board scaffolding vocabularies round-trip', () => {
   it('defaults the status and type vocabularies', () => {
     const settings = settingsFromData({});
