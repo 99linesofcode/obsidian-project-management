@@ -1,3 +1,12 @@
+# [0.11.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.10.0...0.11.0) (2026-10-08)
+
+
+### Features
+
+* **infrastructure:** add the Todoist mirror adapter and its descriptor ([c37c897](https://github.com/99linesofcode/obsidian-project-management/commit/c37c8972589e4855736a3ba65c90969da15d378b))
+
+
+
 # [0.10.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.9.0...0.10.0) (2026-10-08)
 
 
@@ -61,15 +70,6 @@
 ### Features
 
 * **ci:** release the plugin the way Obsidian distributes it ([68f1b52](https://github.com/99linesofcode/obsidian-project-management/commit/68f1b525374ae602cbba2626c2d993e62b2b19ce))
-
-
-
-## [0.5.1](https://github.com/99linesofcode/obsidian-project-management/compare/v0.5.0...v0.5.1) (2026-10-06)
-
-
-### Bug Fixes
-
-* **lint:** classify the composition root and arm the unknown-file gate ([cfdcb32](https://github.com/99linesofcode/obsidian-project-management/commit/cfdcb3275626b5f76c0b964f75472e51ed0697e1))
 
 
 
