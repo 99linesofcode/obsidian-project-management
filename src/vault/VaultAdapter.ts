@@ -98,6 +98,11 @@ export class VaultAdapter implements VaultPort {
     return notes;
   }
 
+  async findHomeNotePath(project: string): Promise<string | null> {
+    const notes = await this.findProjectNotes();
+    return notes.find((note) => note.projectName === project)?.path ?? null;
+  }
+
   onNoteChanged(cb: (path: string) => void): void {
     const handler = (file: unknown): void => {
       if (

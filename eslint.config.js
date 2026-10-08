@@ -123,10 +123,7 @@ const transitionalPolicies = [
     from: {
       element: {
         type: 'infrastructure',
-        fileInternalPath: [
-          'vault/VaultProjectSourceAdapter.ts',
-          'vault/VaultProjectLifecycleAdapter.ts',
-        ],
+        fileInternalPath: ['vault/VaultProjectSourceAdapter.ts'],
       },
     },
     allow: {

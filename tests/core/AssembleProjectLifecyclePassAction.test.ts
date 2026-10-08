@@ -42,9 +42,18 @@ class FakeVault {
     this.notes.set(path, { content, mtime });
   }
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
-    const note = this.notes.get(path);
-    return note === undefined ? null : { content: note.content };
+  async findHomeNotePath(project: string): Promise<string | null> {
+    for (const path of this.notes.keys()) {
+      const segments = path.split('/');
+      if (
+        (segments[0] === 'Projecten' || segments[0] === 'Archief') &&
+        segments[1] === project &&
+        segments.length === 3
+      ) {
+        return path;
+      }
+    }
+    return null;
   }
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -119,11 +128,15 @@ interface SetupOptions {
   vaultArchived: boolean;
   mirrorA: boolean;
   mirrorB: boolean;
+  homePath?: string;
 }
 
 function setup(options: SetupOptions) {
   const vault = new FakeVault();
-  vault.seed(options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME, HOME, MTIME);
+  const homePath =
+    options.homePath ??
+    (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
+  vault.seed(homePath, HOME, MTIME);
   const registry = new FakeRegistry();
   registry.records = [{ id: 'e1', notePath: TASK_PATH }];
 
@@ -254,5 +267,22 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(second.advanced).toEqual([]);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
     expect(mirror.currentProject('board-b')?.archived).toBe(true);
+  });
+
+  it('does not freeze a project whose active home note has a legacy name', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+      homePath: 'Projecten/Acme/home.md',
+    });
+    await seedBaselines(baselines, false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(false);
+    expect(vault.has('Projecten/Acme/home.md')).toBe(true);
+    expect(vault.has('Archief/Acme/home.md')).toBe(false);
+    expect(mirror.currentProject('board-a')?.archived).toBe(false);
   });
 });

@@ -1,9 +1,8 @@
 import { OriginObservation } from '../../core/data/OriginObservation.js';
 import type { ProjectLifecycleOriginPort } from '../../core/ports/ProjectLifecycleOriginPort.js';
-import { projectHomePath } from '../../shared/projectHomePath.js';
 
 export interface ProjectLifecycleVault {
-  getNoteByPath(path: string): Promise<{ content: string } | null>;
+  findHomeNotePath(project: string): Promise<string | null>;
   modifiedTime(path: string): Promise<string | null>;
   moveFolder(fromPrefix: string, toPrefix: string): Promise<void>;
 }
@@ -22,14 +21,20 @@ export class VaultProjectLifecycleAdapter implements ProjectLifecycleOriginPort 
   ) {}
 
   async observeProject(project: string): Promise<OriginObservation> {
-    const archived = await this.isArchived(project);
-    const path = projectHomePath(project, archived);
-    const note = await this.vault.getNoteByPath(path);
+    const path = await this.vault.findHomeNotePath(project);
+    if (path === null) {
+      return new OriginObservation({
+        current: null,
+        currentCompleted: false,
+        fieldTime: null,
+        trustworthy: true,
+      });
+    }
 
     return new OriginObservation({
-      current: archived ? 'true' : 'false',
+      current: path.startsWith('Archief/') ? 'true' : 'false',
       currentCompleted: false,
-      fieldTime: note === null ? null : await this.vault.modifiedTime(path),
+      fieldTime: await this.vault.modifiedTime(path),
       trustworthy: true,
     });
   }
@@ -46,13 +51,6 @@ export class VaultProjectLifecycleAdapter implements ProjectLifecycleOriginPort 
       `${from}/${project}/`,
       `${to}/${project}/`,
     );
-  }
-
-  private async isArchived(project: string): Promise<boolean> {
-    const active = await this.vault.getNoteByPath(
-      projectHomePath(project, false),
-    );
-    return active === null;
   }
 
   private async relocateEntities(
