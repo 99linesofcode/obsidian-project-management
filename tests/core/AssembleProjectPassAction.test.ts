@@ -182,13 +182,17 @@ describe('AssembleProjectPassAction — a project pass end to end (F02 NWM-1, NW
     const { vault, mirror, action } = setup();
 
     const records = await action.invoke(PROJECT);
+    const mergedValue = (field: string) =>
+      records.find((record) => record.field === field)!.result.value;
 
-    const status = records.find((record) => record.field === 'Status')!;
-    expect(status.result.value).toBe('Done');
+    expect(mergedValue('title')).toBe('fix the bug');
+    expect(mergedValue('body')).toBe('Mirror body');
+    expect(mergedValue('subtasks')).toBeNull();
+    expect(mergedValue('completion')).toBe('false');
+    expect(mergedValue('Status')).toBe('Done');
+    expect(mergedValue('label')).toBe('alpha,beta');
+
     expect(mirror.currentTask(TASK_PATH)?.status).toBe('Done');
-
-    const body = records.find((record) => record.field === 'body')!;
-    expect(body.result.value).toBe('Mirror body');
     expect(vault.content(TASK_PATH)).toContain('Mirror body');
   });
 
