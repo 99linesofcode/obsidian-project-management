@@ -13,7 +13,6 @@ import type {
 } from '../projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
-import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
 import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
 import type { ProjectReactivationReconciler } from './ProjectReactivationReconciler.js';
 import type { ProjectTaskLocksReconciler } from './ProjectTaskLocksReconciler.js';
@@ -31,11 +30,10 @@ export class SyncProjectAction {
 
   constructor(
     private readonly vault: VaultPort,
-    private readonly syncState: SyncStatePort,
+    syncState: SyncStatePort,
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
-    private readonly halfFactory: SyncHalfFactory,
     private readonly completeTaskCascade: CompleteTaskCascadeAction,
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
@@ -142,52 +140,29 @@ export class SyncProjectAction {
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
     );
 
-    const halves = Object.entries(note.connections)
-      .map(([slug, connection]) => this.halfFactory.create(slug, connection))
-      .filter((half): half is ConnectionSyncHalf => half !== null);
-
-    if (taskFieldReconciler === undefined) {
-      await this.step('code host half', () =>
-        this.runBoardHalves(
-          project,
-          note.connections,
-          halves,
-          boardState,
-          verdict,
-          syncedAt,
-        ),
-      );
-    }
-
     await this.step('vault consistency', () =>
       this.runVaultConsistency(project, syncedAt),
     );
 
-    if (!verdict.frozen) {
-      if (taskFieldReconciler === undefined) {
-        await this.step('task manager half', () =>
-          this.runTaskHalves(project, note.connections, halves, syncedAt),
-        );
-      } else {
-        if (taskCaptureReconciler !== undefined) {
-          await this.step('task capture', () =>
-            taskCaptureReconciler.capture(project, syncedAt),
-          );
-        }
-        await this.step('task fields', () =>
-          taskFieldReconciler.reconcile(project),
+    if (!verdict.frozen && taskFieldReconciler !== undefined) {
+      if (taskCaptureReconciler !== undefined) {
+        await this.step('task capture', () =>
+          taskCaptureReconciler.capture(project, syncedAt),
         );
       }
+      await this.step('task fields', () =>
+        taskFieldReconciler.reconcile(project),
+      );
     }
 
     await this.step('deletions', async () => {
-      for (const half of halves) {
-        if (!half.requiresBoard) {
+      for (const [slug, connection] of Object.entries(note.connections)) {
+        if (connection.tool !== 'github') {
           continue;
         }
         await this.sweepDeletedNotes.execute({
           projectName: project,
-          connectionSlug: half.connectionSlug,
+          connectionSlug: slug,
         });
       }
     });
@@ -276,70 +251,6 @@ export class SyncProjectAction {
         },
         wasFrozen: false,
       };
-    }
-  }
-
-  private async runBoardHalves(
-    project: string,
-    connections: Record<string, ConnectionData>,
-    halves: ConnectionSyncHalf[],
-    boardState: ProjectStateData | undefined,
-    verdict: ProjectLifecycleVerdict,
-    syncedAt: string,
-  ): Promise<void> {
-    if (!boardState || verdict.frozen) {
-      return;
-    }
-
-    const lastUpdate = await this.syncState.getLastProjectUpdate(project);
-    const fullScanPending = await this.syncState.isFullScanPending(project);
-    const includeBoard = boardState.updatedAt !== lastUpdate || fullScanPending;
-    let failed = false;
-    for (const half of halves) {
-      if (!half.requiresBoard) {
-        continue;
-      }
-      try {
-        await half.execute({
-          projectName: project,
-          syncedAt,
-          includeBoard,
-          connections,
-        });
-      } catch (error) {
-        failed = true;
-        console.error(
-          `SyncProjectAction: code host half failed for ${project}`,
-          error,
-        );
-      }
-    }
-    if (!failed) {
-      await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
-      if (fullScanPending) {
-        await this.syncState.consumeFullScan(project);
-      }
-    }
-  }
-
-  private async runTaskHalves(
-    project: string,
-    connections: Record<string, ConnectionData>,
-    halves: ConnectionSyncHalf[],
-    syncedAt: string,
-  ): Promise<void> {
-    for (const half of halves) {
-      if (half.requiresBoard) {
-        continue;
-      }
-      await this.step(`task half ${half.connectionSlug}`, () =>
-        half.execute({
-          projectName: project,
-          syncedAt,
-          includeBoard: false,
-          connections,
-        }),
-      );
     }
   }
 

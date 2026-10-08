@@ -18,13 +18,6 @@ import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
-import { ApplyTaskToGithubAction } from './github/ApplyTaskToGithubAction.js';
-import { ApplyTaskToTodoistAction } from './todoist/ApplyTaskToTodoistAction.js';
-import { ApplyTaskToVaultAction } from './tasks/ApplyTaskToVaultAction.js';
-import { ApplyTodoistCompletionAction } from './todoist/ApplyTodoistCompletionAction.js';
-import { ApplyTodoistRemoteChangesAction } from './todoist/ApplyTodoistRemoteChangesAction.js';
-import { BoardStatusAction } from './projects/BoardStatusAction.js';
-import { CaptureTodoistCreationsAction } from './todoist/CaptureTodoistCreationsAction.js';
 import type { CaptureResult } from './projects/CaptureRemoteProjectsAction.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/CaptureTasksAction.js';
@@ -36,24 +29,15 @@ import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js'
 import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
-import { EnsureTodoistSectionsAction } from './todoist/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
-import { PropagateStatusAction } from './tasks/PropagateStatusAction.js';
 import { PromoteIssueAction } from './tasks/PromoteIssueAction.js';
 import { PromoteCardAction } from './tasks/PromoteCardAction.js';
 import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
-import { PropagateTodoistDeletionsAction } from './todoist/PropagateTodoistDeletionsAction.js';
 import { ReconcileProjectLifecycleAction } from './projects/ReconcileProjectLifecycleAction.js';
 import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
-import { RelinkRenamedTodoAction } from './todoist/RelinkRenamedTodoAction.js';
-import { RelocateTaskStatusAction } from './tasks/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
-import { SyncGithubTasksAction } from './github/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
-import type { SyncHalfFactory } from './sync/SyncHalves.js';
-import { SyncTodoistTasksAction } from './todoist/SyncTodoistTasksAction.js';
-import { VerdictResolver } from './shared/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
 import { VaultAdapter } from './vault/VaultAdapter.js';
 import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
@@ -397,29 +381,14 @@ function composePlugin(
     syncState,
     plugin.settings.taskTemplatePath,
   );
-  const boardStatus = new BoardStatusAction(syncState, github);
-  const propagateStatus = new PropagateStatusAction(
-    github,
-    syncState,
-    boardStatus,
-    plugin.settings.doneOptionName,
-  );
   const handleDeletedNote = new HandleDeletedNoteAction(
     syncState,
     github,
     plugin.settings.doneOptionName,
   );
-  const applyTaskToGithub = new ApplyTaskToGithubAction(github, syncState);
   const completeTaskCascade = new CompleteTaskCascadeAction(
     vault,
     plugin.settings.doneOptionName,
-  );
-  const applyTaskToVault = new ApplyTaskToVaultAction(
-    vault,
-    syncState,
-    createTaskNote,
-    plugin.settings.taskTemplatePath,
-    completeTaskCascade,
   );
   const discoverProjects = new DiscoverProjectsAction(
     vault,
@@ -437,41 +406,13 @@ function composePlugin(
     syncState,
     plugin.settings.doneOptionName,
   );
-  const applyTaskToTodoist = new ApplyTaskToTodoistAction(todoist, syncState);
-  const applyTodoistCompletion = new ApplyTodoistCompletionAction(
-    vault,
-    syncState,
-    applyTaskToVault,
-    plugin.settings.doneOptionName,
-  );
-  const propagateTodoistDeletions = new PropagateTodoistDeletionsAction(
-    todoist,
-    vault,
-    syncState,
-  );
 
   const syncChecklist = new SyncChecklistAction(
     vault,
     plugin.settings.todoTemplatePath,
   );
   const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
-  const relinkRenamedTodo = new RelinkRenamedTodoAction(vault, syncState);
-  const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
 
-  const applyTodoistRemoteChanges = new ApplyTodoistRemoteChangesAction(
-    vault,
-    syncState,
-    propagateStatus,
-    relocateTaskStatus,
-    relinkRenamedTodo,
-    plugin.settings.doneOptionName,
-  );
-  const captureTodoistCreations = new CaptureTodoistCreationsAction(
-    vault,
-    syncState,
-    plugin.settings.todoTemplatePath,
-    plugin.settings.doneOptionName,
-  );
   const ensureProjectBoard = new EnsureProjectBoardAction(
     github,
     syncState,
@@ -500,40 +441,6 @@ function composePlugin(
   );
   promoteCardToIssue.register(plugin);
 
-  const halfFactory: SyncHalfFactory = {
-    create: (slug, connection) => {
-      if (connection.tool === 'github') {
-        return new SyncGithubTasksAction(
-          slug,
-          github,
-          syncState,
-          vault,
-          applyTaskToGithub,
-          applyTaskToVault,
-          new VerdictResolver(plugin.settings.doneOptionName),
-          plugin.settings.doneOptionName,
-        );
-      }
-      if (connection.tool === 'todoist') {
-        return new SyncTodoistTasksAction(
-          slug,
-          connection.project,
-          todoist,
-          github,
-          vault,
-          syncState,
-          new EnsureTodoistSectionsAction(todoist),
-          applyTaskToTodoist,
-          applyTodoistRemoteChanges,
-          captureTodoistCreations,
-          applyTodoistCompletion,
-          propagateTodoistDeletions,
-          plugin.settings.doneOptionName,
-        );
-      }
-      return null;
-    },
-  };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
   let composedCoreReconcilers: CoreReconcilers | undefined;
   const coreReconcilers = (): CoreReconcilers => {
@@ -563,7 +470,6 @@ function composePlugin(
     probeProjects,
     reconcileProjectLifecycle,
     detectNoteRenames,
-    halfFactory,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,

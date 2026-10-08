@@ -1,5 +1,5 @@
 import { TaskData } from '../shared/TaskData.js';
-import { hasCompletionStamp } from '../shared/Reconciliation.js';
+import { hasCompletionStamp } from '../shared/hasCompletionStamp.js';
 import { sameLabels } from '../shared/sameLabels.js';
 import { projectFromNotePath } from '../projects/projectFromNotePath.js';
 import { projectFromTodoPath } from '../todos/projectFromTodoPath.js';

@@ -214,7 +214,6 @@ const PROVIDER_SURFACE = {
   github: [
     'GitHubAdapter.ts',
     'ApplyTaskToGithubAction.ts',
-    'SyncGithubTasksAction.ts',
     // The promote modal lists unpromoted issues from the provider's transport
     // shape; the type is part of what the app is allowed to see.
     'GithubTaskData.ts',
@@ -222,7 +221,6 @@ const PROVIDER_SURFACE = {
   todoist: [
     'TodoistAdapter.ts',
     'ApplyTaskToTodoistAction.ts',
-    'SyncTodoistTasksAction.ts',
     'ApplyTodoistCompletionAction.ts',
     'ApplyTodoistRemoteChangesAction.ts',
     'CaptureTodoistCreationsAction.ts',

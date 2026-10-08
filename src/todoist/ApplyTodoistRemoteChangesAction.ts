@@ -1,5 +1,5 @@
 import { laneForSection } from '../tasks/laneForSection.js';
-import { hasCompletionStamp } from '../shared/Reconciliation.js';
+import { hasCompletionStamp } from '../shared/hasCompletionStamp.js';
 import { rewriteFrontmatterFields } from '../vault/rewriteFrontmatterFields.js';
 import { parseAffiliation } from '../shared/parseAffiliation.js';
 import {
