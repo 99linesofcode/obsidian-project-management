@@ -1,3 +1,21 @@
+# [0.19.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.18.0...0.19.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** refresh every reactivation watch when one connection reopens ([4175d70](https://github.com/99linesofcode/obsidian-project-management/commit/4175d704b4f8823b04817e56107a31ebdc5af9eb))
+* **core:** rename a drifted mirror project on every lifecycle pass ([131843f](https://github.com/99linesofcode/obsidian-project-management/commit/131843fcd983945134baa01c11e643e2fbc6cd0f))
+* **core:** tolerate a per-task lock failure on the freeze transition ([33da5d9](https://github.com/99linesofcode/obsidian-project-management/commit/33da5d91312048b6a02bc6a042d27424adf33fc1))
+
+
+### Features
+
+* **core:** lock a frozen project's task conversations ([edb3150](https://github.com/99linesofcode/obsidian-project-management/commit/edb315017ca653ff2c5320a12b3b801176ddeaad))
+* **core:** reactivate a frozen project when newer work appears ([7f90457](https://github.com/99linesofcode/obsidian-project-management/commit/7f90457beed33d903c2b37b981afb2a434d01f11))
+* **core:** rename a drifted mirror project on the lifecycle pass ([2afce2e](https://github.com/99linesofcode/obsidian-project-management/commit/2afce2e369334706ce1dbc7fe99d4279ee7b5186))
+
+
+
 # [0.18.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.17.0...0.18.0) (2026-10-08)
 
 
@@ -54,21 +72,6 @@
 * **core:** onboard a newly-connected project's mirror ([8a42acb](https://github.com/99linesofcode/obsidian-project-management/commit/8a42acb57805f204954c9e02a32cb7573b83fab5))
 * **core:** sync a project whose home note still has a legacy name ([65ed2b3](https://github.com/99linesofcode/obsidian-project-management/commit/65ed2b34dfba59cead6af3a9594cca8232699282))
 * **sync:** migrate the project home note on the gated new path ([6708935](https://github.com/99linesofcode/obsidian-project-management/commit/67089358f07f4651bc3c7d7a4c2ef1c18617f2d9))
-
-
-
-# [0.14.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.1...0.14.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **core:** discover the project home note name-agnostically ([6bc4e72](https://github.com/99linesofcode/obsidian-project-management/commit/6bc4e72febfe17ede353a3e325dde5858400bbac))
-
-
-### Features
-
-* **core:** carry the archived timestamp through the project port ([5e4e6bb](https://github.com/99linesofcode/obsidian-project-management/commit/5e4e6bba73a7fa585ae03371bbf04ea2e33aad27))
-* **core:** reconcile project lifecycle through the multi-adapter core ([2a6d99d](https://github.com/99linesofcode/obsidian-project-management/commit/2a6d99da91582d58efc63c3a750357468d04cacc))
 
 
 
