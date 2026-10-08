@@ -1,3 +1,21 @@
+# [0.9.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.8.0...0.9.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **infrastructure:** fail the origin write when the note cannot accept it ([6c75ccd](https://github.com/99linesofcode/obsidian-project-management/commit/6c75ccd89dee8a780e52d899bab6125292d4fd24))
+* **infrastructure:** keep the origin rename inside the note's folder ([0935337](https://github.com/99linesofcode/obsidian-project-management/commit/0935337138d7d91a11da2895f4dcc936704d0a9d))
+
+
+### Features
+
+* **core:** add the origin port and its observation ([6db5c7a](https://github.com/99linesofcode/obsidian-project-management/commit/6db5c7af0bff625bc1bc9c7158ef4434a076e5a7))
+* **core:** carry the origin's mtime into the merge side ([7a8e3c5](https://github.com/99linesofcode/obsidian-project-management/commit/7a8e3c5b74e52b2714fc686f53c0a3b3336b50fb))
+* **core:** write reconciled values back to the origin and advance baselines ([06aca0d](https://github.com/99linesofcode/obsidian-project-management/commit/06aca0d38ed90795c1e29343658ee79208bdcf80))
+* **infrastructure:** add the vault origin adapter ([dda408d](https://github.com/99linesofcode/obsidian-project-management/commit/dda408d0e1c35e44c738e0fd1aaac190e34d4788))
+
+
+
 # [0.8.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.7.0...0.8.0) (2026-10-07)
 
 
@@ -67,30 +85,6 @@
 * the project home note renamed to _<folder> ([fb3bf1d](https://github.com/99linesofcode/obsidian-project-management/commit/fb3bf1d1d7d045afb0769ad7f68a8bc4be019ed1))
 * the project layer — archivedAt, the home-note convention, the dead-code sweep ([024c246](https://github.com/99linesofcode/obsidian-project-management/commit/024c2468119adad22df252aea4fb31b4dc1b4fc5))
 * the vault identity layer and both sync halves on the registry ([4c4eb16](https://github.com/99linesofcode/obsidian-project-management/commit/4c4eb1608e141aa77deb5cf2dbd597848e1e74b3))
-
-
-
-# [0.4.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.3.0...v0.4.0) (2026-10-06)
-
-
-### Bug Fixes
-
-* carry the todoist anchor through a GitHub task rewrite ([8d42d8b](https://github.com/99linesofcode/obsidian-project-management/commit/8d42d8b9621ec12c08664fa4d6d7ac866ab26ab6))
-* create Todoist twins parents-before-children ([49a8c1c](https://github.com/99linesofcode/obsidian-project-management/commit/49a8c1c297e674febdd6425f9b30a5f9e2e85985)), closes [#61](https://github.com/99linesofcode/obsidian-project-management/issues/61)
-* move a reopened task twin back to its lane section ([6a9895f](https://github.com/99linesofcode/obsidian-project-management/commit/6a9895faddaaa573de7818dbfa3751997c9baabd))
-* resolve checklist links to the to-do's real path before projection ([f3e5fb2](https://github.com/99linesofcode/obsidian-project-management/commit/f3e5fb246f33b4b501ca31a8a0f6e5b06000f906))
-* resolve short and wrong-folder checklist links before creating to-dos ([3831788](https://github.com/99linesofcode/obsidian-project-management/commit/3831788c7b5a672d9c4c137244fc25fabe1924cd))
-* skip closed untracked issues on materialisation ([9af137c](https://github.com/99linesofcode/obsidian-project-management/commit/9af137c8f2f3ed14bd2013a97331fa315be74d17))
-* stop completed tasks re-syncing every tick ([29cfa89](https://github.com/99linesofcode/obsidian-project-management/commit/29cfa8991c75bef06815d60ddc1a98321c959ffc))
-* sweep a deleted note by deleting its board card ([c3bb803](https://github.com/99linesofcode/obsidian-project-management/commit/c3bb80328d0d8daa3b3be920b06b7340bcf65aae))
-
-
-### Features
-
-* cascade a done task onto its checklist line and to-dos ([59584e5](https://github.com/99linesofcode/obsidian-project-management/commit/59584e5e80683136b41fb55ce662c1a7e607205a))
-* detect note renames from snapshot drift ([661a692](https://github.com/99linesofcode/obsidian-project-management/commit/661a692d1ec8a7637f311244afab291f3b12722f))
-* name projects from their folder and accept _home.md ([fbd2e52](https://github.com/99linesofcode/obsidian-project-management/commit/fbd2e5203c6ff822e4ec092a020c79108827d327))
-* serialise project syncs through one coalescing queue ([a9362df](https://github.com/99linesofcode/obsidian-project-management/commit/a9362dfe519640a37019ae02dd2550d5851b0712))
 
 
 
