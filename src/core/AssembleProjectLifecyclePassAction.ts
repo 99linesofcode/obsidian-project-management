@@ -90,6 +90,7 @@ export class AssembleProjectLifecyclePassAction {
       connection.slug,
     );
     if (recorded !== null) {
+      await this.renameIfDrifted(adapter, recorded, project);
       return recorded;
     }
 
@@ -97,9 +98,7 @@ export class AssembleProjectLifecyclePassAction {
       connection.envelope.target,
     );
     if (existing !== null) {
-      if (existing.name !== project) {
-        await adapter.project.renameProject(connection.envelope.target, project);
-      }
+      await this.renameIfDrifted(adapter, connection.envelope.target, project);
       await this.record(connection, project, connection.envelope.target);
       return connection.envelope.target;
     }
@@ -110,6 +109,17 @@ export class AssembleProjectLifecyclePassAction {
     );
     await this.record(connection, project, created.handle);
     return created.handle;
+  }
+
+  private async renameIfDrifted(
+    adapter: RegisteredAdapter,
+    handle: string,
+    project: string,
+  ): Promise<void> {
+    const mirror = await adapter.project.readProject(handle);
+    if (mirror !== null && mirror.name !== project) {
+      await adapter.project.renameProject(handle, project);
+    }
   }
 
   private async record(

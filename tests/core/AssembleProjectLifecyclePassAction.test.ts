@@ -435,7 +435,7 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(mirror.createCalls).toEqual([]);
   });
 
-  it('renames a mirror project whose name drifted from the vault project', async () => {
+  it('renames a mirror project whose name drifted from the vault project (NWM-31)', async () => {
     const { mirror, baselines, action } = setup({
       vaultArchived: false,
       mirrorA: false,
@@ -449,7 +449,23 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
   });
 
-  it('leaves a mirror project whose name already matches the vault project', async () => {
+  it('renames a mirror project whose name drifts after adoption (NWM-31)', async () => {
+    const { mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    mirror.seedProjectName('board-a', PROJECT);
+    await seedBaselines(baselines, false);
+    await action.invoke(PROJECT);
+
+    mirror.seedProjectName('board-a', 'Drifted Name');
+    await action.invoke(PROJECT);
+
+    expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
+  });
+
+  it('leaves a mirror project whose name already matches the vault project (NWM-31)', async () => {
     const { mirror, baselines, action } = setup({
       vaultArchived: false,
       mirrorA: false,
