@@ -629,6 +629,183 @@ describe('CodeHostMirrorAdapter — the board is derived from the repository (F0
   });
 });
 
+describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () => {
+  it('reconciles a board it created in the same pass', async () => {
+    const transport = new FakeTransport(
+      [
+        { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } },
+        {
+          status: 200,
+          json: { data: { viewer: { projectsV2: { nodes: [] } } } },
+        },
+        { status: 200, json: { data: { viewer: { id: 'U_1' } } } },
+        {
+          status: 200,
+          json: {
+            data: {
+              createProjectV2: {
+                projectV2: { id: 'PVT_NEW', url: 'https://example.test/p' },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              linkProjectV2ToRepository: {
+                repository: { id: 'R_kgDOAAAA' },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              createProjectV2Field: {
+                projectV2Field: {
+                  id: 'PVTF_NEW',
+                  name: 'Status',
+                  options: [
+                    { id: 'PVTSSF_1', name: 'Unshaped' },
+                    { id: 'PVTSSF_2', name: 'Done' },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: { node: { id: 'PVT_NEW', title: 'widgets', closed: false } },
+          },
+        },
+      ],
+      [
+        {
+          status: 200,
+          json: {
+            data: {
+              repository: { id: 'R_kgDOAAAA', projectsV2: { nodes: [] } },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: { data: { node: { id: 'PVT_NEW', fields: { nodes: [] } } } },
+        },
+      ],
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target(), undefined, [
+      'Unshaped',
+      'Done',
+    ]);
+
+    const before = await adapter.readProject(target());
+    const created = await adapter.createProject(target(), 'widgets');
+    const after = await adapter.readProject(target());
+
+    expect(before).toBeNull();
+    expect(created.handle).toBe(target());
+    expect(after?.handle).toBe('PVT_NEW');
+    expect(after?.archived).toBe(false);
+    expect(transport.bodies[5]).toContain('CreateStatusField');
+    expect(transport.bodies[5]).toContain('"name":"Unshaped"');
+    expect(transport.bodies[5]).toContain('"name":"Done"');
+  });
+
+  it('adopts an orphan board instead of creating a duplicate', async () => {
+    const transport = new FakeTransport(
+      [
+        { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } },
+        {
+          status: 200,
+          json: {
+            data: {
+              viewer: {
+                projectsV2: {
+                  nodes: [
+                    {
+                      id: 'PVT_ORPHAN',
+                      title: 'widgets',
+                      repositories: { nodes: [] },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              linkProjectV2ToRepository: {
+                repository: { id: 'R_kgDOAAAA' },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              createProjectV2Field: {
+                projectV2Field: {
+                  id: 'PVTF_ORPHAN',
+                  name: 'Status',
+                  options: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+                },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              node: { id: 'PVT_ORPHAN', title: 'widgets', closed: false },
+            },
+          },
+        },
+      ],
+      [
+        {
+          status: 200,
+          json: {
+            data: {
+              repository: { id: 'R_kgDOAAAA', projectsV2: { nodes: [] } },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: { node: { id: 'PVT_ORPHAN', fields: { nodes: [] } } },
+          },
+        },
+      ],
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target(), undefined, [
+      'Unshaped',
+    ]);
+
+    await adapter.readProject(target());
+    await adapter.createProject(target(), 'widgets');
+    const after = await adapter.readProject(target());
+
+    expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
+      false,
+    );
+    expect(transport.bodies.some((body) => body.includes('LinkBoard'))).toBe(
+      true,
+    );
+    expect(after?.handle).toBe('PVT_ORPHAN');
+  });
+});
+
 describe('githubDescriptor — registers with the core (F01 ACM-8, ACM-9)', () => {
   it('registers the code host as a mirror under the application id github', () => {
     const result = registerAdapters([
