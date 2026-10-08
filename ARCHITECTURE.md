@@ -115,8 +115,8 @@ provider actions. A provider's name never appears in the chain.
 | `src/tasks/`          | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
 | `src/shared/`         | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
-| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store and project-source ports, and the pass assembler                                                       | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
+| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store, project-source, mirror-handle and adapter-factory ports, and the pass assembler                                                       | TypeScript                   | in-process       |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store and mirror-handle adapter, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -157,8 +157,9 @@ clears. `data.json` is secret-free.
 ### The multi-adapter core (walking skeleton)
 
 The `core/` block is the target shape of ADR-001, proven end to end on one thin
-path (the `Status` field) with the plugin's runtime behaviour unchanged. It
-consists of the port layer and the pure core:
+path (the `Status` field). It runs in the runtime only when the
+`multiAdapterEngine` setting is on (default off); with it off the legacy chain
+is unchanged. It consists of the port layer and the pure core:
 
 - **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
   `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
@@ -219,11 +220,28 @@ consists of the port layer and the pure core:
   (`infrastructure/vault/VaultProjectSourceAdapter`) reuses the legacy vault
   module's connections codec and note reads.
 - **The pass assembler** (`AssembleProjectPassAction`). Given a project, it
-  resolves each connection envelope to its registered adapter, assembles the
-  origin side through `OriginPort` and each mirror's baseline through the
-  baseline store, runs `MirrorSyncAction` once per (entity, canonical value
-  field), and persists the advanced baselines. It is inert until a test (or a
-  later slice) drives it; the existing chain remains the runtime.
+  reads each declared connection with its slug, builds the connection's mirror
+  adapter through the factory (scoped by the connection's target), resolves the
+  entity to that connection's own handle through the mirror-handle port,
+  assembles the origin side through `OriginPort` and each mirror's baseline
+  through the baseline store, runs `MirrorSyncAction` once per (entity,
+  canonical value field) against a per-connection `MirrorSide`, and persists the
+  advanced baselines. Two connections to the same application stay distinct
+  sides; a connection whose entity has no resolved handle is skipped.
+- **The mirror-handle port** (`MirrorHandlePort`). The core's need to resolve an
+  entity to the handle a given connection's application uses for it (an issue
+  URL, a task id). Its adapter
+  (`infrastructure/registry/RegistryMirrorHandleAdapter`) reads the registry's
+  per-connection item map through the existing `findMirrorItemByEntity` lookup.
+- **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
+  need to build a mirror adapter for an application and a connection target. The
+  composition root implements it over the provider adapters, so one adapter
+  instance serves exactly one connection.
+- **The gated cutover.** When `multiAdapterEngine` is on, `SyncProjectAction`
+  runs the assembled pass for task-field reconciliation and skips the legacy
+  code-host and task halves; probe, board-ensure, capture, lifecycle, vault
+  consistency and the deletion sweep still run. When it is off, the legacy
+  chain runs exactly as before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -385,12 +403,15 @@ developer manual records the remaining code-vs-brief discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is a walking skeleton:
 the shape is built and proven on the `Status` field through the conformance
-adapter, GitHub and Todoist mirror adapters now implement the capability
-ports, the vault origin adapter completes the origin round-trip, and the pass
-assembler plus the core baseline store assemble a whole project pass and
-persist its baselines. None of it is wired at the composition root; running
-the assembled pass in the runtime is a later slice, and the existing chain is
-unchanged.
+adapter, GitHub and Todoist mirror adapters implement the capability ports, the
+vault origin adapter completes the origin round-trip, and the pass assembler
+plus the core baseline store assemble a whole project pass and persist its
+baselines. The runtime cutover is gated by the `multiAdapterEngine` plugin
+setting (default off): with it on, the chain builds the origin and the
+per-connection mirror adapters from the project's connections and the stored
+secrets, runs the assembled pass for task-field reconciliation, and skips the
+legacy task halves; with it off the legacy chain runs exactly as before. The
+legacy chain is not yet retired.
 
 ## 10. Project Identification
 

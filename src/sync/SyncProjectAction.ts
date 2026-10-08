@@ -14,6 +14,7 @@ import type {
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
+import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
@@ -35,6 +36,7 @@ export class SyncProjectAction {
     handleDeletedNote: HandleDeletedNoteAction,
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
+    private readonly taskFieldReconciler?: TaskFieldReconciler,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -92,26 +94,35 @@ export class SyncProjectAction {
     const halves = Object.entries(note.connections)
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
+    const taskFieldReconciler = this.taskFieldReconciler;
 
-    await this.step('code host half', () =>
-      this.runBoardHalves(
-        project,
-        note.connections,
-        halves,
-        boardState,
-        verdict,
-        syncedAt,
-      ),
-    );
+    if (taskFieldReconciler === undefined) {
+      await this.step('code host half', () =>
+        this.runBoardHalves(
+          project,
+          note.connections,
+          halves,
+          boardState,
+          verdict,
+          syncedAt,
+        ),
+      );
+    }
 
     await this.step('vault consistency', () =>
       this.runVaultConsistency(project, syncedAt),
     );
 
     if (!verdict.frozen) {
-      await this.step('task manager half', () =>
-        this.runTaskHalves(project, note.connections, halves, syncedAt),
-      );
+      if (taskFieldReconciler === undefined) {
+        await this.step('task manager half', () =>
+          this.runTaskHalves(project, note.connections, halves, syncedAt),
+        );
+      } else {
+        await this.step('task fields', () =>
+          taskFieldReconciler.reconcile(project),
+        );
+      }
     }
 
     await this.step('deletions', async () => {
