@@ -72,7 +72,7 @@ async function observeMirror(
     role: 'mirror',
     current: project.archived ? 'true' : 'false',
     baseline: pass.baselines.get(mirror.side) ?? null,
-    fieldTime: null,
+    fieldTime: await mirror.adapter.project.archivedTime(mirror.handle),
     timestampTrustworthy: mirror.adapter.descriptor.capabilities.includes(
       'trustworthy per-field timestamps',
     ),

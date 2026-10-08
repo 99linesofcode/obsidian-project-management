@@ -167,18 +167,25 @@ function setup(options: SetupOptions) {
   return { vault, registry, mirror, baselines, action };
 }
 
+async function seedBaseline(
+  baselines: CoreBaselineStoreAdapter,
+  side: string,
+  archived: boolean,
+): Promise<void> {
+  await baselines.write(
+    PROJECT,
+    'lifecycle',
+    side,
+    new Baseline(archived ? 'true' : 'false', false),
+  );
+}
+
 async function seedBaselines(
   baselines: CoreBaselineStoreAdapter,
   archived: boolean,
 ): Promise<void> {
-  const value = archived ? 'true' : 'false';
   for (const side of ['origin', 'mirror:a', 'mirror:b']) {
-    await baselines.write(
-      PROJECT,
-      'lifecycle',
-      side,
-      new Baseline(value, false),
-    );
+    await seedBaseline(baselines, side, archived);
   }
 }
 
@@ -284,5 +291,24 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     expect(vault.has('Projecten/Acme/home.md')).toBe(true);
     expect(vault.has('Archief/Acme/home.md')).toBe(false);
     expect(mirror.currentProject('board-a')?.archived).toBe(false);
+  });
+
+  it('lets a mirror with a decisive timestamp win the archived fact (NWM-6)', async () => {
+    const { vault, mirror, baselines, action } = setup({
+      vaultArchived: false,
+      mirrorA: true,
+      mirrorB: false,
+    });
+    await seedBaseline(baselines, 'origin', false);
+    await seedBaseline(baselines, 'mirror:a', false);
+    await seedBaseline(baselines, 'mirror:b', true);
+    mirror.setProjectTime('board-a', '2026-10-08T11:00:00Z');
+    mirror.setProjectTime('board-b', '2026-10-08T09:00:00Z');
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(true);
+    expect(vault.has(ARCHIVED_HOME)).toBe(true);
+    expect(mirror.currentProject('board-b')?.archived).toBe(true);
   });
 });

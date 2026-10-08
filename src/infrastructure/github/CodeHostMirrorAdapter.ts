@@ -392,6 +392,10 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     });
   }
 
+  async archivedTime(_target: string): Promise<string | null> {
+    return null;
+  }
+
   async readTasks(target: string): Promise<CanonicalTask[]> {
     const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
     return snapshot.issues

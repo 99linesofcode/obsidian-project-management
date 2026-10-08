@@ -247,10 +247,15 @@ is unchanged. It consists of the port layer and the pure core:
   freeze out to the origin and every capable mirror. Any side can start the
   freeze or the unfreeze (NWM-15); the reconciled freeze is the pass's `frozen`
   verdict, which gates the task-field pass (NWM-16). Its per-side baselines live
-  in the same `coreBaselines` store under the `lifecycle` field. The origin
-  adapter (`infrastructure/vault/VaultProjectLifecycleAdapter`) reads the home
-  note from either folder, moves the project folder on a freeze/unfreeze, and
-  relocates the registry's entity paths in lockstep.
+  in the same `coreBaselines` store under the `lifecycle` field. The archived
+  fact carries a timestamp: the origin's is the home note's edit time, trusted
+  by default (NWM-28), and each mirror's is read through `ProjectPort`'s
+  `archivedTime` — a provider that exposes none returns null, so the ladder
+  falls through to the vault tie-break. The origin adapter
+  (`infrastructure/vault/VaultProjectLifecycleAdapter`) discovers the home note
+  name-agnostically — the same discovery the legacy chain uses, so an
+  unmigrated note is never misread as archived — moves the project folder on a
+  freeze/unfreeze, and relocates the registry's entity paths in lockstep.
 - **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
   need to build a mirror adapter for an application and a connection target. The
   composition root implements it over the provider adapters, so one adapter
