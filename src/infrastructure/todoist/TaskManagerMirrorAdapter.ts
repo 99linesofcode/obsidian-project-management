@@ -88,6 +88,10 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     return null;
   }
 
+  async latestActivity(): Promise<never> {
+    throw new Error('task manager: does not support project activity');
+  }
+
   async readTasks(target: string): Promise<CanonicalTask[]> {
     const connection = TaskManagerTarget.parse(target);
     const sections = await this.sections(connection.projectId);

@@ -15,6 +15,7 @@ import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
 import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
+import type { ProjectReactivationReconciler } from './ProjectReactivationReconciler.js';
 import type { ProjectTaskLocksReconciler } from './ProjectTaskLocksReconciler.js';
 import type { TaskCaptureReconciler } from './TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
@@ -45,6 +46,7 @@ export class SyncProjectAction {
     private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
     private readonly taskCaptureReconciler?: () => TaskCaptureReconciler | undefined,
     private readonly projectTaskLocksReconciler?: () => ProjectTaskLocksReconciler | undefined,
+    private readonly projectReactivationReconciler?: () => ProjectReactivationReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -67,6 +69,8 @@ export class SyncProjectAction {
     const taskFieldReconciler = this.taskFieldReconciler?.();
     const taskCaptureReconciler = this.taskCaptureReconciler?.();
     const projectTaskLocksReconciler = this.projectTaskLocksReconciler?.();
+    const projectReactivationReconciler =
+      this.projectReactivationReconciler?.();
     if (lifecycleReconciler !== undefined) {
       await this.step('migrate home note', async () => {
         await this.migrateProjectHomeNote.execute({
@@ -102,6 +106,12 @@ export class SyncProjectAction {
     }
 
     const boardState = await this.probe(project, note.connections);
+
+    if (projectReactivationReconciler !== undefined) {
+      await this.step('reactivation', async () => {
+        await projectReactivationReconciler.reactivate(project);
+      });
+    }
 
     let wasFrozen = false;
     let verdict: ProjectLifecycleVerdict;

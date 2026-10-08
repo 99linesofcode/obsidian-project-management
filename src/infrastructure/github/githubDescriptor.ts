@@ -12,6 +12,7 @@ export function githubDescriptor(): AdapterDescriptor {
       ...MANDATORY_FIELD_CAPABILITIES,
       'capture',
       'task-locking',
+      'project-activity',
       'trustworthy per-field timestamps',
       'complete-fetch',
     ],

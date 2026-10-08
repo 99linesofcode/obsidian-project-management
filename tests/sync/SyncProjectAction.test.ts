@@ -14,6 +14,7 @@ import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCasc
 import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
 import type { ProjectTaskLocksReconciler } from '../../src/sync/ProjectTaskLocksReconciler.js';
+import type { ProjectReactivationReconciler } from '../../src/sync/ProjectReactivationReconciler.js';
 import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
@@ -160,6 +161,15 @@ function taskLocksRecorder(events: string[]): ProjectTaskLocksReconciler {
   };
 }
 
+function reactivationRecorder(events: string[]): ProjectReactivationReconciler {
+  return {
+    reactivate: async (project) => {
+      events.push(`reactivate:${project}`);
+      return false;
+    },
+  };
+}
+
 function projectNote(
   projectName: string,
   archivedAt: string | null,
@@ -291,6 +301,9 @@ function harness(options: HarnessOptions = {}) {
   const taskLocks: { current: ProjectTaskLocksReconciler | undefined } = {
     current: options.engine ? taskLocksRecorder(events) : undefined,
   };
+  const reactivation: { current: ProjectReactivationReconciler | undefined } = {
+    current: options.engine ? reactivationRecorder(events) : undefined,
+  };
 
   const action = new SyncProjectAction(
     vault,
@@ -309,6 +322,7 @@ function harness(options: HarnessOptions = {}) {
     () => newLifecycle.current,
     () => taskCapture.current,
     () => taskLocks.current,
+    () => reactivation.current,
   );
 
   return {
@@ -323,6 +337,7 @@ function harness(options: HarnessOptions = {}) {
     newLifecycle,
     taskCapture,
     taskLocks,
+    reactivation,
   };
 }
 
@@ -651,7 +666,12 @@ describe('the setting-gated cutover', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).not.toContain('reconcile:Acme Widgets');
-    expect(h.events).toEqual(['lifecycle', 'taskLocks:true:false', 'renames']);
+    expect(h.events).toEqual([
+      'reactivate:Acme Widgets',
+      'lifecycle',
+      'taskLocks:true:false',
+      'renames',
+    ]);
   });
 
   it('sweeps a gone note while the engine is on', async () => {
@@ -736,6 +756,26 @@ describe('the setting-gated lifecycle cutover', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events.some((event) => event.startsWith('taskLocks:'))).toBe(
+      false,
+    );
+  });
+
+  it('runs the reactivation step before the new lifecycle when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events.indexOf('reactivate:Acme Widgets')).toBeLessThan(
+      h.events.indexOf('lifecycle'),
+    );
+  });
+
+  it('does not run the reactivation step when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events.some((event) => event.startsWith('reactivate:'))).toBe(
       false,
     );
   });

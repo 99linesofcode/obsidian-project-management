@@ -94,5 +94,8 @@ function gatePorts(registration: AdapterRegistration): RegisteredAdapter {
     taskLock: descriptor.capabilities.includes('task-locking')
       ? adapter
       : undefined,
+    activity: descriptor.capabilities.includes('project-activity')
+      ? adapter
+      : undefined,
   });
 }

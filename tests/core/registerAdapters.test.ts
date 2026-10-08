@@ -75,7 +75,7 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
     );
   });
 
-  it('exposes the task-lock port only when the adapter declares the capability (ACM-8)', () => {
+  it('exposes the optional ports only when the adapter declares the capability (ACM-8)', () => {
     const capable = registerAdapters([
       new AdapterRegistration(
         conformanceDescriptor('capable'),
@@ -83,21 +83,24 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
       ),
     ]).adapters.get('capable')!;
     const base = conformanceDescriptor('plain');
-    const withoutLock = new AdapterDescriptor({
+    const withoutOptional = new AdapterDescriptor({
       applicationId: base.applicationId,
       capabilities: base.capabilities.filter(
-        (capability) => capability !== 'task-locking',
+        (capability) =>
+          capability !== 'task-locking' && capability !== 'project-activity',
       ),
       representations: base.representations,
       secretKeys: base.secretKeys,
       settingsRows: base.settingsRows,
     });
     const plain = registerAdapters([
-      new AdapterRegistration(withoutLock, new ConformanceMirrorAdapter()),
+      new AdapterRegistration(withoutOptional, new ConformanceMirrorAdapter()),
     ]).adapters.get('plain')!;
 
     expect(capable.taskLock).toBeDefined();
+    expect(capable.activity).toBeDefined();
     expect(plain.taskLock).toBeUndefined();
+    expect(plain.activity).toBeUndefined();
   });
 
   it('rejects an adapter that cannot represent the mandatory surface (ACM-8, ACM-9)', () => {

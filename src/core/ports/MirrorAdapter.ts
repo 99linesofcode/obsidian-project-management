@@ -1,5 +1,6 @@
 import type { CapturePort } from './CapturePort.js';
 import type { CompleteFetchPort } from './CompleteFetchPort.js';
+import type { ProjectActivityPort } from './ProjectActivityPort.js';
 import type { ProjectCapturePort } from './ProjectCapturePort.js';
 import type { ProjectPort } from './ProjectPort.js';
 import type { TaskLockPort } from './TaskLockPort.js';
@@ -13,4 +14,5 @@ export interface MirrorAdapter
     ProjectCapturePort,
     CompleteFetchPort,
     TimestampedPort,
-    TaskLockPort {}
+    TaskLockPort,
+    ProjectActivityPort {}
