@@ -765,6 +765,7 @@ describe('the setting-gated lifecycle cutover', () => {
 
     await h.action.execute('Acme Widgets');
 
+    expect(h.events).toContain('reactivate:Acme Widgets');
     expect(h.events.indexOf('reactivate:Acme Widgets')).toBeLessThan(
       h.events.indexOf('lifecycle'),
     );
