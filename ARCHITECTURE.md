@@ -255,12 +255,13 @@ is unchanged. It consists of the port layer and the pure core:
   `AssembleProjectLifecyclePassAction`). The project-level peer of the
   mirror-sync action: it resolves each connection's mirror project through
   `MirrorProjectPort`, onboarding a missing one via `ProjectPort.createProject`
-  so a newly-connected project syncs in the same pass, then reads the origin's
-  archived state through `ProjectLifecycleOriginPort` and each mirror's through
-  `ProjectPort`, runs the same pure `mergeField` ladder over the archived fact,
-  and fans the reconciled freeze out to the origin and every capable mirror. Any side can start the
-  freeze or the unfreeze (NWM-15); the reconciled freeze is the pass's `frozen`
-  verdict, which gates the task-field pass (NWM-16). Its per-side baselines live
+  so a newly-connected project is onboarded in the same pass, then reads the
+  origin's archived state through `ProjectLifecycleOriginPort` and each
+  mirror's through `ProjectPort`, runs the same pure `mergeField` ladder over
+  the archived fact, and fans the reconciled freeze out to the origin and every
+  capable mirror. Any side can start the freeze or the unfreeze (NWM-15); the
+  reconciled freeze is the pass's `frozen` verdict, which gates the task-field
+  pass (NWM-16). Its per-side baselines live
   in the same `coreBaselines` store under the `lifecycle` field. The archived
   fact carries a timestamp: the origin's is the home note's edit time, trusted
   by default (NWM-28), and each mirror's is read through `ProjectPort`'s
