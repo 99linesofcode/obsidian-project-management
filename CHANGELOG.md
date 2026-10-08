@@ -1,3 +1,12 @@
+# [0.20.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.19.0...0.20.0) (2026-10-08)
+
+
+### Features
+
+* **sync:** always run the multi-adapter core ([467e6e8](https://github.com/99linesofcode/obsidian-project-management/commit/467e6e8f645a34a8a186f619f0c0e2d47f0f4dd7))
+
+
+
 # [0.19.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.18.0...0.19.0) (2026-10-08)
 
 
@@ -53,25 +62,6 @@
 ### Features
 
 * **core:** adopt remote-born projects on the new sync engine ([2d3983f](https://github.com/99linesofcode/obsidian-project-management/commit/2d3983f7fafd5e23a2f2b499d4d26a2943dc25bc))
-
-
-
-# [0.15.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.14.0...0.15.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **core:** isolate a failing connection in the lifecycle pass ([da98a3e](https://github.com/99linesofcode/obsidian-project-management/commit/da98a3e51a7a7f78688102572577247124b93a54))
-* **core:** prefer the conventional home note in discovery ([61b8434](https://github.com/99linesofcode/obsidian-project-management/commit/61b8434871f917a8ba1ca592e134dfd0a344a7d6))
-* **core:** reconcile a board the code-host adapter just created ([d93e7dc](https://github.com/99linesofcode/obsidian-project-management/commit/d93e7dccbef5e0a6b42e6a88ce31e72ed8d8d03a))
-* **sync:** snapshot the reconcilers once per execute ([733c0c3](https://github.com/99linesofcode/obsidian-project-management/commit/733c0c3767097836122495ae353a737456917be6))
-
-
-### Features
-
-* **core:** onboard a newly-connected project's mirror ([8a42acb](https://github.com/99linesofcode/obsidian-project-management/commit/8a42acb57805f204954c9e02a32cb7573b83fab5))
-* **core:** sync a project whose home note still has a legacy name ([65ed2b3](https://github.com/99linesofcode/obsidian-project-management/commit/65ed2b34dfba59cead6af3a9594cca8232699282))
-* **sync:** migrate the project home note on the gated new path ([6708935](https://github.com/99linesofcode/obsidian-project-management/commit/67089358f07f4651bc3c7d7a4c2ef1c18617f2d9))
 
 
 
