@@ -129,7 +129,7 @@ function setup() {
   return { action, mirror, origin };
 }
 
-describe('ReconcileProjectTaskLocksAction — lock a frozen project\'s task conversations', () => {
+describe('ReconcileProjectTaskLocksAction — lock a frozen project\'s task conversations (F02 NWM-29)', () => {
   it('locks the tracked tasks that are not done when the project freezes', async () => {
     const { action, mirror, origin } = setup();
     origin.tasks.set(FIX, task(FIX, 'Building'));
@@ -140,15 +140,28 @@ describe('ReconcileProjectTaskLocksAction — lock a frozen project\'s task conv
     expect([...mirror.lockedHandles]).toEqual(['issue-1']);
   });
 
-  it('unlocks the tracked tasks when the project unfreezes', async () => {
+  it('unlocks every tracked task on unfreeze, including the done lane', async () => {
     const { action, mirror, origin } = setup();
     origin.tasks.set(FIX, task(FIX, 'Building'));
+    origin.tasks.set(SHIP, task(SHIP, DONE));
     await mirror.lockTask('issue-1');
     await mirror.lockTask('issue-2');
 
     await action.invoke({ project: PROJECT, frozen: false, wasFrozen: true });
 
     expect([...mirror.lockedHandles]).toEqual([]);
+  });
+
+  it('keeps unlocking the rest when one task fails to unlock', async () => {
+    const { action, mirror, origin } = setup();
+    origin.tasks.set(FIX, task(FIX, 'Building'));
+    await mirror.lockTask('issue-1');
+    await mirror.lockTask('issue-2');
+    mirror.seedThrowingLock('issue-1');
+
+    await action.invoke({ project: PROJECT, frozen: false, wasFrozen: true });
+
+    expect([...mirror.lockedHandles]).toEqual(['issue-1']);
   });
 
   it('does nothing when the frozen state has not changed', async () => {

@@ -46,14 +46,30 @@ export class ReconcileProjectTaskLocksAction {
   ): Promise<void> {
     const tracked = await this.handles.list(input.project, connection.slug);
     for (const { handle, notePath } of tracked) {
-      if (input.frozen) {
+      await this.applyToTask(taskLock, handle, notePath, input.frozen);
+    }
+  }
+
+  private async applyToTask(
+    taskLock: TaskLockPort,
+    handle: string,
+    notePath: string,
+    frozen: boolean,
+  ): Promise<void> {
+    try {
+      if (frozen) {
         if (await this.isDone(notePath)) {
-          continue;
+          return;
         }
         await taskLock.lockTask(handle);
       } else {
         await taskLock.unlockTask(handle);
       }
+    } catch (error) {
+      console.error(
+        `ReconcileProjectTaskLocksAction: task ${handle} failed`,
+        error,
+      );
     }
   }
 

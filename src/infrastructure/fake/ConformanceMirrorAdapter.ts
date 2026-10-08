@@ -16,6 +16,7 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly absentProjects = new Set<string>();
   private readonly throwingProjects = new Set<string>();
   private readonly throwingTasks = new Set<string>();
+  private readonly throwingLocks = new Set<string>();
   readonly createCalls: string[] = [];
   readonly createTaskCalls: string[] = [];
   readonly lockedHandles = new Set<string>();
@@ -54,6 +55,10 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   seedThrowingTask(target: string): void {
     this.throwingTasks.add(target);
+  }
+
+  seedThrowingLock(handle: string): void {
+    this.throwingLocks.add(handle);
   }
 
   setProjectTime(target: string, time: string | null): void {
@@ -167,10 +172,16 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   }
 
   async lockTask(handle: string): Promise<void> {
+    if (this.throwingLocks.has(handle)) {
+      throw new Error(`conformance: lock for ${handle} failed`);
+    }
     this.lockedHandles.add(handle);
   }
 
   async unlockTask(handle: string): Promise<void> {
+    if (this.throwingLocks.has(handle)) {
+      throw new Error(`conformance: unlock for ${handle} failed`);
+    }
     this.lockedHandles.delete(handle);
   }
 
