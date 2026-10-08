@@ -40,14 +40,14 @@ export class AssembleProjectPassAction {
 
   async invoke(project: string): Promise<PassRecord[]> {
     const connections = await this.projectSource.readConnections(project);
-    const entities = await this.projectSource.listEntities(project);
+    const notePaths = await this.projectSource.listEntities(project);
     const scoped = this.scopeMirrors(connections);
 
     const records: PassRecord[] = [];
-    for (const entityId of entities) {
-      const mirrors = await this.resolveMirrors(scoped, entityId);
+    for (const notePath of notePaths) {
+      const mirrors = await this.resolveMirrors(scoped, notePath);
       for (const field of MERGED_FIELDS) {
-        records.push(await this.runField(entityId, field, mirrors));
+        records.push(await this.runField(notePath, field, mirrors));
       }
     }
     return records;
@@ -71,14 +71,18 @@ export class AssembleProjectPassAction {
 
   private async resolveMirrors(
     scoped: readonly ScopedMirror[],
-    entityId: string,
+    notePath: string,
   ): Promise<MirrorSide[]> {
     const mirrors: MirrorSide[] = [];
     for (const { connection, adapter } of scoped) {
-      const handle = await this.handles.resolve(connection.slug, entityId);
+      const handle = await this.handles.resolve(connection.slug, notePath);
       if (handle !== null) {
         mirrors.push(
-          new MirrorSide({ side: connection.slug, handle, adapter }),
+          new MirrorSide({
+            side: mirrorSideKey(connection.slug),
+            handle,
+            adapter,
+          }),
         );
       }
     }
@@ -86,18 +90,18 @@ export class AssembleProjectPassAction {
   }
 
   private async runField(
-    entityId: string,
+    notePath: string,
     field: CanonicalField,
     mirrors: readonly MirrorSide[],
   ): Promise<PassRecord> {
     const origin = originSideObservation(
       ORIGIN_SIDE,
-      await this.baselines.read(entityId, field, ORIGIN_SIDE),
-      await this.origin.observe(entityId, field),
+      await this.baselines.read(notePath, field, ORIGIN_SIDE),
+      await this.origin.observe(notePath, field),
     );
-    const baselines = await this.readMirrorBaselines(entityId, field, mirrors);
+    const baselines = await this.readMirrorBaselines(notePath, field, mirrors);
     const pass = new MirrorSyncPass({
-      entityId,
+      entityId: notePath,
       field,
       origin,
       mirrors,
@@ -105,18 +109,18 @@ export class AssembleProjectPassAction {
     });
 
     const record = await new MirrorSyncAction(this.origin).invoke(pass);
-    await this.persistAdvanced(entityId, field, record);
+    await this.persistAdvanced(notePath, field, record);
     return record;
   }
 
   private async readMirrorBaselines(
-    entityId: string,
+    notePath: string,
     field: CanonicalField,
     mirrors: readonly MirrorSide[],
   ): Promise<Map<string, Baseline>> {
     const baselines = new Map<string, Baseline>();
     for (const mirror of mirrors) {
-      const baseline = await this.baselines.read(entityId, field, mirror.side);
+      const baseline = await this.baselines.read(notePath, field, mirror.side);
       if (baseline !== null) {
         baselines.set(mirror.side, baseline);
       }
@@ -125,13 +129,13 @@ export class AssembleProjectPassAction {
   }
 
   private async persistAdvanced(
-    entityId: string,
+    notePath: string,
     field: CanonicalField,
     record: PassRecord,
   ): Promise<void> {
     for (const side of record.advanced) {
       await this.baselines.write(
-        entityId,
+        notePath,
         field,
         side,
         new Baseline(
@@ -141,6 +145,10 @@ export class AssembleProjectPassAction {
       );
     }
   }
+}
+
+function mirrorSideKey(slug: string): string {
+  return `mirror:${slug}`;
 }
 
 function completedValue(field: CanonicalField, value: string | null): boolean {

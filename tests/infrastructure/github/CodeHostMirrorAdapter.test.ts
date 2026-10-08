@@ -705,7 +705,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
     const status = records.find((record) => record.field === 'Status')!;
 
     expect(status.result.value).toBe('Building');
-    expect(status.result.winner).toBe('gh');
+    expect(status.result.winner).toBe('mirror:gh');
     expect(origin.applied).toEqual([
       new CanonicalFieldWrite({
         handle: entityId,

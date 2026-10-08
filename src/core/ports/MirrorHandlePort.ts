@@ -1,3 +1,3 @@
 export interface MirrorHandlePort {
-  resolve(connection: string, entityId: string): Promise<string | null>;
+  resolve(connection: string, notePath: string): Promise<string | null>;
 }

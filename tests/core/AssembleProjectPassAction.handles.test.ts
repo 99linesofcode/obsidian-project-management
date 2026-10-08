@@ -172,7 +172,7 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     expect(second.adapter.currentTask('handle-b')?.status).toBe('Done');
     expect(first.adapter.currentTask(ENTITY)).toBeNull();
     expect(status.advanced).toEqual(
-      expect.arrayContaining(['gh-main', 'gh-second']),
+      expect.arrayContaining(['mirror:gh-main', 'mirror:gh-second']),
     );
   });
 

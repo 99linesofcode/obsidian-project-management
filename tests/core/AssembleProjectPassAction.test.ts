@@ -218,7 +218,7 @@ describe('AssembleProjectPassAction — a project pass end to end (F02 NWM-1, NW
     const mirrorStatus = await baselines.read(
       TASK_PATH,
       'Status',
-      'conformance',
+      'mirror:conformance',
     );
     expect(originStatus?.value).toBe('Done');
     expect(mirrorStatus?.value).toBe('Done');
