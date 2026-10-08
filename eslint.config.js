@@ -97,6 +97,22 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
       : `the ${type} module may not import that element`,
 }));
 
+// Transitional reuse: the new core's vault adapter reuses the legacy vault
+// module's connections codec and note reads while the old chain is retired.
+// The edge is scoped to that one adapter file, so the infrastructure block
+// still imports core only in general.
+const transitionalPolicies = [
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultProjectSourceAdapter.ts'],
+      },
+    },
+    allow: { to: { element: { type: 'vault' } } },
+  },
+];
+
 // The public surface of each provider module: the only files another element
 // may import. The composition root wires the adapter and the half's actions;
 // everything else inside the provider is private to it. Expressed with the
@@ -257,6 +273,7 @@ export default tseslint.config(
           default: 'disallow',
           policies: [
             ...matrixPolicies,
+            ...transitionalPolicies,
             ...surfacePolicies,
             ...compositionRootPolicies,
           ],
