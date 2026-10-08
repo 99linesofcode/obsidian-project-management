@@ -117,4 +117,20 @@ describe('CoreBaselineStoreAdapter — the core baseline store', () => {
     const read = await store.read('note.md', 'Status', 'conformance');
     expect(read?.value).toBe('Done');
   });
+
+  it('refuses a prototype-polluting entity id', async () => {
+    const { storage } = fakeStorage();
+    const store = new CoreBaselineStoreAdapter(storage);
+
+    await expect(
+      store.write(
+        '__proto__',
+        'Status',
+        'conformance',
+        new Baseline('Done', false),
+      ),
+    ).rejects.toThrow(/forbidden baseline key/);
+
+    expect(Object.prototype.hasOwnProperty('Status')).toBe(false);
+  });
 });

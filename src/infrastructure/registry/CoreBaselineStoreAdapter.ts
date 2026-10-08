@@ -8,6 +8,7 @@ export interface CoreBaselineStorage {
 }
 
 const CORE_BASELINES_KEY = 'coreBaselines';
+const FORBIDDEN_RECORD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export class CoreBaselineStoreAdapter implements BaselineStorePort {
   constructor(private readonly storage: CoreBaselineStorage) {}
@@ -46,7 +47,7 @@ function readPath(
 ): unknown {
   let current: unknown = data;
   for (const key of keys) {
-    if (!isRecord(current)) {
+    if (!isRecord(current) || isForbiddenRecordKey(key)) {
       return undefined;
     }
     current = current[key];
@@ -58,10 +59,17 @@ function ensureRecord(
   parent: Record<string, unknown>,
   key: string,
 ): Record<string, unknown> {
+  if (isForbiddenRecordKey(key)) {
+    throw new Error(`refusing forbidden baseline key: ${key}`);
+  }
   if (!isRecord(parent[key])) {
     parent[key] = {};
   }
   return parent[key] as Record<string, unknown>;
+}
+
+function isForbiddenRecordKey(key: string): boolean {
+  return FORBIDDEN_RECORD_KEYS.has(key);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
