@@ -7,7 +7,6 @@ export interface CoreBaselineStorage {
   save(data: unknown): Promise<void>;
 }
 
-const SYNC_STATE_KEY = 'syncState';
 const CORE_BASELINES_KEY = 'coreBaselines';
 
 export class CoreBaselineStoreAdapter implements BaselineStorePort {
@@ -19,13 +18,7 @@ export class CoreBaselineStoreAdapter implements BaselineStorePort {
     side: string,
   ): Promise<Baseline | null> {
     const data = await this.storage.load();
-    const entry = readPath(data, [
-      SYNC_STATE_KEY,
-      CORE_BASELINES_KEY,
-      entityId,
-      field,
-      side,
-    ]);
+    const entry = readPath(data, [CORE_BASELINES_KEY, entityId, field, side]);
     if (!isRecord(entry)) {
       return null;
     }
@@ -39,8 +32,7 @@ export class CoreBaselineStoreAdapter implements BaselineStorePort {
     baseline: Baseline,
   ): Promise<void> {
     const data = await this.storage.load();
-    const syncState = ensureRecord(data, SYNC_STATE_KEY);
-    const baselines = ensureRecord(syncState, CORE_BASELINES_KEY);
+    const baselines = ensureRecord(data, CORE_BASELINES_KEY);
     const entity = ensureRecord(baselines, entityId);
     const fieldNode = ensureRecord(entity, field);
     fieldNode[side] = { value: baseline.value, completed: baseline.completed };

@@ -206,8 +206,7 @@ describe('AssembleProjectPassAction — a project pass end to end (F02 NWM-1, NW
     expect(originStatus?.value).toBe('Done');
     expect(mirrorStatus?.value).toBe('Done');
 
-    const syncState = snapshot()['syncState'] as Record<string, unknown>;
-    expect(syncState['coreBaselines']).toBeDefined();
+    expect(snapshot()['coreBaselines']).toBeDefined();
   });
 
   it('writes nothing on a second pass when nothing changed (NWM-24)', async () => {

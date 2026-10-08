@@ -210,8 +210,9 @@ consists of the port layer and the pure core:
 - **The baseline store port** (`BaselineStorePort`). The core's need to read and
   write one side's baseline for an entity + field — the memory the merge diffs
   against. Its adapter (`infrastructure/registry/CoreBaselineStoreAdapter`)
-  persists to `data.json` under the registry's new `syncState.coreBaselines`
-  key, leaving the existing chain's per-mirror bases untouched.
+  persists to `data.json` under a top-level `coreBaselines` key — a sibling of
+  `syncState`, as the settings root writes use — leaving the existing chain's
+  per-mirror bases untouched.
 - **The project source port** (`ProjectSourcePort`). The core's need to read a
   project's declared connections as `{application, target}` envelopes and to
   enumerate the project's task notes. Its adapter
@@ -263,13 +264,14 @@ consists of the port layer and the pure core:
   last-synced base, a diff view whose body is a digest), `ports` (provider,
   project, last poll, lane names), per-connection identities
   (`projects.<name>.identities.<connectionSlug>`), watch state, the
-  per-project `fullScanPending` marker, the per-surface `projectCursors`, and
-  `coreBaselines` (the new core's per-side, per-entity, per-field baselines,
-  separate from the existing chain's `items.<handle>.base`).
+  per-project `fullScanPending` marker, and the per-surface `projectCursors`.
   Ports are keyed by the note's connection slug, so a project can hold two
   connections of the same tool; a slug rename re-keys the port in lockstep.
   Written only through `SyncStateAdapter`, behind a serialization mutex it
-  shares with the settings save.
+  shares with the settings save. A top-level `coreBaselines` key — a sibling
+  of `syncState`, like the settings root writes — holds the new core's
+  per-side, per-entity, per-field baselines, separate from the existing
+  chain's `items.<handle>.base`, so a registry write cannot clobber it.
 - **`main.js`** — the built bundle; never authored.
 
 No other persistent store. The mirrors hold copies, never authority.

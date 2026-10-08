@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../src/core/data/Baseline.js';
 import { CoreBaselineStoreAdapter } from '../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
+import { SyncStateAdapter } from '../../../src/registry/SyncStateAdapter.js';
 
 function fakeStorage(initial: Record<string, unknown> = {}) {
   let data: Record<string, unknown> = initial;
@@ -36,11 +37,9 @@ describe('CoreBaselineStoreAdapter — the core baseline store', () => {
 
     expect(read?.value).toBe('Done');
     expect(read?.completed).toBe(false);
-    expect(snapshot()['syncState']).toEqual({
-      coreBaselines: {
-        'Projecten/Acme/taken/fix.md': {
-          Status: { conformance: { value: 'Done', completed: false } },
-        },
+    expect(snapshot()['coreBaselines']).toEqual({
+      'Projecten/Acme/taken/fix.md': {
+        Status: { conformance: { value: 'Done', completed: false } },
       },
     });
   });
@@ -97,5 +96,25 @@ describe('CoreBaselineStoreAdapter — the core baseline store', () => {
 
     const syncState = snapshot()['syncState'] as Record<string, unknown>;
     expect(syncState['projects']).toEqual(existing.syncState.projects);
+  });
+
+  it('keeps the core baselines when the registry writes the sync state', async () => {
+    const { storage } = fakeStorage();
+    const store = new CoreBaselineStoreAdapter(storage);
+    const registry = new SyncStateAdapter(storage);
+
+    await store.write(
+      'note.md',
+      'Status',
+      'conformance',
+      new Baseline('Done', false),
+    );
+    await registry.setEntity({
+      id: 'entity-1',
+      notePath: 'Projecten/Acme/taken/note.md',
+    });
+
+    const read = await store.read('note.md', 'Status', 'conformance');
+    expect(read?.value).toBe('Done');
   });
 });
