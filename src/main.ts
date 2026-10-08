@@ -63,10 +63,29 @@ import type { RegistrationResult } from './core/data/RegistrationResult.js';
 import { registerAdapters } from './core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
+import { AssembleProjectPassAction } from './core/AssembleProjectPassAction.js';
+import type { AdapterDescriptor } from './core/AdapterDescriptor.js';
+import type { RegisteredAdapter } from './core/data/RegisteredAdapter.js';
+import type { MirrorAdapter } from './core/ports/MirrorAdapter.js';
+import type { MirrorAdapterFactoryPort } from './core/ports/MirrorAdapterFactoryPort.js';
+import {
+  CoreBaselineStoreAdapter,
+  type CoreBaselineStorage,
+} from './infrastructure/registry/CoreBaselineStoreAdapter.js';
+import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
+import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
+import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
+import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
+import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
+import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
+import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
+import type { TaskManagerTransport } from './infrastructure/todoist/TaskManagerTransport.js';
+import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
+import type { TaskFieldReconciler } from './sync/TaskFieldReconciler.js';
 
 async function request(
   token: string,
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: string,
 ): Promise<{ status: number; json: unknown }> {
@@ -83,6 +102,16 @@ async function request(
     ...(body === undefined ? {} : { body }),
   });
   return { status: response.status, json: response.json };
+}
+
+function createCodeHostTransport(token: string): CodeHostTransport {
+  return {
+    post: (body) => request(token, 'POST', '/graphql', body),
+    get: (path) => request(token, 'GET', path),
+    patch: (path, body) => request(token, 'PATCH', path, body),
+    postPath: (path, body) => request(token, 'POST', path, body),
+    putPath: (path, body) => request(token, 'PUT', path, body),
+  };
 }
 
 function createTransport(token: string): Transport {
@@ -112,10 +141,82 @@ function createTransport(token: string): Transport {
   };
 }
 
+function composeTaskFieldReconciler(
+  plugin: ProjectManagementPlugin,
+  vault: VaultAdapter,
+  syncState: SyncStateAdapter,
+  secrets: SecretStore,
+  baselineStorage: CoreBaselineStorage,
+): TaskFieldReconciler {
+  const codeHostTransport = createCodeHostTransport(
+    secrets.load(GITHUB_TOKEN_KEY) ?? '',
+  );
+  const taskManagerTransport = transportFromSecret(
+    secrets,
+    TODOIST_TOKEN_KEY,
+    createTodoistTransport,
+  );
+  const mirrorAdapters: MirrorAdapterFactoryPort = {
+    create: (application, target) =>
+      createMirrorAdapter(
+        application,
+        target,
+        codeHostTransport,
+        taskManagerTransport,
+      ),
+  };
+  const assemblePass = new AssembleProjectPassAction(
+    new VaultProjectSourceAdapter(vault),
+    new VaultOriginAdapter(plugin.app),
+    new CoreBaselineStoreAdapter(baselineStorage),
+    new RegistryMirrorHandleAdapter(syncState),
+    mirrorAdapters,
+  );
+
+  return {
+    reconcile: async (project) => {
+      await assemblePass.invoke(project);
+    },
+  };
+}
+
+function createMirrorAdapter(
+  application: string,
+  target: string,
+  codeHost: CodeHostTransport,
+  taskManager: TaskManagerTransport,
+): RegisteredAdapter | null {
+  if (application === 'github') {
+    return gateMirror(
+      githubDescriptor(),
+      new CodeHostMirrorAdapter(codeHost, target),
+    );
+  }
+  if (application === 'todoist') {
+    return gateMirror(
+      todoistDescriptor(),
+      new TaskManagerMirrorAdapter(taskManager, target),
+    );
+  }
+  return null;
+}
+
+function gateMirror(
+  descriptor: AdapterDescriptor,
+  adapter: MirrorAdapter,
+): RegisteredAdapter | null {
+  return (
+    registerAdapters([new AdapterRegistration(descriptor, adapter)]).adapters.get(
+      descriptor.applicationId,
+    ) ?? null
+  );
+}
+
 function composePlugin(
   plugin: ProjectManagementPlugin,
   syncState: SyncStateAdapter,
   secrets: SecretStore,
+  baselineStorage: CoreBaselineStorage,
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
@@ -286,6 +387,20 @@ function composePlugin(
     },
   };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
+  let composedTaskFieldReconciler: TaskFieldReconciler | undefined;
+  const taskFieldReconciler = (): TaskFieldReconciler | undefined => {
+    if (!plugin.settings.multiAdapterEngine) {
+      return undefined;
+    }
+    composedTaskFieldReconciler ??= composeTaskFieldReconciler(
+      plugin,
+      vault,
+      syncState,
+      secrets,
+      baselineStorage,
+    );
+    return composedTaskFieldReconciler;
+  };
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
@@ -299,6 +414,7 @@ function composePlugin(
     handleDeletedNote,
     ensureProjectBoard,
     new RekeyRenamedConnectionsAction(syncState),
+    taskFieldReconciler,
   );
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(
@@ -367,6 +483,16 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
+    const baselineStorage: CoreBaselineStorage = {
+      load: () =>
+        loadDataSafely(
+          () => this.loadData(),
+          () => this.quarantineDataFile(),
+          () => this.dataFileExists(),
+        ),
+      save: (data) => this.saveData(data),
+    };
+
     const {
       scheduler,
       discoverProjects,
@@ -374,7 +500,7 @@ export default class ProjectManagementPlugin extends Plugin {
       seedArtifacts,
       seedTypeLabels,
       adapters,
-    } = composePlugin(this, syncState, this.secrets);
+    } = composePlugin(this, syncState, this.secrets, baselineStorage);
     this.seedArtifacts = seedArtifacts;
     this.seedTypeLabels = seedTypeLabels;
     this.adapters = adapters;
