@@ -46,6 +46,20 @@ class FakeNotes {
     const prefix = `${folder}/`;
     return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
   }
+
+  async findHomeNotePath(project: string): Promise<string | null> {
+    for (const path of this.notes.keys()) {
+      const segments = path.split('/');
+      if (
+        (segments[0] === 'Projecten' || segments[0] === 'Archief') &&
+        segments[1] === project &&
+        segments.length === 3
+      ) {
+        return path;
+      }
+    }
+    return null;
+  }
 }
 
 class RecordingOrigin implements OriginPort {
