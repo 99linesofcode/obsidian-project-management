@@ -1,8 +1,8 @@
-import type { ProjectBoardData } from '../shared/ProjectBoardData.js';
 import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
-import type { RepoBoardData } from '../shared/RepoBoardData.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { ProjectAddressing } from '../core/data/ProjectAddressing.js';
+import type { ProjectSummary } from '../core/data/ProjectSummary.js';
+import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { repoNameFromUrl } from './repoNameFromUrl.js';
 
@@ -13,7 +13,7 @@ export interface EnsureProjectBoardInput {
 
 export class EnsureProjectBoardAction {
   constructor(
-    private readonly projectManagement: ProjectManagementPort,
+    private readonly setup: ProjectSetupPort,
     private readonly syncState: SyncStatePort,
     private readonly statusOptions: string[],
   ) {}
@@ -33,26 +33,29 @@ export class EnsureProjectBoardAction {
     }
 
     const repoName = repoNameFromUrl(repoUrl);
-    const { repoNodeId, boards } =
-      await this.projectManagement.fetchRepoBoards(repoUrl);
-    const choice = deriveBoardChoice(repoName, boards);
+    const discovery = await this.setup.discoverProjects(repoUrl);
+    const choice = deriveBoardChoice(repoName, discovery.projects);
     if (choice.kind === 'ambiguous') {
       throw new Error(
         `EnsureProjectBoardAction: repository ${repoUrl} has several boards and none is titled "${repoName}"; not creating or adopting one`,
       );
     }
 
-    const board =
+    const addressing =
       choice.kind === 'create'
         ? await this.createOrAdoptOrphan(repoUrl, repoName)
-        : await this.adopt(choice.board, repoUrl);
+        : await this.setup.adoptProject(
+            repoUrl,
+            choice.board,
+            this.statusOptions,
+          );
 
     const merged = new ProjectIdentityData({
       repoUrl,
-      repoNodeId,
-      projectNodeId: board.projectNodeId,
-      statusFieldId: board.statusFieldId,
-      statusOptions: board.statusOptions,
+      repoNodeId: discovery.targetHandle,
+      projectNodeId: addressing.projectHandle,
+      statusFieldId: addressing.statusFieldHandle,
+      statusOptions: [...addressing.statusOptions],
     });
     await this.syncState.setIdentity(
       input.projectName,
@@ -64,38 +67,26 @@ export class EnsureProjectBoardAction {
   private async createOrAdoptOrphan(
     repoUrl: string,
     repoName: string,
-  ): Promise<ProjectBoardData> {
-    const orphanUrl = await this.findOrphanBoard(repoName);
-    if (orphanUrl === null) {
-      return this.projectManagement.createBoardWithStatusField(
+  ): Promise<ProjectAddressing> {
+    const orphan = await this.findOrphanProject(repoName);
+    if (orphan === null) {
+      return this.setup.createProjectWithStatus(
         repoUrl,
+        repoName,
         this.statusOptions,
       );
     }
-    return this.projectManagement.adoptBoard(
-      orphanUrl,
-      repoUrl,
-      this.statusOptions,
-    );
+    return this.setup.adoptProject(repoUrl, orphan, this.statusOptions);
   }
 
-  private async findOrphanBoard(repoName: string): Promise<string | null> {
-    const boards = await this.projectManagement.fetchViewerProjects();
-    const orphan = boards.find(
-      (board) => board.project.name === repoName && board.repoUrls.length === 0,
+  private async findOrphanProject(
+    repoName: string,
+  ): Promise<ProjectSummary | null> {
+    const candidates = await this.setup.listProjects();
+    const orphan = candidates.find(
+      (candidate) =>
+        candidate.project.name === repoName && candidate.targets.length === 0,
     );
-    const url = orphan?.project.mirrors.github ?? '';
-    return url === '' ? null : url;
-  }
-
-  private async adopt(
-    board: RepoBoardData,
-    repoUrl: string,
-  ): Promise<ProjectBoardData> {
-    return this.projectManagement.adoptBoard(
-      board.boardUrl,
-      repoUrl,
-      this.statusOptions,
-    );
+    return orphan?.project ?? null;
   }
 }

@@ -263,6 +263,13 @@ the port layer and the pure core:
   project is onboarded: the lifecycle pass creates it through
   `ProjectPort.createProject`, records the returned handle, and reconciles it in
   the same pass rather than skipping it.
+- **The project-setup port** (`ProjectSetupPort`). The core's need to resolve a
+  connection's project before it mirrors: the projects a target carries, one
+  created or adopted with the core's Status vocabulary, the addressing the core
+  writes through, the projects the viewer can see, and a cheap per-project state
+  probe. The code-host adapter implements it; the discovery, attach,
+  board-ensure and probe setup actions depend on this port, not on the legacy
+  `ProjectManagementPort`.
 - **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction` +
   `AssembleProjectLifecyclePassAction`). The project-level peer of the
   mirror-sync action: it resolves each connection's mirror project through
@@ -502,7 +509,11 @@ over HTTPS.
 **Known debt / open items:** `ProjectManagementPort` still carries
 `fetchTrackedIssues` / `fetchBoardItems` alongside the canonical
 `fetchProjectDetail`, kept for the promote UI until it migrates to the
-canonical read. The legacy chain carries pre-existing provider vocabulary
+canonical read. The discovery, attach, board-ensure and probe setup actions now
+run on the core's `ProjectSetupPort`; the remaining old-port consumers are the
+promote UI and seed labels, remote project capture, the archive-lock action,
+and the legacy lifecycle and handle-deleted actions. The legacy chain carries
+pre-existing provider vocabulary
 (`shared/`, `projects/`, `sync/`, `tasks/`, `vault/`, `registry/`); the
 provider-vocabulary gate grandfathers it until that chain is retired. The
 developer manual records the remaining code-vs-brief discrepancies.
