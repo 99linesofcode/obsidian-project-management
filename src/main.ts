@@ -18,7 +18,7 @@ import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
-import type { CaptureResult } from './projects/CaptureRemoteProjectsAction.js';
+import type { CaptureProjectsResult } from './core/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/CaptureTasksAction.js';
 import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
@@ -34,7 +34,6 @@ import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
 import { PromoteIssueAction } from './tasks/PromoteIssueAction.js';
 import { PromoteCardAction } from './tasks/PromoteCardAction.js';
 import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
-import { ReconcileProjectLifecycleAction } from './projects/ReconcileProjectLifecycleAction.js';
 import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
@@ -42,10 +41,7 @@ import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
 import { VaultAdapter } from './vault/VaultAdapter.js';
 import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
 import { loadDataSafely } from './registry/loadDataSafely.js';
-import {
-  TodoistAdapter,
-  createTodoistTransport,
-} from './todoist/TodoistAdapter.js';
+import { createTodoistTransport } from './infrastructure/todoist/TodoistTransport.js';
 import { PromoteToTaskCommand } from './app/commands/PromoteToTaskCommand.js';
 import { PromoteCardToIssueCommand } from './app/commands/PromoteCardToIssueCommand.js';
 import { AdapterRegistration } from './core/data/AdapterRegistration.js';
@@ -163,7 +159,7 @@ function createTransport(token: string): Transport {
 }
 
 interface ProjectCaptureReconciler {
-  capture(syncedAt: string): Promise<CaptureResult>;
+  capture(syncedAt: string): Promise<CaptureProjectsResult>;
 }
 
 interface CoreReconcilers {
@@ -359,7 +355,7 @@ function composePlugin(
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
-  projectCapture: () => Promise<CaptureResult>;
+  projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
   seedTypeLabels: SeedTypeLabelsAction;
   adapters: RegistrationResult;
@@ -398,17 +394,6 @@ function composePlugin(
     new AttachProjectAction(codeHostSetup),
   );
   const probeProjects = new ProbeProjectsAction(codeHostSetup, syncState);
-
-  const todoist = new TodoistAdapter(
-    transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
-  );
-  const reconcileProjectLifecycle = new ReconcileProjectLifecycleAction(
-    github,
-    todoist,
-    vault,
-    syncState,
-    plugin.settings.doneOptionName,
-  );
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -471,26 +456,25 @@ function composePlugin(
     vault,
     syncState,
     probeProjects,
-    reconcileProjectLifecycle,
     detectNoteRenames,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
     handleDeletedNote,
-    ensureProjectBoard,
-    new RekeyRenamedConnectionsAction(syncState),
     taskFieldReconciler,
     projectLifecycleReconciler,
     taskCaptureReconciler,
     projectTaskLocksReconciler,
     projectReactivationReconciler,
+    ensureProjectBoard,
+    new RekeyRenamedConnectionsAction(syncState),
   );
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,
     );
   });
-  const projectCapture = (): Promise<CaptureResult> =>
+  const projectCapture = (): Promise<CaptureProjectsResult> =>
     coreReconcilers().capture.capture(new Date().toISOString());
   const scheduler = new SyncScheduler(
     vault,
@@ -586,7 +570,7 @@ export default class ProjectManagementPlugin extends Plugin {
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
-    projectCapture: () => Promise<CaptureResult>,
+    projectCapture: () => Promise<CaptureProjectsResult>,
   ): Promise<void> {
     try {
       const { projects, errors } = await discoverProjects.execute();
