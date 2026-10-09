@@ -1,4 +1,7 @@
-import { AdapterDescriptor } from '../../core/AdapterDescriptor.js';
+import {
+  AdapterDescriptor,
+  SettingsRow,
+} from '../../core/AdapterDescriptor.js';
 import {
   MANDATORY_FIELD_CAPABILITIES,
   UNIVERSAL_CAPABILITIES,
@@ -24,6 +27,13 @@ export function todoistDescriptor(): AdapterDescriptor {
       label: 'native',
     },
     secretKeys: ['todoist-token'],
-    settingsRows: [],
+    settingsRows: [
+      new SettingsRow({
+        key: 'todoist-token',
+        label: 'Todoist token',
+        kind: 'text',
+        description: 'Personal API token used to talk to the Todoist API.',
+      }),
+    ],
   });
 }

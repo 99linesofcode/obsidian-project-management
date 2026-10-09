@@ -442,11 +442,11 @@ over HTTPS.
     `infrastructure/`) cannot slip in unclassified.
   - **`pnpm run lint:boundaries`** (`scripts/lint-boundaries.mjs`) — the
     provider-vocabulary gate. A provider name may appear only in the provider's
-    own module (`infrastructure/<vendor>/`), the composition root (`main.ts`)
-    and the driving side (`app/`); a capitalized provider name anywhere else
-    fails. Inside the neutral architecture (`core/`, `infrastructure/`) the
-    check is case-insensitive, so any provider name in the core fails. The gate
-    is bite-tested (`tests/scripts/lint-boundaries.test.ts`): a deliberate core
+    own module (`infrastructure/<vendor>/`) and the composition root
+    (`main.ts`); a capitalized provider name anywhere else fails. Inside the
+    neutral architecture (`core/`, `infrastructure/`) the check is
+    case-insensitive, so any provider name in the core fails. The gate is
+    bite-tested (`tests/scripts/lint-boundaries.test.ts`): a deliberate core
     violation exits non-zero while the legitimate provider path exits zero, so a
     green gate on an empty tree cannot pass unnoticed.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
@@ -566,8 +566,8 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
   it, never a provider adapter directly; the composition root wires everything;
   no circular module dependencies.
 - **Provider neutrality**: a provider name appears only in the provider's own
-  module (`infrastructure/<vendor>/`), the composition root, and the driving
-  side; cross-cutting vocabulary is neutral (a provider name is a
+  module (`infrastructure/<vendor>/`) and the composition root; cross-cutting
+  vocabulary is neutral (a provider name is a
   value argument, never a namespace key). The neutral architecture (`core/`,
   `infrastructure/`) is checked case-insensitively, so any provider name in the
   core fails.

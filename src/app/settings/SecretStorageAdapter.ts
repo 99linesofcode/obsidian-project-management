@@ -1,8 +1,5 @@
 import type { SecretStorage } from 'obsidian';
 
-export const GITHUB_TOKEN_KEY = 'github-token';
-export const TODOIST_TOKEN_KEY = 'todoist-token';
-
 export interface SecretStore {
   load(key: string): string | null;
   save(key: string, value: string): void;

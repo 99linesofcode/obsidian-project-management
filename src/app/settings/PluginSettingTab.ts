@@ -6,7 +6,6 @@ import {
 } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
 import { isRecord } from '../../core/isRecord.js';
-import { GITHUB_TOKEN_KEY, TODOIST_TOKEN_KEY } from './SecretStorageAdapter.js';
 import { TokenSettings } from './TokenSettings.js';
 import { DEFAULT_SETTINGS } from './settings.js';
 import { SEED_ARTIFACTS, type SeedArtifact } from '../seedArtifacts.js';
@@ -50,18 +49,7 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
 
   private rows(): SettingRow[] {
     return [
-      {
-        name: 'GitHub token',
-        desc: 'Personal access token used to talk to the GitHub API.',
-        populate: (setting, desc, refresh) =>
-          this.populateTokenSetting(setting, desc, GITHUB_TOKEN_KEY, refresh),
-      },
-      {
-        name: 'Todoist token',
-        desc: 'Personal API token used to talk to the Todoist API.',
-        populate: (setting, desc, refresh) =>
-          this.populateTokenSetting(setting, desc, TODOIST_TOKEN_KEY, refresh),
-      },
+      ...this.tokenRows(),
       {
         name: 'Poll interval (minutes)',
         desc: 'How often to check for changes.',
@@ -69,7 +57,7 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       },
       {
         name: 'Done option name',
-        desc: 'The GitHub Projects single-select option that marks a task done.',
+        desc: 'The board option that marks a task done.',
         populate: (setting) => this.populateDoneOption(setting),
       },
       {
@@ -94,6 +82,26 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           this.populateArtifactSetting(setting, artifact, refresh),
       })),
     ];
+  }
+
+  private tokenRows(): SettingRow[] {
+    const rows: SettingRow[] = [];
+    for (const descriptor of this.plugin.providerDescriptors) {
+      const key = descriptor.secretKeys[0];
+      const row = descriptor.settingsRows.find(
+        (candidate) => candidate.key === key,
+      );
+      if (key === undefined || row === undefined) {
+        continue;
+      }
+      rows.push({
+        name: row.label,
+        desc: row.description ?? '',
+        populate: (setting, desc, refresh) =>
+          this.populateTokenSetting(setting, desc, key, refresh),
+      });
+    }
+    return rows;
   }
 
   private populatePollInterval(setting: Setting): void {
