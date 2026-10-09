@@ -78,14 +78,6 @@ describe('the provider-vocabulary gate', () => {
     expect(gateExitCode(root)).toBe(0);
   });
 
-  it('passes a provider name in its own legacy module', () => {
-    const root = fixtureRoot({
-      'src/github/adapter.ts': 'export class GitHubAdapter {}\n',
-    });
-
-    expect(gateExitCode(root)).toBe(0);
-  });
-
   it('passes a provider name in the composition root', () => {
     const root = fixtureRoot({
       'src/main.ts': "export const applicationId = 'todoist';\n",

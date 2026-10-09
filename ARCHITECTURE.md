@@ -428,13 +428,14 @@ over HTTPS.
   config with prettier (`pnpm run lint`), prettier (`pnpm run format:check`).
 - **Mechanical gates** (and what each makes impossible):
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
-    are the `src/` module folders plus the src root (the composition root);
+    are the `src/` module folders — the provider modules are
+    `infrastructure/<vendor>/` — plus the src root (the composition root);
     `core/` is the inner block and imports no module; `infrastructure/` may
-    import `core/` only; provider modules
-    never import each other; neutral modules consume the core and the ports
-    that live in it, never a provider adapter directly; the composition root
-    wires everything. An unlisted import edge fails the lint, so the dependency
-    graph stays acyclic and the inner blocks stay neutral.
+    import `core/` only; the provider modules never import each other; neutral
+    modules consume the core and the ports that live in it, never a provider
+    adapter directly; the composition root wires everything. An unlisted import
+    edge fails the lint, so the dependency graph stays acyclic and the inner
+    blocks stay neutral.
   - **`boundaries/no-unknown-files`** and **`no-unknown-dependencies`** —
     every source file must belong to an element and every local import must
     resolve to one, so a new top-level module (including `core/` and
