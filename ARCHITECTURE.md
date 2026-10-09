@@ -349,6 +349,10 @@ the port layer and the pure core:
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
+- **Connection validation is open.** A connection is accepted when it names a
+  registered application; the composition root supplies the registered set from
+  the adapters it registers, so the accepted set is not a hardcoded union. An
+  application that is not registered is still rejected with a collected error.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary, its opaque

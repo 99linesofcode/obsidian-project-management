@@ -266,6 +266,16 @@ function buildCaptureSources(
   return sources;
 }
 
+function registeredApplicationIds(
+  conformance: AdapterDescriptor,
+): ReadonlySet<string> {
+  return new Set(
+    [githubDescriptor(), todoistDescriptor(), conformance].map(
+      (descriptor) => descriptor.applicationId,
+    ),
+  );
+}
+
 function createMirrorAdapter(
   application: string,
   target: string,
@@ -312,8 +322,11 @@ function composePlugin(
   seedArtifacts: SeedVaultArtifactsAction;
   adapters: RegistrationResult;
 } {
-  const vault = new VaultAdapter(plugin.app, (eventRef) =>
-    plugin.registerEvent(eventRef),
+  const conformance = conformanceDescriptor('conformance');
+  const vault = new VaultAdapter(
+    plugin.app,
+    (eventRef) => plugin.registerEvent(eventRef),
+    registeredApplicationIds(conformance),
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
@@ -426,10 +439,7 @@ function composePlugin(
     projectCapture,
     seedArtifacts,
     adapters: registerAdapters([
-      new AdapterRegistration(
-        conformanceDescriptor('conformance'),
-        new ConformanceMirrorAdapter(),
-      ),
+      new AdapterRegistration(conformance, new ConformanceMirrorAdapter()),
     ]),
   };
 }
