@@ -4,7 +4,13 @@ import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
 import { CapturedProject } from '../../core/data/CapturedProject.js';
 import { ProjectActivityObservation } from '../../core/data/ProjectActivityObservation.js';
+import { ProjectAddressing } from '../../core/data/ProjectAddressing.js';
+import { ProjectCandidate } from '../../core/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../core/data/ProjectDiscovery.js';
+import { ProjectState } from '../../core/data/ProjectState.js';
+import { ProjectSummary } from '../../core/data/ProjectSummary.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
+import type { ProjectSetupPort } from '../../core/ports/ProjectSetupPort.js';
 import type {
   CodeHostResponse,
   CodeHostTransport,
@@ -320,7 +326,9 @@ interface BoardSnapshot {
   cards: Map<string, RawCard>;
 }
 
-export class CodeHostMirrorAdapter implements MirrorAdapter {
+export class CodeHostMirrorAdapter
+  implements MirrorAdapter, ProjectSetupPort
+{
   private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
@@ -423,19 +431,25 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     return createdProjectId(created);
   }
 
-  private async ensureStatusField(projectId: string): Promise<StatusField> {
+  private async ensureStatusField(
+    projectId: string,
+    statusOptions: readonly string[],
+  ): Promise<StatusField> {
     const data = await this.graphql(PROJECT_FIELDS_QUERY, { projectId });
     const existing = statusField(data.node);
     if (existing !== null) {
       return existing;
     }
-    return this.createStatusField(projectId);
+    return this.createStatusField(projectId, statusOptions);
   }
 
-  private async createStatusField(projectId: string): Promise<StatusField> {
+  private async createStatusField(
+    projectId: string,
+    statusOptions: readonly string[],
+  ): Promise<StatusField> {
     const created = await this.graphql(CREATE_STATUS_FIELD_MUTATION, {
       projectId,
-      options: this.statusOptions.map((name) => ({
+      options: statusOptions.map((name) => ({
         name,
         color: 'GRAY',
         description: '',
@@ -474,11 +488,8 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     const repositoryId = await this.repoNodeId(repo);
     const projectId =
       (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
-    await this.graphql(LINK_BOARD_MUTATION, {
-      projectId,
-      repositoryId,
-    });
-    const status = await this.ensureStatusField(projectId);
+    await this.linkBoard(projectId, repositoryId);
+    const status = await this.ensureStatusField(projectId, this.statusOptions);
     this.boards.set(
       connection.repoUrl,
       Promise.resolve({
@@ -492,6 +503,13 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
       name,
       archived: false,
     });
+  }
+
+  private async linkBoard(
+    projectId: string,
+    repositoryId: string,
+  ): Promise<void> {
+    await this.graphql(LINK_BOARD_MUTATION, { projectId, repositoryId });
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
@@ -524,6 +542,140 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
 
   async archivedTime(_target: string): Promise<string | null> {
     return null;
+  }
+
+  async discoverProjects(target: string): Promise<ProjectDiscovery> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const data = await this.graphql(REPO_BOARDS_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+    });
+    const repository = data.repository;
+    if (!isRecord(repository) || typeof repository.id !== 'string') {
+      throw new Error(
+        `code host: repository ${repo.owner}/${repo.name} not found`,
+      );
+    }
+    const projects = nodesOf(repository, 'projectsV2')
+      .filter(isRecord)
+      .flatMap(parseRepoBoard)
+      .map(
+        (board) =>
+          new ProjectSummary({
+            handle: board.projectNodeId,
+            name: board.name,
+          }),
+      );
+    return new ProjectDiscovery({ targetHandle: repository.id, projects });
+  }
+
+  async readProjectAddressing(
+    project: ProjectSummary,
+  ): Promise<ProjectAddressing | null> {
+    const data = await this.graphql(PROJECT_FIELDS_QUERY, {
+      projectId: project.handle,
+    });
+    const node = data.node;
+    if (!isRecord(node) || typeof node.id !== 'string') {
+      return null;
+    }
+    const status = statusField(node);
+    if (status === null) {
+      throw new Error(`code host: project ${project.handle} has no Status field`);
+    }
+    return new ProjectAddressing({
+      projectHandle: project.handle,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  async createProjectWithStatus(
+    target: string,
+    name: string,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const repositoryId = await this.repoNodeId(repo);
+    const projectId =
+      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
+    await this.linkBoard(projectId, repositoryId);
+    const status = await this.ensureStatusField(projectId, statusOptions);
+    return new ProjectAddressing({
+      projectHandle: projectId,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  async adoptProject(
+    target: string,
+    project: ProjectSummary,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const repositoryId = await this.repoNodeId(repo);
+    const status = await this.ensureStatusField(project.handle, statusOptions);
+    await this.linkBoard(project.handle, repositoryId);
+    return new ProjectAddressing({
+      projectHandle: project.handle,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  async listProjects(): Promise<readonly ProjectCandidate[]> {
+    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
+    return nodesOf(data.viewer, 'projectsV2')
+      .filter(isRecord)
+      .flatMap((node) =>
+        typeof node.id === 'string'
+          ? [
+              new ProjectCandidate({
+                project: new ProjectSummary({
+                  handle: node.id,
+                  name: typeof node.title === 'string' ? node.title : '',
+                }),
+                targets: repoUrlsOf(node),
+              }),
+            ]
+          : [],
+      );
+  }
+
+  async probeProjects(
+    handles: readonly string[],
+  ): Promise<readonly ProjectState[]> {
+    if (handles.length === 0) {
+      return [];
+    }
+    const variables: Record<string, string> = {};
+    const selections = handles.map((id, index) => {
+      variables[`id${index}`] = id;
+      return `p${index}: node(id: $id${index}) { ... on ProjectV2 { id updatedAt closed } }`;
+    });
+    const declarations = handles
+      .map((_, index) => `$id${index}: ID!`)
+      .join(', ');
+    const query = `query ProjectStates(${declarations}) {\n  ${selections.join('\n  ')}\n}`;
+    const data = await this.graphql(query, variables);
+    return Object.values(data).flatMap((raw) =>
+      isRecord(raw) &&
+      typeof raw.id === 'string' &&
+      typeof raw.updatedAt === 'string' &&
+      typeof raw.closed === 'boolean'
+        ? [
+            new ProjectState({
+              handle: raw.id,
+              updatedAt: raw.updatedAt,
+              archived: raw.closed,
+            }),
+          ]
+        : [],
+    );
   }
 
   async latestActivity(
