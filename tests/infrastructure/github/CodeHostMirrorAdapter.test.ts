@@ -603,7 +603,7 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(tasks.map((task) => task.handle)).toEqual([ISSUE_URL]);
   });
 
-  it('captures the untyped, open issues as remote-born tasks', async () => {
+  it('captures the typed issues as tracked tasks', async () => {
     const { adapter } = adapterWith([
       boardResponse(
         [
@@ -620,7 +620,7 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
             number: 44,
             id: 'I_kwDOAAAA44',
             state: 'CLOSED',
-            labels: { nodes: [] },
+            labels: { nodes: [{ name: 'type: chore' }] },
           }),
         ],
         [cardNode()],
@@ -630,7 +630,8 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     const tasks = await adapter.capture(target());
 
     expect(tasks.map((task) => task.handle)).toEqual([
-      'https://github.com/acme/widgets/issues/43',
+      ISSUE_URL,
+      'https://github.com/acme/widgets/issues/44',
     ]);
   });
 

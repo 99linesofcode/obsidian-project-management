@@ -133,8 +133,6 @@ The actions and infrastructure:
   card, with the base lane refreshed.
 - **BoardStatusAction** — a note's status onto the board's Status column,
   gated on the base lane.
-- **PromoteIssueAction / PromoteCardAction** — the explicit user escape hatch
-  past the type-label gate.
 - **SeedVaultArtifactsAction** — seeds the six vault-owned artifacts (three note
   templates, three Bases files) create-if-missing, on init and on demand from
   the settings tab.
@@ -464,16 +462,16 @@ sequenceDiagram
   end
 ```
 
-#### 2.4b Note creation from adoption or promotion
+#### 2.4b Note creation from adoption
 
 The other note-creation path is `CreateTaskNoteAction`, driven from the GitHub
-side (adoption, see 2.5) and from promotion (see 2.13), never from a bare vault
-note. It mints the uuid, renders the template through `TaskNoteMapper`, resolves
-a free path (slug plus ordinal), writes the note and the registry record.
+side (adoption, see 2.5), never from a bare vault note. It mints the uuid,
+renders the template through `TaskNoteMapper`, resolves a free path (slug plus
+ordinal), writes the note and the registry record.
 
 ```mermaid
 sequenceDiagram
-  participant Caller as ApplyTaskToVaultAction or Promote actions
+  participant Caller as ApplyTaskToVaultAction
   participant C as CreateTaskNoteAction
   participant SS as SyncStatePort
   participant V as VaultPort
@@ -933,38 +931,12 @@ sequenceDiagram
   Note over P: settingsFromData deleted SYNC_STATE_KEY at onload
 ```
 
-### 2.13 Promotion (added flow)
+### 2.13 Task capture (promotion folded in)
 
-The type label is the adoption gate; promotion is the explicit user override.
-`PromoteToTaskCommand` opens `PromoteModal`, which lists unpromoted issues
-across the discovered projects; `PromoteIssueAction` applies the type label,
-fetches the issue and materializes the note immediately.
-`PromoteCardToIssueCommand` opens `PromoteCardModal`, which lists draft cards;
-`PromoteCardAction` converts the draft to an issue and materializes the note.
-Implements PRO-1, PRO-2, PRO-3.
-
-```mermaid
-sequenceDiagram
-  participant Cmd as PromoteToTaskCommand or PromoteCardToIssueCommand
-  participant Modal as PromoteModal or PromoteCardModal
-  participant Act as PromoteIssueAction or PromoteCardAction
-  participant PM as ProjectManagementPort
-  participant SS as SyncStatePort
-  participant C as CreateTaskNoteAction
-
-  Cmd->>Modal: open()
-  Modal->>PM: fetchUnpromotedIssues or fetchBoardItems
-  Modal->>Act: execute(chosen)
-  alt issue
-    Act->>PM: addLabel(url, 'type: task')
-    Act->>PM: fetchTask(url)
-  else card
-    Act->>PM: promoteCard(itemId, repoNodeId)
-  end
-  Act->>SS: getIdentity(project)
-  Act->>C: execute(type from label, default lane)
-  C->>SS: setEntity and setMirrorItem('github')
-```
+The type label is the adoption gate: an issue carrying a `type:` label is
+tracked, and task capture adopts it as a task note. There is no separate manual
+promotion flow — a typed issue becomes a task note through the core capture
+surface (`CapturePort` + `CaptureTasksAction`), and a draft card is left alone.
 
 ### 2.14 Vault consistency (added flow)
 

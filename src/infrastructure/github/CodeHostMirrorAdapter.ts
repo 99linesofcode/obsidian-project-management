@@ -811,7 +811,7 @@ export class CodeHostMirrorAdapter
   async capture(target: string): Promise<CanonicalTask[]> {
     const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
     return snapshot.issues
-      .filter((issue) => issue.state === 'open' && !hasTypeLabel(issue.labels))
+      .filter((issue) => hasTypeLabel(issue.labels))
       .map((issue) =>
         toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null),
       );

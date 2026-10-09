@@ -56,7 +56,6 @@ export interface ProjectManagementPort {
   ): Promise<Map<string, ProjectStateData>>;
   setProjectClosed(projectNodeId: string, closed: boolean): Promise<void>;
   lockIssue(nodeId: string): Promise<void>;
-  fetchUnpromotedIssues(repoUrl: string): Promise<CodeHostTaskData[]>;
   fetchTask(url: string): Promise<CodeHostTaskData>;
   updateTask(
     url: string,
@@ -70,6 +69,4 @@ export interface ProjectManagementPort {
   setBoardStatus(status: BoardStatusData): Promise<void>;
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
   deleteCard(projectNodeId: string, issueUrl: string): Promise<void>;
-  addLabel(url: string, label: string): Promise<void>;
-  promoteCard(itemId: string, repoNodeId: string): Promise<CodeHostTaskData>;
 }

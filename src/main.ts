@@ -31,8 +31,6 @@ import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
-import { PromoteIssueAction } from './tasks/PromoteIssueAction.js';
-import { PromoteCardAction } from './tasks/PromoteCardAction.js';
 import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
 import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
@@ -42,8 +40,6 @@ import { VaultAdapter } from './vault/VaultAdapter.js';
 import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
 import { loadDataSafely } from './registry/loadDataSafely.js';
 import { createTodoistTransport } from './infrastructure/todoist/TodoistTransport.js';
-import { PromoteToTaskCommand } from './app/commands/PromoteToTaskCommand.js';
-import { PromoteCardToIssueCommand } from './app/commands/PromoteCardToIssueCommand.js';
 import { AdapterRegistration } from './core/data/AdapterRegistration.js';
 import type { RegistrationResult } from './core/data/RegistrationResult.js';
 import { registerAdapters } from './core/registerAdapters.js';
@@ -406,28 +402,6 @@ function composePlugin(
     syncState,
     plugin.settings.statusOptions,
   );
-
-  const promoteIssue = new PromoteIssueAction(
-    github,
-    syncState,
-    createTaskNote,
-  );
-  const promoteToTask = new PromoteToTaskCommand(
-    () => plugin.projectNames,
-    syncState,
-    github,
-    promoteIssue,
-  );
-  promoteToTask.register(plugin);
-
-  const promoteCard = new PromoteCardAction(github, syncState, createTaskNote);
-  const promoteCardToIssue = new PromoteCardToIssueCommand(
-    () => plugin.projectNames,
-    syncState,
-    github,
-    promoteCard,
-  );
-  promoteCardToIssue.register(plugin);
 
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
   let composedCoreReconcilers: CoreReconcilers | undefined;
