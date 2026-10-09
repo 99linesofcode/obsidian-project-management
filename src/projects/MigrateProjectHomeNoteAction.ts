@@ -1,5 +1,6 @@
 import { projectHomePath } from '../core/projectHomePath.js';
-import type { VaultPort } from '../core/VaultPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
 
 export interface MigrateProjectHomeNoteInput {
   projectName: string;
@@ -14,7 +15,7 @@ export interface MigrateProjectHomeNoteInput {
 // projects migrate too, so the note lands under Archief/. Returns the note's
 // path after the migration (unchanged when nothing moved).
 export class MigrateProjectHomeNoteAction {
-  constructor(private readonly vault: VaultPort) {}
+  constructor(private readonly vault: NoteReaderPort & NoteWriterPort) {}
 
   async execute(input: MigrateProjectHomeNoteInput): Promise<string> {
     const target = projectHomePath(input.projectName, input.locationArchived);

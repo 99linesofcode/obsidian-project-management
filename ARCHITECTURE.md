@@ -25,8 +25,9 @@ obsidian-project-management/
 │   ├── core/            # the multi-adapter core: capability ports, canonical DTOs,
 │   │                    # the pure N-way merge, the descriptor/registrar, the
 │   │                    # mirror-sync and lifecycle actions, the pass assemblers,
-│   │                    # the capture/lock/reactivation reconcilers, and the
-│   │                    # retained shell's ports (VaultPort, SyncStatePort) + DTOs
+│   │                    # the capture/lock/reactivation reconcilers, the narrow
+│   │                    # shell seams (note I/O, events, identity, tracked
+│   │                    # entities, connection state) and the DTOs
 │   ├── infrastructure/  # driven adapters for the core, one namespace per vendor:
 │   │                    # vault/ (origin, project source, lifecycle, capture,
 │   │                    # note codecs),
@@ -36,7 +37,9 @@ obsidian-project-management/
 │   │                    # fake/ (in-memory conformance adapter)
 │   ├── app/             # driving side: plugin lifecycle, scheduler, queue, settings
 │   ├── projects/        # discovery, attach, board creation, home-note migration
-│   ├── registry/        # the data.json-backed SyncStatePort adapter and schema
+│   ├── registry/        # the data.json-backed registry adapter and schema —
+│   │                    # the identity, tracked-entity and connection-state
+│   │                    # seams' implementation
 │   ├── tasks/           # task actions: note creation, cascade
 │   ├── todos/           # checklist ⇄ to-do note consistency
 │   ├── sync/            # the chain, the probe, renames, deletion sweep, the
@@ -122,7 +125,7 @@ name never appears in the core.
 | `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters, the GitHub and Todoist mirror adapters, the registry baseline/handle/project/cursor/watch adapters, and the in-memory conformance adapter                       | TypeScript, GraphQL, REST v1 | external tools   |
 | `src/sync/`           | The chain: `SyncProjectAction` drives the core reconcilers through five interfaces; the probe, rename recovery, deletion sweep and deleted-note action                                                                    | TypeScript                   | in-process       |
 | `src/projects/`       | Project discovery, attach, board creation, home-note migration and connection re-keying                                                                                                                                                                                           | TypeScript                   | in-process       |
-| `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
+| `src/registry/`       | The `data.json`-backed registry adapter and schema — the implementation behind the shell's identity, tracked-entity and connection-state seams                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
 | `src/tasks/`          | Task actions: the completion cascade                                                                                                                                                                                                                           | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
 | `src/vault/`          | The vault adapter and the to-do note mapper/parser (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`)                                                                                                | host vault API               | the vault        |
@@ -165,17 +168,25 @@ module and exposes only the ports its descriptor declares.
   `ProjectCaptureVaultPort` and `TaskCaptureVaultPort` (the vault sinks), and
   `ProjectWatchPort` (the reactivation watch).
 
-**The shell's ports (`src/core/`).** The retained chain and the registry
-still use two provider-neutral ports, now co-located with the core:
+**The shell's seams (`src/core/ports/`).** The retained chain and the driving
+side reach the vault and the registry through seven narrow, provider-neutral
+seams, each naming only the methods its call sites use:
 
-- **`VaultPort`** — the vault: read, create, write and rename notes by path;
-  move folders; enumerate notes under a folder; read a note's modified time;
-  trash a note (never a permanent delete); enumerate the project notes; and
-  subscribe to note change/delete/rename events. Adapter: `VaultAdapter`.
-- **`SyncStatePort`** — the shell's memory: one entity per hub and one base
-  item per mirror, grouped under the connection slug that owns it, plus
-  identities, watch state, the per-project full-scan marker and the per-surface
-  project cursors. Adapter: `SyncStateAdapter`.
+- **Note I/O.** `NoteReaderPort` (read a note by path), `NoteWriterPort`
+  (create, write, rename and trash a note), `NoteEnumeratorPort` (list the notes
+  under a folder; enumerate the project notes) and `VaultEventPort` (subscribe
+  to note change/delete/rename events). Implementer: `VaultAdapter`.
+- **Registry.** `IdentityStorePort` (a connection's board identity),
+  `TrackedEntityPort` (the tracked entities and their mirror items) and
+  `ConnectionStatePort` (a project's per-connection port state and its
+  re-keying). Implementer: `SyncStateAdapter`. Its records `EntityRecord`,
+  `MirrorItem` and `PortState` live in `src/core/data/`.
+
+The monolithic `VaultPort` and `SyncStatePort` remain in `src/core/` as
+core-internal seams: the concrete adapters implement them (and satisfy the
+narrow seams structurally), and the only other named consumer is the core's
+`CreateTaskNoteAction`. No shell module imports them; the
+`no-restricted-imports` gate enforces the split.
 
 A component that reaches around a port is a defect.
 
@@ -377,8 +388,10 @@ No other persistent store. The mirrors hold copies, never authority.
   `CapturePort`, `ProjectCapturePort`, `CompleteFetchPort`, `TimestampedPort`).
   An API token, bearer.
 - **The host vault application** — the plugin API (vault read/write, events,
-  `requestUrl`, settings and data). Behind `VaultPort` and the origin adapters;
-  only the adapters import the host package.
+  `requestUrl`, settings and data). Behind the shell's narrow note seams
+  (`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`, `VaultEventPort`),
+  the origin adapters, and `VaultPort` for the core's own use; only the adapters
+  import the host package.
 
 There is no server of our own: every call goes through the host's `requestUrl`
 over HTTPS.
@@ -430,6 +443,11 @@ over HTTPS.
     every source file must belong to an element and every local import must
     resolve to one, so a new top-level module (including `core/` and
     `infrastructure/`) cannot slip in unclassified.
+  - **`no-restricted-imports`** (ESLint) — a shell module may not import the
+    monolithic `VaultPort` or `SyncStatePort`; only their two concrete adapters
+    are exempt as implementers, and the core's own `CreateTaskNoteAction` names
+    them through a relative import. The shell reaches the vault and the registry
+    only through the narrow core seams.
   - **`pnpm run lint:boundaries`** (`scripts/lint-boundaries.mjs`) — the
     provider-vocabulary gate. A provider name may appear only in the provider's
     own module (`infrastructure/<vendor>/`), the composition root (`main.ts`)
@@ -462,17 +480,17 @@ over HTTPS.
   mirrors, but the vault note itself is trashed, never destroyed.
 
 **Known debt / open items:** The retained shell is the main debt.
-`SyncProjectAction` still orchestrates through `VaultPort` and `SyncStatePort`,
-still branches on `connection.tool === 'github'` for board-ensure, probe and the
-deletion sweep, and still runs the vault-consistency steps; the core reconcilers
-are injected seams inside it. `HandleDeletedNoteAction` uses the core
-`MirrorAdapterFactoryPort` and `TaskSurfacePort` but finds its records through
-the shell `SyncStatePort`. The `identity` canonical field is declared and
-represented but not merged by `AssembleProjectPassAction`. The probe's result is
-used only as a fallback when the lifecycle reconciler throws. The boundary
-config and the provider-vocabulary gate carry historical allowances while the
-shell is retired. The developer manual records the remaining code-vs-brief
-discrepancies.
+`SyncProjectAction` still runs the board-ensure, probe, vault-consistency
+(cascade, checklist, to-do mirror) and deletion-sweep steps around the injected
+core reconcilers, but it reaches the vault and the registry through the narrow
+core seams (`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`,
+`TrackedEntityPort`) and selects setup-capable connections through the setup
+factory rather than a provider check. The `identity` canonical field is declared
+and represented but not merged by `AssembleProjectPassAction`. The probe's
+result is used only as a fallback when the lifecycle reconciler throws. The
+boundary config and the provider-vocabulary gate carry historical allowances
+while the shell is retired. The developer manual records the remaining
+code-vs-brief discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
 GitHub and Todoist mirror adapters implement the capability ports, the vault

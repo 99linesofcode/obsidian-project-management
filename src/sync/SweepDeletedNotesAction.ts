@@ -1,5 +1,5 @@
-import type { SyncStatePort } from '../core/SyncStatePort.js';
-import type { VaultPort } from '../core/VaultPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
@@ -13,8 +13,8 @@ export interface SweepDeletedNotesInput {
 
 export class SweepDeletedNotesAction {
   constructor(
-    private readonly vault: VaultPort,
-    private readonly syncState: SyncStatePort,
+    private readonly vault: NoteReaderPort,
+    private readonly syncState: TrackedEntityPort,
     private readonly handleDeletedNote: HandleDeletedNoteAction,
   ) {}
 

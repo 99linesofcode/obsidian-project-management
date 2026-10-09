@@ -252,4 +252,42 @@ export default tseslint.config(
       'boundaries/no-unknown-dependencies': 'error',
     },
   },
+  {
+    // The shell depends on the narrow core seams, never the monolithic
+    // VaultPort/SyncStatePort. Core-internal use (the relative './VaultPort.js'
+    // import) stays legal; only the shell's `../core/...` edge is gated.
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: 'core/(VaultPort|SyncStatePort)(\\.js)?$',
+              message:
+                'the shell depends on narrow core seams, not the monolithic ports',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportExpression[source.value=/core\\/(VaultPort|SyncStatePort)(\\.js)?$/]',
+          message:
+            'the shell depends on narrow core seams, not the monolithic ports',
+        },
+      ],
+    },
+  },
+  {
+    // The two concrete adapters are the implementers of the monolithic ports,
+    // so they are the only files allowed to name them.
+    files: ['src/vault/VaultAdapter.ts', 'src/registry/SyncStateAdapter.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+      'no-restricted-syntax': 'off',
+    },
+  },
 );

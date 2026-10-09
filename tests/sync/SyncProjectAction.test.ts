@@ -17,7 +17,7 @@ import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { ConnectionData } from '../../src/core/ConnectionData.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
-import type { EntityRecord } from '../../src/core/SyncStatePort.js';
+import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
 import type { VaultPort } from '../../src/core/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';

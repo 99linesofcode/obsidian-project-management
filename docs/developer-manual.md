@@ -66,6 +66,11 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   `MirrorHandlePort`, `MirrorProjectPort`, `MirrorAdapterFactoryPort`,
   `ProjectCaptureCursorPort`, `ProjectCaptureVaultPort`, `TaskCaptureVaultPort`
   and `ProjectWatchPort`.
+- **The shell's seams.** The retained chain reaches the vault through
+  `NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort` and `VaultEventPort`,
+  and the registry through `IdentityStorePort`, `TrackedEntityPort` and
+  `ConnectionStatePort`. The monolithic `VaultPort` and `SyncStatePort` are
+  core-internal, named only by their adapters and `CreateTaskNoteAction`.
 - **The vocabulary.** `Capabilities.ts` holds the fourteen capability names;
   `canonicalField.ts` holds the seven canonical fields (`identity`, `title`,
   `body`, `subtasks`, `completion`, `Status`, `label`).
@@ -689,7 +694,7 @@ sequenceDiagram
   participant SP as SyncProjectAction
   participant Chk as SyncChecklistAction
   participant Mir as MirrorTodoStatusAction
-  participant V as VaultPort
+  participant V as NoteReaderPort & NoteWriterPort & NoteEnumeratorPort
 
   loop each taken note
     SP->>Chk: execute(notePath, projectName, syncedAt)
@@ -741,7 +746,7 @@ sequenceDiagram
 A deleted note is swept by `SweepDeletedNotesAction`, which enumerates the
 project's entities and, for each whose note is gone, calls
 `HandleDeletedNoteAction`. That action finds the registry record by note path,
-resolves the connection's mirror item through `SyncStatePort`, builds the
+resolves the connection's mirror item through `TrackedEntityPort`, builds the
 connection's adapter through `MirrorAdapterFactoryPort`, and calls
 `TaskSurfacePort.deleteTask` (the GitHub adapter deletes the board card). When
 the stored base lane is not the done lane it then applies
@@ -754,7 +759,7 @@ sequenceDiagram
   participant SP as SyncProjectAction
   participant Sweep as SweepDeletedNotesAction
   participant HD as HandleDeletedNoteAction
-  participant SS as SyncStatePort
+  participant SS as TrackedEntityPort
   participant F as MirrorAdapterFactoryPort
   participant R as RegisteredAdapter
 
@@ -791,8 +796,8 @@ sequenceDiagram
   participant Q as SyncQueue
   participant SP as SyncProjectAction
   participant Ren as DetectNoteRenamesAction
-  participant V as VaultPort
-  participant SS as SyncStatePort
+  participant V as VaultEventPort & NoteEnumeratorPort
+  participant SS as TrackedEntityPort
 
   alt live rename
     V-->>Sched: onNoteRenamed(old, new)
@@ -831,7 +836,7 @@ sequenceDiagram
   participant A as AttachProjectAction
   participant Setup as ProjectSetupPort
   participant Ens as EnsureProjectBoardAction
-  participant SS as SyncStatePort
+  participant SS as IdentityStorePort
 
   P->>D: execute()
   D->>A: execute({ repoUrl })
@@ -952,29 +957,24 @@ code is documented above; the brief's version is recorded here.
 1. **The orchestration shell is retained, not fully replaced.** ADR 001 says the
    legacy halves, the old pure verdict and the legacy writers are deleted (they
    are), and describes the chain as running the core reconcilers. It does — but
-   `SyncProjectAction` still orchestrates through the legacy `VaultPort` and
-   `SyncStatePort`, still branches on `connection.tool === 'github'`, and still
-   runs the board-ensure, probe, vault-consistency (cascade, checklist, to-do
-   mirror) and deletion-sweep steps. The five core reconcilers are injected
-   seams; the surrounding shell is legacy scaffolding. The ADR's "the chain
-   builds the origin and the per-connection mirror adapters" is accurate, but the
-   surrounding steps are not core.
-2. **`HandleDeletedNoteAction` is the remaining old-port consumer.** It builds
-   the connection's adapter through the core `MirrorAdapterFactoryPort` and
-   writes through `TaskSurfacePort`, but it still finds the record and the
-   mirror item through the legacy `SyncStatePort`. The ADR names it as the
-   remaining old-port consumer; that is still true.
-3. **The probe result is only a fallback.** `SyncProjectAction.probe` runs
+   `SyncProjectAction` still runs the board-ensure, probe, vault-consistency
+   (cascade, checklist, to-do mirror) and deletion-sweep steps around the
+   injected core reconcilers; the surrounding shell is not core. The chain now
+   reaches the vault and the registry through the narrow core seams, and selects
+   setup-capable connections through the setup factory rather than a provider
+   check. The ADR's "the chain builds the origin and the per-connection mirror
+   adapters" is accurate, but the surrounding steps are not core.
+2. **The probe result is only a fallback.** `SyncProjectAction.probe` runs
    `ProbeProjectsAction` and passes the `ProjectStateData` into
    `reconcileLifecycle`, but the lifecycle reconciler ignores it; the probe's
    `closed` fact is used only when the lifecycle reconciler throws. The primary
    freeze verdict comes from the core lifecycle pass.
-4. **`identity` is declared but not reconciled by the task pass.** The
+3. **`identity` is declared but not reconciled by the task pass.** The
    `identity` canonical field and capability exist, and `MirrorSyncAction`'s
    `canonicalValue` supports it, but `AssembleProjectPassAction` merges only
    `title`, `body`, `subtasks`, `completion`, `Status` and `label`. Identity is
    carried by the registry's mirror items, not merged as a field.
-5. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
+4. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
    invokes an optional `captureProjects` callback and enqueues its returned
    names; `main.ts` wires that callback to `projectCapture()`. The scheduler
    itself makes no decision about what the capture does.

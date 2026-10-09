@@ -17,6 +17,7 @@ import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from './core/ports/ProjectSetupFactoryPort.js';
+import type { IdentityStorePort } from './core/ports/IdentityStorePort.js';
 import { CreateTaskNoteAction } from './core/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
@@ -228,7 +229,7 @@ function composeCoreReconcilers(
 }
 
 function mirrorAdapterFactory(
-  syncState: SyncStateAdapter,
+  syncState: IdentityStorePort,
   codeHost: CodeHostTransport,
   taskManager: TaskManagerTransport,
   statusOptions: readonly string[],
@@ -510,7 +511,7 @@ export default class ProjectManagementPlugin extends Plugin {
 
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
-    syncState: SyncStateAdapter,
+    syncState: IdentityStorePort,
     projectCapture: () => Promise<CaptureProjectsResult>,
   ): Promise<void> {
     try {

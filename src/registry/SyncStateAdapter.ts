@@ -3,12 +3,10 @@ import { projectFromNotePath } from '../projects/projectFromNotePath.js';
 import type { ArchiveBaselineData } from '../core/ArchiveBaselineData.js';
 import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
 import type { WatchStateData } from '../core/WatchStateData.js';
-import type {
-  EntityRecord,
-  MirrorItem,
-  PortState,
-  SyncStatePort,
-} from '../core/SyncStatePort.js';
+import type { EntityRecord } from '../core/data/EntityRecord.js';
+import type { MirrorItem } from '../core/data/MirrorItem.js';
+import type { PortState } from '../core/data/PortState.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
 import {
   FULL_SCAN_PENDING_KEY,
   PROJECT_CURSORS_KEY,

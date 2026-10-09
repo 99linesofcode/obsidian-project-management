@@ -2,8 +2,10 @@ import type { ProjectNoteData } from '../core/ProjectNoteData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ConnectionData } from '../core/ConnectionData.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
-import type { SyncStatePort } from '../core/SyncStatePort.js';
-import type { VaultPort } from '../core/VaultPort.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../todos/MirrorTodoStatusAction.js';
@@ -26,9 +28,11 @@ export class SyncProjectAction {
   private stepErrors: unknown[] = [];
 
   constructor(
-    private readonly vault: VaultPort,
+    private readonly vault: NoteReaderPort &
+      NoteWriterPort &
+      NoteEnumeratorPort,
     private readonly setupFactory: ProjectSetupFactoryPort,
-    syncState: SyncStatePort,
+    syncState: TrackedEntityPort,
     private readonly probeProjects: ProbeProjectsAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
     private readonly completeTaskCascade: CompleteTaskCascadeAction,
