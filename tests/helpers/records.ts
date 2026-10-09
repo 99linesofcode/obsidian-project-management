@@ -1,5 +1,4 @@
 import { TaskData } from '../../src/shared/TaskData.js';
-import type { TodoistTaskData } from '../../src/todoist/TodoistTaskData.js';
 import type {
   EntityRecord,
   MirrorItem,
@@ -46,23 +45,5 @@ export function portState(overrides: Partial<PortState> = {}): PortState {
     project: overrides.project ?? '',
     lastPoll: overrides.lastPoll ?? null,
     lanes: overrides.lanes ?? {},
-  };
-}
-
-export function todoistTask(
-  overrides: Partial<TodoistTaskData> = {},
-): TodoistTaskData {
-  const id = overrides.id ?? 'T1';
-  return {
-    id,
-    projectId: overrides.projectId ?? 'P1',
-    sectionId: overrides.sectionId ?? null,
-    parentId: overrides.parentId ?? null,
-    content: overrides.content ?? 'Fix the bug',
-    labels: overrides.labels ?? [],
-    isCompleted: overrides.isCompleted ?? false,
-    addedAt: overrides.addedAt ?? '',
-    updatedAt: overrides.updatedAt ?? '',
-    completedAt: overrides.completedAt ?? null,
   };
 }

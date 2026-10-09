@@ -21,8 +21,6 @@ import { registerAdapters } from '../../../src/core/registerAdapters.js';
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
 import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
-import { GithubTaskMapper } from '../../../src/github/GithubTaskMapper.js';
-import { typeFromLabels } from '../../../src/shared/typeFromLabels.js';
 
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
 const PARENT_URL = 'https://github.com/acme/widgets/issues/40';
@@ -277,43 +275,6 @@ describe('CodeHostMirrorAdapter — the canonical read (F01 ACM-5)', () => {
     const task = await adapter.readTask(ISSUE_URL);
 
     expect(task!.status).toBe('');
-  });
-});
-
-describe('CodeHostMirrorAdapter — the existing half is the characterization (MAT-3)', () => {
-  it('matches GithubTaskMapper on the shared canonical fields', async () => {
-    const { adapter } = adapterWith([
-      boardResponse([issueNode()], [cardNode()]),
-    ]);
-
-    const task = await adapter.readTask(ISSUE_URL);
-    const existing = GithubTaskMapper.parse(
-      {
-        url: ISSUE_URL,
-        nodeId: 'I_kwDOAAAA42',
-        title: 'Fix the bug',
-        body: 'The bug happens on resize.',
-        state: 'open',
-        createdAt: '2026-09-18T08:00:00Z',
-        lastEditedAt: '2026-09-18T10:00:00Z',
-        updatedAt: '2026-09-18T11:30:00Z',
-        labels: ['type: task'],
-        parentUrl: PARENT_URL,
-      },
-      {
-        itemId: 'PVTI_1',
-        type: 'ISSUE',
-        issueUrl: ISSUE_URL,
-        statusOptionName: 'Building',
-        updatedAt: '2026-09-18T12:00:00Z',
-      },
-      'Done',
-    );
-
-    expect(task!.title).toBe(existing.title);
-    expect(task!.body).toBe(existing.body);
-    expect(task!.status).toBe(existing.status);
-    expect(typeFromLabels([...task!.labels])).toBe(existing.type);
   });
 });
 
