@@ -57,6 +57,8 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: 'github',
+      application: 'github',
+      target: 'https://github.com/acme/widgets',
     });
 
     expect(h.deleted).toEqual(['Projecten/Acme Widgets/taken/42-gone.md']);
@@ -79,6 +81,8 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: 'github',
+      application: 'github',
+      target: 'https://github.com/acme/widgets',
     });
 
     expect(h.deleted).toEqual([]);
@@ -97,6 +101,8 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: 'github',
+      application: 'github',
+      target: 'https://github.com/acme/widgets',
     });
 
     expect(h.deleted).toEqual([]);
@@ -117,6 +123,8 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
       h.action.execute({
         projectName: 'Acme Widgets',
         connectionSlug: 'github',
+        application: 'github',
+        target: 'https://github.com/acme/widgets',
       }),
     ).resolves.toBeUndefined();
     expect(h.deleted).toEqual([]);

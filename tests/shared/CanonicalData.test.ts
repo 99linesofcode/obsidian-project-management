@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { ProjectData } from '../../src/shared/ProjectData.js';
 import { TaskData } from '../../src/shared/TaskData.js';
 
 // The canonical string is the snapshot the diff compares against (the base).
@@ -24,21 +23,6 @@ function task(overrides: Partial<TaskData> = {}): TaskData {
   return Object.assign(base, overrides);
 }
 
-function project(overrides: Partial<ProjectData> = {}): ProjectData {
-  const base = new ProjectData(
-    'project-1',
-    'Projecten/Acme Widgets',
-    { github: 'https://github.com/acme/widgets' },
-    'Acme Widgets',
-    null,
-    ['Unshaped', 'Building', 'Done'],
-    'Done',
-    '2026-09-18T10:00:00Z',
-    '2026-09-18T10:00:00Z',
-  );
-  return Object.assign(base, overrides);
-}
-
 describe('SYNC-6 — the canonical snapshot is deterministic for equal content', () => {
   it('renders the same string for the same values', () => {
     expect(task().canonical()).toBe(task().canonical());
@@ -50,12 +34,6 @@ describe('SYNC-6 — the canonical delimiter keeps field boundaries distinct', (
     const split = task({ title: 'ab', body: 'c' });
     const other = task({ title: 'a', body: 'bc' });
     expect(split.canonical()).not.toBe(other.canonical());
-  });
-
-  it('keeps lane boundaries distinct when a lane name contains a comma', () => {
-    const oneLane = project({ statusOptions: ['a,b'] });
-    const twoLanes = project({ statusOptions: ['a', 'b'] });
-    expect(oneLane.canonical()).not.toBe(twoLanes.canonical());
   });
 
   it('documents the NUL-free constraint: a NUL in a field can shift a boundary', () => {

@@ -142,6 +142,8 @@ export class SyncProjectAction {
         await this.sweepDeletedNotes.execute({
           projectName: project,
           connectionSlug: slug,
+          application: connection.tool,
+          target: connection.project,
         });
       }
     });

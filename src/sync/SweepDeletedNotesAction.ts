@@ -5,6 +5,8 @@ import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 export interface SweepDeletedNotesInput {
   projectName: string;
   connectionSlug: string | null;
+  application: string;
+  target: string;
 }
 
 export class SweepDeletedNotesAction {
@@ -26,6 +28,8 @@ export class SweepDeletedNotesAction {
             notePath: record.notePath,
             projectName: input.projectName,
             connectionSlug: input.connectionSlug,
+            application: input.application,
+            target: input.target,
           });
         } catch (error) {
           console.error(
