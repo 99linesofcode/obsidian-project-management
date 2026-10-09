@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ProbeProjectsAction } from '../../src/sync/ProbeProjectsAction.js';
 import { ProjectState } from '../../src/core/data/ProjectState.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
+import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
@@ -34,6 +35,16 @@ class FakeSetup implements ProjectSetupPort {
   async listProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
+}
+
+function makeAction(
+  setup: FakeSetup,
+  syncState: FakeSyncState,
+): ProbeProjectsAction {
+  const setupFactory: ProjectSetupFactoryPort = {
+    setupFor: (application) => (application === 'github' ? setup : null),
+  };
+  return new ProbeProjectsAction(setupFactory, syncState);
 }
 
 function identity(projectNodeId: string): ProjectIdentityData {
@@ -70,11 +81,11 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const setup = new FakeSetup();
     setup.states.set('PVT_1', state('PVT_1'));
     setup.states.set('PVT_2', state('PVT_2'));
-    const action = new ProbeProjectsAction(setup, syncState);
+    const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Acme Widgets', connectionSlug: 'github' },
-      { projectName: 'Other', connectionSlug: 'github' },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', application: 'github' },
+      { projectName: 'Other', connectionSlug: 'github', application: 'github' },
     ]);
 
     expect(setup.probeCalls).toEqual([['PVT_1', 'PVT_2']]);
@@ -87,11 +98,11 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     syncState.identities.set('Acme Widgets', identity('PVT_1'));
     const setup = new FakeSetup();
     setup.states.set('PVT_1', state('PVT_1'));
-    const action = new ProbeProjectsAction(setup, syncState);
+    const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Acme Widgets', connectionSlug: 'github' },
-      { projectName: 'Unattached', connectionSlug: 'github' },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', application: 'github' },
+      { projectName: 'Unattached', connectionSlug: 'github', application: 'github' },
     ]);
 
     expect(setup.probeCalls).toEqual([['PVT_1']]);
@@ -102,10 +113,10 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const syncState = new FakeSyncState();
     syncState.identities.set('Gone', identity('PVT_9'));
     const setup = new FakeSetup();
-    const action = new ProbeProjectsAction(setup, syncState);
+    const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Gone', connectionSlug: 'github' },
+      { projectName: 'Gone', connectionSlug: 'github', application: 'github' },
     ]);
 
     expect(result.size).toBe(0);
@@ -114,11 +125,11 @@ describe('PRB-1 — a quiet board is not fetched', () => {
   it('returns an empty map when no project has an identity', async () => {
     const syncState = new FakeSyncState();
     const setup = new FakeSetup();
-    const action = new ProbeProjectsAction(setup, syncState);
+    const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Acme Widgets', connectionSlug: 'github' },
-      { projectName: 'Other', connectionSlug: 'github' },
+      { projectName: 'Acme Widgets', connectionSlug: 'github', application: 'github' },
+      { projectName: 'Other', connectionSlug: 'github', application: 'github' },
     ]);
 
     expect(result.size).toBe(0);

@@ -9,16 +9,17 @@ import { repoNameFromUrl } from './repoNameFromUrl.js';
 export interface EnsureProjectBoardInput {
   projectName: string;
   connectionSlug: string;
+  setup: ProjectSetupPort;
 }
 
 export class EnsureProjectBoardAction {
   constructor(
-    private readonly setup: ProjectSetupPort,
     private readonly syncState: SyncStatePort,
     private readonly statusOptions: string[],
   ) {}
 
   async execute(input: EnsureProjectBoardInput): Promise<void> {
+    const { setup } = input;
     const identity = await this.syncState.getIdentity(
       input.projectName,
       input.connectionSlug,
@@ -33,7 +34,7 @@ export class EnsureProjectBoardAction {
     }
 
     const repoName = repoNameFromUrl(repoUrl);
-    const discovery = await this.setup.discoverProjects(repoUrl);
+    const discovery = await setup.discoverProjects(repoUrl);
     const choice = deriveBoardChoice(repoName, discovery.projects);
     if (choice.kind === 'ambiguous') {
       throw new Error(
@@ -43,12 +44,8 @@ export class EnsureProjectBoardAction {
 
     const addressing =
       choice.kind === 'create'
-        ? await this.createOrAdoptOrphan(repoUrl, repoName)
-        : await this.setup.adoptProject(
-            repoUrl,
-            choice.board,
-            this.statusOptions,
-          );
+        ? await this.createOrAdoptOrphan(setup, repoUrl, repoName)
+        : await setup.adoptProject(repoUrl, choice.board, this.statusOptions);
 
     const merged = new ProjectIdentityData({
       repoUrl,
@@ -65,24 +62,26 @@ export class EnsureProjectBoardAction {
   }
 
   private async createOrAdoptOrphan(
+    setup: ProjectSetupPort,
     repoUrl: string,
     repoName: string,
   ): Promise<ProjectAddressing> {
-    const orphan = await this.findOrphanProject(repoName);
+    const orphan = await this.findOrphanProject(setup, repoName);
     if (orphan === null) {
-      return this.setup.createProjectWithStatus(
+      return setup.createProjectWithStatus(
         repoUrl,
         repoName,
         this.statusOptions,
       );
     }
-    return this.setup.adoptProject(repoUrl, orphan, this.statusOptions);
+    return setup.adoptProject(repoUrl, orphan, this.statusOptions);
   }
 
   private async findOrphanProject(
+    setup: ProjectSetupPort,
     repoName: string,
   ): Promise<ProjectSummary | null> {
-    const candidates = await this.setup.listProjects();
+    const candidates = await setup.listProjects();
     const orphan = candidates.find(
       (candidate) =>
         candidate.project.name === repoName && candidate.targets.length === 0,

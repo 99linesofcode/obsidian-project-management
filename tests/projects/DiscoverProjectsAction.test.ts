@@ -5,6 +5,7 @@ import { ProjectAddressing } from '../../src/core/data/ProjectAddressing.js';
 import { ProjectDiscovery } from '../../src/core/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../src/core/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
+import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
@@ -104,7 +105,14 @@ function makeAction(
   setup: FakeSetup,
   vault: FakeVault,
 ): DiscoverProjectsAction {
-  return new DiscoverProjectsAction(vault, new AttachProjectAction(setup));
+  const setupFactory: ProjectSetupFactoryPort = {
+    setupFor: (application) => (application === 'github' ? setup : null),
+  };
+  return new DiscoverProjectsAction(
+    vault,
+    setupFactory,
+    new AttachProjectAction(),
+  );
 }
 
 describe('DISC-1 — a project folder is discovered from its home note', () => {
