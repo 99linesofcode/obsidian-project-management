@@ -1,6 +1,7 @@
 import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ConnectionData } from '../shared/ConnectionData.js';
+import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 import type { VaultPort } from '../shared/VaultPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
@@ -26,6 +27,7 @@ export class SyncProjectAction {
 
   constructor(
     private readonly vault: VaultPort,
+    private readonly setupFactory: ProjectSetupFactoryPort,
     syncState: SyncStatePort,
     private readonly probeProjects: ProbeProjectsAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
@@ -84,13 +86,15 @@ export class SyncProjectAction {
 
     if (this.ensureProjectBoard && note.archivedAt === null) {
       for (const [slug, connection] of Object.entries(note.connections)) {
-        if (connection.tool !== 'github') {
+        const setup = this.setupFactory.setupFor(connection.tool);
+        if (setup === null) {
           continue;
         }
         await this.step(`ensure board ${slug}`, () =>
           this.ensureProjectBoard!.execute({
             projectName: project,
             connectionSlug: slug,
+            setup,
           }),
         );
       }
@@ -134,19 +138,18 @@ export class SyncProjectAction {
       );
     }
 
-    await this.step('deletions', async () => {
-      for (const [slug, connection] of Object.entries(note.connections)) {
-        if (connection.tool !== 'github') {
-          continue;
-        }
-        await this.sweepDeletedNotes.execute({
-          projectName: project,
-          connectionSlug: slug,
-          application: connection.tool,
-          target: connection.project,
-        });
-      }
-    });
+    await this.step('deletions', () =>
+      this.sweepDeletedNotes.execute({
+        projectName: project,
+        connections: Object.entries(note.connections).map(
+          ([slug, connection]) => ({
+            slug,
+            application: connection.tool,
+            target: connection.project,
+          }),
+        ),
+      }),
+    );
 
     return this.stepErrors;
   }
@@ -164,8 +167,15 @@ export class SyncProjectAction {
   ): Promise<ProjectStateData | undefined> {
     try {
       const targets = Object.entries(connections)
-        .filter(([, connection]) => connection.tool === 'github')
-        .map(([slug]) => ({ projectName: project, connectionSlug: slug }));
+        .filter(
+          ([, connection]) =>
+            this.setupFactory.setupFor(connection.tool) !== null,
+        )
+        .map(([slug, connection]) => ({
+          projectName: project,
+          connectionSlug: slug,
+          application: connection.tool,
+        }));
       return (await this.probeProjects.execute(targets)).get(project);
     } catch (error) {
       console.error(`SyncProjectAction: probe failed for ${project}`, error);

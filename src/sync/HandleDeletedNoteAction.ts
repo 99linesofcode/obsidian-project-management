@@ -5,9 +5,11 @@ import type { SyncStatePort } from '../shared/SyncStatePort.js';
 export interface HandleDeletedNoteInput {
   notePath: string;
   projectName: string;
-  connectionSlug: string | null;
-  application: string;
-  target: string;
+  connections: ReadonlyArray<{
+    slug: string;
+    application: string;
+    target: string;
+  }>;
 }
 
 export class HandleDeletedNoteAction {
@@ -23,19 +25,19 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    if (input.connectionSlug !== null) {
-      await this.deleteMirror(input, input.connectionSlug, record.id);
+    for (const connection of input.connections) {
+      await this.deleteMirror(record.id, input.projectName, connection);
     }
     await this.syncState.removeEntity(record.id);
   }
 
   private async deleteMirror(
-    input: HandleDeletedNoteInput,
-    connection: string,
     entityId: string,
+    projectName: string,
+    connection: HandleDeletedNoteInput['connections'][number],
   ): Promise<void> {
     const found = await this.syncState.findMirrorItemByEntity(
-      connection,
+      connection.slug,
       entityId,
     );
     if (found === null) {
@@ -43,10 +45,10 @@ export class HandleDeletedNoteAction {
     }
 
     const adapter = this.mirrorAdapters.create(
-      input.application,
-      input.target,
-      connection,
-      input.projectName,
+      connection.application,
+      connection.target,
+      connection.slug,
+      projectName,
     );
     if (adapter === null) {
       return;

@@ -41,11 +41,25 @@ const notePath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 const projectName = 'Acme Widgets';
 const application = 'github';
 const target = 'https://github.com/acme/widgets';
+const todoistTarget = 'P1';
 
 function seed(syncState: FakeSyncState, lane = 'Building'): void {
   syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
     github: {
       handle: url,
+      base: taskData({ id: 'uuid-42', notePath, status: lane }),
+    },
+  });
+}
+
+function seedBoth(syncState: FakeSyncState, lane = 'Building'): void {
+  syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
+    github: {
+      handle: url,
+      base: taskData({ id: 'uuid-42', notePath, status: lane }),
+    },
+    todoist: {
+      handle: 'T1',
       base: taskData({ id: 'uuid-42', notePath, status: lane }),
     },
   });
@@ -68,9 +82,7 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     await action.execute({
       notePath,
       projectName,
-      connectionSlug: 'github',
-      application,
-      target,
+      connections: [{ slug: 'github', application, target }],
     });
 
     expect(mirrorAdapters.tasks.deleted).toEqual([url]);
@@ -90,9 +102,7 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     await action.execute({
       notePath,
       projectName,
-      connectionSlug: 'github',
-      application,
-      target,
+      connections: [{ slug: 'github', application, target }],
     });
 
     expect(mirrorAdapters.tasks.deleted).toEqual([url]);
@@ -108,13 +118,46 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     await action.execute({
       notePath: 'Projecten/Acme Widgets/taken/99-untracked.md',
       projectName,
-      connectionSlug: 'github',
-      application,
-      target,
+      connections: [{ slug: 'github', application, target }],
     });
 
     expect(mirrorAdapters.tasks.deleted).toEqual([]);
     expect(mirrorAdapters.tasks.writes).toEqual([]);
     expect(syncState.removed).toEqual([]);
   });
+});
+
+describe('SHELL-3 — every connection mirror is deleted before the record is dropped', () => {
+  const orders = [
+    ['todoist', 'github'],
+    ['github', 'todoist'],
+  ] as const;
+
+  for (const order of orders) {
+    it(`deletes both mirrors for connections ordered {${order.join(', ')}}`, async () => {
+      const mirrorAdapters = new FakeMirrorAdapters();
+      const syncState = new FakeSyncState();
+      seedBoth(syncState);
+      const action = makeAction(syncState, mirrorAdapters);
+      const bySlug = {
+        github: { slug: 'github', application, target },
+        todoist: {
+          slug: 'todoist',
+          application: 'todoist',
+          target: todoistTarget,
+        },
+      };
+
+      await action.execute({
+        notePath,
+        projectName,
+        connections: order.map((slug) => bySlug[slug]),
+      });
+
+      expect(mirrorAdapters.tasks.deleted.sort()).toEqual([url, 'T1'].sort());
+      expect(mirrorAdapters.tasks.writes).toHaveLength(2);
+      expect(syncState.removed).toEqual(['uuid-42']);
+      expect(await syncState.findByNotePath(notePath)).toBeNull();
+    });
+  }
 });

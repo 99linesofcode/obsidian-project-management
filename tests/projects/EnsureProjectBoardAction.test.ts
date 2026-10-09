@@ -95,11 +95,7 @@ function setup(stored?: ProjectIdentityData) {
   if (stored !== undefined) {
     syncState.identities.set(projectName, stored);
   }
-  const action = new EnsureProjectBoardAction(
-    setupPort,
-    syncState,
-    statusOptions,
-  );
+  const action = new EnsureProjectBoardAction(syncState, statusOptions);
   return { action, setup: setupPort, syncState };
 }
 
@@ -107,7 +103,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
   it('creates, links and gives a Status field when the repo has no board', async () => {
     const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
 
-    await h.action.execute({ projectName, connectionSlug: SLUG });
+    await h.action.execute({
+      projectName,
+      connectionSlug: SLUG,
+      setup: h.setup,
+    });
 
     expect(h.setup.createCalls).toEqual([
       { target: repoUrl, name: 'widgets', statusOptions },
@@ -138,7 +138,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
       }),
     );
 
-    await h.action.execute({ projectName, connectionSlug: SLUG });
+    await h.action.execute({
+      projectName,
+      connectionSlug: SLUG,
+      setup: h.setup,
+    });
 
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: linked }]);
@@ -167,7 +171,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
       }),
     );
 
-    await h.action.execute({ projectName, connectionSlug: SLUG });
+    await h.action.execute({
+      projectName,
+      connectionSlug: SLUG,
+      setup: h.setup,
+    });
 
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: match }]);
@@ -189,7 +197,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
       }),
     );
 
-    await h.action.execute({ projectName, connectionSlug: SLUG });
+    await h.action.execute({
+      projectName,
+      connectionSlug: SLUG,
+      setup: h.setup,
+    });
 
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: orphan }]);
@@ -206,7 +218,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     });
 
     await expect(
-      h.action.execute({ projectName, connectionSlug: SLUG }),
+      h.action.execute({ projectName, connectionSlug: SLUG, setup: h.setup }),
     ).rejects.toThrow(/several boards/);
 
     expect(h.setup.createCalls).toEqual([]);
@@ -219,7 +231,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
   it('is idempotent: an identity that already has a board is left alone', async () => {
     const h = setup(identity({ repoUrl, projectNodeId: 'PVT_existing' }));
 
-    await h.action.execute({ projectName, connectionSlug: SLUG });
+    await h.action.execute({
+      projectName,
+      connectionSlug: SLUG,
+      setup: h.setup,
+    });
 
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([]);
@@ -231,7 +247,11 @@ describe('PRJ-1 — the board is derived from the repository', () => {
   it('leaves a repo-less project board-less', async () => {
     const h = setup(identity({ repoUrl: '' }));
 
-    await h.action.execute({ projectName, connectionSlug: SLUG });
+    await h.action.execute({
+      projectName,
+      connectionSlug: SLUG,
+      setup: h.setup,
+    });
 
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([]);

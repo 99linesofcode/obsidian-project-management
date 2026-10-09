@@ -1,41 +1,68 @@
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
-import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';
+import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
 import type { SyncStatePort } from '../shared/SyncStatePort.js';
 
 export class ProbeProjectsAction {
   constructor(
-    private readonly setup: ProjectSetupPort,
+    private readonly setupFactory: ProjectSetupFactoryPort,
     private readonly syncState: SyncStatePort,
   ) {}
 
   async execute(
-    targets: Array<{ projectName: string; connectionSlug: string }>,
+    targets: ReadonlyArray<{
+      projectName: string;
+      connectionSlug: string;
+      application: string;
+    }>,
   ): Promise<Map<string, ProjectStateData>> {
-    const nodeIdsByProject = new Map<string, string>();
-    for (const { projectName, connectionSlug } of targets) {
-      const identity = await this.syncState.getIdentity(
-        projectName,
-        connectionSlug,
-      );
-      if (identity?.projectNodeId) {
-        nodeIdsByProject.set(projectName, identity.projectNodeId);
+    const targetsByApplication = new Map<
+      string,
+      Array<{ projectName: string; connectionSlug: string }>
+    >();
+    for (const { application, projectName, connectionSlug } of targets) {
+      const group = targetsByApplication.get(application);
+      const target = { projectName, connectionSlug };
+      if (group === undefined) {
+        targetsByApplication.set(application, [target]);
+      } else {
+        group.push(target);
       }
     }
 
-    const states = await this.setup.probeProjects([
-      ...nodeIdsByProject.values(),
-    ]);
-    const stateByHandle = new Map(states.map((state) => [state.handle, state]));
-
     const probed = new Map<string, ProjectStateData>();
-    for (const [projectName, nodeId] of nodeIdsByProject) {
-      const state = stateByHandle.get(nodeId);
-      if (state) {
-        probed.set(projectName, {
-          projectId: state.handle,
-          updatedAt: state.updatedAt,
-          closed: state.archived,
-        });
+    for (const [application, group] of targetsByApplication) {
+      const setup = this.setupFactory.setupFor(application);
+      if (setup === null) {
+        continue;
+      }
+
+      const nodeIdsByProject = new Map<string, string>();
+      for (const { projectName, connectionSlug } of group) {
+        const identity = await this.syncState.getIdentity(
+          projectName,
+          connectionSlug,
+        );
+        if (identity?.projectNodeId) {
+          nodeIdsByProject.set(projectName, identity.projectNodeId);
+        }
+      }
+
+      const states = await setup.probeProjects([
+        ...nodeIdsByProject.values(),
+      ]);
+      const stateByHandle = new Map(
+        states.map((state) => [state.handle, state]),
+      );
+
+      for (const [projectName, nodeId] of nodeIdsByProject) {
+        const state = stateByHandle.get(nodeId);
+        if (state) {
+          probed.set(projectName, {
+            projectId: state.handle,
+            updatedAt: state.updatedAt,
+            closed: state.archived,
+          });
+        }
       }
     }
     return probed;

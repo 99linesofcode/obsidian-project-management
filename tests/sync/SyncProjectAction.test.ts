@@ -14,6 +14,9 @@ import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
+import type { ConnectionData } from '../../src/shared/ConnectionData.js';
+import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
+import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
 import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
@@ -55,8 +58,20 @@ class FakeVault implements VaultPort {
 class FakeProbe {
   fail = false;
   states = new Map<string, ProjectStateData>();
+  targets: Array<{
+    projectName: string;
+    connectionSlug: string;
+    application: string;
+  }> = [];
 
-  async execute(): Promise<Map<string, ProjectStateData>> {
+  async execute(
+    targets: Array<{
+      projectName: string;
+      connectionSlug: string;
+      application: string;
+    }>,
+  ): Promise<Map<string, ProjectStateData>> {
+    this.targets = [...targets];
     if (this.fail) {
       throw new Error('probe failed');
     }
@@ -113,15 +128,16 @@ function reactivationRecorder(events: string[]): ProjectReactivationReconciler {
 function projectNote(
   projectName: string,
   archivedAt: string | null,
+  connections: Record<string, ConnectionData> = {
+    github: { tool: 'github', project: 'https://github.com/acme/widgets' },
+    todoist: { tool: 'todoist', project: 'P1' },
+  },
 ): ProjectNoteData {
   return {
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     archivedAt,
-    connections: {
-      github: { tool: 'github', project: 'https://github.com/acme/widgets' },
-      todoist: { tool: 'todoist', project: 'P1' },
-    },
+    connections,
     connectionErrors: [],
   };
 }
@@ -137,13 +153,16 @@ interface HarnessOptions {
   taken?: string[];
   todos?: string[];
   ensureBoard?: boolean;
+  connections?: Record<string, ConnectionData>;
+  setupApplications?: string[];
 }
 
 function harness(options: HarnessOptions = {}) {
   const events: string[] = [];
+  const deletedConnections: string[] = [];
   const vault = new FakeVault();
   vault.projectNotes = options.projectNotes ?? [
-    projectNote('Acme Widgets', null),
+    projectNote('Acme Widgets', null, options.connections),
   ];
   vault.folders.set('Projecten/Acme Widgets/taken', options.taken ?? []);
   vault.folders.set('Projecten/Acme Widgets/todos', options.todos ?? []);
@@ -178,18 +197,35 @@ function harness(options: HarnessOptions = {}) {
     },
   } as unknown as MirrorTodoStatusAction;
   const handleDeleted = {
-    execute: async (input: { notePath: string }) => {
+    execute: async (input: {
+      notePath: string;
+      connections: ReadonlyArray<{ slug: string }>;
+    }) => {
       events.push(`delete:${input.notePath}`);
+      deletedConnections.push(...input.connections.map((c) => c.slug));
     },
   } as unknown as HandleDeletedNoteAction;
 
   const ensureBoard = options.ensureBoard
     ? ({
-        execute: async (input: { projectName: string }) => {
-          events.push(`ensureBoard:${input.projectName}`);
+        execute: async (input: {
+          projectName: string;
+          connectionSlug: string;
+        }) => {
+          events.push(
+            `ensureBoard:${input.projectName}/${input.connectionSlug}`,
+          );
         },
       } as unknown as EnsureProjectBoardAction)
     : undefined;
+
+  const setupApplications = options.setupApplications ?? ['github'];
+  const setupFactory: ProjectSetupFactoryPort = {
+    setupFor: (application) =>
+      setupApplications.includes(application)
+        ? ({} as ProjectSetupPort)
+        : null,
+  };
 
   const frozen =
     (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
@@ -197,6 +233,7 @@ function harness(options: HarnessOptions = {}) {
 
   const action = new SyncProjectAction(
     vault,
+    setupFactory,
     syncState,
     probe as unknown as ProbeProjectsAction,
     renames,
@@ -219,6 +256,7 @@ function harness(options: HarnessOptions = {}) {
     vault,
     syncState,
     probe,
+    deletedConnections,
   };
 }
 
@@ -302,7 +340,7 @@ describe('the multi-adapter pass', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events.slice(0, 2)).toEqual([
-      'ensureBoard:Acme Widgets',
+      'ensureBoard:Acme Widgets/github',
       'reactivate:Acme Widgets',
     ]);
   });
@@ -375,5 +413,108 @@ describe('the deletion sweep', () => {
     expect(h.events).not.toContain(
       'delete:Archief/Acme Widgets/taken/42-gone.md',
     );
+  });
+
+  it('hands every connection to the deletion handler', async () => {
+    const h = harness({
+      state: openState,
+      statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.deletedConnections).toEqual(['github', 'todoist']);
+  });
+});
+
+describe('SHELL-2 — setup-capable connections only', () => {
+  it('skips ensure-board for a connection whose application has no setup port', async () => {
+    const h = harness({
+      projectNotes: [
+        projectNote('Acme Widgets', null, {
+          github: {
+            tool: 'github',
+            project: 'https://github.com/acme/widgets',
+          },
+          linear: { tool: 'linear', project: 'L1' },
+        }),
+      ],
+      setupApplications: ['github'],
+      ensureBoard: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('ensureBoard:Acme Widgets/github');
+    expect(h.events).not.toContain('ensureBoard:Acme Widgets/linear');
+  });
+
+  it('probes only connections whose application has a setup port', async () => {
+    const h = harness({
+      projectNotes: [
+        projectNote('Acme Widgets', null, {
+          github: {
+            tool: 'github',
+            project: 'https://github.com/acme/widgets',
+          },
+          linear: { tool: 'linear', project: 'L1' },
+        }),
+      ],
+      setupApplications: ['github'],
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.probe.targets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        connectionSlug: 'github',
+        application: 'github',
+      },
+    ]);
+  });
+
+  it('runs ensure-board and probes a setup-capable non-github connection', async () => {
+    const h = harness({
+      projectNotes: [
+        projectNote('Acme Widgets', null, {
+          linear: { tool: 'linear', project: 'L1' },
+        }),
+      ],
+      setupApplications: ['linear'],
+      ensureBoard: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('ensureBoard:Acme Widgets/linear');
+    expect(h.probe.targets).toEqual([
+      {
+        projectName: 'Acme Widgets',
+        connectionSlug: 'linear',
+        application: 'linear',
+      },
+    ]);
+  });
+});
+
+describe('SHELL-3 — the deletion sweep covers every connection', () => {
+  it('sweeps a gone note on a connection whose application has no setup port', async () => {
+    const h = harness({
+      projectNotes: [
+        projectNote('Acme Widgets', null, {
+          linear: { tool: 'linear', project: 'L1' },
+        }),
+      ],
+      setupApplications: [],
+      statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain(
+      'delete:Projecten/Acme Widgets/taken/42-gone.md',
+    );
+    expect(h.deletedConnections).toEqual(['linear']);
   });
 });

@@ -16,6 +16,7 @@ import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
+import type { ProjectSetupFactoryPort } from './core/ports/ProjectSetupFactoryPort.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
@@ -334,6 +335,9 @@ function composePlugin(
     secrets.load(GITHUB_TOKEN_KEY) ?? '',
   );
   const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
+  const setupFactory: ProjectSetupFactoryPort = {
+    setupFor: (application) => (application === 'github' ? codeHostSetup : null),
+  };
   const mirrorAdapters = mirrorAdapterFactory(
     syncState,
     codeHostTransport,
@@ -356,9 +360,10 @@ function composePlugin(
   );
   const discoverProjects = new DiscoverProjectsAction(
     vault,
-    new AttachProjectAction(codeHostSetup),
+    setupFactory,
+    new AttachProjectAction(),
   );
-  const probeProjects = new ProbeProjectsAction(codeHostSetup, syncState);
+  const probeProjects = new ProbeProjectsAction(setupFactory, syncState);
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -367,7 +372,6 @@ function composePlugin(
   const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
 
   const ensureProjectBoard = new EnsureProjectBoardAction(
-    codeHostSetup,
     syncState,
     plugin.settings.statusOptions,
   );
@@ -397,6 +401,7 @@ function composePlugin(
     coreReconcilers().reactivation;
   const syncProject = new SyncProjectAction(
     vault,
+    setupFactory,
     syncState,
     probeProjects,
     detectNoteRenames,
