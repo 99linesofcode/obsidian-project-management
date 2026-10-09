@@ -1,24 +1,9 @@
 import type { ArchiveBaselineData } from './ArchiveBaselineData.js';
 import type { ProjectIdentityData } from './ProjectIdentityData.js';
-import type { TaskData } from './TaskData.js';
+import type { EntityRecord } from './data/EntityRecord.js';
+import type { MirrorItem } from './data/MirrorItem.js';
+import type { PortState } from './data/PortState.js';
 import type { WatchStateData } from './WatchStateData.js';
-
-export interface EntityRecord {
-  id: string;
-  notePath: string;
-}
-
-export interface MirrorItem {
-  entityId: string;
-  base: TaskData | null;
-}
-
-export interface PortState {
-  provider: string;
-  project: string;
-  lastPoll: string | null;
-  lanes: Record<string, string>;
-}
 
 export interface SyncStatePort {
   getEntity(id: string): Promise<EntityRecord | null>;

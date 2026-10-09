@@ -3,12 +3,10 @@ import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js'
 import type { TaskData } from '../../src/core/TaskData.js';
 import type { WatchStateData } from '../../src/core/WatchStateData.js';
 import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
-import type {
-  EntityRecord,
-  MirrorItem,
-  PortState,
-  SyncStatePort,
-} from '../../src/core/SyncStatePort.js';
+import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
+import type { MirrorItem } from '../../src/core/data/MirrorItem.js';
+import type { PortState } from '../../src/core/data/PortState.js';
+import type { SyncStatePort } from '../../src/core/SyncStatePort.js';
 
 interface SeededMirror {
   handle: string;

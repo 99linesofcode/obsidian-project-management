@@ -1,6 +1,6 @@
 import { CanonicalFieldWrite } from '../core/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../core/ports/MirrorAdapterFactoryPort.js';
-import type { SyncStatePort } from '../core/SyncStatePort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
@@ -14,7 +14,7 @@ export interface HandleDeletedNoteInput {
 
 export class HandleDeletedNoteAction {
   constructor(
-    private readonly syncState: SyncStatePort,
+    private readonly syncState: TrackedEntityPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly doneOptionName: string,
   ) {}

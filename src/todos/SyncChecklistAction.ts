@@ -15,7 +15,9 @@ import {
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
 import { readTemplate } from '../core/readTemplate.js';
-import type { VaultPort } from '../core/VaultPort.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
 
 export interface SyncChecklistInput {
   notePath: string;
@@ -25,7 +27,9 @@ export interface SyncChecklistInput {
 
 export class SyncChecklistAction {
   constructor(
-    private readonly vault: VaultPort,
+    private readonly vault: NoteReaderPort &
+      NoteWriterPort &
+      NoteEnumeratorPort,
     private readonly todoTemplatePath: string,
   ) {}
 

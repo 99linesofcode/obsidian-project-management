@@ -1,11 +1,11 @@
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
-import type { SyncStatePort } from '../core/SyncStatePort.js';
+import type { IdentityStorePort } from '../core/ports/IdentityStorePort.js';
 
 export class ProbeProjectsAction {
   constructor(
     private readonly setupFactory: ProjectSetupFactoryPort,
-    private readonly syncState: SyncStatePort,
+    private readonly syncState: IdentityStorePort,
   ) {}
 
   async execute(

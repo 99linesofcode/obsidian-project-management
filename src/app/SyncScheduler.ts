@@ -1,5 +1,6 @@
 import { Component } from 'obsidian';
-import type { VaultPort } from '../core/VaultPort.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { VaultEventPort } from '../core/ports/VaultEventPort.js';
 import type { SyncQueue } from './SyncQueue.js';
 
 // Obsidian runs in a browser where window is the global; the node type
@@ -23,7 +24,7 @@ export class SyncScheduler extends Component {
   private readonly debounceTimers = new Map<string, number>();
 
   constructor(
-    private readonly vault: VaultPort,
+    private readonly vault: VaultEventPort & NoteEnumeratorPort,
     private readonly queue: SyncQueue,
     private readonly intervalMs: number,
     private readonly debounceMs: number,
