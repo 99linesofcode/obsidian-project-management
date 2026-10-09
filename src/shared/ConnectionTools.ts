@@ -1,7 +1,0 @@
-export const CONNECTION_TOOLS = ['github', 'todoist'] as const;
-
-export type ConnectionTool = (typeof CONNECTION_TOOLS)[number];
-
-export function isConnectionTool(value: string): value is ConnectionTool {
-  return (CONNECTION_TOOLS as readonly string[]).includes(value);
-}

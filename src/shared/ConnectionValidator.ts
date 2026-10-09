@@ -1,5 +1,4 @@
 import { isRecord } from './isRecord.js';
-import { isConnectionTool } from './ConnectionTools.js';
 import type { ConnectionData } from './ConnectionData.js';
 
 export interface ConnectionValidationResult {
@@ -8,6 +7,8 @@ export interface ConnectionValidationResult {
 }
 
 export class ConnectionValidator {
+  constructor(private readonly registeredApplications: ReadonlySet<string>) {}
+
   validate(raw: unknown): ConnectionValidationResult {
     const connections: Record<string, ConnectionData> = {};
     const errors: unknown[] = [];
@@ -38,7 +39,7 @@ export class ConnectionValidator {
       );
     }
     const tool = entry.tool;
-    if (typeof tool !== 'string' || !isConnectionTool(tool)) {
+    if (typeof tool !== 'string' || !this.registeredApplications.has(tool)) {
       return new Error(`connection "${slug}" names an unknown tool`);
     }
     const project = entry.project;

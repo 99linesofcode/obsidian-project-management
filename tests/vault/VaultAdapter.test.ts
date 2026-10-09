@@ -45,7 +45,11 @@ function setup() {
   const vault = new FakeVault();
   const app = { vault } as unknown as App;
   const registered: EventRef[] = [];
-  const adapter = new VaultAdapter(app, (ref) => registered.push(ref));
+  const adapter = new VaultAdapter(
+    app,
+    (ref) => registered.push(ref),
+    new Set(),
+  );
   const changed: string[] = [];
   const renamed: Array<{ oldPath: string; newPath: string }> = [];
   adapter.onNoteChanged((path) => changed.push(path));
@@ -155,7 +159,7 @@ describe('VaultAdapter.modifiedTime', () => {
         path === file.path ? file : null,
     };
     const app = { vault } as unknown as App;
-    const adapter = new VaultAdapter(app, () => {});
+    const adapter = new VaultAdapter(app, () => {}, new Set());
 
     const iso = await adapter.modifiedTime(file.path);
 
@@ -202,7 +206,7 @@ class MoveVault {
 function moveSetup(paths: string[]) {
   const vault = new MoveVault(paths);
   const app = { vault, fileManager: vault.fileManager } as unknown as App;
-  const adapter = new VaultAdapter(app, () => {});
+  const adapter = new VaultAdapter(app, () => {}, new Set());
   return { vault, adapter };
 }
 
@@ -270,7 +274,7 @@ class CreateVault {
 function createSetup() {
   const vault = new CreateVault();
   const app = { vault } as unknown as App;
-  const adapter = new VaultAdapter(app, () => {});
+  const adapter = new VaultAdapter(app, () => {}, new Set());
   return { vault, adapter };
 }
 
@@ -320,7 +324,7 @@ describe('VaultAdapter.trashNote', () => {
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     ]);
     const app = { vault, fileManager: vault.fileManager } as unknown as App;
-    const adapter = new VaultAdapter(app, () => {});
+    const adapter = new VaultAdapter(app, () => {}, new Set());
 
     await adapter.trashNote('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
 
@@ -332,7 +336,7 @@ describe('VaultAdapter.trashNote', () => {
   it('is a no-op for an unknown path', async () => {
     const vault = new TrashVault([]);
     const app = { vault, fileManager: vault.fileManager } as unknown as App;
-    const adapter = new VaultAdapter(app, () => {});
+    const adapter = new VaultAdapter(app, () => {}, new Set());
 
     await adapter.trashNote('Projecten/missing.md');
 
