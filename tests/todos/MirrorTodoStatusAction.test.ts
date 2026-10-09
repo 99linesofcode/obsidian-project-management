@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
 import { splitFrontmatter } from '../../src/vault/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { VaultPort } from '../../src/core/VaultPort.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
 // mirror's single decision (flip the checkbox or not) is observable.

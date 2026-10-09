@@ -1,7 +1,7 @@
 import type { AttachProjectAction } from './AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { ProjectIdentityData } from '../core/ProjectIdentityData.js';
+import type { VaultPort } from '../core/VaultPort.js';
 
 export interface DiscoveredProject {
   projectName: string;

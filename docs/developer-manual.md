@@ -959,28 +959,22 @@ code is documented above; the brief's version is recorded here.
    seams; the surrounding shell is legacy scaffolding. The ADR's "the chain
    builds the origin and the per-connection mirror adapters" is accurate, but the
    surrounding steps are not core.
-2. **`infrastructure/` does not import `core/` only.** The vault adapters reuse
-   the legacy vault module's note codecs and the shared `projectHomePath`
-   convention through transitional, file-scoped `eslint-plugin-boundaries`
-   exceptions (`VaultProjectSourceAdapter`, `VaultProjectCaptureAdapter`,
-   `VaultTaskCaptureAdapter`). The general rule still holds; these are named
-   transitional edges.
-3. **`HandleDeletedNoteAction` is the remaining old-port consumer.** It builds
+2. **`HandleDeletedNoteAction` is the remaining old-port consumer.** It builds
    the connection's adapter through the core `MirrorAdapterFactoryPort` and
    writes through `TaskSurfacePort`, but it still finds the record and the
    mirror item through the legacy `SyncStatePort`. The ADR names it as the
    remaining old-port consumer; that is still true.
-4. **The probe result is only a fallback.** `SyncProjectAction.probe` runs
+3. **The probe result is only a fallback.** `SyncProjectAction.probe` runs
    `ProbeProjectsAction` and passes the `ProjectStateData` into
    `reconcileLifecycle`, but the lifecycle reconciler ignores it; the probe's
    `closed` fact is used only when the lifecycle reconciler throws. The primary
    freeze verdict comes from the core lifecycle pass.
-5. **`identity` is declared but not reconciled by the task pass.** The
+4. **`identity` is declared but not reconciled by the task pass.** The
    `identity` canonical field and capability exist, and `MirrorSyncAction`'s
    `canonicalValue` supports it, but `AssembleProjectPassAction` merges only
    `title`, `body`, `subtasks`, `completion`, `Status` and `label`. Identity is
    carried by the registry's mirror items, not merged as a field.
-6. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
+5. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
    invokes an optional `captureProjects` callback and enqueues its returned
    names; `main.ts` wires that callback to `projectCapture()`. The scheduler
    itself makes no decision about what the capture does.
@@ -1010,6 +1004,8 @@ The tree is module-first; each module owns one surface of the system.
 - The projects module: `src/projects/` (`DiscoverProjectsAction`,
   `AttachProjectAction`, `EnsureProjectBoardAction`, `deriveBoardChoice`,
   `MigrateProjectHomeNoteAction`, `RekeyRenamedConnectionsAction`).
-- The vault: `src/vault/` (`VaultAdapter`, the note mappers, `Checklist`).
+- The vault: `src/vault/` (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`);
+  the task-note codecs live with their consumers
+  (`src/core/TaskNoteMapper.ts`, `src/infrastructure/vault/CapturedTaskNoteMapper.ts`).
 - The driving side: `src/app/` (`SyncScheduler`, `SyncQueue`, the settings
   module, `SeedVaultArtifactsAction`).

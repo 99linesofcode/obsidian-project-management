@@ -1,5 +1,5 @@
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
+import type { VaultPort } from '../core/VaultPort.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {

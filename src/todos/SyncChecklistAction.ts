@@ -3,19 +3,19 @@ import {
   renderChecklist,
   type ChecklistItem,
 } from '../vault/Checklist.js';
-import { freePath } from '../vault/freePath.js';
+import { freePath } from '../core/freePath.js';
 import { stemOf } from '../shared/stemOf.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
-import { slugify } from '../vault/TaskNoteMapper.js';
-import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
+import { slugify } from '../core/TaskNoteMapper.js';
+import { taskLinkFromAffiliation } from '../core/taskLinkFromAffiliation.js';
 import {
   ToDoNoteMapper,
   type ToDoNoteContext,
 } from '../vault/ToDoNoteMapper.js';
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
-import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import { readTemplate } from '../core/readTemplate.js';
+import type { VaultPort } from '../core/VaultPort.js';
 
 export interface SyncChecklistInput {
   notePath: string;

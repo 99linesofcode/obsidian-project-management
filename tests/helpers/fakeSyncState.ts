@@ -1,14 +1,14 @@
-import type { ArchiveBaselineData } from '../../src/shared/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
-import type { TaskData } from '../../src/shared/TaskData.js';
-import type { WatchStateData } from '../../src/shared/WatchStateData.js';
+import type { ArchiveBaselineData } from '../../src/core/ArchiveBaselineData.js';
+import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js';
+import type { TaskData } from '../../src/core/TaskData.js';
+import type { WatchStateData } from '../../src/core/WatchStateData.js';
 import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
 import type {
   EntityRecord,
   MirrorItem,
   PortState,
   SyncStatePort,
-} from '../../src/shared/SyncStatePort.js';
+} from '../../src/core/SyncStatePort.js';
 
 interface SeededMirror {
   handle: string;

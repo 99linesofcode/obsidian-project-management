@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { taskLinkFromAffiliation } from '../../src/shared/taskLinkFromAffiliation.js';
+import { taskLinkFromAffiliation } from '../../src/core/taskLinkFromAffiliation.js';
 
 describe('SUB-1 — the actionable parent is read from affiliation', () => {
   it('returns the first link that is not the project', () => {

@@ -1,7 +1,7 @@
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
-import { projectAffiliationLink } from '../shared/projectAffiliation.js';
+import { projectAffiliationLink } from './projectAffiliation.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
-import { slugify } from '../shared/slugify.js';
+import { slugify } from './slugify.js';
 
 export { slugify };
 

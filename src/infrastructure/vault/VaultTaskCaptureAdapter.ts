@@ -2,10 +2,10 @@ import type {
   AdoptTaskInput,
   TaskCaptureVaultPort,
 } from '../../core/ports/TaskCaptureVaultPort.js';
-import { typeFromLabels } from '../../shared/typeFromLabels.js';
-import type { CreateTaskNoteAction } from '../../tasks/CreateTaskNoteAction.js';
-import { CapturedTaskNoteMapper } from '../../vault/CapturedTaskNoteMapper.js';
-import { freePath } from '../../vault/freePath.js';
+import { typeFromLabels } from '../../core/typeFromLabels.js';
+import type { CreateTaskNoteAction } from '../../core/CreateTaskNoteAction.js';
+import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
+import { freePath } from '../../core/freePath.js';
 
 export interface TaskCaptureVault {
   getNoteByPath(path: string): Promise<{ content: string } | null>;

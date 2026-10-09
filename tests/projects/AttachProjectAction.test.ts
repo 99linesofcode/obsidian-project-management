@@ -4,7 +4,7 @@ import { ProjectAddressing } from '../../src/core/data/ProjectAddressing.js';
 import { ProjectDiscovery } from '../../src/core/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../src/core/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
-import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
+import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js';
 
 class FakeSetup implements ProjectSetupPort {
   discovery: ProjectDiscovery = new ProjectDiscovery({

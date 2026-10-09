@@ -1,4 +1,4 @@
-import type { ConnectionData } from '../shared/ConnectionData.js';
+import type { ConnectionData } from '../../core/ConnectionData.js';
 
 export function parseConnectionsBlock(
   frontmatterLines: string[],

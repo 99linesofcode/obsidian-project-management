@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CapturedTaskNoteMapper } from '../../src/vault/CapturedTaskNoteMapper.js';
+import { CapturedTaskNoteMapper } from '../../src/infrastructure/vault/CapturedTaskNoteMapper.js';
 
 const projectName = 'Acme Widgets';
 const syncedAt = '2026-09-24T12:00:00Z';

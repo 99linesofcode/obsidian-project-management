@@ -1,7 +1,7 @@
-import { slugify } from './TaskNoteMapper.js';
-import { fillFrontmatterFields } from './fillFrontmatterFields.js';
-import { projectAffiliationLink } from '../shared/projectAffiliation.js';
-import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
+import { slugify } from '../core/TaskNoteMapper.js';
+import { fillFrontmatterFields } from '../core/fillFrontmatterFields.js';
+import { projectAffiliationLink } from '../core/projectAffiliation.js';
+import { replaceTimestampPlaceholders } from '../core/replaceTimestampPlaceholders.js';
 
 export interface ToDoNoteInput {
   title: string;

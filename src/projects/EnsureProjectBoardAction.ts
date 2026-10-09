@@ -1,5 +1,5 @@
-import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
 import type { ProjectAddressing } from '../core/data/ProjectAddressing.js';
 import type { ProjectSummary } from '../core/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CanonicalTask } from '../../../src/core/data/CanonicalTask.js';
 import { VaultTaskCaptureAdapter } from '../../../src/infrastructure/vault/VaultTaskCaptureAdapter.js';
-import { CreateTaskNoteAction } from '../../../src/tasks/CreateTaskNoteAction.js';
+import { CreateTaskNoteAction } from '../../../src/core/CreateTaskNoteAction.js';
 import { splitFrontmatter } from '../../../src/vault/splitFrontmatter.js';
-import type { VaultPort } from '../../../src/shared/VaultPort.js';
+import type { VaultPort } from '../../../src/core/VaultPort.js';
 import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 

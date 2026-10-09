@@ -1,6 +1,6 @@
-import { isRecord } from '../shared/isRecord.js';
-import type { ConnectionValidator } from '../shared/ConnectionValidator.js';
-import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
+import { isRecord } from '../core/isRecord.js';
+import type { ConnectionValidator } from '../core/ConnectionValidator.js';
+import type { ProjectNoteData } from '../core/ProjectNoteData.js';
 import { projectNameFromPath } from './projectNameFromPath.js';
 
 export function projectNoteFromCache(

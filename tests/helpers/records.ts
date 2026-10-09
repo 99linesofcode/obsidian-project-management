@@ -1,9 +1,9 @@
-import { TaskData } from '../../src/shared/TaskData.js';
+import { TaskData } from '../../src/core/TaskData.js';
 import type {
   EntityRecord,
   MirrorItem,
   PortState,
-} from '../../src/shared/SyncStatePort.js';
+} from '../../src/core/SyncStatePort.js';
 
 export function taskData(overrides: Partial<TaskData> = {}): TaskData {
   return new TaskData({

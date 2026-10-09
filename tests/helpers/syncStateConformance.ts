@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   EntityRecord,
   SyncStatePort,
-} from '../../src/shared/SyncStatePort.js';
+} from '../../src/core/SyncStatePort.js';
 import { taskData } from './records.js';
 
 export interface SyncStateConformanceHarness {

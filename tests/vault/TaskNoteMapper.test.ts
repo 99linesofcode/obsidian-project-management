@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TaskNoteMapper } from '../../src/vault/TaskNoteMapper.js';
-import type { TaskNoteSource } from '../../src/vault/TaskNoteMapper.js';
+import { TaskNoteMapper } from '../../src/core/TaskNoteMapper.js';
+import type { TaskNoteSource } from '../../src/core/TaskNoteMapper.js';
 
 const task: TaskNoteSource = {
   type: 'task',

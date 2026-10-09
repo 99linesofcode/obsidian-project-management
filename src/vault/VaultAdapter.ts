@@ -1,8 +1,8 @@
 import { App, EventRef, TFile } from 'obsidian';
-import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
-import type { VaultPort } from '../shared/VaultPort.js';
-import { chooseHomeNotePath } from '../shared/projectHomePath.js';
-import { ConnectionValidator } from '../shared/ConnectionValidator.js';
+import type { ProjectNoteData } from '../core/ProjectNoteData.js';
+import type { VaultPort } from '../core/VaultPort.js';
+import { chooseHomeNotePath } from '../core/projectHomePath.js';
+import { ConnectionValidator } from '../core/ConnectionValidator.js';
 import { folderChainForPath } from './folderChainForPath.js';
 import { projectNoteFromCache } from './projectNoteFromCache.js';
 

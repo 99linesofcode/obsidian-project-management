@@ -1,5 +1,5 @@
-import { projectAffiliationLink } from '../shared/projectAffiliation.js';
-import { slugify } from './TaskNoteMapper.js';
+import { projectAffiliationLink } from '../../core/projectAffiliation.js';
+import { slugify } from '../../core/TaskNoteMapper.js';
 
 export interface CapturedTaskNoteInput {
   title: string;
@@ -22,7 +22,7 @@ export interface CapturedTaskNote {
 
 // Maps a task-manager-created item onto a captured draft task note (dt-06). It is a
 // task note without a code-host issue: no `url` frontmatter and no Status record —
-// the registry's todoist mirror is its identity and bookkeeping. The body stays
+// the registry's task-manager mirror is its identity and bookkeeping. The body stays
 // empty. Deliberately not template-rendered: the task template carries a `url`
 // field, and a captured draft must not advertise one.
 export const CapturedTaskNoteMapper = {

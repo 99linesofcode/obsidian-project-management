@@ -1,14 +1,14 @@
-import { isRecord } from '../shared/isRecord.js';
+import { isRecord } from '../core/isRecord.js';
 import { projectFromNotePath } from '../projects/projectFromNotePath.js';
-import type { ArchiveBaselineData } from '../shared/ArchiveBaselineData.js';
-import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
-import type { WatchStateData } from '../shared/WatchStateData.js';
+import type { ArchiveBaselineData } from '../core/ArchiveBaselineData.js';
+import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
+import type { WatchStateData } from '../core/WatchStateData.js';
 import type {
   EntityRecord,
   MirrorItem,
   PortState,
   SyncStatePort,
-} from '../shared/SyncStatePort.js';
+} from '../core/SyncStatePort.js';
 import {
   FULL_SCAN_PENDING_KEY,
   PROJECT_CURSORS_KEY,

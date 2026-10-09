@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConnectionValidator } from '../../src/shared/ConnectionValidator.js';
+import { ConnectionValidator } from '../../src/core/ConnectionValidator.js';
 import { projectNoteFromCache } from '../../src/vault/projectNoteFromCache.js';
 
 const github = { tool: 'github', project: 'https://github.com/acme/widgets' };

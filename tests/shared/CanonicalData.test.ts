@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TaskData } from '../../src/shared/TaskData.js';
+import { TaskData } from '../../src/core/TaskData.js';
 
 // The canonical string is the snapshot the diff compares against (the base).
 // Its one job is to move when, and only when, a diffed field moves; field-by-

@@ -1,6 +1,6 @@
 import { CanonicalFieldWrite } from '../core/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../core/ports/MirrorAdapterFactoryPort.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
