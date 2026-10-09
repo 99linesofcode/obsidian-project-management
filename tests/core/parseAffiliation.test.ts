@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAffiliation } from '../../src/shared/parseAffiliation.js';
+import { parseAffiliation } from '../../src/core/parseAffiliation.js';
 
 describe('SUB-1 — affiliation names the parent note', () => {
   it('reads each quoted wikilink verbatim', () => {

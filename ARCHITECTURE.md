@@ -45,7 +45,6 @@ obsidian-project-management/
 │   ├── sync/            # the chain, the probe, renames, deletion sweep, the
 │   │                    # reconciler interfaces the chain is driven through
 │   ├── vault/           # the vault adapter and the to-do note mapper/parser
-│   ├── shared/          # neutral helpers shared across the shell modules
 │   └── main.ts          # the composition root — wires every adapter and action
 ├── tests/               # mirrors src/
 ├── docs/                # developer manual — flows as sequence diagrams; ADRs
@@ -129,7 +128,6 @@ name never appears in the core.
 | `src/tasks/`          | Task actions: the completion cascade                                                                                                                                                                                                                           | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
 | `src/vault/`          | The vault adapter and the to-do note mapper/parser (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`)                                                                                                | host vault API               | the vault        |
-| `src/shared/`         | Neutral helpers shared across the retained shell (`Checklist`, `DomainError`, `parseAffiliation`, `ProjectStateData`, `stemOf`)                                                                                                                                                            | TypeScript                   | in-process       |
 
 ### Ports & adapters
 
@@ -432,7 +430,7 @@ over HTTPS.
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
     are the `src/` module folders plus the src root (the composition root);
     `core/` is the inner block and imports no module; `infrastructure/` may
-    import `core/` only; `shared/` imports from no module; provider modules
+    import `core/` only; provider modules
     never import each other; neutral modules consume the core and the ports
     that live in it, never a provider adapter directly; the composition root
     wires everything. An unlisted import edge fails the lint, so the dependency
@@ -562,13 +560,13 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
 - **Entry point**: `src/main.ts` — above the modules, never inside one; the
   composition root.
 - **Dependency matrix**: `core/` imports no module; `infrastructure/` imports
-  `core/` only; `shared/` imports from no module; provider namespaces never
+  `core/` only; provider namespaces never
   import each other; neutral modules consume the core and the ports that live in
   it, never a provider adapter directly; the composition root wires everything;
   no circular module dependencies.
 - **Provider neutrality**: a provider name appears only in the provider's own
   module (`infrastructure/<vendor>/`), the composition root, and the driving
-  side; shared and cross-cutting vocabulary is neutral (a provider name is a
+  side; cross-cutting vocabulary is neutral (a provider name is a
   value argument, never a namespace key). The neutral architecture (`core/`,
   `infrastructure/`) is checked case-insensitively, so any provider name in the
   core fails.

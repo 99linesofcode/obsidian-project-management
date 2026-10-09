@@ -2,9 +2,9 @@ import {
   parseChecklist,
   renderChecklist,
   type ChecklistItem,
-} from '../vault/Checklist.js';
+} from '../core/Checklist.js';
 import { freePath } from '../core/freePath.js';
-import { stemOf } from '../shared/stemOf.js';
+import { stemOf } from '../core/stemOf.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { slugify } from '../core/TaskNoteMapper.js';
 import { taskLinkFromAffiliation } from '../core/taskLinkFromAffiliation.js';

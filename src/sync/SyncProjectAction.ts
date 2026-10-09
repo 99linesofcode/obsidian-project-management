@@ -1,5 +1,5 @@
 import type { ProjectNoteData } from '../core/ProjectNoteData.js';
-import type { ProjectStateData } from '../shared/ProjectStateData.js';
+import type { ProjectStateData } from '../core/ProjectStateData.js';
 import type { ConnectionData } from '../core/ConnectionData.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
 import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';

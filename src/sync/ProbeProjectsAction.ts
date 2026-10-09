@@ -1,4 +1,4 @@
-import type { ProjectStateData } from '../shared/ProjectStateData.js';
+import type { ProjectStateData } from '../core/ProjectStateData.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
 import type { IdentityStorePort } from '../core/ports/IdentityStorePort.js';
 

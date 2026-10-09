@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stemOf } from '../../src/shared/stemOf.js';
+import { stemOf } from '../../src/core/stemOf.js';
 
 describe('REN-1 — a note stem survives a rename', () => {
   it('returns the basename without the .md extension', () => {

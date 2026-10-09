@@ -5,7 +5,7 @@ import boundaries from 'eslint-plugin-boundaries';
 // WHY boundaries are enforced by ESLint rather than a bespoke script: the
 // module tree is an architectural contract, and the linter is already the
 // place a broken import is caught. The hand-rolled gate expressed one rule
-// (the shared kernel's direction); the plugin expresses the whole matrix,
+// (the core imports nothing); the plugin expresses the whole matrix,
 // including provider isolation, which the old gate could only approximate.
 
 // The module tree. Each element is one folder under src/. Element patterns
@@ -15,7 +15,6 @@ import boundaries from 'eslint-plugin-boundaries';
 const ELEMENT_PATTERNS = [
   { type: 'core', pattern: 'src/core/**' },
   { type: 'infrastructure', pattern: 'src/infrastructure/**' },
-  { type: 'shared', pattern: 'src/shared/**' },
   { type: 'github', pattern: 'src/github/**' },
   { type: 'todoist', pattern: 'src/todoist/**' },
   { type: 'vault', pattern: 'src/vault/**' },
@@ -36,13 +35,13 @@ const ALL_ELEMENT_TYPES = [
 //
 // WHY these edges and no others:
 // - core is the inner block: the capability ports, canonical DTOs and the pure
-//   merge import nothing, so no outer block can leak in (the dependency rule).
+//   merge import nothing, so no outer block can leak in (the dependency rule);
+//   the ports and their DTOs live there precisely so no provider's shape leaks
+//   into neutral ground.
 // - infrastructure is the middle block of driven adapters; it may import core
 //   only, never the driving side or a sibling block.
-// - shared imports nothing. The ports and their DTOs live in core precisely
-//   so no provider's shape leaks into neutral ground.
 // - github/todoist never import each other. A mirror's module may not depend
-//   on a sibling mirror; the sync halves meet only through shared and sync.
+//   on a sibling mirror; the sync halves meet only through core and sync.
 // - app is the composition root and wires every module.
 // - The domain and orchestration modules keep their real, legitimate edges:
 //   vault/tasks/todos/projects write notes, sync orchestrates them, and the
@@ -53,7 +52,6 @@ const MATRIX = {
   app: [
     'app',
     'core',
-    'shared',
     'github',
     'todoist',
     'vault',
@@ -65,10 +63,8 @@ const MATRIX = {
   ],
   core: [],
   infrastructure: ['core'],
-  shared: [],
-  github: ['shared', 'tasks', 'todos', 'vault', 'projects', 'sync'],
+  github: ['tasks', 'todos', 'vault', 'projects', 'sync'],
   todoist: [
-    'shared',
     'tasks',
     'todos',
     'vault',
@@ -76,18 +72,18 @@ const MATRIX = {
     'registry',
     'sync',
   ],
-  projects: ['shared', 'core', 'vault'],
-  tasks: ['shared', 'core', 'projects', 'vault'],
-  todos: ['shared', 'core', 'vault'],
-  sync: ['shared', 'core', 'projects', 'tasks', 'todos'],
-  registry: ['shared', 'core', 'projects'],
-  vault: ['shared', 'core'],
+  projects: ['core', 'vault'],
+  tasks: ['core', 'projects', 'vault'],
+  todos: ['core', 'vault'],
+  sync: ['core', 'projects', 'tasks', 'todos'],
+  registry: ['core', 'projects'],
+  vault: ['core'],
 };
 
 const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
   from: { element: { type } },
-  // An empty allow list (the shared kernel) leaves the global disallow in
-  // force: shared may import nothing.
+  // An empty allow list (the core block) leaves the global disallow in force:
+  // core may import nothing.
   ...(allowed.length === 0
     ? { disallow: { to: { element: { types: { anyOf: ALL_ELEMENT_TYPES } } } } }
     : { allow: { to: { element: { types: { anyOf: allowed } } } } }),
@@ -105,7 +101,7 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
 // The surface policies are scoped to the elements the matrix already lets
 // import that provider, and they come last: last-write-wins lets the specific
 // allow override the general disallow for exactly the public files, while a
-// module the matrix forbids (say, shared) is still caught by the matrix and is
+// module the matrix forbids (say, core) is still caught by the matrix and is
 // never granted access by the surface allow.
 const PROVIDER_SURFACE = {
   github: ['GitHubAdapter.ts'],
@@ -159,7 +155,6 @@ const compositionRootPolicies = [
               'app',
               'core',
               'infrastructure',
-              'shared',
               'vault',
               'registry',
               'tasks',

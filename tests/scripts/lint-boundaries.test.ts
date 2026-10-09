@@ -104,7 +104,7 @@ describe('the provider-vocabulary gate', () => {
 
   it('does not flag a lowercase provider value in the grandfathered legacy chain', () => {
     const root = fixtureRoot({
-      'src/shared/legacy.ts': "export const tool = 'todoist';\n",
+      'src/sync/legacy.ts': "export const tool = 'todoist';\n",
     });
 
     expect(gateExitCode(root)).toBe(0);

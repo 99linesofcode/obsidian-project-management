@@ -4,7 +4,7 @@ import {
   renderChecklist,
   toIssueBody,
   withChecklistLinks,
-} from '../../src/vault/Checklist.js';
+} from '../../src/core/Checklist.js';
 import { slugify } from '../../src/core/TaskNoteMapper.js';
 
 describe('TODO-1 — checklist lines parse to their items', () => {

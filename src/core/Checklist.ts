@@ -1,8 +1,7 @@
 // The markdown checklist core: parse, render and project the task-list lines
-// of a note body. Pure, no imports. WHY it lives in the shared kernel: the
-// reconciliation arithmetic needs toIssueBody (the code-host-comparable body),
-// and the shared kernel may not import from the vault; the vault module
-// re-exports this so note-facing callers keep their import path.
+// of a note body. Pure, no imports. WHY it lives in core: the reconciliation
+// arithmetic needs toIssueBody (the code-host-comparable body), and core may
+// not import from the vault; note-facing callers import it from here.
 export interface ChecklistItem {
   text: string;
   checked: boolean;

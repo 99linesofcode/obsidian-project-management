@@ -1,5 +1,5 @@
 import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
-import { DomainError } from '../shared/DomainError.js';
+import { DomainError } from '../core/DomainError.js';
 import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { repoNameFromUrl } from './repoNameFromUrl.js';
