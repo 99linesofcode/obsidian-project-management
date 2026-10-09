@@ -1,7 +1,7 @@
 import {
   App,
   PluginSettingTab,
-  Setting,
+  type Setting,
   type SettingDefinitionItem,
 } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
@@ -46,18 +46,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       desc: row.desc,
       render: (setting) => row.populate(setting, row.desc, () => this.update()),
     }));
-  }
-
-  override display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-
-    for (const row of this.rows()) {
-      const setting = new Setting(containerEl)
-        .setName(row.name)
-        .setDesc(row.desc);
-      row.populate(setting, row.desc, () => this.display());
-    }
   }
 
   private rows(): SettingRow[] {
