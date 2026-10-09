@@ -12,11 +12,16 @@ import boundaries from 'eslint-plugin-boundaries';
 // match folders only (v7 dropped file-mode matching), so the composition
 // root at src/main.ts is classified by the file descriptor in the settings
 // block below, not by an element pattern.
+//
+// Order matters: the plugin matches the first pattern that fits, so the two
+// provider patterns must precede the broad `infrastructure/**` pattern — or
+// the providers collapse into one element and stop being isolated from each
+// other (see tests/scripts/boundary-isolation.test.ts).
 const ELEMENT_PATTERNS = [
   { type: 'core', pattern: 'src/core/**' },
+  { type: 'github', pattern: 'src/infrastructure/github/**' },
+  { type: 'todoist', pattern: 'src/infrastructure/todoist/**' },
   { type: 'infrastructure', pattern: 'src/infrastructure/**' },
-  { type: 'github', pattern: 'src/github/**' },
-  { type: 'todoist', pattern: 'src/todoist/**' },
   { type: 'vault', pattern: 'src/vault/**' },
   { type: 'registry', pattern: 'src/registry/**' },
   { type: 'tasks', pattern: 'src/tasks/**' },
@@ -52,8 +57,6 @@ const MATRIX = {
   app: [
     'app',
     'core',
-    'github',
-    'todoist',
     'vault',
     'registry',
     'tasks',
@@ -62,16 +65,9 @@ const MATRIX = {
     'sync',
   ],
   core: [],
+  github: ['core'],
+  todoist: ['core'],
   infrastructure: ['core'],
-  github: ['tasks', 'todos', 'vault', 'projects', 'sync'],
-  todoist: [
-    'tasks',
-    'todos',
-    'vault',
-    'projects',
-    'registry',
-    'sync',
-  ],
   projects: ['core', 'vault'],
   tasks: ['core', 'projects', 'vault'],
   todos: ['core', 'vault'],
@@ -93,55 +89,11 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
       : `the ${type} module may not import that element`,
 }));
 
-// The public surface of each provider module: the only files another element
-// may import. The composition root wires the adapter and the half's actions;
-// everything else inside the provider is private to it. Expressed with the
-// modern dependencies rule (the entry-point rule is deprecated in v7).
-//
-// The surface policies are scoped to the elements the matrix already lets
-// import that provider, and they come last: last-write-wins lets the specific
-// allow override the general disallow for exactly the public files, while a
-// module the matrix forbids (say, core) is still caught by the matrix and is
-// never granted access by the surface allow.
-const PROVIDER_SURFACE = {
-  github: ['GitHubAdapter.ts'],
-  todoist: ['TodoistAdapter.ts'],
-};
-
-// The elements the matrix lets import a provider; the surface narrows those
-// edges only, so it can never grant a provider to a module the matrix forbids.
-/**
- * @param {string} provider
- */
-const importersOf = (provider) =>
-  Object.entries(MATRIX)
-    .filter(([, allowed]) => allowed.includes(provider))
-    .map(([type]) => type);
-
-const surfacePolicies = Object.entries(PROVIDER_SURFACE).flatMap(
-  ([type, files]) => {
-    const importers = importersOf(type);
-    return [
-      {
-        from: { element: { types: { anyOf: importers } } },
-        disallow: { to: { element: { type } } },
-        message: `the ${type} module is imported through its public surface only`,
-      },
-      {
-        from: { element: { types: { anyOf: importers } } },
-        allow: { to: { element: { type, fileInternalPath: files } } },
-      },
-    ];
-  },
-);
-
 // The composition root is a lone file at the src root. Element patterns match
 // folders only, so src/main.ts cannot be an element; the file descriptor in
-// the settings block below keeps it known to no-unknown-files, and these
-// policies give it the same edges the app element has: every internal module,
-// with the providers reachable through their public surfaces only. Order
-// matters — last-write-wins, so the surface allow must come after the
-// provider disallow.
+// the settings block below keeps it known to no-unknown-files, and this policy
+// gives it the edges to wire every internal module — including the provider
+// adapters under infrastructure/, which only it imports.
 const COMPOSITION_ROOT_CATEGORY = 'composition-root';
 
 const compositionRootPolicies = [
@@ -154,6 +106,8 @@ const compositionRootPolicies = [
             anyOf: [
               'app',
               'core',
+              'github',
+              'todoist',
               'infrastructure',
               'vault',
               'registry',
@@ -167,17 +121,6 @@ const compositionRootPolicies = [
       },
     },
   },
-  ...Object.entries(PROVIDER_SURFACE).flatMap(([type, files]) => [
-    {
-      from: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } },
-      disallow: { to: { element: { type } } },
-      message: `the ${type} module is imported through its public surface only`,
-    },
-    {
-      from: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } },
-      allow: { to: { element: { type, fileInternalPath: files } } },
-    },
-  ]),
   // The plugin class lives in main.ts (Obsidian's manifest entry), so app
   // files type their back-reference to it. Type-only by importKind: a value
   // import from the composition root stays a violation.
@@ -233,11 +176,7 @@ export default tseslint.config(
         'error',
         {
           default: 'disallow',
-          policies: [
-            ...matrixPolicies,
-            ...surfacePolicies,
-            ...compositionRootPolicies,
-          ],
+          policies: [...matrixPolicies, ...compositionRootPolicies],
         },
       ],
       // Every source file must belong to an element, and every local import

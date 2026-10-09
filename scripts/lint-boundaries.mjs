@@ -3,8 +3,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const PROVIDER_MODULE_ROOTS = [
-  'src/github',
-  'src/todoist',
   'src/infrastructure/github',
   'src/infrastructure/todoist',
 ];
