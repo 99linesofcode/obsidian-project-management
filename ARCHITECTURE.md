@@ -105,7 +105,7 @@ the chain.
 | Component             | Responsibility                                                                                                                                                                                                                                                                   | Technology                   | Target           |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------- |
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                                                                      | host plugin API              | the vault        |
-| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions                                                                        | host plugin API, `Component` | the vault        |
+| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                        | host plugin API, `Component` | the vault        |
 | `src/sync/`           | The chain: `SyncProjectAction` runs the assembled core pass; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                                                                                                  | TypeScript                   | in-process       |
 | `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`                                                                                                                                                                                                                      | GraphQL + REST               | the code host    |
 | `src/todoist/`        | The task-manager provider's DTOs and mapper (the adapter and transport live under `infrastructure/todoist/`)                                                                                                                                                                     | REST v1                      | the task manager |
@@ -345,7 +345,7 @@ the port layer and the pure core:
   the project's code-host connections directly — and the capture pre-tick runs
   the assembled core capture. The legacy lifecycle, remote-capture and
   archive-lock actions the new core supersedes are deleted; the old-port
-  consumers that remain are the type-label seed and the handle-deleted action.
+  consumers that remain are the handle-deleted action.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -408,7 +408,7 @@ No other persistent store. The mirrors hold copies, never authority.
   watch read (ETag / 304) and the label and state updates. The core consumes it
   through the capability ports (`ProjectPort`, `TaskSurfacePort`,
   `ProjectSetupPort`, `ProjectCapturePort`, `ProjectActivityPort`); the legacy
-  seed/deletion surfaces still ride `ProjectManagementPort`. A
+  deletion surfaces still ride `ProjectManagementPort`. A
   fine-grained token, bearer.
 - **Task manager** — REST v1 for projects, sections, tasks and labels. The core
   consumes it through the capability ports (`ProjectPort`, `TaskSurfacePort`,
@@ -505,16 +505,16 @@ over HTTPS.
   mirrors, but the vault note itself is trashed, never destroyed.
 
 **Known debt / open items:** `ProjectManagementPort` still carries the
-seed-label and deletion surfaces — `fetchBoardItems`, `fetchTask`,
-`listRepoLabels`, `createRepoLabel`, `deleteCard` and `setTaskState` — kept for
-the type-label seed and the handle-deleted action until they migrate to the
-core ports. The discovery, attach, board-ensure and probe setup actions now run
-on the core's `ProjectSetupPort`; the new lifecycle pass, capture and locking
-reconcilers run unconditionally, and the legacy remote-capture, archive-lock
-and lifecycle actions are deleted along with `TaskManagerPort` and the legacy
-`TodoistAdapter` (its transport moved to `infrastructure/todoist/`). The
-remaining old-port consumers are seed labels and the handle-deleted action. The
-legacy chain carries pre-existing provider
+deletion surfaces — `fetchBoardItems`, `fetchTask`, `deleteCard` and
+`setTaskState` — kept for the handle-deleted action until they migrate to the
+core ports. Its label surface (`listRepoLabels`, `createRepoLabel`) has no
+consumer since project seeding was dropped. The discovery, attach, board-ensure
+and probe setup actions now run on the core's `ProjectSetupPort`; the new
+lifecycle pass, capture and locking reconcilers run unconditionally, and the
+legacy remote-capture, archive-lock and lifecycle actions are deleted along
+with `TaskManagerPort` and the legacy `TodoistAdapter` (its transport moved to
+`infrastructure/todoist/`). The remaining old-port consumer is the
+handle-deleted action. The legacy chain carries pre-existing provider
 vocabulary (`shared/`, `projects/`, `sync/`, `tasks/`, `vault/`, `registry/`,
 `todoist/`); the provider-vocabulary gate grandfathers it until that chain is
 retired. The developer manual records the remaining code-vs-brief

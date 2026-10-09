@@ -13,7 +13,6 @@ import {
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
 import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
 import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
-import { SeedTypeLabelsAction } from './app/SeedTypeLabelsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
@@ -353,7 +352,6 @@ function composePlugin(
   discoverProjects: DiscoverProjectsAction;
   projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
-  seedTypeLabels: SeedTypeLabelsAction;
   adapters: RegistrationResult;
 } {
   const transport = transportFromSecret(
@@ -370,7 +368,6 @@ function composePlugin(
   const codeHostSetup = new CodeHostMirrorAdapter(
     createCodeHostTransport(secrets.load(GITHUB_TOKEN_KEY) ?? ''),
   );
-  const seedTypeLabels = new SeedTypeLabelsAction(github);
   const createTaskNote = new CreateTaskNoteAction(
     vault,
     syncState,
@@ -469,7 +466,6 @@ function composePlugin(
     discoverProjects,
     projectCapture,
     seedArtifacts,
-    seedTypeLabels,
     adapters: registerAdapters([
       new AdapterRegistration(
         conformanceDescriptor('conformance'),
@@ -485,7 +481,6 @@ export default class ProjectManagementPlugin extends Plugin {
   projectNames: string[] = [];
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
-  seedTypeLabels!: SeedTypeLabelsAction;
   adapters!: RegistrationResult;
 
   override async onload(): Promise<void> {
@@ -525,11 +520,9 @@ export default class ProjectManagementPlugin extends Plugin {
       discoverProjects,
       projectCapture,
       seedArtifacts,
-      seedTypeLabels,
       adapters,
     } = composePlugin(this, syncState, this.secrets, baselineStorage);
     this.seedArtifacts = seedArtifacts;
-    this.seedTypeLabels = seedTypeLabels;
     this.adapters = adapters;
     await seedArtifacts.execute();
     this.addChild(scheduler);

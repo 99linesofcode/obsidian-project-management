@@ -96,14 +96,8 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       },
       {
         name: 'Type labels',
-        desc: 'The type-label vocabulary the seed action applies (comma-separated).',
+        desc: 'The type-label vocabulary (comma-separated).',
         populate: (setting) => this.populateTypeLabels(setting),
-      },
-      {
-        name: 'Seed type labels',
-        desc: 'Create the configured type labels on a repository (owner/name).',
-        populate: (setting, _desc, refresh) =>
-          this.populateLabelSeed(setting, refresh),
       },
       ...SEED_ARTIFACTS.map((artifact) => ({
         name: artifact.label,
@@ -173,28 +167,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
     );
-  }
-
-  private populateLabelSeed(setting: Setting, refresh: () => void): void {
-    let repo = '';
-    setting
-      .addText((text) =>
-        text.setPlaceholder('owner/name').onChange((value) => {
-          repo = value;
-        }),
-      )
-      .addButton((button) =>
-        button
-          .setButtonText('Seed')
-          .setTooltip('Create the configured type labels that are missing')
-          .onClick(async () => {
-            await this.plugin.seedTypeLabels.execute(
-              repo,
-              this.plugin.settings.typeLabels,
-            );
-            refresh();
-          }),
-      );
   }
 
   private populateArtifactSetting(
