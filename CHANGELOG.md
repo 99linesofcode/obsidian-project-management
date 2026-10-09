@@ -1,3 +1,12 @@
+# [0.22.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.21.0...0.22.0) (2026-10-09)
+
+
+### Features
+
+* **capture:** adopt typed issues as tracked tasks ([6f609de](https://github.com/99linesofcode/obsidian-project-management/commit/6f609de2524baa35fb559eada97abd514353ee99))
+
+
+
 # [0.21.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.20.0...0.21.0) (2026-10-09)
 
 
@@ -47,21 +56,6 @@
 ### Features
 
 * **core:** create a vault task note's missing mirror item ([12ad30d](https://github.com/99linesofcode/obsidian-project-management/commit/12ad30d69e56f0a36e164fa186fd2800e9178d17))
-
-
-
-# [0.17.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.16.0...0.17.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **core:** scan the whole task listing and isolate failing connections ([6b3a1f0](https://github.com/99linesofcode/obsidian-project-management/commit/6b3a1f0a9ae5a996b1ecf0439d102ba7d04b4c6c))
-* **todoist:** capture completed tasks alongside active ones ([5ec5842](https://github.com/99linesofcode/obsidian-project-management/commit/5ec5842557b6962d58534e9937ee49996aedccd9))
-
-
-### Features
-
-* **core:** adopt application-born tasks on the new sync engine ([7f4ec1e](https://github.com/99linesofcode/obsidian-project-management/commit/7f4ec1e81242d8f0577191e8408ed8fc03672c80))
 
 
 
