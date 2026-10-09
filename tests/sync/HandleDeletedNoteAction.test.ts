@@ -48,9 +48,6 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
   async setProjectClosed(): Promise<void> {}
   async lockIssue(): Promise<void> {}
-  async fetchUnpromotedIssues(): Promise<never> {
-    throw new Error('not used in this test');
-  }
   async fetchTask(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -64,9 +61,6 @@ class FakeProjectManagement implements ProjectManagementPort {
     throw new Error('not used in this test');
   }
   async addBoardItem(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async addLabel(): Promise<never> {
     throw new Error('not used in this test');
   }
   async fetchProject(): Promise<never> {

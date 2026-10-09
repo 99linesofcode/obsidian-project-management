@@ -871,55 +871,6 @@ export class GitHubAdapter implements ProjectManagementPort {
     };
   }
 
-  async fetchUnpromotedIssues(repoUrl: string): Promise<GithubTaskData[]> {
-    const repo = this.parseRepoUrl(repoUrl);
-    const path = `/repos/${repo.owner}/${repo.name}/issues?state=open&per_page=100`;
-
-    const response = await this.transport.get(path);
-    if (response.status !== 200) {
-      throw new Error(
-        `GitHubAdapter: REST request failed with status ${response.status}`,
-      );
-    }
-    if (!Array.isArray(response.json)) {
-      throw new Error('GitHubAdapter: unexpected REST response shape');
-    }
-
-    return response.json
-      .filter(isRecord)
-      .filter((issue) => this.isUnpromoted(issue))
-      .map((issue) => this.mapIssue(issue));
-  }
-
-  private isUnpromoted(issue: Record<string, unknown>): boolean {
-    if (!Array.isArray(issue.labels)) {
-      return false;
-    }
-    const names = issue.labels
-      .filter(isRecord)
-      .filter(
-        (label): label is { name: string } => typeof label.name === 'string',
-      )
-      .map((label) => label.name);
-    return !names.some((name) => name.startsWith('type:'));
-  }
-
-  async addLabel(url: string, label: string): Promise<void> {
-    const repo = this.parseRepoUrl(url);
-    const number = this.issueNumberFromUrl(url);
-    const path = `/repos/${repo.owner}/${repo.name}/issues/${number}/labels`;
-
-    const response = await this.transport.postPath(
-      path,
-      JSON.stringify({ labels: [label] }),
-    );
-    if (response.status !== 200) {
-      throw new Error(
-        `GitHubAdapter: REST request failed with status ${response.status}`,
-      );
-    }
-  }
-
   async fetchTask(url: string): Promise<GithubTaskData> {
     const repo = this.parseRepoUrl(url);
     const number = this.issueNumberFromUrl(url);

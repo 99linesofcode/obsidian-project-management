@@ -30,7 +30,7 @@ obsidian-project-management/
 │   ├── vault/        # the vault adapter and the note mappers/parsers
 │   ├── projects/     # discovery, attach, board creation
 │   ├── registry/     # the data.json-backed SyncStatePort adapter and schema
-│   ├── tasks/        # task actions: note creation, cascade, promote
+│   ├── tasks/        # task actions: note creation, cascade
 │   ├── todos/        # checklist ⇄ to-do note consistency
 │   ├── sync/         # the chain, the probe, renames, deletion sweep
 │   ├── shared/       # the kernel: ports, canonical DTOs, pure arithmetic — imports from no module
@@ -105,14 +105,14 @@ the chain.
 | Component             | Responsibility                                                                                                                                                                                                                                                                   | Technology                   | Target           |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------- |
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                                                                      | host plugin API              | the vault        |
-| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions                                             | host plugin API, `Component` | the vault        |
+| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions                                                                        | host plugin API, `Component` | the vault        |
 | `src/sync/`           | The chain: `SyncProjectAction` runs the assembled core pass; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                                                                                                  | TypeScript                   | in-process       |
 | `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`                                                                                                                                                                                                                      | GraphQL + REST               | the code host    |
-| `src/todoist/`        | The task-manager provider's DTOs and mapper (the adapter and transport live under `infrastructure/todoist/`)                                                                                                     | REST v1                      | the task manager |
-| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                 | host vault API               | the vault        |
-| `src/projects/`       | Project discovery, attach, board creation and the project mapper                                                                                                                                                 | TypeScript                   | in-process       |
+| `src/todoist/`        | The task-manager provider's DTOs and mapper (the adapter and transport live under `infrastructure/todoist/`)                                                                                                                                                                     | REST v1                      | the task manager |
+| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                                                                                | host vault API               | the vault        |
+| `src/projects/`       | Project discovery, attach, board creation and the project mapper                                                                                                                                                                                                                 | TypeScript                   | in-process       |
 | `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
-| `src/tasks/`          | Task actions: note creation, the completion cascade, promote                                                                                                                                                                                                                     | TypeScript                   | in-process       |
+| `src/tasks/`          | Task actions: note creation and the completion cascade                                                                                                                                                                                                                           | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
 | `src/shared/`         | The kernel: the four ports, canonical DTOs and the pure helpers                                                                                                                                                                                                                  | TypeScript                   | in-process       |
 | `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store, project-source, mirror-handle and adapter-factory ports, and the pass assembler | TypeScript                   | in-process       |
@@ -124,13 +124,12 @@ The legacy chain still owns three provider-neutral ports, all in `src/shared/`.
 Each states the **core need** it serves, never the tool's API it wraps; the
 adapter registers from its own module.
 
-- **`ProjectManagementPort`** — the remaining legacy code-host need: promote a
-  draft card to an issue, list the board's draft cards and a repository's
-  unpromoted issues, add a label and fetch a single issue, list and create a
-  repository's labels, and delete a card / set an issue's state for the deletion
-  sweep. The board identity, whole-project read, probe, capture and watch
-  surfaces that once lived here have moved to the core's `ProjectSetupPort`,
-  `ProjectCapturePort` and `ProjectActivityPort`. Adapter: `GitHubAdapter`.
+- **`ProjectManagementPort`** — the remaining legacy code-host need: fetch a
+  single issue, list and create a repository's labels, and delete a card / set
+  an issue's state for the deletion sweep. The board identity, whole-project
+  read, probe, capture and watch surfaces that once lived here have moved to the
+  core's `ProjectSetupPort`, `ProjectCapturePort` and `ProjectActivityPort`.
+  Adapter: `GitHubAdapter`.
 - **`VaultPort`** — the origin's need: read, create, write and
   rename notes by path; move folders; enumerate notes under a folder; read a
   note's modified time; trash a note (never a permanent delete); enumerate the
@@ -326,30 +325,27 @@ the port layer and the pure core:
   infrastructure peers; the core names no provider.
 - **The task-capture surface** (`CapturePort` + `CaptureTasksAction`). For each
   declared connection whose adapter declares `capture`, the core action reads the
-  application-born tasks the adapter can see (`capture`) and adopts every task
-  the vault does not already hold as a task note. The whole listing is scanned
-  each pass and the adopted mirror items are skipped, so the pass is idempotent
-  without a cursor and a task ordered before an adopted one is still adopted; a
-  connection whose listing or adoption fails is collected and never stops the
-  later connections. The vault sink routes by the connection's application — the
-  code-host task note or the captured draft note — and refuses an empty handle,
-  so a malformed task never stamps a blank mirror. Unlike project capture, a
-  first sight backfills the application's whole untyped backlog (recorded in the
-  spec's open questions). The vault sink is an infrastructure peer; the core
-  names no provider.
+  tracked tasks the adapter can see (`capture`) — the issues carrying a type
+  label — and adopts every task the vault does not already hold as a task note.
+  The whole listing is scanned each pass and the adopted mirror items are
+  skipped, so the pass is idempotent without a cursor and a task ordered before
+  an adopted one is still adopted; a connection whose listing or adoption fails
+  is collected and never stops the later connections. The vault sink routes by
+  the connection's application — the code-host task note or the captured draft
+  note — and refuses an empty handle, so a malformed task never stamps a blank
+  mirror. The vault sink is an infrastructure peer; the core names no provider.
 - **The cutover.** `SyncProjectAction` requires the five reconciler providers.
   It runs the reactivation action before the assembled lifecycle pass
   (unfreezing the origin when newer mirror work appears), the assembled
   lifecycle pass for the freeze verdict, the task-lock action on the
-  freeze/unfreeze transition, the assembled task capture for application-born
-  tasks, and the assembled pass for task-field reconciliation, and migrates the
+  freeze/unfreeze transition, the assembled task capture for tracked tasks, and
+  the assembled pass for task-field reconciliation, and migrates the
   project's home note through the legacy migration action. Probe, board-ensure,
   vault consistency and the deletion sweep still run — the sweep now enumerates
   the project's code-host connections directly — and the capture pre-tick runs
   the assembled core capture. The legacy lifecycle, remote-capture and
   archive-lock actions the new core supersedes are deleted; the old-port
-  consumers that remain are the promote UI, the type-label seed and the
-  handle-deleted action.
+  consumers that remain are the type-label seed and the handle-deleted action.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -412,7 +408,7 @@ No other persistent store. The mirrors hold copies, never authority.
   watch read (ETag / 304) and the label and state updates. The core consumes it
   through the capability ports (`ProjectPort`, `TaskSurfacePort`,
   `ProjectSetupPort`, `ProjectCapturePort`, `ProjectActivityPort`); the legacy
-  promote/seed/deletion surfaces still ride `ProjectManagementPort`. A
+  seed/deletion surfaces still ride `ProjectManagementPort`. A
   fine-grained token, bearer.
 - **Task manager** — REST v1 for projects, sections, tasks and labels. The core
   consumes it through the capability ports (`ProjectPort`, `TaskSurfacePort`,
@@ -509,17 +505,16 @@ over HTTPS.
   mirrors, but the vault note itself is trashed, never destroyed.
 
 **Known debt / open items:** `ProjectManagementPort` still carries the
-promote, seed-label and deletion surfaces — `fetchUnpromotedIssues`,
-`fetchBoardItems`, `promoteCard`, `addLabel`, `fetchTask`, `listRepoLabels`,
-`createRepoLabel`, `deleteCard` and `setTaskState` — kept for the promote UI,
+seed-label and deletion surfaces — `fetchBoardItems`, `fetchTask`,
+`listRepoLabels`, `createRepoLabel`, `deleteCard` and `setTaskState` — kept for
 the type-label seed and the handle-deleted action until they migrate to the
 core ports. The discovery, attach, board-ensure and probe setup actions now run
 on the core's `ProjectSetupPort`; the new lifecycle pass, capture and locking
 reconcilers run unconditionally, and the legacy remote-capture, archive-lock
 and lifecycle actions are deleted along with `TaskManagerPort` and the legacy
 `TodoistAdapter` (its transport moved to `infrastructure/todoist/`). The
-remaining old-port consumers are the promote UI, seed labels and the
-handle-deleted action. The legacy chain carries pre-existing provider
+remaining old-port consumers are seed labels and the handle-deleted action. The
+legacy chain carries pre-existing provider
 vocabulary (`shared/`, `projects/`, `sync/`, `tasks/`, `vault/`, `registry/`,
 `todoist/`); the provider-vocabulary gate grandfathers it until that chain is
 retired. The developer manual records the remaining code-vs-brief
@@ -577,10 +572,11 @@ Date of Last Update: 2026-10-09
   creates the missing item through the adapter, stamps the real handle over the
   placeholder, and reconciles it in the same pass; an interrupted pass adopts
   the created item instead of duplicating it.
-- **Capture** — adopting a remote-born project or task into the vault. A project
-  capture is guarded by a per-surface creation watermark; a task capture scans
-  the whole application listing and skips the mirror items already stamped, so it
-  needs no cursor. A captured project's home note is born with the connection
+- **Capture** — adopting a remote-born project or tracked task into the vault. A
+  project capture is guarded by a per-surface creation watermark; a task capture
+  scans the whole application listing for the tracked tasks (those carrying a
+  type label) and skips the mirror items already stamped, so it needs no cursor.
+  A captured project's home note is born with the connection
   envelope: a task-manager-born project declares a todoist connection, a
   board-born project a github connection derived from the board's single linked
   repository. Zero or several linked repositories is a collected error, never a

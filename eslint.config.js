@@ -211,12 +211,7 @@ const transitionalPolicies = [
 // module the matrix forbids (say, shared) is still caught by the matrix and is
 // never granted access by the surface allow.
 const PROVIDER_SURFACE = {
-  github: [
-    'GitHubAdapter.ts',
-    // The promote modal lists unpromoted issues from the provider's transport
-    // shape; the type is part of what the app is allowed to see.
-    'GithubTaskData.ts',
-  ],
+  github: ['GitHubAdapter.ts'],
   todoist: ['TodoistAdapter.ts'],
 };
 
