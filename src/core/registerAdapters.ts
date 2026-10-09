@@ -27,7 +27,10 @@ export function registerAdapters(
       );
       continue;
     }
-    adapters.set(registration.descriptor.applicationId, gatePorts(registration));
+    adapters.set(
+      registration.descriptor.applicationId,
+      gatePorts(registration),
+    );
   }
 
   return new RegistrationResult(adapters, errors);

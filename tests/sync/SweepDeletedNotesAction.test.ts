@@ -41,11 +41,7 @@ function harness() {
       calls.push({ notePath: input.notePath, connections: input.connections });
     },
   } as unknown as HandleDeletedNoteAction;
-  const action = new SweepDeletedNotesAction(
-    vault,
-    syncState,
-    handleDeleted,
-  );
+  const action = new SweepDeletedNotesAction(vault, syncState, handleDeleted);
   return {
     action,
     vault,

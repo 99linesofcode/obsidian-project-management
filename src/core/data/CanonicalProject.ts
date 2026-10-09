@@ -3,11 +3,7 @@ export class CanonicalProject {
   readonly name: string;
   readonly archived: boolean;
 
-  constructor(init: {
-    handle: string;
-    name: string;
-    archived: boolean;
-  }) {
+  constructor(init: { handle: string; name: string; archived: boolean }) {
     this.handle = init.handle;
     this.name = init.name;
     this.archived = init.archived;

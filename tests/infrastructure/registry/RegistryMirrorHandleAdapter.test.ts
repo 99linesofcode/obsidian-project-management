@@ -140,12 +140,12 @@ describe('RegistryMirrorHandleAdapter — entity to per-connection handle (F02 N
     registry.seedItem('td-work', 'uuid-1', 'task-9');
     const handles = new RegistryMirrorHandleAdapter(registry);
 
-    expect(await handles.resolve('gh-main', 'Projecten/Acme/taken/fix.md')).toBe(
-      'https://github.com/acme/widgets/issues/42',
-    );
-    expect(await handles.resolve('td-work', 'Projecten/Acme/taken/fix.md')).toBe(
-      'task-9',
-    );
+    expect(
+      await handles.resolve('gh-main', 'Projecten/Acme/taken/fix.md'),
+    ).toBe('https://github.com/acme/widgets/issues/42');
+    expect(
+      await handles.resolve('td-work', 'Projecten/Acme/taken/fix.md'),
+    ).toBe('task-9');
   });
 
   it('returns null when the note path maps to no entity', async () => {

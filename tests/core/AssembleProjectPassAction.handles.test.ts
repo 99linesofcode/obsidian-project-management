@@ -85,7 +85,9 @@ function mirrorLikeOrigin(status: string): FieldOrigin {
 class RecordingFactory implements MirrorAdapterFactoryPort {
   readonly calls: Array<{ application: string; target: string }> = [];
 
-  constructor(private readonly adapters: ReadonlyMap<string, RegisteredAdapter>) {}
+  constructor(
+    private readonly adapters: ReadonlyMap<string, RegisteredAdapter>,
+  ) {}
 
   create(application: string, target: string): RegisteredAdapter | null {
     this.calls.push({ application, target });

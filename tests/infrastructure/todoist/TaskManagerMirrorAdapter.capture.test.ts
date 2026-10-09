@@ -15,7 +15,11 @@ class ProjectsTransport implements TaskManagerTransport {
           name: 'New Project',
           created_at: '2026-10-05T10:00:00Z',
         },
-        { id: 'P-old', name: 'Old Project', created_at: '2026-09-01T00:00:00Z' },
+        {
+          id: 'P-old',
+          name: 'Old Project',
+          created_at: '2026-09-01T00:00:00Z',
+        },
       ],
     };
   }
@@ -43,8 +47,16 @@ describe('TaskManagerMirrorAdapter — the project-capture surface', () => {
         createdAt: project.createdAt,
       })),
     ).toEqual([
-      { name: 'New Project', targets: ['P-new'], createdAt: '2026-10-05T10:00:00Z' },
-      { name: 'Old Project', targets: ['P-old'], createdAt: '2026-09-01T00:00:00Z' },
+      {
+        name: 'New Project',
+        targets: ['P-new'],
+        createdAt: '2026-10-05T10:00:00Z',
+      },
+      {
+        name: 'Old Project',
+        targets: ['P-old'],
+        createdAt: '2026-09-01T00:00:00Z',
+      },
     ]);
   });
 });

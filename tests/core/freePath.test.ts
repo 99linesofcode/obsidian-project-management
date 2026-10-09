@@ -7,11 +7,7 @@ import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 
 // A vault fake backed by a path set, so the collision walk is observable.
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   modifiedTimes = new Map<string, string>();
 

@@ -34,7 +34,9 @@ export class ReactivateFrozenProjectAction {
       if (adapter === null || adapter.activity === undefined) {
         continue;
       }
-      if (await this.reactivateOnNewerWork(project, connection, adapter.activity)) {
+      if (
+        await this.reactivateOnNewerWork(project, connection, adapter.activity)
+      ) {
         reactivated = true;
       }
     }

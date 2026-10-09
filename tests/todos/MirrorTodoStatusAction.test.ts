@@ -10,11 +10,7 @@ import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 // Fakes at the vault port: a path-keyed note store that records writes, so the
 // mirror's single decision (flip the checkbox or not) is observable.
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   modifiedTimes = new Map<string, string>();
 

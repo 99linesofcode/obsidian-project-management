@@ -350,7 +350,8 @@ function composePlugin(
   );
   const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
   const setupFactory: ProjectSetupFactoryPort = {
-    setupFor: (application) => (application === 'github' ? codeHostSetup : null),
+    setupFor: (application) =>
+      application === 'github' ? codeHostSetup : null,
   };
   const mirrorAdapters = mirrorAdapterFactory(
     syncState,
