@@ -34,7 +34,6 @@ import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
 import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
-import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
 import { VaultAdapter } from './vault/VaultAdapter.js';
 import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
 import { loadDataSafely } from './registry/loadDataSafely.js';
@@ -126,33 +125,6 @@ function createCodeHostTransport(token: string): CodeHostTransport {
   };
 }
 
-function createTransport(token: string): Transport {
-  return {
-    post: (body) => request(token, 'POST', '/graphql', body),
-    get: (path) => request(token, 'GET', path),
-    patch: (path, body) => request(token, 'PATCH', path, body),
-    postPath: (path, body) => request(token, 'POST', path, body),
-    async getConditional(path, etag) {
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-      };
-      if (etag) {
-        headers['If-None-Match'] = etag;
-      }
-      const response = await requestUrl({
-        url: `https://api.github.com${path}`,
-        method: 'GET',
-        headers,
-        throw: false,
-      });
-      const responseEtag = response.headers['etag'];
-      return responseEtag === undefined
-        ? { status: response.status, json: response.json }
-        : { status: response.status, json: response.json, etag: responseEtag };
-    },
-  };
-}
-
 interface ProjectCaptureReconciler {
   capture(syncedAt: string): Promise<CaptureProjectsResult>;
 }
@@ -170,26 +142,12 @@ function composeCoreReconcilers(
   plugin: ProjectManagementPlugin,
   vault: VaultAdapter,
   syncState: SyncStateAdapter,
-  secrets: SecretStore,
   baselineStorage: CoreBaselineStorage,
   createTaskNote: CreateTaskNoteAction,
+  mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreReconcilers {
-  const codeHostTransport = createCodeHostTransport(
-    secrets.load(GITHUB_TOKEN_KEY) ?? '',
-  );
-  const taskManagerTransport = transportFromSecret(
-    secrets,
-    TODOIST_TOKEN_KEY,
-    createTodoistTransport,
-  );
   const projectSource = new VaultProjectSourceAdapter(vault);
   const baselines = new CoreBaselineStoreAdapter(baselineStorage);
-  const mirrorAdapters = mirrorAdapterFactory(
-    syncState,
-    codeHostTransport,
-    taskManagerTransport,
-    plugin.settings.statusOptions,
-  );
 
   const origin = new VaultOriginAdapter(plugin.app);
   const handles = new RegistryMirrorHandleAdapter(syncState);
@@ -354,19 +312,20 @@ function composePlugin(
   seedArtifacts: SeedVaultArtifactsAction;
   adapters: RegistrationResult;
 } {
-  const transport = transportFromSecret(
-    secrets,
-    GITHUB_TOKEN_KEY,
-    createTransport,
-  );
   const vault = new VaultAdapter(plugin.app, (eventRef) =>
     plugin.registerEvent(eventRef),
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
-  const github = new GitHubAdapter(transport);
-  const codeHostSetup = new CodeHostMirrorAdapter(
-    createCodeHostTransport(secrets.load(GITHUB_TOKEN_KEY) ?? ''),
+  const codeHostTransport = createCodeHostTransport(
+    secrets.load(GITHUB_TOKEN_KEY) ?? '',
+  );
+  const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
+  const mirrorAdapters = mirrorAdapterFactory(
+    syncState,
+    codeHostTransport,
+    transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
+    plugin.settings.statusOptions,
   );
   const createTaskNote = new CreateTaskNoteAction(
     vault,
@@ -375,7 +334,7 @@ function composePlugin(
   );
   const handleDeletedNote = new HandleDeletedNoteAction(
     syncState,
-    github,
+    mirrorAdapters,
     plugin.settings.doneOptionName,
   );
   const completeTaskCascade = new CompleteTaskCascadeAction(
@@ -407,9 +366,9 @@ function composePlugin(
       plugin,
       vault,
       syncState,
-      secrets,
       baselineStorage,
       createTaskNote,
+      mirrorAdapters,
     );
     return composedCoreReconcilers;
   };
