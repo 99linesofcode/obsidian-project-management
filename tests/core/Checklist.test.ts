@@ -1,11 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  parseChecklist,
-  renderChecklist,
-  toIssueBody,
-  withChecklistLinks,
-} from '../../src/core/Checklist.js';
-import { slugify } from '../../src/core/TaskNoteMapper.js';
+import { describe, expect, it } from 'vitest';
+import { parseChecklist, renderChecklist } from '../../src/core/Checklist.js';
 
 describe('TODO-1 — checklist lines parse to their items', () => {
   it('parses flat items in order with their checked state and indentation depth', () => {
@@ -140,75 +134,5 @@ describe('TODO-1 — checklist items render back to lines', () => {
     expect(
       renderChecklist(body, [{ text: 'Changed', checked: true, depth: 0 }]),
     ).toBe(['```', '- [ ] Inside', '```', '- [x] Changed'].join('\n'));
-  });
-});
-
-describe('SYNC-1 — a checklist projects to an issue body', () => {
-  it('strips wikilinks from checklist lines and keeps everything else verbatim', () => {
-    const body = [
-      '- [ ] [[Projecten/X/todos/foo|Fix the bug]]',
-      '- [x] Plain',
-    ].join('\n');
-    expect(toIssueBody(body)).toBe(
-      ['- [ ] Fix the bug', '- [x] Plain'].join('\n'),
-    );
-
-    const fenced = [
-      'Intro',
-      '```',
-      '- [ ] [[p|Inside]]',
-      '```',
-      '- [ ] [[p|Outside]]',
-    ].join('\n');
-    expect(toIssueBody(fenced)).toBe(
-      ['Intro', '```', '- [ ] [[p|Inside]]', '```', '- [ ] Outside'].join('\n'),
-    );
-  });
-
-  it('re-links a projected body back to the original for known to-dos', () => {
-    const linked = [
-      'Intro',
-      '- [ ] [[Projecten/X/todos/fix-the-bug.md|Fix the bug]]',
-      '- [x] [[Projecten/X/todos/ship-it.md|Ship it]]',
-      'Outro',
-    ].join('\n');
-    const paths = new Map([
-      ['fix-the-bug', 'Projecten/X/todos/fix-the-bug.md'],
-      ['ship-it', 'Projecten/X/todos/ship-it.md'],
-    ]);
-    const resolve = (text: string) => paths.get(slugify(text)) ?? null;
-
-    expect(withChecklistLinks(toIssueBody(linked), resolve)).toBe(linked);
-  });
-});
-
-describe('TODO-2 — unlinked items gain their resolved link', () => {
-  it('attaches a link to every unlinked item and leaves the rest alone', () => {
-    const body = ['- [ ] Fix the bug', '- [x] Done'].join('\n');
-    const resolve = (text: string) =>
-      `Projecten/X/todos/${text.toLowerCase().replace(/\s+/g, '-')}`;
-
-    expect(withChecklistLinks(body, resolve)).toBe(
-      [
-        '- [ ] [[Projecten/X/todos/fix-the-bug|Fix the bug]]',
-        '- [x] [[Projecten/X/todos/done|Done]]',
-      ].join('\n'),
-    );
-  });
-
-  it('leaves an item unlinked when the resolver returns null, preserving other lines', () => {
-    const body = ['Intro', '- [ ] Task', 'Outro'].join('\n');
-    expect(withChecklistLinks(body, () => null)).toBe(body);
-    expect(withChecklistLinks(body, () => 'Projecten/X/task')).toBe(
-      ['Intro', '- [ ] [[Projecten/X/task|Task]]', 'Outro'].join('\n'),
-    );
-  });
-
-  it('passes items that already carry a link through unchanged', () => {
-    const body = '- [ ] [[existing|Fix]]';
-    const resolve = vi.fn(() => 'new-path');
-
-    expect(withChecklistLinks(body, resolve)).toBe(body);
-    expect(resolve).not.toHaveBeenCalled();
   });
 });

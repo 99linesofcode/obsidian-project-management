@@ -1,7 +1,6 @@
-// The markdown checklist core: parse, render and project the task-list lines
-// of a note body. Pure, no imports. WHY it lives in core: the reconciliation
-// arithmetic needs toIssueBody (the code-host-comparable body), and core may
-// not import from the vault; note-facing callers import it from here.
+// The markdown checklist core: parse and render the task-list lines of a note
+// body. Pure, no imports. WHY it lives in core: it is neutral note arithmetic
+// the vault must not own; note-facing callers import it from here.
 export interface ChecklistItem {
   text: string;
   checked: boolean;
@@ -44,39 +43,6 @@ export function renderChecklist(body: string, items: ChecklistItem[]): string {
   }
 
   return [...out, ...items.slice(index).map(renderItem)].join('\n');
-}
-
-// Projects the body for the code-host issue: checklist lines drop their wikilink
-// (the code host's plain task-list form); every other line is verbatim.
-export function toIssueBody(body: string): string {
-  return classifyLines(body)
-    .map((entry) => (entry.item ? renderUnlinkedItem(entry.item) : entry.line))
-    .join('\n');
-}
-
-// Re-attaches links after a remote-driven rewrite. Items that already carry a
-// link pass through untouched; the rest ask resolve for their note path, and
-// stay unlinked when it returns null.
-export function withChecklistLinks(
-  body: string,
-  resolve: (text: string) => string | null,
-): string {
-  return classifyLines(body)
-    .map((entry) => linkItem(entry, resolve))
-    .join('\n');
-}
-
-function linkItem(
-  entry: ClassifiedLine,
-  resolve: (text: string) => string | null,
-): string {
-  const { item } = entry;
-  if (item === null || item.linkPath !== undefined) {
-    return entry.line;
-  }
-
-  const linkPath = resolve(item.text);
-  return linkPath === null ? entry.line : renderItem({ ...item, linkPath });
 }
 
 // Splits the body into lines, pairing each checklist line with its parsed item.
@@ -161,10 +127,6 @@ function renderItem(item: ChecklistItem): string {
       ? item.text
       : `[[${item.linkPath}|${item.text}]]`;
   return renderLine(item.depth, item.checked, content);
-}
-
-function renderUnlinkedItem(item: ChecklistItem): string {
-  return renderLine(item.depth, item.checked, item.text);
 }
 
 function renderLine(depth: number, checked: boolean, content: string): string {
