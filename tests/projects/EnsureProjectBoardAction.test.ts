@@ -1,111 +1,65 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
-import type { BoardItemData } from '../../src/shared/BoardItemData.js';
-import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
-import type { ProjectBoardData } from '../../src/shared/ProjectBoardData.js';
-import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
+import { ProjectAddressing } from '../../src/core/data/ProjectAddressing.js';
+import { ProjectCandidate } from '../../src/core/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../src/core/data/ProjectDiscovery.js';
+import { ProjectSummary } from '../../src/core/data/ProjectSummary.js';
+import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
-import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
-import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
-import { ProjectData } from '../../src/shared/ProjectData.js';
-import type { RemoteBoardData } from '../../src/shared/RemoteBoardData.js';
-import type {
-  RepoBoardData,
-  RepositoryBoardsData,
-} from '../../src/shared/RepoBoardData.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-class FakeProjectManagement implements ProjectManagementPort {
-  repoBoards: RepositoryBoardsData = { repoNodeId: 'R_kgDOAAAA', boards: [] };
-  viewerBoards: RemoteBoardData[] = [];
-  createCalls: Array<{ repoUrl: string; statusOptions: string[] }> = [];
-  adoptCalls: Array<{ boardUrl: string; repoUrl: string }> = [];
-  identities = new Map<string, ProjectIdentityData>();
-  board: ProjectBoardData = {
-    projectNodeId: 'PVT_new',
-    boardUrl: 'https://github.com/users/acme/projects/7',
-    statusFieldId: 'PVTF_new',
+class FakeSetup implements ProjectSetupPort {
+  discovery: ProjectDiscovery = new ProjectDiscovery({
+    targetHandle: 'R_kgDOAAAA',
+    projects: [],
+  });
+  candidates: ProjectCandidate[] = [];
+  createCalls: Array<{
+    target: string;
+    name: string;
+    statusOptions: string[];
+  }> = [];
+  adoptCalls: Array<{ target: string; project: ProjectSummary }> = [];
+  addressings = new Map<string, ProjectAddressing>();
+  created = new ProjectAddressing({
+    projectHandle: 'PVT_new',
+    statusFieldHandle: 'PVTF_new',
     statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
-  };
+  });
 
-  async fetchRepoBoards(): Promise<RepositoryBoardsData> {
-    return this.repoBoards;
+  async discoverProjects(): Promise<ProjectDiscovery> {
+    return this.discovery;
   }
-  async createBoardWithStatusField(
-    repoUrl: string,
-    statusOptions: string[],
-  ): Promise<ProjectBoardData> {
-    this.createCalls.push({ repoUrl, statusOptions });
-    return this.board;
-  }
-  async adoptBoard(
-    boardUrl: string,
-    repoUrl: string,
-  ): Promise<ProjectBoardData> {
-    this.adoptCalls.push({ boardUrl, repoUrl });
-    const identity = this.identities.get(boardUrl);
-    return {
-      projectNodeId: identity?.projectNodeId ?? 'PVT_adopted',
-      boardUrl,
-      statusFieldId: identity?.statusFieldId ?? 'PVTF_adopted',
-      statusOptions: identity?.statusOptions ?? [],
-    };
-  }
-  async fetchProjectIdentity(data: {
-    boardUrl: string;
-  }): Promise<ProjectIdentityData | null> {
-    return this.identities.get(data.boardUrl) ?? null;
-  }
-  async listRepoLabels(): Promise<never> {
+  async readProjectAddressing(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async createRepoLabel(): Promise<never> {
+  async createProjectWithStatus(
+    target: string,
+    name: string,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    this.createCalls.push({ target, name, statusOptions: [...statusOptions] });
+    return this.created;
+  }
+  async adoptProject(
+    target: string,
+    project: ProjectSummary,
+  ): Promise<ProjectAddressing> {
+    this.adoptCalls.push({ target, project });
+    return (
+      this.addressings.get(project.handle) ??
+      new ProjectAddressing({
+        projectHandle: project.handle,
+        statusFieldHandle: 'PVTF_adopted',
+        statusOptions: [],
+      })
+    );
+  }
+  async listProjects(): Promise<readonly ProjectCandidate[]> {
+    return this.candidates;
+  }
+  async probeProjects(): Promise<never> {
     throw new Error('not used in this test');
-  }
-  async fetchProject(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async createIssue(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchProjectDetail(): Promise<ProjectDetailData> {
-    throw new Error('not used in this test');
-  }
-  async fetchTrackedIssues(): Promise<GithubTaskData[]> {
-    return [];
-  }
-  async fetchLatestIssueActivity(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchProjectStates(): Promise<Map<string, ProjectStateData>> {
-    return new Map();
-  }
-  async setProjectClosed(): Promise<void> {}
-  async lockIssue(): Promise<void> {}
-  async fetchUnpromotedIssues(): Promise<GithubTaskData[]> {
-    return [];
-  }
-  async fetchTask(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async updateTask(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async setTaskState(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchBoardItems(): Promise<BoardItemData[]> {
-    return [];
-  }
-  async setBoardStatus(): Promise<void> {}
-  async addBoardItem(): Promise<void> {}
-  async deleteCard(): Promise<void> {}
-  async addLabel(): Promise<void> {}
-  async promoteCard(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchViewerProjects(): Promise<RemoteBoardData[]> {
-    return this.viewerBoards;
   }
 }
 
@@ -127,21 +81,26 @@ function identity(
   };
 }
 
-function board(
-  name: string,
-  url = `https://github.com/users/acme/projects/${name.length}`,
-): RepoBoardData {
-  return { projectNodeId: `PVT_${name}`, name, boardUrl: url };
+function project(name: string): ProjectSummary {
+  return new ProjectSummary({ handle: `PVT_${name}`, name });
+}
+
+function candidate(name: string, targets: string[] = []): ProjectCandidate {
+  return new ProjectCandidate({ project: project(name), targets });
 }
 
 function setup(stored?: ProjectIdentityData) {
-  const port = new FakeProjectManagement();
+  const setupPort = new FakeSetup();
   const syncState = new FakeSyncState();
   if (stored !== undefined) {
     syncState.identities.set(projectName, stored);
   }
-  const action = new EnsureProjectBoardAction(port, syncState, statusOptions);
-  return { action, port, syncState };
+  const action = new EnsureProjectBoardAction(
+    setupPort,
+    syncState,
+    statusOptions,
+  );
+  return { action, setup: setupPort, syncState };
 }
 
 describe('PRJ-1 — the board is derived from the repository', () => {
@@ -150,8 +109,10 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
     await h.action.execute({ projectName, connectionSlug: SLUG });
 
-    expect(h.port.createCalls).toEqual([{ repoUrl, statusOptions }]);
-    expect(h.port.adoptCalls).toEqual([]);
+    expect(h.setup.createCalls).toEqual([
+      { target: repoUrl, name: 'widgets', statusOptions },
+    ]);
+    expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual({
       repoUrl,
       repoNodeId: 'R_kgDOAAAA',
@@ -163,23 +124,24 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
   it('adopts the single board linked to the repo', async () => {
     const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
-    const linked = board('widgets');
-    h.port.repoBoards = { repoNodeId: 'R_kgDOAAAA', boards: [linked] };
-    h.port.identities.set(
-      linked.boardUrl,
-      identity({
-        repoUrl,
-        repoNodeId: 'R_kgDOAAAA',
-        projectNodeId: 'PVT_widgets',
-        statusFieldId: 'PVTF_live',
+    const linked = project('widgets');
+    h.setup.discovery = new ProjectDiscovery({
+      targetHandle: 'R_kgDOAAAA',
+      projects: [linked],
+    });
+    h.setup.addressings.set(
+      linked.handle,
+      new ProjectAddressing({
+        projectHandle: 'PVT_widgets',
+        statusFieldHandle: 'PVTF_live',
         statusOptions: [{ id: 'PVTSSF_live', name: 'Shipped' }],
       }),
     );
 
     await h.action.execute({ projectName, connectionSlug: SLUG });
 
-    expect(h.port.createCalls).toEqual([]);
-    expect(h.port.adoptCalls).toEqual([{ boardUrl: linked.boardUrl, repoUrl }]);
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: linked }]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual({
       repoUrl,
       repoNodeId: 'R_kgDOAAAA',
@@ -191,27 +153,24 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
   it('adopts the board titled with the repo name when several are linked', async () => {
     const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
-    const other = board('Roadmap');
-    const match = board('widgets');
-    h.port.repoBoards = {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [other, match],
-    };
-    h.port.identities.set(
-      match.boardUrl,
-      identity({
-        repoUrl,
-        repoNodeId: 'R_kgDOAAAA',
-        projectNodeId: 'PVT_widgets',
-        statusFieldId: 'PVTF_live',
+    const match = project('widgets');
+    h.setup.discovery = new ProjectDiscovery({
+      targetHandle: 'R_kgDOAAAA',
+      projects: [project('Roadmap'), match],
+    });
+    h.setup.addressings.set(
+      match.handle,
+      new ProjectAddressing({
+        projectHandle: 'PVT_widgets',
+        statusFieldHandle: 'PVTF_live',
         statusOptions: [{ id: 'PVTSSF_live', name: 'Shipped' }],
       }),
     );
 
     await h.action.execute({ projectName, connectionSlug: SLUG });
 
-    expect(h.port.createCalls).toEqual([]);
-    expect(h.port.adoptCalls).toEqual([{ boardUrl: match.boardUrl, repoUrl }]);
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: match }]);
     expect(
       (await h.syncState.getIdentity(projectName, SLUG))?.projectNodeId,
     ).toBe('PVT_widgets');
@@ -219,38 +178,21 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
   it('adopts an unlinked same-name viewer board instead of creating a duplicate', async () => {
     const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
-    const orphanUrl = 'https://github.com/users/acme/projects/9';
-    h.port.viewerBoards = [
-      {
-        project: new ProjectData(
-          'PVT_orphan',
-          '',
-          { github: orphanUrl },
-          'widgets',
-          null,
-          [],
-          '',
-          null,
-          null,
-        ),
-        repoUrls: [],
-      },
-    ];
-    h.port.identities.set(
-      orphanUrl,
-      identity({
-        repoUrl,
-        repoNodeId: 'R_kgDOAAAA',
-        projectNodeId: 'PVT_orphan',
-        statusFieldId: 'PVTF_orphan',
+    const orphan = project('widgets');
+    h.setup.candidates = [candidate('widgets')];
+    h.setup.addressings.set(
+      orphan.handle,
+      new ProjectAddressing({
+        projectHandle: 'PVT_orphan',
+        statusFieldHandle: 'PVTF_orphan',
         statusOptions: [{ id: 'PVTSSF_o', name: 'Shipped' }],
       }),
     );
 
     await h.action.execute({ projectName, connectionSlug: SLUG });
 
-    expect(h.port.createCalls).toEqual([]);
-    expect(h.port.adoptCalls).toEqual([{ boardUrl: orphanUrl, repoUrl }]);
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: orphan }]);
     expect(
       (await h.syncState.getIdentity(projectName, SLUG))?.projectNodeId,
     ).toBe('PVT_orphan');
@@ -258,17 +200,17 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
   it('surfaces a discovery error when several boards match no repo name', async () => {
     const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
-    h.port.repoBoards = {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('Roadmap'), board('Backlog')],
-    };
+    h.setup.discovery = new ProjectDiscovery({
+      targetHandle: 'R_kgDOAAAA',
+      projects: [project('Roadmap'), project('Backlog')],
+    });
 
     await expect(
       h.action.execute({ projectName, connectionSlug: SLUG }),
     ).rejects.toThrow(/several boards/);
 
-    expect(h.port.createCalls).toEqual([]);
-    expect(h.port.adoptCalls).toEqual([]);
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual(
       identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }),
     );
@@ -279,8 +221,8 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
     await h.action.execute({ projectName, connectionSlug: SLUG });
 
-    expect(h.port.createCalls).toEqual([]);
-    expect(h.port.adoptCalls).toEqual([]);
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls).toEqual([]);
     expect(
       (await h.syncState.getIdentity(projectName, SLUG))?.projectNodeId,
     ).toBe('PVT_existing');
@@ -291,8 +233,8 @@ describe('PRJ-1 — the board is derived from the repository', () => {
 
     await h.action.execute({ projectName, connectionSlug: SLUG });
 
-    expect(h.port.createCalls).toEqual([]);
-    expect(h.port.adoptCalls).toEqual([]);
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual(
       identity({ repoUrl: '' }),
     );

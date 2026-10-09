@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CaptureRemoteProjectsAction } from '../../src/projects/CaptureRemoteProjectsAction.js';
 import { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
 import { ReconcileProjectLifecycleAction } from '../../src/projects/ReconcileProjectLifecycleAction.js';
+import { ProjectAddressing } from '../../src/core/data/ProjectAddressing.js';
+import type { ProjectCandidate } from '../../src/core/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../src/core/data/ProjectDiscovery.js';
+import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import { ProjectData } from '../../src/shared/ProjectData.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
 import type { CreateTodoistTaskData } from '../../src/todoist/CreateTodoistTaskData.js';
@@ -197,6 +201,47 @@ class FakeProjectManagement implements ProjectManagementPort {
   }
 }
 
+class FakeSetup implements ProjectSetupPort {
+  discovery: ProjectDiscovery = new ProjectDiscovery({
+    targetHandle: 'R_kgDOAAAA',
+    projects: [],
+  });
+  createCalls: Array<{
+    target: string;
+    name: string;
+    statusOptions: string[];
+  }> = [];
+  created = new ProjectAddressing({
+    projectHandle: 'PVT_new',
+    statusFieldHandle: 'PVTF_new',
+    statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+  });
+
+  async discoverProjects(): Promise<ProjectDiscovery> {
+    return this.discovery;
+  }
+  async readProjectAddressing(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createProjectWithStatus(
+    target: string,
+    name: string,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    this.createCalls.push({ target, name, statusOptions: [...statusOptions] });
+    return this.created;
+  }
+  async adoptProject(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listProjects(): Promise<readonly ProjectCandidate[]> {
+    return [];
+  }
+  async probeProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+}
+
 function todoistProject(
   overrides: Partial<TodoistProjectData> = {},
 ): TodoistProjectData {
@@ -242,6 +287,7 @@ function setup() {
   const syncState = new FakeSyncState();
   const taskManager = new FakeTaskManager();
   const projectManagement = new FakeProjectManagement();
+  const setup = new FakeSetup();
   const action = new CaptureRemoteProjectsAction(
     projectManagement,
     taskManager,
@@ -249,11 +295,9 @@ function setup() {
     syncState,
     'Shipped',
   );
-  const ensureBoard = new EnsureProjectBoardAction(
-    projectManagement,
-    syncState,
-    ['Unshaped'],
-  );
+  const ensureBoard = new EnsureProjectBoardAction(setup, syncState, [
+    'Unshaped',
+  ]);
   return {
     action,
     ensureBoard,
@@ -261,6 +305,7 @@ function setup() {
     syncState,
     taskManager,
     projectManagement,
+    setup,
   };
 }
 
@@ -647,9 +692,10 @@ describe('PRJ-3 — a board born on GitHub becomes a vault project', () => {
 
     const home = h.vault.notes.get('Projecten/New Project/_New Project.md');
     expect(home).toBe(TODOIST_HOME);
-    expect(h.projectManagement.boardCreateCalls).toEqual([
+    expect(h.setup.createCalls).toEqual([
       {
-        repoUrl: 'https://github.com/acme/widgets',
+        target: 'https://github.com/acme/widgets',
+        name: 'widgets',
         statusOptions: ['Unshaped'],
       },
     ]);

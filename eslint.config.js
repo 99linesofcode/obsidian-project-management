@@ -76,10 +76,10 @@ const MATRIX = {
     'registry',
     'sync',
   ],
-  projects: ['shared', 'vault'],
+  projects: ['shared', 'core', 'vault'],
   tasks: ['shared', 'projects', 'vault'],
   todos: ['shared', 'vault'],
-  sync: ['shared', 'projects', 'tasks', 'todos'],
+  sync: ['shared', 'core', 'projects', 'tasks', 'todos'],
   registry: ['shared', 'projects'],
   vault: ['shared'],
 };

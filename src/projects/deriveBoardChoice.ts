@@ -1,13 +1,13 @@
-import type { RepoBoardData } from '../shared/RepoBoardData.js';
+import type { ProjectSummary } from '../core/data/ProjectSummary.js';
 
 export type BoardChoice =
   | { kind: 'create' }
-  | { kind: 'adopt'; board: RepoBoardData }
+  | { kind: 'adopt'; board: ProjectSummary }
   | { kind: 'ambiguous' };
 
 export function deriveBoardChoice(
   repoName: string,
-  boards: RepoBoardData[],
+  boards: readonly ProjectSummary[],
 ): BoardChoice {
   if (boards.length === 0) {
     return { kind: 'create' };

@@ -375,6 +375,9 @@ function composePlugin(
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
   const github = new GitHubAdapter(transport);
+  const codeHostSetup = new CodeHostMirrorAdapter(
+    createCodeHostTransport(secrets.load(GITHUB_TOKEN_KEY) ?? ''),
+  );
   const seedTypeLabels = new SeedTypeLabelsAction(github);
   const createTaskNote = new CreateTaskNoteAction(
     vault,
@@ -392,9 +395,9 @@ function composePlugin(
   );
   const discoverProjects = new DiscoverProjectsAction(
     vault,
-    new AttachProjectAction(github),
+    new AttachProjectAction(codeHostSetup),
   );
-  const probeProjects = new ProbeProjectsAction(github, syncState);
+  const probeProjects = new ProbeProjectsAction(codeHostSetup, syncState);
 
   const todoist = new TodoistAdapter(
     transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
@@ -414,7 +417,7 @@ function composePlugin(
   const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
 
   const ensureProjectBoard = new EnsureProjectBoardAction(
-    github,
+    codeHostSetup,
     syncState,
     plugin.settings.statusOptions,
   );
