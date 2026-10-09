@@ -1,5 +1,5 @@
-import type { ConnectionData } from '../shared/ConnectionData.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { ConnectionData } from '../core/ConnectionData.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
 
 export interface RekeyRenamedConnectionsInput {
   projectName: string;

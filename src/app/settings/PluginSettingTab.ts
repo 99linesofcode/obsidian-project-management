@@ -5,7 +5,7 @@ import {
   type SettingDefinitionItem,
 } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
-import { isRecord } from '../../shared/isRecord.js';
+import { isRecord } from '../../core/isRecord.js';
 import { GITHUB_TOKEN_KEY, TODOIST_TOKEN_KEY } from './SecretStorageAdapter.js';
 import { TokenSettings } from './TokenSettings.js';
 import { DEFAULT_SETTINGS } from './settings.js';

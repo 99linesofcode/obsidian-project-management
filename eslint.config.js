@@ -39,8 +39,8 @@ const ALL_ELEMENT_TYPES = [
 //   merge import nothing, so no outer block can leak in (the dependency rule).
 // - infrastructure is the middle block of driven adapters; it may import core
 //   only, never the driving side or a sibling block.
-// - shared imports nothing. It is the kernel: the ports and their DTOs live
-//   here precisely so no provider's shape leaks into neutral ground.
+// - shared imports nothing. The ports and their DTOs live in core precisely
+//   so no provider's shape leaks into neutral ground.
 // - github/todoist never import each other. A mirror's module may not depend
 //   on a sibling mirror; the sync halves meet only through shared and sync.
 // - app is the composition root and wires every module.
@@ -77,11 +77,11 @@ const MATRIX = {
     'sync',
   ],
   projects: ['shared', 'core', 'vault'],
-  tasks: ['shared', 'projects', 'vault'],
-  todos: ['shared', 'vault'],
+  tasks: ['shared', 'core', 'projects', 'vault'],
+  todos: ['shared', 'core', 'vault'],
   sync: ['shared', 'core', 'projects', 'tasks', 'todos'],
-  registry: ['shared', 'projects'],
-  vault: ['shared'],
+  registry: ['shared', 'core', 'projects'],
+  vault: ['shared', 'core'],
 };
 
 const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
@@ -96,109 +96,6 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
       ? `the ${type} block imports no module; move the neutral shape into ${type}`
       : `the ${type} module may not import that element`,
 }));
-
-// Transitional reuse: the new core's vault adapters reuse the legacy vault and
-// task modules' note codecs while the old chain is retired. Each edge is scoped
-// to one adapter file and the helpers it imports, so the infrastructure block
-// still imports core only in general.
-const transitionalPolicies = [
-  {
-    from: {
-      element: {
-        type: 'infrastructure',
-        fileInternalPath: ['vault/VaultProjectSourceAdapter.ts'],
-      },
-    },
-    allow: {
-      to: {
-        element: {
-          type: 'vault',
-          fileInternalPath: ['connectionsOf.ts'],
-        },
-      },
-    },
-  },
-  {
-    from: {
-      element: {
-        type: 'infrastructure',
-        fileInternalPath: ['vault/VaultProjectCaptureAdapter.ts'],
-      },
-    },
-    allow: {
-      to: {
-        element: {
-          type: 'vault',
-          fileInternalPath: ['renderConnectionsBlock.ts'],
-        },
-      },
-    },
-  },
-  {
-    from: {
-      element: {
-        type: 'infrastructure',
-        fileInternalPath: ['vault/VaultProjectCaptureAdapter.ts'],
-      },
-    },
-    allow: {
-      to: {
-        element: {
-          type: 'shared',
-          fileInternalPath: ['projectHomePath.ts'],
-        },
-      },
-    },
-  },
-  {
-    from: {
-      element: {
-        type: 'infrastructure',
-        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
-      },
-    },
-    allow: {
-      to: {
-        element: {
-          type: 'vault',
-          fileInternalPath: ['CapturedTaskNoteMapper.ts', 'freePath.ts'],
-        },
-      },
-    },
-  },
-  {
-    from: {
-      element: {
-        type: 'infrastructure',
-        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
-      },
-    },
-    allow: {
-      to: {
-        element: {
-          type: 'tasks',
-          fileInternalPath: ['CreateTaskNoteAction.ts'],
-        },
-      },
-    },
-  },
-  {
-    from: {
-      element: {
-        type: 'infrastructure',
-        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
-      },
-    },
-    allow: {
-      to: {
-        element: {
-          type: 'shared',
-          fileInternalPath: ['typeFromLabels.ts'],
-        },
-      },
-    },
-  },
-];
 
 // The public surface of each provider module: the only files another element
 // may import. The composition root wires the adapter and the half's actions;
@@ -343,7 +240,6 @@ export default tseslint.config(
           default: 'disallow',
           policies: [
             ...matrixPolicies,
-            ...transitionalPolicies,
             ...surfacePolicies,
             ...compositionRootPolicies,
           ],

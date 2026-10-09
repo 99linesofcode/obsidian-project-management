@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { typeFromLabels } from '../../src/shared/typeFromLabels.js';
+import { typeFromLabels } from '../../src/core/typeFromLabels.js';
 
 describe('MAT-3 — the type gate reads the type label', () => {
   it('reads the type from a spaced type label', () => {

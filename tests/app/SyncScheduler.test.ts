@@ -15,8 +15,8 @@ vi.mock('obsidian', () => {
 
 import { SyncScheduler } from '../../src/app/SyncScheduler.js';
 import type { SyncQueue } from '../../src/app/SyncQueue.js';
-import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { ProjectNoteData } from '../../src/core/ProjectNoteData.js';
+import type { VaultPort } from '../../src/core/VaultPort.js';
 
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();

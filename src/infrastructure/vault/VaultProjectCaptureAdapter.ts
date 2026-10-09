@@ -1,8 +1,8 @@
 import { AdoptedProject } from '../../core/data/AdoptedProject.js';
 import type { CapturedProject } from '../../core/data/CapturedProject.js';
 import type { ProjectCaptureVaultPort } from '../../core/ports/ProjectCaptureVaultPort.js';
-import { projectHomePath } from '../../shared/projectHomePath.js';
-import { renderConnectionsBlock } from '../../vault/renderConnectionsBlock.js';
+import { projectHomePath } from '../../core/projectHomePath.js';
+import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 
 export interface CaptureProjectNote {
   projectName: string;
@@ -64,7 +64,9 @@ function homeNote(
 ): string {
   return [
     '---',
-    ...renderConnectionsBlock({ [slug]: { tool: application, project: target } }),
+    ...renderConnectionsBlock({
+      [slug]: { tool: application, project: target },
+    }),
     '---',
     '',
     `# ${name}`,

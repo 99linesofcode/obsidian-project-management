@@ -12,13 +12,13 @@ import type { ProjectTaskLocksReconciler } from '../../src/sync/ProjectTaskLocks
 import type { ProjectReactivationReconciler } from '../../src/sync/ProjectReactivationReconciler.js';
 import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
-import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
+import type { ProjectNoteData } from '../../src/core/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
-import type { ConnectionData } from '../../src/shared/ConnectionData.js';
+import type { ConnectionData } from '../../src/core/ConnectionData.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
-import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { EntityRecord } from '../../src/core/SyncStatePort.js';
+import type { VaultPort } from '../../src/core/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

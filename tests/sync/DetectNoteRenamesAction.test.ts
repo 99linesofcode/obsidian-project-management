@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAction.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { VaultPort } from '../../src/core/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 

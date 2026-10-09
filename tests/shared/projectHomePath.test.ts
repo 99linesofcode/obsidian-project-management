@@ -3,7 +3,7 @@ import {
   chooseHomeNotePath,
   projectHomePath,
   projectHomeStem,
-} from '../../src/shared/projectHomePath.js';
+} from '../../src/core/projectHomePath.js';
 
 describe('DISC-2 — the home note path follows the convention', () => {
   it('builds the active home path under Projecten', () => {
@@ -30,7 +30,10 @@ describe('DISC-2 — the home note path follows the convention', () => {
 describe('DISC-2 — home note discovery prefers the convention', () => {
   it('prefers the conventional home note when a legacy one lingers beside it', () => {
     const chosen = chooseHomeNotePath(
-      ['Projecten/Acme Widgets/_home.md', 'Projecten/Acme Widgets/_Acme Widgets.md'],
+      [
+        'Projecten/Acme Widgets/_home.md',
+        'Projecten/Acme Widgets/_Acme Widgets.md',
+      ],
       'Acme Widgets',
     );
 

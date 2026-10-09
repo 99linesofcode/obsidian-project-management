@@ -25,9 +25,11 @@ obsidian-project-management/
 │   ├── core/            # the multi-adapter core: capability ports, canonical DTOs,
 │   │                    # the pure N-way merge, the descriptor/registrar, the
 │   │                    # mirror-sync and lifecycle actions, the pass assemblers,
-│   │                    # the capture/lock/reactivation reconcilers
+│   │                    # the capture/lock/reactivation reconcilers, and the
+│   │                    # retained shell's ports (VaultPort, SyncStatePort) + DTOs
 │   ├── infrastructure/  # driven adapters for the core, one namespace per vendor:
-│   │                    # vault/ (origin, project source, lifecycle, capture),
+│   │                    # vault/ (origin, project source, lifecycle, capture,
+│   │                    # note codecs),
 │   │                    # github/ (mirror adapter + descriptor + transport),
 │   │                    # todoist/ (mirror adapter + descriptor + transport),
 │   │                    # registry/ (baselines, handles, mirror project, cursor, watch),
@@ -39,8 +41,8 @@ obsidian-project-management/
 │   ├── todos/           # checklist ⇄ to-do note consistency
 │   ├── sync/            # the chain, the probe, renames, deletion sweep, the
 │   │                    # reconciler interfaces the chain is driven through
-│   ├── vault/           # the vault adapter and the note mappers/parsers
-│   ├── shared/          # the shell kernel: VaultPort, SyncStatePort and their DTOs
+│   ├── vault/           # the vault adapter and the to-do note mapper/parser
+│   ├── shared/          # neutral helpers shared across the shell modules
 │   └── main.ts          # the composition root — wires every adapter and action
 ├── tests/               # mirrors src/
 ├── docs/                # developer manual — flows as sequence diagrams; ADRs
@@ -121,10 +123,10 @@ name never appears in the core.
 | `src/sync/`           | The chain: `SyncProjectAction` drives the core reconcilers through five interfaces; the probe, rename recovery, deletion sweep and deleted-note action                                                                    | TypeScript                   | in-process       |
 | `src/projects/`       | Project discovery, attach, board creation, home-note migration and connection re-keying                                                                                                                                                                                           | TypeScript                   | in-process       |
 | `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
-| `src/tasks/`          | Task actions: note creation and the completion cascade                                                                                                                                                                                                                           | TypeScript                   | in-process       |
+| `src/tasks/`          | Task actions: the completion cascade                                                                                                                                                                                                                           | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
-| `src/vault/`          | The vault adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                                                                                | host vault API               | the vault        |
-| `src/shared/`         | The shell kernel: `VaultPort`, `SyncStatePort` and their DTOs, plus pure helpers (`projectHomePath`, `stemOf`, `hash`)                                                                                                                                                            | TypeScript                   | in-process       |
+| `src/vault/`          | The vault adapter and the to-do note mapper/parser (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`)                                                                                                | host vault API               | the vault        |
+| `src/shared/`         | Neutral helpers shared across the retained shell (`Checklist`, `DomainError`, `parseAffiliation`, `ProjectStateData`, `stemOf`)                                                                                                                                                            | TypeScript                   | in-process       |
 
 ### Ports & adapters
 
@@ -163,8 +165,8 @@ module and exposes only the ports its descriptor declares.
   `ProjectCaptureVaultPort` and `TaskCaptureVaultPort` (the vault sinks), and
   `ProjectWatchPort` (the reactivation watch).
 
-**The shell's ports (`src/shared/`).** The retained chain and the registry
-still use two provider-neutral ports, owned by the shell kernel:
+**The shell's ports (`src/core/`).** The retained chain and the registry
+still use two provider-neutral ports, now co-located with the core:
 
 - **`VaultPort`** — the vault: read, create, write and rename notes by path;
   move folders; enumerate notes under a folder; read a note's modified time;
@@ -298,11 +300,8 @@ canonical DTOs and the pure core.
   carrying the provider's own vocabulary, its transport boundary, its opaque
   target and its descriptor. The conformance adapter is the reference
   implementation; a real mirror adapter is a new namespace beside it, with no
-  core edit. `infrastructure/` imports `core/` only, with three named
-  transitional, file-scoped exceptions (the vault adapters reuse the legacy
-  vault note codecs and the shared `projectHomePath` convention), and the
-  provider-vocabulary gate keeps each namespace the sole home for its provider's
-  name.
+  core edit. `infrastructure/` imports `core/` only, and the provider-vocabulary
+  gate keeps each namespace the sole home for its provider's name.
 - **The GitHub mirror adapter** (`infrastructure/github/`) implements the
   capability ports for the code host: title and body as the issue, Status as the
   board card's lane, completion as the issue state (kept separate from the
@@ -422,16 +421,11 @@ over HTTPS.
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
     are the `src/` module folders plus the src root (the composition root);
     `core/` is the inner block and imports no module; `infrastructure/` may
-    import `core/` only, with three transitional, file-scoped exceptions — the
-    vault project-source adapter reuses the legacy `vault/` connections codec,
-    and the vault capture adapters reuse the legacy home-note codec, the
-    `CapturedTaskNoteMapper`/`freePath` helpers, `CreateTaskNoteAction` and the
-    shared `projectHomePath`/`typeFromLabels` convention; `shared/` imports from
-    no module; provider modules never import each other; neutral modules consume
-    the kernel and the ports that live in it, never a provider adapter directly;
-    the composition root wires everything. An unlisted import edge fails the
-    lint, so the dependency graph stays acyclic and the inner blocks stay
-    neutral.
+    import `core/` only; `shared/` imports from no module; provider modules
+    never import each other; neutral modules consume the core and the ports
+    that live in it, never a provider adapter directly; the composition root
+    wires everything. An unlisted import edge fails the lint, so the dependency
+    graph stays acyclic and the inner blocks stay neutral.
   - **`boundaries/no-unknown-files`** and **`no-unknown-dependencies`** —
     every source file must belong to an element and every local import must
     resolve to one, so a new top-level module (including `core/` and
@@ -476,9 +470,9 @@ are injected seams inside it. `HandleDeletedNoteAction` uses the core
 the shell `SyncStatePort`. The `identity` canonical field is declared and
 represented but not merged by `AssembleProjectPassAction`. The probe's result is
 used only as a fallback when the lifecycle reconciler throws. The boundary
-config and the provider-vocabulary gate carry transitional and historical
-allowances while the shell is retired. The developer manual records the
-remaining code-vs-brief discrepancies.
+config and the provider-vocabulary gate carry historical allowances while the
+shell is retired. The developer manual records the remaining code-vs-brief
+discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
 GitHub and Todoist mirror adapters implement the capability ports, the vault
@@ -557,8 +551,7 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
 - **Entry point**: `src/main.ts` — above the modules, never inside one; the
   composition root.
 - **Dependency matrix**: `core/` imports no module; `infrastructure/` imports
-  `core/` only, with three named transitional file-scoped exceptions for the
-  vault adapters; `shared/` imports from no module; provider namespaces never
+  `core/` only; `shared/` imports from no module; provider namespaces never
   import each other; neutral modules consume the core and the ports that live in
   it, never a provider adapter directly; the composition root wires everything;
   no circular module dependencies.

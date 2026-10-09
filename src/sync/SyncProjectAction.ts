@@ -1,9 +1,9 @@
-import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
+import type { ProjectNoteData } from '../core/ProjectNoteData.js';
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
-import type { ConnectionData } from '../shared/ConnectionData.js';
+import type { ConnectionData } from '../core/ConnectionData.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
+import type { VaultPort } from '../core/VaultPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../todos/MirrorTodoStatusAction.js';

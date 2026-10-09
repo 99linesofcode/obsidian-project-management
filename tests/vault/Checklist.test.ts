@@ -5,7 +5,7 @@ import {
   toIssueBody,
   withChecklistLinks,
 } from '../../src/vault/Checklist.js';
-import { slugify } from '../../src/vault/TaskNoteMapper.js';
+import { slugify } from '../../src/core/TaskNoteMapper.js';
 
 describe('TODO-1 — checklist lines parse to their items', () => {
   it('parses flat items in order with their checked state and indentation depth', () => {

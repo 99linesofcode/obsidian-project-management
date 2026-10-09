@@ -1,4 +1,4 @@
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { VaultPort } from '../core/VaultPort.js';
 import type { ProjectManagementSettings } from './settings/settings.js';
 import {
   SEED_ARTIFACTS,

@@ -3,7 +3,7 @@ import { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import { splitFrontmatter } from '../../src/vault/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../src/vault/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../../src/vault/ToDoNoteParser.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { VaultPort } from '../../src/core/VaultPort.js';
 
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();

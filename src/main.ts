@@ -17,7 +17,7 @@ import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from './core/ports/ProjectSetupFactoryPort.js';
-import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
+import { CreateTaskNoteAction } from './core/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/CaptureTasksAction.js';
@@ -305,9 +305,9 @@ function gateMirror(
   adapter: MirrorAdapter,
 ): RegisteredAdapter | null {
   return (
-    registerAdapters([new AdapterRegistration(descriptor, adapter)]).adapters.get(
-      descriptor.applicationId,
-    ) ?? null
+    registerAdapters([
+      new AdapterRegistration(descriptor, adapter),
+    ]).adapters.get(descriptor.applicationId) ?? null
   );
 }
 

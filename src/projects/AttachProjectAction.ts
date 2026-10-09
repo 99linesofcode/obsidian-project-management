@@ -1,4 +1,4 @@
-import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
 import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';

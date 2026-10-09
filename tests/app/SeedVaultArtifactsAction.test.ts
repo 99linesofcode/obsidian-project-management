@@ -5,7 +5,7 @@ import {
   DEFAULT_SETTINGS,
   type ProjectManagementSettings,
 } from '../../src/app/settings/settings.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { VaultPort } from '../../src/core/VaultPort.js';
 
 class FakeVault implements VaultPort {
   notes = new Map<string, string>();

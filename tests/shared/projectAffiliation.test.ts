@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isProjectAffiliationEntry,
   projectAffiliationLink,
-} from '../../src/shared/projectAffiliation.js';
+} from '../../src/core/projectAffiliation.js';
 
 describe('SUB-1 — affiliation links the project and parent', () => {
   it('renders the underscore form that resolves to the home note', () => {

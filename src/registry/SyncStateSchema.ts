@@ -1,6 +1,6 @@
-import { isRecord } from '../shared/isRecord.js';
-import { TaskData } from '../shared/TaskData.js';
-import type { MirrorItem, PortState } from '../shared/SyncStatePort.js';
+import { isRecord } from '../core/isRecord.js';
+import { TaskData } from '../core/TaskData.js';
+import type { MirrorItem, PortState } from '../core/SyncStatePort.js';
 
 export const SYNC_STATE_KEY = 'syncState';
 

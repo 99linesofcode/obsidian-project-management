@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripLink } from '../../src/shared/stripLink.js';
+import { stripLink } from '../../src/core/stripLink.js';
 
 describe('SYNC-1 — a wikilink is stripped to its target', () => {
   it('strips the brackets from a plain wikilink', () => {

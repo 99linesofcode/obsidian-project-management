@@ -1,8 +1,8 @@
-import { freePath } from '../vault/freePath.js';
-import { TaskNoteMapper } from '../vault/TaskNoteMapper.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import { freePath } from './freePath.js';
+import { TaskNoteMapper } from './TaskNoteMapper.js';
+import type { SyncStatePort } from './SyncStatePort.js';
+import { readTemplate } from './readTemplate.js';
+import type { VaultPort } from './VaultPort.js';
 
 export interface CreateTaskNoteInput {
   url: string;

@@ -1,7 +1,7 @@
 import { ConnectionEnvelope } from '../../core/data/ConnectionEnvelope.js';
 import { DeclaredConnection } from '../../core/data/DeclaredConnection.js';
 import type { ProjectSourcePort } from '../../core/ports/ProjectSourcePort.js';
-import { connectionsOf } from '../../vault/connectionsOf.js';
+import { connectionsOf } from './connectionsOf.js';
 
 export interface NoteSource {
   getNoteByPath(path: string): Promise<{ content: string } | null>;

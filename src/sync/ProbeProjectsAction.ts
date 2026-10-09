@@ -1,6 +1,6 @@
 import type { ProjectStateData } from '../shared/ProjectStateData.js';
 import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
+import type { SyncStatePort } from '../core/SyncStatePort.js';
 
 export class ProbeProjectsAction {
   constructor(

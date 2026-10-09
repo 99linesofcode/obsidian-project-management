@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hash } from '../../src/shared/hash.js';
+import { hash } from '../../src/core/hash.js';
 
 describe('SYNC-6 — the canonical digest is stable', () => {
   it('is deterministic for the same input', () => {
