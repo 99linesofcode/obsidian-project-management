@@ -1,37 +1,8 @@
 import type { MirrorHandlePort } from '../../core/ports/MirrorHandlePort.js';
-
-export interface MirrorItemLookup {
-  findByNotePath(notePath: string): Promise<{ id: string } | null>;
-  findMirrorItemByEntity(
-    connection: string,
-    entityId: string,
-  ): Promise<{ handle: string } | null>;
-  listMirrorItems(
-    project: string,
-    connection: string,
-  ): Promise<Array<{ handle: string; item: { entityId: string } }>>;
-  getEntity(id: string): Promise<{ id: string; notePath: string } | null>;
-}
-
-export interface MirrorItemRecorder {
-  setEntity(record: { id: string; notePath: string }): Promise<void>;
-  setMirrorItem(
-    project: string,
-    connection: string,
-    handle: string,
-    item: { entityId: string; base: null },
-  ): Promise<void>;
-  removeMirrorItem(
-    project: string,
-    connection: string,
-    handle: string,
-  ): Promise<void>;
-}
+import type { TrackedEntityPort } from '../../core/ports/TrackedEntityPort.js';
 
 export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
-  constructor(
-    private readonly registry: MirrorItemLookup & MirrorItemRecorder,
-  ) {}
+  constructor(private readonly registry: TrackedEntityPort) {}
 
   async resolve(connection: string, notePath: string): Promise<string | null> {
     const entity = await this.registry.findByNotePath(notePath);

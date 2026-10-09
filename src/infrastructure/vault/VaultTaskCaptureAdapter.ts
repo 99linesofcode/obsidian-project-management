@@ -4,32 +4,16 @@ import type {
 } from '../../core/ports/TaskCaptureVaultPort.js';
 import { typeFromLabels } from '../../core/typeFromLabels.js';
 import type { CreateTaskNoteAction } from '../../core/CreateTaskNoteAction.js';
+import type { NoteReaderPort } from '../../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../core/ports/NoteWriterPort.js';
+import type { TrackedEntityPort } from '../../core/ports/TrackedEntityPort.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
 import { freePath } from '../../core/freePath.js';
 
-export interface TaskCaptureVault {
-  getNoteByPath(path: string): Promise<{ content: string } | null>;
-  createNote(path: string, content: string): Promise<void>;
-}
-
-export interface TaskCaptureState {
-  listMirrorItems(
-    project: string,
-    slug: string,
-  ): Promise<Array<{ handle: string }>>;
-  setEntity(record: { id: string; notePath: string }): Promise<void>;
-  setMirrorItem(
-    project: string,
-    slug: string,
-    handle: string,
-    item: { entityId: string; base: null },
-  ): Promise<void>;
-}
-
 export class VaultTaskCaptureAdapter implements TaskCaptureVaultPort {
   constructor(
-    private readonly vault: TaskCaptureVault,
-    private readonly state: TaskCaptureState,
+    private readonly vault: NoteReaderPort & NoteWriterPort,
+    private readonly state: TrackedEntityPort,
     private readonly createTaskNote: CreateTaskNoteAction,
     private readonly isCodeHost: (application: string) => boolean,
   ) {}

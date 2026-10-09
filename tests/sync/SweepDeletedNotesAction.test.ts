@@ -3,7 +3,7 @@ import { SweepDeletedNotesAction } from '../../src/sync/SweepDeletedNotesAction.
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 import { entityRecord } from '../helpers/records.js';
 import type { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
-import type { VaultPort } from '../../src/core/VaultPort.js';
+import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
 
 const githubConnection = {
   slug: 'github',
@@ -11,7 +11,7 @@ const githubConnection = {
   target: 'https://github.com/acme/widgets',
 };
 
-class FakeVault {
+class FakeVault implements NoteReaderPort {
   notes = new Map<string, string>();
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
@@ -42,7 +42,7 @@ function harness() {
     },
   } as unknown as HandleDeletedNoteAction;
   const action = new SweepDeletedNotesAction(
-    vault as unknown as VaultPort,
+    vault,
     syncState,
     handleDeleted,
   );

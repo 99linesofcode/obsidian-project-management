@@ -1,14 +1,13 @@
 import { isRecord } from '../core/isRecord.js';
 import { projectFromNotePath } from '../projects/projectFromNotePath.js';
-import type { ArchiveBaselineData } from '../core/ArchiveBaselineData.js';
 import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
-import type { WatchStateData } from '../core/WatchStateData.js';
 import type { EntityRecord } from '../core/data/EntityRecord.js';
 import type { MirrorItem } from '../core/data/MirrorItem.js';
 import type { PortState } from '../core/data/PortState.js';
-import type { SyncStatePort } from '../core/SyncStatePort.js';
+import type { ConnectionStatePort } from '../core/ports/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../core/ports/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 import {
-  FULL_SCAN_PENDING_KEY,
   PROJECT_CURSORS_KEY,
   SYNC_STATE_KEY,
   VERSION,
@@ -266,7 +265,9 @@ function relocateItems(
   }
 }
 
-export class SyncStateAdapter implements SyncStatePort {
+export class SyncStateAdapter
+  implements IdentityStorePort, TrackedEntityPort, ConnectionStatePort
+{
   private indexes: Indexes | null = null;
   private container: Record<string, unknown> | null = null;
   private chain: Promise<unknown> = Promise.resolve();
@@ -728,138 +729,6 @@ export class SyncStateAdapter implements SyncStatePort {
       const raw =
         node === null ? undefined : identitiesMap(node)[connectionSlug];
       return isRecord(raw) ? this.mapIdentity(raw) : null;
-    });
-  }
-
-  async listIdentities(
-    projectName: string,
-  ): Promise<Array<{ slug: string; identity: ProjectIdentityData }>> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
-      if (node === null) {
-        return [];
-      }
-      const result: Array<{ slug: string; identity: ProjectIdentityData }> = [];
-      for (const [slug, raw] of Object.entries(identitiesMap(node))) {
-        if (isRecord(raw)) {
-          result.push({ slug, identity: this.mapIdentity(raw) });
-        }
-      }
-      return result;
-    });
-  }
-
-  async getLastProjectUpdate(projectName: string): Promise<string | null> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
-      const raw = node === null ? undefined : node.lastProjectUpdate;
-      return typeof raw === 'string' ? raw : null;
-    });
-  }
-
-  async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      this.assertWritable();
-      ensureProjectNode(
-        ensureProjects(container),
-        projectName,
-      ).lastProjectUpdate = iso;
-      await this.persist();
-    });
-  }
-
-  async getArchiveBaseline(
-    projectName: string,
-  ): Promise<ArchiveBaselineData | null> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
-      const raw = node === null ? undefined : node.archive;
-      return isRecord(raw) ? this.mapArchiveBaseline(raw) : null;
-    });
-  }
-
-  async setArchiveBaseline(
-    projectName: string,
-    baseline: ArchiveBaselineData,
-  ): Promise<void> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      this.assertWritable();
-      ensureProjectNode(ensureProjects(container), projectName).archive =
-        baseline;
-      await this.persist();
-    });
-  }
-
-  private mapArchiveBaseline(
-    raw: Record<string, unknown>,
-  ): ArchiveBaselineData {
-    const locationArchived = raw.locationArchived === true;
-    return {
-      locationArchived,
-      closed: raw.closed === true,
-      archivedAt:
-        typeof raw.archivedAt === 'string'
-          ? raw.archivedAt
-          : locationArchived
-            ? ''
-            : null,
-    };
-  }
-
-  async getWatchState(projectName: string): Promise<WatchStateData> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
-      const raw = node === null ? undefined : node.watch;
-      return isRecord(raw)
-        ? this.mapWatchState(raw)
-        : { etag: null, cursor: null };
-    });
-  }
-
-  async setWatchState(
-    projectName: string,
-    state: WatchStateData,
-  ): Promise<void> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      this.assertWritable();
-      ensureProjectNode(ensureProjects(container), projectName).watch = state;
-      await this.persist();
-    });
-  }
-
-  private mapWatchState(raw: Record<string, unknown>): WatchStateData {
-    return {
-      etag: typeof raw.etag === 'string' ? raw.etag : null,
-      cursor: typeof raw.cursor === 'string' ? raw.cursor : null,
-    };
-  }
-
-  async isFullScanPending(projectName: string): Promise<boolean> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
-      return node !== null && node[FULL_SCAN_PENDING_KEY] === true;
-    });
-  }
-
-  async consumeFullScan(projectName: string): Promise<boolean> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      this.assertWritable();
-      const node = projectNode(readProjectsMap(container), projectName);
-      const pending = node !== null && node[FULL_SCAN_PENDING_KEY] === true;
-      if (pending) {
-        node[FULL_SCAN_PENDING_KEY] = false;
-        await this.persist();
-      }
-      return pending;
     });
   }
 

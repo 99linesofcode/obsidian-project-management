@@ -6,11 +6,7 @@ import { FakeSyncState } from './fakeSyncState.js';
 // SyncStateAdapter.test.ts). Migration cases are adapter-only: the fake has no
 // persisted container, so its harness omits the migration capability.
 runSyncStateConformance('FakeSyncState', {
-  create(options) {
-    const fake = new FakeSyncState();
-    for (const project of options?.pendingProjects ?? []) {
-      fake.fullScanPending.add(project);
-    }
-    return fake;
+  create() {
+    return new FakeSyncState();
   },
 });
