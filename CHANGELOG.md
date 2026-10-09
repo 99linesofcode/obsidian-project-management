@@ -1,3 +1,12 @@
+## [0.22.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.22.0...0.22.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **settings:** require Obsidian 1.13.0 for the declarative settings tab ([85f1b04](https://github.com/99linesofcode/obsidian-project-management/commit/85f1b04cdfad2f269f294cb5ba5abbeaa5e6099d))
+
+
+
 # [0.22.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.21.0...0.22.0) (2026-10-09)
 
 
@@ -40,22 +49,6 @@
 * **core:** lock a frozen project's task conversations ([edb3150](https://github.com/99linesofcode/obsidian-project-management/commit/edb315017ca653ff2c5320a12b3b801176ddeaad))
 * **core:** reactivate a frozen project when newer work appears ([7f90457](https://github.com/99linesofcode/obsidian-project-management/commit/7f90457beed33d903c2b37b981afb2a434d01f11))
 * **core:** rename a drifted mirror project on the lifecycle pass ([2afce2e](https://github.com/99linesofcode/obsidian-project-management/commit/2afce2e369334706ce1dbc7fe99d4279ee7b5186))
-
-
-
-# [0.18.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.17.0...0.18.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **core:** record a task's mirror handle before creating the item ([820928c](https://github.com/99linesofcode/obsidian-project-management/commit/820928c5a8631518847a8b55680cb578ae72648b))
-* **vault:** materialize only typed task notes ([6d398b6](https://github.com/99linesofcode/obsidian-project-management/commit/6d398b6e9a7266b52d4887ac764475f1363673b0))
-* **vault:** stop passing the vault link as the mirror's parent ([bb20b0b](https://github.com/99linesofcode/obsidian-project-management/commit/bb20b0b4058f15f5993c0baf2473cd0a6c3589d8))
-
-
-### Features
-
-* **core:** create a vault task note's missing mirror item ([12ad30d](https://github.com/99linesofcode/obsidian-project-management/commit/12ad30d69e56f0a36e164fa186fd2800e9178d17))
 
 
 
