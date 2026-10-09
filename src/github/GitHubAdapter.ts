@@ -247,22 +247,6 @@ const DELETE_BOARD_ITEM_MUTATION = `
   }
 `;
 
-const CONVERT_DRAFT_ISSUE_MUTATION = `
-  mutation ConvertDraftIssue($itemId: ID!, $repositoryId: ID!) {
-    convertProjectV2DraftIssueItemToIssue(
-      input: { itemId: $itemId, repositoryId: $repositoryId }
-    ) {
-      item {
-        content {
-          ... on Issue {
-            url
-          }
-        }
-      }
-    }
-  }
-`;
-
 const SET_PROJECT_CLOSED_MUTATION = `
   mutation SetProjectClosed($projectId: ID!, $closed: Boolean!) {
     updateProjectV2(input: { projectId: $projectId, closed: $closed }) {
@@ -1094,33 +1078,6 @@ export class GitHubAdapter implements ProjectManagementPort {
       projectId: projectNodeId,
       itemId: item.itemId,
     });
-  }
-
-  async promoteCard(
-    itemId: string,
-    repoNodeId: string,
-  ): Promise<GithubTaskData> {
-    const data = await this.postQuery(CONVERT_DRAFT_ISSUE_MUTATION, {
-      itemId,
-      repositoryId: repoNodeId,
-    });
-    const converted = data.convertProjectV2DraftIssueItemToIssue;
-    if (
-      !isRecord(converted) ||
-      !isRecord(converted.item) ||
-      !isRecord(converted.item.content)
-    ) {
-      throw new Error(
-        'GitHubAdapter: unexpected convert draft issue response shape',
-      );
-    }
-    const url = converted.item.content.url;
-    if (typeof url !== 'string') {
-      throw new Error(
-        'GitHubAdapter: convert draft issue returned no issue url',
-      );
-    }
-    return this.fetchTask(url);
   }
 
   private mapProjectState(raw: unknown): ProjectStateData | null {

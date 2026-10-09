@@ -71,5 +71,4 @@ export interface ProjectManagementPort {
   addBoardItem(projectNodeId: string, issueUrl: string): Promise<void>;
   deleteCard(projectNodeId: string, issueUrl: string): Promise<void>;
   addLabel(url: string, label: string): Promise<void>;
-  promoteCard(itemId: string, repoNodeId: string): Promise<CodeHostTaskData>;
 }

@@ -1231,61 +1231,6 @@ describe('LANE-2 — board items carry their lane', () => {
   });
 });
 
-describe('PRO-2 — a card without an issue is promoted', () => {
-  it('promotes a draft card to an issue and fetches the full task', async () => {
-    const mutationResponse = {
-      status: 200,
-      json: {
-        data: {
-          convertProjectV2DraftIssueItemToIssue: {
-            item: {
-              id: 'PVTI_2',
-              content: { url: 'https://github.com/acme/widgets/issues/50' },
-            },
-          },
-        },
-      },
-    };
-    const issueResponse = {
-      status: 200,
-      json: {
-        html_url: 'https://github.com/acme/widgets/issues/50',
-        number: 50,
-        node_id: 'I_kwDOAAAA50',
-        title: 'An idea',
-        body: 'The draft body.',
-        state: 'open',
-        updated_at: '2026-09-19T10:00:00Z',
-        labels: [],
-      },
-    };
-    const { transport, bodies, paths } = fakeTransport([
-      mutationResponse,
-      issueResponse,
-    ]);
-    const adapter = new GitHubAdapter(transport);
-
-    const result = await adapter.promoteCard('PVTI_2', 'R_kgDOAAAA');
-
-    expect(result).toEqual({
-      url: 'https://github.com/acme/widgets/issues/50',
-      nodeId: 'I_kwDOAAAA50',
-      title: 'An idea',
-      body: 'The draft body.',
-      state: 'open',
-      createdAt: null,
-      lastEditedAt: null,
-      updatedAt: '2026-09-19T10:00:00Z',
-      labels: [],
-      parentUrl: null,
-    });
-    expect(bodies[0]).toContain('ConvertDraftIssue');
-    expect(bodies[0]).toContain('"itemId":"PVTI_2"');
-    expect(bodies[0]).toContain('"repositoryId":"R_kgDOAAAA"');
-    expect(paths[0]).toBe('/repos/acme/widgets/issues/50');
-  });
-});
-
 describe('LANE-2 — a lane move is written to the board', () => {
   it('sets a board item status via updateProjectV2ItemFieldValue', async () => {
     const boardResponse = {

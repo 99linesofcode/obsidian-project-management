@@ -70,9 +70,6 @@ class FakePort implements ProjectManagementPort {
   async createIssue(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async promoteCard(): Promise<never> {
-    throw new Error('not used in this test');
-  }
   async deleteCard(): Promise<never> {
     throw new Error('not used in this test');
   }

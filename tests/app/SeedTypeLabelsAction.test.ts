@@ -80,9 +80,6 @@ class FakePort implements ProjectManagementPort {
   async addLabel(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async promoteCard(): Promise<never> {
-    throw new Error('not used in this test');
-  }
 }
 
 const labels = ['type: bug', 'type: task'];
