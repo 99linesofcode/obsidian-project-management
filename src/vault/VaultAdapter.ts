@@ -1,6 +1,9 @@
 import { App, EventRef, TFile } from 'obsidian';
 import type { ProjectNoteData } from '../core/ProjectNoteData.js';
-import type { VaultPort } from '../core/VaultPort.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../core/ports/VaultEventPort.js';
 import { chooseHomeNotePath } from '../core/projectHomePath.js';
 import { ConnectionValidator } from '../core/ConnectionValidator.js';
 import { folderChainForPath } from './folderChainForPath.js';
@@ -8,7 +11,13 @@ import { projectNoteFromCache } from './projectNoteFromCache.js';
 
 export type EventRegistrar = (eventRef: EventRef) => void;
 
-export class VaultAdapter implements VaultPort {
+export class VaultAdapter
+  implements
+    NoteReaderPort,
+    NoteWriterPort,
+    NoteEnumeratorPort,
+    VaultEventPort
+{
   private readonly connectionValidator: ConnectionValidator;
 
   constructor(

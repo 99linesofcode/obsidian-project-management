@@ -182,11 +182,10 @@ seams, each naming only the methods its call sites use:
   re-keying). Implementer: `SyncStateAdapter`. Its records `EntityRecord`,
   `MirrorItem` and `PortState` live in `src/core/data/`.
 
-The monolithic `VaultPort` and `SyncStatePort` remain in `src/core/` as
-core-internal seams: the concrete adapters implement them (and satisfy the
-narrow seams structurally), and the only other named consumer is the core's
-`CreateTaskNoteAction`. No shell module imports them; the
-`no-restricted-imports` gate enforces the split.
+The seven seams are the whole vault and registry contract. The former
+monolithic `VaultPort` and `SyncStatePort` are gone, so every consumer — the
+shell, the core's `CreateTaskNoteAction` and the driven adapters alike —
+depends on the narrow seams above.
 
 A component that reaches around a port is a defect.
 
@@ -389,9 +388,8 @@ No other persistent store. The mirrors hold copies, never authority.
   An API token, bearer.
 - **The host vault application** — the plugin API (vault read/write, events,
   `requestUrl`, settings and data). Behind the shell's narrow note seams
-  (`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`, `VaultEventPort`),
-  the origin adapters, and `VaultPort` for the core's own use; only the adapters
-  import the host package.
+  (`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`, `VaultEventPort`)
+  and the origin adapters; only the adapters import the host package.
 
 There is no server of our own: every call goes through the host's `requestUrl`
 over HTTPS.
@@ -443,11 +441,6 @@ over HTTPS.
     every source file must belong to an element and every local import must
     resolve to one, so a new top-level module (including `core/` and
     `infrastructure/`) cannot slip in unclassified.
-  - **`no-restricted-imports`** (ESLint) — a shell module may not import the
-    monolithic `VaultPort` or `SyncStatePort`; only their two concrete adapters
-    are exempt as implementers, and the core's own `CreateTaskNoteAction` names
-    them through a relative import. The shell reaches the vault and the registry
-    only through the narrow core seams.
   - **`pnpm run lint:boundaries`** (`scripts/lint-boundaries.mjs`) — the
     provider-vocabulary gate. A provider name may appear only in the provider's
     own module (`infrastructure/<vendor>/`), the composition root (`main.ts`)

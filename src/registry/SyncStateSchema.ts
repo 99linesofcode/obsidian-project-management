@@ -15,8 +15,6 @@ export const IDENTITIES_KEY = 'identities';
 
 export const PROJECT_CURSORS_KEY = 'projectCursors';
 
-export const FULL_SCAN_PENDING_KEY = 'fullScanPending';
-
 export function str(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }

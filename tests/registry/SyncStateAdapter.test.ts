@@ -262,50 +262,18 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     );
   });
 
-  it('round-trips the project-level namespaces nested under the project', async () => {
+  it('round-trips a connection identity under the project', async () => {
     const { storage, snapshot } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
 
     await adapter.setIdentity('Acme Widgets', 'github', identity);
-    await adapter.setLastProjectUpdate('Acme Widgets', '2026-09-18T10:00:00Z');
-    await adapter.setArchiveBaseline('Acme Widgets', {
-      locationArchived: true,
-      closed: false,
-      archivedAt: '2026-09-18T09:00:00Z',
-    });
-    await adapter.setWatchState('Acme Widgets', {
-      etag: 'W/"abc"',
-      cursor: '2026-09-18T10:00:00Z',
-    });
 
     expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(
       identity,
     );
-    expect(await adapter.getLastProjectUpdate('Acme Widgets')).toBe(
-      '2026-09-18T10:00:00Z',
-    );
-    expect(await adapter.getArchiveBaseline('Acme Widgets')).toEqual({
-      locationArchived: true,
-      closed: false,
-      archivedAt: '2026-09-18T09:00:00Z',
-    });
-    expect(await adapter.getWatchState('Acme Widgets')).toEqual({
-      etag: 'W/"abc"',
-      cursor: '2026-09-18T10:00:00Z',
-    });
 
     const acme = project(snapshot(), 'Acme Widgets');
     expect(acme['identities']).toEqual({ github: identity });
-    expect(acme['lastProjectUpdate']).toBe('2026-09-18T10:00:00Z');
-    expect(acme['archive']).toEqual({
-      locationArchived: true,
-      closed: false,
-      archivedAt: '2026-09-18T09:00:00Z',
-    });
-    expect(acme['watch']).toEqual({
-      etag: 'W/"abc"',
-      cursor: '2026-09-18T10:00:00Z',
-    });
   });
 
   it('round-trips a port state and returns null for an unknown port', async () => {
@@ -552,16 +520,8 @@ describe('F7 — settings and registry writes share one chain', () => {
 });
 
 const conformanceHarness: SyncStateConformanceHarness = {
-  create(options) {
-    const raw: Record<string, unknown> = {};
-    if (options?.pendingProjects?.length) {
-      const projects: Record<string, unknown> = {};
-      for (const name of options.pendingProjects) {
-        projects[name] = { fullScanPending: true };
-      }
-      raw[SYNC_STATE_KEY] = { version: 3, projects };
-    }
-    const { storage } = fakeStorage(raw);
+  create() {
+    const { storage } = fakeStorage();
     return new SyncStateAdapter(storage);
   },
 };

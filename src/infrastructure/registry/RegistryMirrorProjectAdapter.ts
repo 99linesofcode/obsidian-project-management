@@ -1,26 +1,8 @@
+import type { ConnectionStatePort } from '../../core/ports/ConnectionStatePort.js';
 import type { MirrorProjectPort } from '../../core/ports/MirrorProjectPort.js';
 
-export interface MirrorProjectState {
-  provider: string;
-  project: string;
-  lastPoll: string | null;
-  lanes: Record<string, string>;
-}
-
-export interface MirrorProjectStateStore {
-  getPortState(
-    project: string,
-    connection: string,
-  ): Promise<MirrorProjectState | null>;
-  setPortState(
-    project: string,
-    connection: string,
-    state: MirrorProjectState,
-  ): Promise<void>;
-}
-
 export class RegistryMirrorProjectAdapter implements MirrorProjectPort {
-  constructor(private readonly registry: MirrorProjectStateStore) {}
+  constructor(private readonly registry: ConnectionStatePort) {}
 
   async resolve(project: string, connection: string): Promise<string | null> {
     const state = await this.registry.getPortState(project, connection);

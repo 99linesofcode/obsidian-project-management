@@ -69,8 +69,8 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 - **The shell's seams.** The retained chain reaches the vault through
   `NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort` and `VaultEventPort`,
   and the registry through `IdentityStorePort`, `TrackedEntityPort` and
-  `ConnectionStatePort`. The monolithic `VaultPort` and `SyncStatePort` are
-  core-internal, named only by their adapters and `CreateTaskNoteAction`.
+  `ConnectionStatePort` — the whole vault and registry contract. The former
+  monolithic `VaultPort` and `SyncStatePort` are gone.
 - **The vocabulary.** `Capabilities.ts` holds the fourteen capability names;
   `canonicalField.ts` holds the seven canonical fields (`identity`, `title`,
   `body`, `subtasks`, `completion`, `Status`, `label`).

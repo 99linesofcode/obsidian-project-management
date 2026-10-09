@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MigrateProjectHomeNoteAction } from '../../src/projects/MigrateProjectHomeNoteAction.js';
-import type { VaultPort } from '../../src/core/VaultPort.js';
+import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
 
 class FakeVault {
   notes = new Map<string, string>();
@@ -24,7 +25,7 @@ class FakeVault {
 function harness() {
   const vault = new FakeVault();
   const action = new MigrateProjectHomeNoteAction(
-    vault as unknown as VaultPort,
+    vault as unknown as NoteReaderPort & NoteWriterPort,
   );
   return { action, vault };
 }

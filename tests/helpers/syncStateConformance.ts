@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
-import type { SyncStatePort } from '../../src/core/SyncStatePort.js';
+import type { ConnectionStatePort } from '../../src/core/ports/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../../src/core/ports/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../../src/core/ports/TrackedEntityPort.js';
 import { taskData } from './records.js';
 
 export interface SyncStateConformanceHarness {
-  create(options?: { pendingProjects?: string[] }): SyncStatePort;
+  create(): IdentityStorePort & TrackedEntityPort & ConnectionStatePort;
 }
 
 const PROJECT_A = 'Project A';
@@ -231,32 +233,6 @@ export function runSyncStateConformance(
 
         expect(await port.getEntity('e2')).not.toBeNull();
         expect((await port.findMirrorItem('todoist', TD))?.entityId).toBe('e2');
-      });
-    });
-
-    describe('fullScanPending per-project semantics', () => {
-      it('reads each seeded project as pending', async () => {
-        const port = harness.create({
-          pendingProjects: [PROJECT_A, PROJECT_B],
-        });
-        expect(await port.isFullScanPending(PROJECT_A)).toBe(true);
-        expect(await port.isFullScanPending(PROJECT_B)).toBe(true);
-      });
-
-      it('consumes only the named project, once', async () => {
-        const port = harness.create({
-          pendingProjects: [PROJECT_A, PROJECT_B],
-        });
-        expect(await port.consumeFullScan(PROJECT_A)).toBe(true);
-        expect(await port.isFullScanPending(PROJECT_A)).toBe(false);
-        expect(await port.isFullScanPending(PROJECT_B)).toBe(true);
-        expect(await port.consumeFullScan(PROJECT_A)).toBe(false);
-      });
-
-      it('reports no pending scan for an unknown project', async () => {
-        const port = harness.create();
-        expect(await port.isFullScanPending('Missing')).toBe(false);
-        expect(await port.consumeFullScan('Missing')).toBe(false);
       });
     });
   });

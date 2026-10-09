@@ -1,27 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { RegistryMirrorProjectAdapter } from '../../../src/infrastructure/registry/RegistryMirrorProjectAdapter.js';
-import type {
-  MirrorProjectState,
-  MirrorProjectStateStore,
-} from '../../../src/infrastructure/registry/RegistryMirrorProjectAdapter.js';
+import type { PortState } from '../../../src/core/data/PortState.js';
+import type { ConnectionStatePort } from '../../../src/core/ports/ConnectionStatePort.js';
 
-class FakeStore implements MirrorProjectStateStore {
-  private readonly states = new Map<string, MirrorProjectState>();
+class FakeStore implements ConnectionStatePort {
+  private readonly states = new Map<string, PortState>();
 
   async getPortState(
     project: string,
     connection: string,
-  ): Promise<MirrorProjectState | null> {
+  ): Promise<PortState | null> {
     return this.states.get(`${project}\u0000${connection}`) ?? null;
   }
 
   async setPortState(
     project: string,
     connection: string,
-    state: MirrorProjectState,
+    state: PortState,
   ): Promise<void> {
     this.states.set(`${project}\u0000${connection}`, state);
   }
+
+  async listPortStates(): Promise<Array<{ slug: string; state: PortState }>> {
+    return [];
+  }
+
+  async rekeyPortState(): Promise<void> {}
 }
 
 describe('RegistryMirrorProjectAdapter — the mirror project handle (F02 NWM-2)', () => {
