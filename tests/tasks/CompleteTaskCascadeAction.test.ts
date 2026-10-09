@@ -10,11 +10,7 @@ import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 // the cascade's gates (an already-done to-do, an already-checked line) are
 // observable.
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   modifiedTimes = new Map<string, string>();
 

@@ -5,9 +5,7 @@ import {
   type ProjectManagementSettings,
 } from './app/settings/settings.js';
 import {
-  GITHUB_TOKEN_KEY,
   SecretStorageAdapter,
-  TODOIST_TOKEN_KEY,
   type SecretStore,
 } from './app/settings/SecretStorageAdapter.js';
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
@@ -268,13 +266,22 @@ function buildCaptureSources(
   return sources;
 }
 
+function secretKeyOf(descriptor: AdapterDescriptor): string {
+  const key = descriptor.secretKeys[0];
+  if (key === undefined) {
+    throw new Error(
+      `descriptor '${descriptor.applicationId}' declares no secret key`,
+    );
+  }
+  return key;
+}
+
 function registeredApplicationIds(
+  descriptors: readonly AdapterDescriptor[],
   conformance: AdapterDescriptor,
 ): ReadonlySet<string> {
   return new Set(
-    [githubDescriptor(), todoistDescriptor(), conformance].map(
-      (descriptor) => descriptor.applicationId,
-    ),
+    [...descriptors, conformance].map((descriptor) => descriptor.applicationId),
   );
 }
 
@@ -323,26 +330,37 @@ function composePlugin(
   projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
   adapters: RegistrationResult;
+  providerDescriptors: readonly AdapterDescriptor[];
 } {
   const conformance = conformanceDescriptor('conformance');
+  const codeHostDescriptor = githubDescriptor();
+  const taskManagerDescriptor = todoistDescriptor();
+  const providerDescriptors = [codeHostDescriptor, taskManagerDescriptor];
   const vault = new VaultAdapter(
     plugin.app,
     (eventRef) => plugin.registerEvent(eventRef),
-    registeredApplicationIds(conformance),
+    registeredApplicationIds(providerDescriptors, conformance),
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
-  const codeHostTransport = createCodeHostTransport(
-    secrets.load(GITHUB_TOKEN_KEY) ?? '',
+  const codeHostTransport = transportFromSecret(
+    secrets,
+    secretKeyOf(codeHostDescriptor),
+    createCodeHostTransport,
   );
   const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
   const setupFactory: ProjectSetupFactoryPort = {
-    setupFor: (application) => (application === 'github' ? codeHostSetup : null),
+    setupFor: (application) =>
+      application === 'github' ? codeHostSetup : null,
   };
   const mirrorAdapters = mirrorAdapterFactory(
     syncState,
     codeHostTransport,
-    transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
+    transportFromSecret(
+      secrets,
+      secretKeyOf(taskManagerDescriptor),
+      createTodoistTransport,
+    ),
     plugin.settings.statusOptions,
   );
   const createTaskNote = new CreateTaskNoteAction(
@@ -447,6 +465,7 @@ function composePlugin(
     adapters: registerAdapters([
       new AdapterRegistration(conformance, new ConformanceMirrorAdapter()),
     ]),
+    providerDescriptors,
   };
 }
 
@@ -457,6 +476,7 @@ export default class ProjectManagementPlugin extends Plugin {
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
   adapters!: RegistrationResult;
+  providerDescriptors!: readonly AdapterDescriptor[];
 
   override async onload(): Promise<void> {
     const raw = await loadDataSafely(
@@ -496,9 +516,11 @@ export default class ProjectManagementPlugin extends Plugin {
       projectCapture,
       seedArtifacts,
       adapters,
+      providerDescriptors,
     } = composePlugin(this, syncState, this.secrets, baselineStorage);
     this.seedArtifacts = seedArtifacts;
     this.adapters = adapters;
+    this.providerDescriptors = providerDescriptors;
     await seedArtifacts.execute();
     this.addChild(scheduler);
 

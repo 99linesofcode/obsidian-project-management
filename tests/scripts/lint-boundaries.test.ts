@@ -86,15 +86,23 @@ describe('the provider-vocabulary gate', () => {
     expect(gateExitCode(root)).toBe(0);
   });
 
-  it('passes a provider name in the driving side', () => {
+  it('fails a capitalized provider name in the driving side', () => {
     const root = fixtureRoot({
-      'src/app/settings.ts': "export const applicationId = 'github';\n",
+      'src/app/settings.ts': "export const provider = 'GitHub';\n",
     });
 
-    expect(gateExitCode(root)).toBe(0);
+    expect(gateExitCode(root)).not.toBe(0);
   });
 
-  it('does not flag a lowercase provider value in the grandfathered legacy chain', () => {
+  it('fails an upper-case provider identifier outside a provider module', () => {
+    const root = fixtureRoot({
+      'src/app/settings.ts': "export const GITHUB_TOKEN_KEY = 'x';\n",
+    });
+
+    expect(gateExitCode(root)).not.toBe(0);
+  });
+
+  it('does not flag a lowercase provider value in a non-neutral module', () => {
     const root = fixtureRoot({
       'src/sync/legacy.ts': "export const tool = 'todoist';\n",
     });

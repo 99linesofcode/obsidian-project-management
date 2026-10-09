@@ -29,7 +29,7 @@ export class SyncScheduler extends Component {
     private readonly intervalMs: number,
     private readonly debounceMs: number,
     // A global pre-tick hook: the plugin wires the remote-project capture here
-    // so a project born on Todoist or GitHub becomes a vault project before the
+    // so a project born on a remote becomes a vault project before the
     // tick enumerates them (PRJ-2/PRJ-3). The scheduler makes no decision about
     // what it does — it invokes the injected action and enqueues what it
     // returns. Optional so a scheduler assembled without the project wave
@@ -71,7 +71,7 @@ export class SyncScheduler extends Component {
   }
 
   // Discovery: every pm-project is enqueued; the chain probes and gates the
-  // GitHub half itself, so the scheduler no longer probes. The pre-tick capture
+  // remote half itself, so the scheduler no longer probes. The pre-tick capture
   // runs first so a remote-born project exists as a vault project before the
   // enumeration; its names are enqueued explicitly because a freshly created
   // note may not be visible to the metadata cache within the same tick.

@@ -14,11 +14,7 @@ import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
 import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   modifiedTimes = new Map<string, string>();
 

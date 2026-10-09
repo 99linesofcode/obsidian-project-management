@@ -84,7 +84,11 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Acme Widgets', connectionSlug: 'github', application: 'github' },
+      {
+        projectName: 'Acme Widgets',
+        connectionSlug: 'github',
+        application: 'github',
+      },
       { projectName: 'Other', connectionSlug: 'github', application: 'github' },
     ]);
 
@@ -101,8 +105,16 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Acme Widgets', connectionSlug: 'github', application: 'github' },
-      { projectName: 'Unattached', connectionSlug: 'github', application: 'github' },
+      {
+        projectName: 'Acme Widgets',
+        connectionSlug: 'github',
+        application: 'github',
+      },
+      {
+        projectName: 'Unattached',
+        connectionSlug: 'github',
+        application: 'github',
+      },
     ]);
 
     expect(setup.probeCalls).toEqual([['PVT_1']]);
@@ -128,7 +140,11 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const action = makeAction(setup, syncState);
 
     const result = await action.execute([
-      { projectName: 'Acme Widgets', connectionSlug: 'github', application: 'github' },
+      {
+        projectName: 'Acme Widgets',
+        connectionSlug: 'github',
+        application: 'github',
+      },
       { projectName: 'Other', connectionSlug: 'github', application: 'github' },
     ]);
 

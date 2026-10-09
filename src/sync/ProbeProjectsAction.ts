@@ -47,9 +47,7 @@ export class ProbeProjectsAction {
         }
       }
 
-      const states = await setup.probeProjects([
-        ...nodeIdsByProject.values(),
-      ]);
+      const states = await setup.probeProjects([...nodeIdsByProject.values()]);
       const stateByHandle = new Map(
         states.map((state) => [state.handle, state]),
       );

@@ -66,7 +66,11 @@ describe('CodeHostMirrorAdapter — the project-capture surface', () => {
         createdAt: project.createdAt,
       })),
     ).toEqual([
-      { name: 'Widgets', targets: [REPO_URL], createdAt: '2026-10-05T10:00:00Z' },
+      {
+        name: 'Widgets',
+        targets: [REPO_URL],
+        createdAt: '2026-10-05T10:00:00Z',
+      },
       { name: 'Orphan', targets: [], createdAt: '2026-10-04T10:00:00Z' },
     ]);
   });

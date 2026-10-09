@@ -116,18 +116,18 @@ name never appears in the core.
 
 ## 3. Core Components
 
-| Component             | Responsibility                                                                                                                                                                                                                                                                   | Technology                   | Target           |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------- |
-| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                                                 | host plugin API              | the vault        |
-| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                        | host plugin API, `Component` | the vault        |
-| `src/core/`           | The multi-adapter core: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, the mirror-sync and lifecycle actions, the pass assemblers, and the capture/lock/reactivation reconcilers                    | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters, the GitHub and Todoist mirror adapters, the registry baseline/handle/project/cursor/watch adapters, and the in-memory conformance adapter                       | TypeScript, GraphQL, REST v1 | external tools   |
-| `src/sync/`           | The chain: `SyncProjectAction` drives the core reconcilers through five interfaces; the probe, rename recovery, deletion sweep and deleted-note action                                                                    | TypeScript                   | in-process       |
-| `src/projects/`       | Project discovery, attach, board creation, home-note migration and connection re-keying                                                                                                                                                                                           | TypeScript                   | in-process       |
-| `src/registry/`       | The `data.json`-backed registry adapter and schema — the implementation behind the shell's identity, tracked-entity and connection-state seams                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
-| `src/tasks/`          | Task actions: the completion cascade                                                                                                                                                                                                                           | TypeScript                   | in-process       |
-| `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
-| `src/vault/`          | The vault adapter and the to-do note mapper/parser (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`)                                                                                                | host vault API               | the vault        |
+| Component             | Responsibility                                                                                                                                                                                                                                                  | Technology                   | Target         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                               | host plugin API              | the vault      |
+| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                   | host plugin API, `Component` | the vault      |
+| `src/core/`           | The multi-adapter core: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, the mirror-sync and lifecycle actions, the pass assemblers, and the capture/lock/reactivation reconcilers | TypeScript                   | in-process     |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters, the GitHub and Todoist mirror adapters, the registry baseline/handle/project/cursor/watch adapters, and the in-memory conformance adapter  | TypeScript, GraphQL, REST v1 | external tools |
+| `src/sync/`           | The chain: `SyncProjectAction` drives the core reconcilers through five interfaces; the probe, rename recovery, deletion sweep and deleted-note action                                                                                                          | TypeScript                   | in-process     |
+| `src/projects/`       | Project discovery, attach, board creation, home-note migration and connection re-keying                                                                                                                                                                         | TypeScript                   | in-process     |
+| `src/registry/`       | The `data.json`-backed registry adapter and schema — the implementation behind the shell's identity, tracked-entity and connection-state seams                                                                                                                  | `data.json`                  | the vault      |
+| `src/tasks/`          | Task actions: the completion cascade                                                                                                                                                                                                                            | TypeScript                   | in-process     |
+| `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                           | TypeScript                   | the vault      |
+| `src/vault/`          | The vault adapter and the to-do note mapper/parser (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`)                                                                                                                                                          | host vault API               | the vault      |
 
 ### Ports & adapters
 
@@ -442,11 +442,11 @@ over HTTPS.
     `infrastructure/`) cannot slip in unclassified.
   - **`pnpm run lint:boundaries`** (`scripts/lint-boundaries.mjs`) — the
     provider-vocabulary gate. A provider name may appear only in the provider's
-    own module (`infrastructure/<vendor>/`), the composition root (`main.ts`)
-    and the driving side (`app/`); a capitalized provider name anywhere else
-    fails. Inside the neutral architecture (`core/`, `infrastructure/`) the
-    check is case-insensitive, so any provider name in the core fails. The gate
-    is bite-tested (`tests/scripts/lint-boundaries.test.ts`): a deliberate core
+    own module (`infrastructure/<vendor>/`) and the composition root
+    (`main.ts`); a capitalized provider name anywhere else fails. Inside the
+    neutral architecture (`core/`, `infrastructure/`) the check is
+    case-insensitive, so any provider name in the core fails. The gate is
+    bite-tested (`tests/scripts/lint-boundaries.test.ts`): a deliberate core
     violation exits non-zero while the legitimate provider path exits zero, so a
     green gate on an empty tree cannot pass unnoticed.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
@@ -566,8 +566,8 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
   it, never a provider adapter directly; the composition root wires everything;
   no circular module dependencies.
 - **Provider neutrality**: a provider name appears only in the provider's own
-  module (`infrastructure/<vendor>/`), the composition root, and the driving
-  side; cross-cutting vocabulary is neutral (a provider name is a
+  module (`infrastructure/<vendor>/`) and the composition root; cross-cutting
+  vocabulary is neutral (a provider name is a
   value argument, never a namespace key). The neutral architecture (`core/`,
   `infrastructure/`) is checked case-insensitively, so any provider name in the
   core fails.

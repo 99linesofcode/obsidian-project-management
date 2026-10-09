@@ -26,11 +26,7 @@ import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   modifiedTimes = new Map<string, string>();
 
@@ -231,9 +227,7 @@ function harness(options: HarnessOptions = {}) {
   const setupApplications = options.setupApplications ?? ['github'];
   const setupFactory: ProjectSetupFactoryPort = {
     setupFor: (application) =>
-      setupApplications.includes(application)
-        ? ({} as ProjectSetupPort)
-        : null,
+      setupApplications.includes(application) ? ({} as ProjectSetupPort) : null,
   };
 
   const frozen =

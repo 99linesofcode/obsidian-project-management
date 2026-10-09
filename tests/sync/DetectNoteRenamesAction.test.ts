@@ -8,11 +8,7 @@ import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   modifiedTimes = new Map<string, string>();
 

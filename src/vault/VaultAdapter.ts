@@ -12,11 +12,7 @@ import { projectNoteFromCache } from './projectNoteFromCache.js';
 export type EventRegistrar = (eventRef: EventRef) => void;
 
 export class VaultAdapter
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   private readonly connectionValidator: ConnectionValidator;
 

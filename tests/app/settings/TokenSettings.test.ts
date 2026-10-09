@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-  GITHUB_TOKEN_KEY,
-  TODOIST_TOKEN_KEY,
-} from '../../../src/app/settings/SecretStorageAdapter.js';
 import { TokenSettings } from '../../../src/app/settings/TokenSettings.js';
 import { FakeSecretStore } from '../../helpers/fakeSecretStore.js';
+
+const GITHUB_TOKEN_KEY = 'github-token';
+const TODOIST_TOKEN_KEY = 'todoist-token';
 
 describe('TokenSettings', () => {
   it('reports a stored token', () => {

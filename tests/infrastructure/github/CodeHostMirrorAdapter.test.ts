@@ -646,14 +646,18 @@ describe('CodeHostMirrorAdapter — the board is derived from the repository (F0
     const transport = new FakeTransport([
       boardResponse([issueNode()], [cardNode()]),
     ]);
-    const adapter = new CodeHostMirrorAdapter(transport, target(), async () => ({
-      projectNodeId: 'PVT_123',
-      statusFieldId: 'PVTF_456',
-      statusOptions: [
-        { id: 'PVTSSF_1', name: 'Unshaped' },
-        { id: 'PVTSSF_2', name: 'Done' },
-      ],
-    }));
+    const adapter = new CodeHostMirrorAdapter(
+      transport,
+      target(),
+      async () => ({
+        projectNodeId: 'PVT_123',
+        statusFieldId: 'PVTF_456',
+        statusOptions: [
+          { id: 'PVTSSF_1', name: 'Unshaped' },
+          { id: 'PVTSSF_2', name: 'Done' },
+        ],
+      }),
+    );
 
     const task = await adapter.readTask(ISSUE_URL);
 
@@ -922,7 +926,11 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
         currentCompleted: false,
       }),
       mirrors: [
-        new MirrorSide({ side: 'github', handle: ISSUE_URL, adapter: registered }),
+        new MirrorSide({
+          side: 'github',
+          handle: ISSUE_URL,
+          adapter: registered,
+        }),
       ],
       baselines: new Map([['github', new Baseline('Building', false)]]),
     });

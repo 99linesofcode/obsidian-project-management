@@ -32,7 +32,12 @@ const synced = (value: string, completed = false): Baseline =>
 describe('mergeField — a single delta wins outright (NWM-2, NWM-3)', () => {
   it('takes the lone origin change as the reconciled value', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'New', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'New',
+        baseline: synced('Base'),
+      }),
       [side({ side: 'alpha', current: 'Base', baseline: synced('Base') })],
     );
 
@@ -46,7 +51,12 @@ describe('mergeField — a single delta wins outright (NWM-2, NWM-3)', () => {
 describe('mergeField — a quiet field stays quiet (NWM-4)', () => {
   it('produces no delta and writes nothing when every side matches its baseline', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'Base', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'Base',
+        baseline: synced('Base'),
+      }),
       [side({ side: 'alpha', current: 'Base', baseline: synced('Base') })],
     );
 
@@ -58,7 +68,12 @@ describe('mergeField — a quiet field stays quiet (NWM-4)', () => {
 describe('mergeField — the decisive-timestamp rung (NWM-6)', () => {
   it('selects the provably-newest trustworthy delta across mirrors', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'Base', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'Base',
+        baseline: synced('Base'),
+      }),
       [
         side({
           side: 'alpha',
@@ -170,7 +185,12 @@ describe('mergeField — the origin clock is trusted by default (NWM-28)', () =>
 describe('mergeField — equal provable timestamps fall to the origin (NWM-26)', () => {
   it('does not decide on the timestamp rung when two deltas tie', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'Base', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'Base',
+        baseline: synced('Base'),
+      }),
       [
         side({
           side: 'alpha',
@@ -198,7 +218,12 @@ describe('mergeField — equal provable timestamps fall to the origin (NWM-26)',
 describe('mergeField — completion over a stale open (NWM-5, NWM-8)', () => {
   it('selects the completion against another mirror still open', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'Base', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'Base',
+        baseline: synced('Base'),
+      }),
       [
         side({
           side: 'alpha',
@@ -219,7 +244,12 @@ describe('mergeField — completion over a stale open (NWM-5, NWM-8)', () => {
 describe('mergeField — delete proof (NWM-10)', () => {
   it('treats a mirror absence without a complete fetch as unchanged', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'Base', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'Base',
+        baseline: synced('Base'),
+      }),
       [
         side({
           side: 'alpha',
@@ -236,7 +266,12 @@ describe('mergeField — delete proof (NWM-10)', () => {
 
   it('treats a verified-complete absence with a synced baseline as a delete', () => {
     const result = mergeField(
-      side({ side: 'vault', role: 'origin', current: 'Base', baseline: synced('Base') }),
+      side({
+        side: 'vault',
+        role: 'origin',
+        current: 'Base',
+        baseline: synced('Base'),
+      }),
       [
         side({
           side: 'alpha',

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { GITHUB_TOKEN_KEY } from '../../../src/app/settings/SecretStorageAdapter.js';
 import { transportFromSecret } from '../../../src/app/settings/transportFromSecret.js';
 import { FakeSecretStore } from '../../helpers/fakeSecretStore.js';
+
+const GITHUB_TOKEN_KEY = 'github-token';
 
 describe('transportFromSecret', () => {
   it('hands the stored token to the transport factory', () => {

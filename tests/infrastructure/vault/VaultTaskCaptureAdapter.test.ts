@@ -11,11 +11,7 @@ import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
 class FakeVault
-  implements
-    NoteReaderPort,
-    NoteWriterPort,
-    NoteEnumeratorPort,
-    VaultEventPort
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];

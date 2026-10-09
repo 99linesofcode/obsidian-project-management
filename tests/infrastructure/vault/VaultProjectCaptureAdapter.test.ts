@@ -79,7 +79,10 @@ describe('VaultProjectCaptureAdapter — adopting a captured project', () => {
       {
         projectName: 'Acme Widgets',
         connections: {
-          github: { tool: 'github', project: 'https://github.com/acme/widgets' },
+          github: {
+            tool: 'github',
+            project: 'https://github.com/acme/widgets',
+          },
         },
       },
       {

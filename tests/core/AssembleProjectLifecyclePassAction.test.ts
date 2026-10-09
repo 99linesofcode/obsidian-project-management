@@ -121,7 +121,9 @@ class FakeRegistry implements TrackedEntityPort {
 
   async removeMirrorItem(): Promise<void> {}
 
-  async listMirrorItems(): Promise<Array<{ handle: string; item: MirrorItem }>> {
+  async listMirrorItems(): Promise<
+    Array<{ handle: string; item: MirrorItem }>
+  > {
     return [];
   }
 }
@@ -186,8 +188,7 @@ interface SetupOptions {
 function setup(options: SetupOptions) {
   const vault = new FakeVault();
   const homePath =
-    options.homePath ??
-    (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
+    options.homePath ?? (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
   vault.seed(homePath, HOME, MTIME);
   const registry = new FakeRegistry();
   registry.records = [{ id: 'e1', notePath: TASK_PATH }];

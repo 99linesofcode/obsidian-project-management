@@ -4,7 +4,9 @@ import {
   UNIVERSAL_CAPABILITIES,
 } from '../../core/Capabilities.js';
 
-export function conformanceDescriptor(applicationId: string): AdapterDescriptor {
+export function conformanceDescriptor(
+  applicationId: string,
+): AdapterDescriptor {
   return new AdapterDescriptor({
     applicationId,
     capabilities: [

@@ -12,9 +12,7 @@ export interface AttachProjectInput {
 export class AttachProjectAction {
   async execute(data: AttachProjectInput): Promise<ProjectIdentityData> {
     if (!data.repoUrl) {
-      throw new DomainError(
-        'AttachProjectAction: repoUrl is required',
-      );
+      throw new DomainError('AttachProjectAction: repoUrl is required');
     }
 
     const repoName = repoNameFromUrl(data.repoUrl);
