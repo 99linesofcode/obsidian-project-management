@@ -146,7 +146,7 @@ keep:
   core.
 - **Modular monolith** — one plugin, internally divided into bounded modules
   (`core`, `infrastructure`, `app`, `projects`, `registry`, `sync`, `tasks`,
-  `todos`, `vault`, `shared`), with a dependency matrix enforced by
+  `todos`, `vault`), with a dependency matrix enforced by
   `eslint-plugin-boundaries` so modules cannot quietly reach into each other.
 - **Pragmatic DDD** — canonical data shapes (one task shape across all
   providers), a `data.json` registry as the sync-state memory, and a pure

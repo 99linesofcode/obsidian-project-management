@@ -4,7 +4,7 @@ import { ProjectState } from '../../src/core/data/ProjectState.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
 import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js';
-import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
+import type { ProjectStateData } from '../../src/core/ProjectStateData.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
 class FakeSetup implements ProjectSetupPort {

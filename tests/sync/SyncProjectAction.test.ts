@@ -13,7 +13,7 @@ import type { ProjectReactivationReconciler } from '../../src/sync/ProjectReacti
 import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/core/ProjectNoteData.js';
-import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
+import type { ProjectStateData } from '../../src/core/ProjectStateData.js';
 import type { ConnectionData } from '../../src/core/ConnectionData.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';

@@ -1,4 +1,4 @@
-import { normalizedStem } from '../shared/stemOf.js';
+import { normalizedStem } from '../core/stemOf.js';
 import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
 import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 

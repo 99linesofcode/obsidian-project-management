@@ -1,7 +1,7 @@
-import { parseAffiliation } from '../shared/parseAffiliation.js';
-import { parseChecklist, renderChecklist } from '../vault/Checklist.js';
+import { parseAffiliation } from '../core/parseAffiliation.js';
+import { parseChecklist, renderChecklist } from '../core/Checklist.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
-import { stemOf } from '../shared/stemOf.js';
+import { stemOf } from '../core/stemOf.js';
 import { taskLinkFromAffiliation } from '../core/taskLinkFromAffiliation.js';
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';

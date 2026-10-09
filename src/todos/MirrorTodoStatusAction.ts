@@ -1,4 +1,4 @@
-import { parseChecklist, renderChecklist } from '../vault/Checklist.js';
+import { parseChecklist, renderChecklist } from '../core/Checklist.js';
 import { projectFromTodoPath } from './projectFromTodoPath.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
 import { taskLinkFromAffiliation } from '../core/taskLinkFromAffiliation.js';
