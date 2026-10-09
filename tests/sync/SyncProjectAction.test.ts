@@ -5,10 +5,6 @@ import type { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectB
 import type { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from '../../src/sync/ProbeProjectsAction.js';
-import type {
-  ProjectLifecycleVerdict,
-  ReconcileProjectLifecycleAction,
-} from '../../src/projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
@@ -65,26 +61,6 @@ class FakeProbe {
       throw new Error('probe failed');
     }
     return this.states;
-  }
-}
-
-class FakeLegacyLifecycle {
-  calls: string[] = [];
-
-  async execute(input: {
-    projectName: string;
-    notePath: string;
-    locationArchived: boolean;
-    syncedAt: string;
-    closed?: boolean;
-  }): Promise<ProjectLifecycleVerdict> {
-    this.calls.push(input.projectName);
-    return {
-      remoteProjectId: null,
-      frozen: false,
-      notePath: input.notePath,
-      archivedAt: null,
-    };
   }
 }
 
@@ -181,7 +157,6 @@ function harness(options: HarnessOptions = {}) {
     probe.states.set('Acme Widgets', options.state);
   }
 
-  const legacyLifecycle = new FakeLegacyLifecycle();
   const renames = {
     execute: async () => {
       events.push('renames');
@@ -224,19 +199,18 @@ function harness(options: HarnessOptions = {}) {
     vault,
     syncState,
     probe as unknown as ProbeProjectsAction,
-    legacyLifecycle as unknown as ReconcileProjectLifecycleAction,
     renames,
     cascade,
     checklist,
     mirrorStatus,
     handleDeleted,
-    ensureBoard,
-    undefined,
     () => reconcileRecorder(events),
     () => projectLifecycleRecorder(events, frozen),
     () => taskCaptureRecorder(events),
     () => taskLocksRecorder(events),
     () => reactivationRecorder(events),
+    ensureBoard,
+    undefined,
   );
 
   return {
@@ -245,7 +219,6 @@ function harness(options: HarnessOptions = {}) {
     vault,
     syncState,
     probe,
-    legacyLifecycle,
   };
 }
 
@@ -321,14 +294,6 @@ describe('the multi-adapter pass', () => {
         'renames',
       ]);
     }
-  });
-
-  it('runs the legacy lifecycle only when no new lifecycle is supplied', async () => {
-    const h = harness({ state: openState });
-
-    await h.action.execute('Acme Widgets');
-
-    expect(h.legacyLifecycle.calls).toEqual([]);
   });
 
   it('ensures the board for an active project before the probe', async () => {
