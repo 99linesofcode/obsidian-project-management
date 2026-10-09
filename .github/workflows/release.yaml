@@ -42,6 +42,11 @@ jobs:
           # it and the release commit carries the bump, so the manifest at
           # the tag always matches the released asset.
           version-file: 'manifest.json'
+          # Obsidian reads versions.json to resolve the minimum app version
+          # for each release. The hook appends the bumped version -> manifest
+          # minAppVersion before the release commit, so the map stays in step
+          # with the manifest without a second, tag-drifting commit.
+          pre-commit: 'scripts/update-versions.cjs'
 
       - name: Build
         if: ${{ steps.changelog.outputs.skipped == 'false' }}
