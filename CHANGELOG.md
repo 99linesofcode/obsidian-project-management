@@ -1,3 +1,12 @@
+# [0.21.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.20.0...0.21.0) (2026-10-09)
+
+
+### Features
+
+* **core:** add a project-setup port the code host implements ([31fc657](https://github.com/99linesofcode/obsidian-project-management/commit/31fc657ca09452bbc5a24da070ce6e305bd504d1))
+
+
+
 # [0.20.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.19.0...0.20.0) (2026-10-08)
 
 
@@ -53,15 +62,6 @@
 ### Features
 
 * **core:** adopt application-born tasks on the new sync engine ([7f4ec1e](https://github.com/99linesofcode/obsidian-project-management/commit/7f4ec1e81242d8f0577191e8408ed8fc03672c80))
-
-
-
-# [0.16.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.15.0...0.16.0) (2026-10-08)
-
-
-### Features
-
-* **core:** adopt remote-born projects on the new sync engine ([2d3983f](https://github.com/99linesofcode/obsidian-project-management/commit/2d3983f7fafd5e23a2f2b499d4d26a2943dc25bc))
 
 
 
