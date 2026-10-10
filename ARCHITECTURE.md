@@ -25,14 +25,14 @@ obsidian-project-management/
 │   ├── core/         # the multi-adapter core: capability ports, canonical DTOs, the pure N-way merge, the adapter registrar, the mirror-sync action, the pass assembler
 │   ├── infrastructure/ # driven adapters for the core, one namespace per vendor (the conformance fake, the vault origin + project-source adapters, the registry baseline store, and the GitHub and Todoist mirror adapters)
 │   ├── app/          # driving side: plugin lifecycle, scheduler, queue, commands, modals, settings
-│   ├── github/       # code-host provider: adapter, mapper, sync half, writer
-│   ├── todoist/      # task-manager provider: adapter, mapper, sync half, writers, absorbers
+│   ├── github/       # code-host provider: adapter, mapper
+│   ├── todoist/      # task-manager provider: adapter, mapper
 │   ├── vault/        # the vault adapter and the note mappers/parsers
 │   ├── projects/     # discovery, attach, board creation, lifecycle, remote capture
 │   ├── registry/     # the data.json-backed SyncStatePort adapter and schema
-│   ├── tasks/        # task actions: the vault writer, cascade, promote, status
+│   ├── tasks/        # task actions: note creation, cascade, promote
 │   ├── todos/        # checklist ⇄ to-do note consistency
-│   ├── sync/         # the chain, the two halves, the probe, renames, deletion sweep
+│   ├── sync/         # the chain, the probe, renames, deletion sweep
 │   ├── shared/       # the kernel: ports, canonical DTOs, pure arithmetic — imports from no module
 │   └── main.ts       # the composition root — wires every adapter and action
 ├── tests/            # mirrors src/
@@ -47,7 +47,7 @@ obsidian-project-management/
 meaningful responsibility, named `*Action`. Adapters map raw provider payloads
 onto canonical DTOs at the boundary; the core never sees a provider shape.
 Pure calculations live in `shared/` as one-function files or pure classes
-(`Reconciliation`, `VerdictResolver`, `toDiffView`). Delivery mechanics — the
+(`hash`, `projectHomePath`). Delivery mechanics — the
 scheduler, the queue, timers — belong to `app/` and make no business
 decisions. Persistence is owned by the registry adapter; nothing else touches
 `data.json`.
@@ -56,9 +56,8 @@ decisions. Persistence is owned by the registry adapter; nothing else touches
 the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar and
 the generic mirror-sync action. `infrastructure/` holds the driven adapters
 that implement those ports, one namespace per vendor. The composition root
-wires them. The existing `shared/`, provider and orchestration modules are the
-current chain, unchanged by the skeleton; the two shapes coexist while the
-real adapters are migrated.
+wires them. The core runs unconditionally; the legacy halves, the old pure
+verdict and the legacy writers are deleted.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
 or concept exists. Modules split when they outgrow grasp, not before.
@@ -80,8 +79,8 @@ each mirror's last-synced base.
                               │
                   ┌───────────┴────────────┐
                   │      the sync pass      │
-                  │  probe → two halves →   │
-                  │  three-way verdict      │
+                  │  probe → N-way merge →  │
+                  │  fan-out                │
                   └──────┬──────────┬───────┘
                          │          │
               ┌──────────┘          └──────────┐
@@ -96,27 +95,28 @@ each mirror's last-synced base.
                         (the memory)
 ```
 
-The pass is provider-neutral at its centre: the chain orchestrates the two
-halves through narrow contracts, and the composition root supplies the concrete
-provider actions. A provider's name never appears in the chain.
+The pass is provider-neutral at its centre: the chain orchestrates the
+per-connection mirror adapters through the core's ports, and the composition
+root supplies the concrete provider actions. A provider's name never appears in
+the chain.
 
 ## 3. Core Components
 
-| Component             | Responsibility                                                                                                                                                                                                                       | Technology                   | Target           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ---------------- |
-| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                          | host plugin API              | the vault        |
-| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions | host plugin API, `Component` | the vault        |
-| `src/sync/`           | The chain: `SyncProjectAction` composes the halves; `SyncHalves` are the half contracts; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                          | TypeScript                   | in-process       |
-| `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`, `SyncGithubTasksAction` (the code-host half), `ApplyTaskToGithubAction` (the code-host writer)                                                                          | GraphQL + REST               | the code host    |
-| `src/todoist/`        | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`, `SyncTodoistTasksAction` (the task-manager half), the writer and the absorbers                                                                                     | REST v1                      | the task manager |
-| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`/`Parser`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                           | host vault API               | the vault        |
-| `src/projects/`       | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper                                                                                                                                   | TypeScript                   | in-process       |
-| `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                           | `data.json`                  | the vault        |
-| `src/tasks/`          | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
-| `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
-| `src/shared/`         | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
-| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store, project-source, mirror-handle and adapter-factory ports, and the pass assembler                                                       | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store and mirror-handle adapter, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
+| Component             | Responsibility                                                                                                                                                                                                                                                                   | Technology                   | Target           |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------- |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and remote-project capture                                                                                                                                                                      | host plugin API              | the vault        |
+| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), promotion commands/modals, settings tab and schema, the SecretStorage-backed token store, and the vault-artifact and type-label seed actions                                             | host plugin API, `Component` | the vault        |
+| `src/sync/`           | The chain: `SyncProjectAction` runs the assembled core pass; the probe, rename recovery, frontmatter cleanup and deletion sweep                                                                                                                                                  | TypeScript                   | in-process       |
+| `src/github/`         | The code-host provider: `GitHubAdapter`, `GithubTaskMapper`                                                                                                                                                                                                                      | GraphQL + REST               | the code host    |
+| `src/todoist/`        | The task-manager provider: `TodoistAdapter`, `TodoistTaskMapper`                                                                                                                                                                                                                 | REST v1                      | the task manager |
+| `src/vault/`          | The origin adapter and the note mappers/parsers (`VaultAdapter`, `TaskNoteMapper`, `ToDoNoteMapper`/`Parser`, `CapturedTaskNoteMapper`, `Checklist`, the connections-block codec)                                                                                                 | host vault API               | the vault        |
+| `src/projects/`       | Project discovery, attach, board creation, lifecycle freeze, remote capture and the project mapper                                                                                                                                                                               | TypeScript                   | in-process       |
+| `src/registry/`       | The `SyncStatePort` adapter and its schema                                                                                                                                                                                                                                       | `data.json`                  | the vault        |
+| `src/tasks/`          | Task actions: note creation, the completion cascade, promote                                                                                                                                                                                                                     | TypeScript                   | in-process       |
+| `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                                                            | TypeScript                   | the vault        |
+| `src/shared/`         | The kernel: the four ports, canonical DTOs and the pure helpers                                                                                                                                                                                                                  | TypeScript                   | in-process       |
+| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store, project-source, mirror-handle and adapter-factory ports, and the pass assembler | TypeScript                   | in-process       |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store and mirror-handle adapter, and the GitHub and Todoist mirror adapters                                      | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -147,7 +147,7 @@ registers from its own module.
   cursors. Adapter: `SyncStateAdapter`.
 
 A component that reaches around a port is a defect. The provider modules never
-import each other; the two sync halves meet only through `shared/` and `sync/`.
+import each other; the provider modules meet only through `shared/` and `sync/`.
 
 The API tokens are not settings and not a port: they live in Obsidian's
 SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
@@ -157,17 +157,18 @@ clears. `data.json` is secret-free.
 ### The multi-adapter core (walking skeleton)
 
 The `core/` block is the target shape of ADR-001, proven end to end on one thin
-path (the `Status` field). It runs in the runtime only when the
-`multiAdapterEngine` setting is on (default off); with it off the legacy chain
-is unchanged. It consists of the port layer and the pure core:
+path (the `Status` field). It runs in the runtime unconditionally; the legacy
+halves, the old pure verdict and the legacy writers are deleted. It consists of
+the port layer and the pure core:
 
 - **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
   `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
   `completion`, `Status`, `label`), and the optional `CapturePort`,
-  `CompleteFetchPort`, `TimestampedPort`. An adapter implements only the groups
-  it declares; an undeclared optional port is absent, so a capability the
-  adapter lacks has no interface to call. `TaskSurfacePort` carries one generic
-  write entry, `applyField`, that dispatches a canonical field to the
+  `CompleteFetchPort`, `TimestampedPort`, `TaskLockPort` (`task-locking`) and
+  `ProjectActivityPort` (`project-activity`). An adapter implements only the
+  groups it declares; an undeclared optional port is absent, so a capability
+  the adapter lacks has no interface to call. `TaskSurfacePort` carries one
+  generic write entry, `applyField`, that dispatches a canonical field to the
   adapter's own representation; the completion fact is a separate canonical
   field from the `Status` representation.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
@@ -235,13 +236,24 @@ is unchanged. It consists of the port layer and the pure core:
   is keyed `mirror:<slug>` — disjoint from the origin side's `origin` key, so a
   connection slug of `origin` cannot collide — while the origin keeps the note
   path as its handle. Two connections to the same application stay distinct
-  sides; a connection whose entity has no resolved handle is skipped.
+  sides. A connection whose entity has no resolved handle is materialized: the
+  origin task is read through `OriginPort.readTask` (a note without a `type` is
+  not a task and is skipped), a placeholder handle is recorded through the
+  mirror-handle port before the item is created through
+  `TaskSurfacePort.createTask`, the real handle replaces the placeholder, and
+  the created mirror is reconciled in the same pass. A placeholder left by an
+  interrupted pass is adopted by matching the mirror's task title rather than
+  re-created, so a failed record never duplicates the item; a connection whose
+  entity has no origin task is skipped.
 - **The mirror-handle port** (`MirrorHandlePort`). The core's need to resolve a
   note path to the handle a given connection's application uses for it (an issue
-  URL, a task id). Its adapter
+  URL, a task id), and to record a handle it just materialized. Its adapter
   (`infrastructure/registry/RegistryMirrorHandleAdapter`) first maps the note
   path to the registry entity's id (`findByNotePath`), then reads that entity's
-  per-connection item through the existing `findMirrorItemByEntity` lookup.
+  per-connection item through the existing `findMirrorItemByEntity` lookup; on
+  record it reuses the note path's entity or creates one, removes any handle
+  already recorded for that entity, then stamps the per-connection item through
+  `setMirrorItem`.
 - **The mirror-project port** (`MirrorProjectPort`). The core's need to resolve
   and record the handle a connection's application uses for the mirror project
   (a board, a project id). Its adapter
@@ -251,6 +263,13 @@ is unchanged. It consists of the port layer and the pure core:
   project is onboarded: the lifecycle pass creates it through
   `ProjectPort.createProject`, records the returned handle, and reconciles it in
   the same pass rather than skipping it.
+- **The project-setup port** (`ProjectSetupPort`). The core's need to resolve a
+  connection's project before it mirrors: the projects a target carries, one
+  created or adopted with the core's Status vocabulary, the addressing the core
+  writes through, the projects the viewer can see, and a cheap per-project state
+  probe. The code-host adapter implements it; the discovery, attach,
+  board-ensure and probe setup actions depend on this port, not on the legacy
+  `ProjectManagementPort`.
 - **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction` +
   `AssembleProjectLifecyclePassAction`). The project-level peer of the
   mirror-sync action: it resolves each connection's mirror project through
@@ -270,21 +289,69 @@ is unchanged. It consists of the port layer and the pure core:
   (`infrastructure/vault/VaultProjectLifecycleAdapter`) discovers the home note
   name-agnostically — the same discovery the legacy chain uses, so an
   unmigrated note is never misread as archived — moves the project folder on a
-  freeze/unfreeze, and relocates the registry's entity paths in lockstep.
+  freeze/unfreeze, and relocates the registry's entity paths in lockstep. The
+  pass also renames a mirror project whose name drifted from the vault project
+  through `ProjectPort.renameProject`.
+- **The task-lock port** (`TaskLockPort`) and the task-lock action
+  (`ReconcileProjectTaskLocksAction`). The core's need to close a task's
+  conversation while its project is frozen and reopen it on unfreeze; the code
+  host declares `task-locking` and the task manager does not. On a lifecycle
+  transition the action enumerates the project's tracked mirror items through
+  the mirror-handle port, skips the tasks whose vault status is the done lane,
+  and locks the rest — or unlocks every tracked task on the unfreeze. The
+  lifecycle record carries the prior frozen state so the transition is known.
+- **The project-activity port** (`ProjectActivityPort`) and the reactivation
+  action (`ReactivateFrozenProjectAction`). The core's need to notice that new
+  work appeared on a frozen project's mirror; the code host declares
+  `project-activity`. The action runs before the lifecycle pass: when the origin
+  was already frozen and the mirror's newest item provably postdates the stored
+  watch cursor, it unfreezes the origin, so the lifecycle pass fans the unfreeze
+  out to every mirror. The first watch adopts the newest item as the cursor; a
+  quiet conditional read writes nothing. The watch state (`ProjectWatchPort` +
+  `infrastructure/registry/CoreProjectWatchAdapter`) is per project and
+  connection, persisted under a top-level `coreWatches` key.
 - **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
   need to build a mirror adapter for an application and a connection target. The
   composition root implements it over the provider adapters, so one adapter
-  instance serves exactly one connection.
-- **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
-  time through two reconciler providers, so toggling `multiAdapterEngine` takes
-  effect on the next sync without a reload. When it is on, `SyncProjectAction`
-  runs the assembled lifecycle pass for the freeze verdict and the assembled
-  pass for task-field reconciliation, migrates the project's home note through
-  the legacy migration action (which the skipped legacy lifecycle would
-  otherwise have run), and skips the legacy lifecycle step and the legacy
-  code-host and task halves; probe, board-ensure, capture, vault consistency and
-  the deletion sweep still run. When it is off, the legacy chain runs exactly as
-  before.
+  instance serves exactly one connection. Its optional `captureSources` exposes
+  the capture-capable adapters, built once at the composition root and gated by
+  the `capture` capability.
+- **The project-capture surface** (`ProjectCapturePort` +
+  `CaptureProjectsAction`). A capture-capable adapter enumerates the
+  application-born projects it can see (`captureProjects`), each carrying its
+  name, its candidate connection targets and its creation clock. The core action
+  reads each source's projects in creation order, adopts every project after
+  that source's stored cursor that the vault does not already declare — writing
+  the home note with its connection envelope through the vault capture adapter,
+  which reuses the legacy home-note path and connections codec — and advances
+  the cursor only over the projects it handled. A first sight adopts the newest
+  clock and captures nothing; a project that links zero or several targets stops
+  the watermark with a collected error. An already-declared project is never
+  re-created, so the pass is idempotent. The cursor store and the vault sink are
+  infrastructure peers; the core names no provider.
+- **The task-capture surface** (`CapturePort` + `CaptureTasksAction`). For each
+  declared connection whose adapter declares `capture`, the core action reads the
+  application-born tasks the adapter can see (`capture`) and adopts every task
+  the vault does not already hold as a task note. The whole listing is scanned
+  each pass and the adopted mirror items are skipped, so the pass is idempotent
+  without a cursor and a task ordered before an adopted one is still adopted; a
+  connection whose listing or adoption fails is collected and never stops the
+  later connections. The vault sink routes by the connection's application — the
+  code-host task note or the captured draft note — and refuses an empty handle,
+  so a malformed task never stamps a blank mirror. Unlike project capture, a
+  first sight backfills the application's whole untyped backlog (recorded in the
+  spec's open questions). The vault sink is an infrastructure peer; the core
+  names no provider.
+- **The cutover.** `SyncProjectAction` reads five reconciler providers at
+  execute time. It runs the reactivation action before the assembled lifecycle
+  pass (unfreezing the origin when newer mirror work appears), the assembled
+  lifecycle pass for the freeze verdict, the task-lock action on the
+  freeze/unfreeze transition, the assembled task capture for application-born
+  tasks, and the assembled pass for task-field reconciliation, and migrates the
+  project's home note through the legacy migration action. Probe, board-ensure,
+  vault consistency and the deletion sweep still run — the sweep now enumerates
+  the project's code-host connections directly — and the capture pre-tick runs
+  the assembled core capture.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -301,15 +368,15 @@ is unchanged. It consists of the port layer and the pure core:
   board card's lane, completion as the issue state (kept separate from the
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
   project, capture, complete-fetch and per-field-timestamp surfaces. Its
-  descriptor registers under the application id `github`. It is not wired at the
-  composition root; the existing GitHub half is unchanged.
+  descriptor registers under the application id `github`. It is wired at the
+  composition root; the legacy GitHub half is deleted.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   capability ports for the task manager: title as the task content, body as the
   task description, Status as the project section, completion as the task's
   completed fact, subtasks as the parent relation, label as the task labels, and
   the project, capture, complete-fetch and per-field-timestamp surfaces. Its
-  descriptor registers under the application id `todoist`. It is not wired at
-  the composition root; the existing Todoist half is unchanged.
+  descriptor registers under the application id `todoist`. It is wired at the
+  composition root; the legacy Todoist half is deleted.
 
 ## 4. Data Stores
 
@@ -332,7 +399,10 @@ is unchanged. It consists of the port layer and the pure core:
   shares with the settings save. A top-level `coreBaselines` key — a sibling
   of `syncState`, like the settings root writes — holds the new core's
   per-side, per-entity, per-field baselines, separate from the existing
-  chain's `items.<handle>.base`, so a registry write cannot clobber it.
+  chain's `items.<handle>.base`, so a registry write cannot clobber it. A
+  sibling `coreWatches` key holds the new core's per-project, per-connection
+  reactivation watch (the conditional read's etag and its newest-item cursor),
+  separate from the legacy chain's per-project watch state.
 - **`main.js`** — the built bundle; never authored.
 
 No other persistent store. The mirrors hold copies, never authority.
@@ -416,8 +486,8 @@ over HTTPS.
     retired.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
     compile error.
-  - **`pnpm test`** — behavioral tests per module, including the sync chain's
-    invariance test.
+  - **`pnpm test`** — behavioral tests per module, including the core pass
+    assembler's integration tests.
 
 ## 9. Future Considerations / Roadmap
 
@@ -439,7 +509,11 @@ over HTTPS.
 **Known debt / open items:** `ProjectManagementPort` still carries
 `fetchTrackedIssues` / `fetchBoardItems` alongside the canonical
 `fetchProjectDetail`, kept for the promote UI until it migrates to the
-canonical read. The legacy chain carries pre-existing provider vocabulary
+canonical read. The discovery, attach, board-ensure and probe setup actions now
+run on the core's `ProjectSetupPort`; the remaining old-port consumers are the
+promote UI and seed labels, remote project capture, the archive-lock action,
+and the legacy lifecycle and handle-deleted actions. The legacy chain carries
+pre-existing provider vocabulary
 (`shared/`, `projects/`, `sync/`, `tasks/`, `vault/`, `registry/`); the
 provider-vocabulary gate grandfathers it until that chain is retired. The
 developer manual records the remaining code-vs-brief discrepancies.
@@ -452,13 +526,15 @@ plus the core baseline store assemble a whole project pass and persist its
 baselines. Project lifecycle (archive/unarchive) reconciles through the same
 core: the lifecycle pass assembler reads the origin's and each mirror's
 archived state, runs the same N-way ladder, and fans the freeze out. The
-runtime cutover is gated by the `multiAdapterEngine` plugin setting (default
-off): with it on, the chain builds the origin and the per-connection mirror
+lifecycle bookkeeping that surrounded the legacy freeze also moved onto the new
+path: a drifted mirror project is renamed, a frozen project's unfinished task
+conversations are locked (and unlocked on unfreeze), and a frozen project
+reactivates when newer mirror work appears. The runtime cutover is
+unconditional: the chain builds the origin and the per-connection mirror
 adapters from the project's connections and the stored secrets, runs the
-assembled lifecycle pass for the freeze verdict and the assembled pass for
-task-field reconciliation, and skips the legacy lifecycle step and the legacy
-task halves; with it off the legacy chain runs exactly as before. The legacy
-chain is not yet retired.
+reactivation action, the assembled lifecycle pass for the freeze verdict, the
+task-lock action and the assembled pass for task-field reconciliation. The
+legacy halves, the old pure verdict and the legacy writers are deleted.
 
 ## 10. Project Identification
 
@@ -468,7 +544,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-08
+Date of Last Update: 2026-10-09
 
 ## 11. Glossary / Acronyms
 
@@ -490,13 +566,21 @@ Date of Last Update: 2026-10-08
   a stale board lane.
 - **Lane** — a board column / task-manager section.
 - **Outward materialization** — creating a mirror for a vault-born task,
-  registry-first.
-- **Capture** — adopting a remote-born project into the vault, guarded by a
-  per-surface creation cursor. The home note is born with the connection
+  registry-first: the task-field pass records a placeholder handle before it
+  creates the missing item through the adapter, stamps the real handle over the
+  placeholder, and reconciles it in the same pass; an interrupted pass adopts
+  the created item instead of duplicating it.
+- **Capture** — adopting a remote-born project or task into the vault. A project
+  capture is guarded by a per-surface creation watermark; a task capture scans
+  the whole application listing and skips the mirror items already stamped, so it
+  needs no cursor. A captured project's home note is born with the connection
   envelope: a task-manager-born project declares a todoist connection, a
   board-born project a github connection derived from the board's single linked
   repository. Zero or several linked repositories is a collected error, never a
-  silent capture; the home note declares only the connection envelope.
+  silent capture; the home note declares only the connection envelope. A captured
+  task is born as a task note — a code-host issue through the task-note writer, a
+  task-manager task as a captured draft — and its mirror item is stamped so it is
+  never re-created.
 
 ## 12. Conventions & Boundaries
 
@@ -508,7 +592,7 @@ Enforced by `eslint-plugin-boundaries` (elements = the module folders) and the
   the name locates the role.
 - **File naming**: PascalCase classes with role suffixes (`*Action`,
   `*Adapter`, `*Port`, `*Mapper`, `*Data`, `*Parser`); camelCase pure
-  functions, one per file (`toDiffView.ts`, `projectHomePath.ts`). Tests
+  functions, one per file (`hash.ts`, `projectHomePath.ts`). Tests
   mirror the tree: `tests/<module>/…`.
 - **Entry point**: `src/main.ts` — above the modules, never inside one; the
   composition root.

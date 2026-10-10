@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoverProjectsAction } from '../../src/projects/DiscoverProjectsAction.js';
 import { AttachProjectAction } from '../../src/projects/AttachProjectAction.js';
+import { ProjectAddressing } from '../../src/core/data/ProjectAddressing.js';
+import { ProjectDiscovery } from '../../src/core/data/ProjectDiscovery.js';
+import { ProjectSummary } from '../../src/core/data/ProjectSummary.js';
+import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
-import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
-import type {
-  RepoBoardData,
-  RepositoryBoardsData,
-} from '../../src/shared/RepoBoardData.js';
 import type { VaultPort } from '../../src/shared/VaultPort.js';
 
 class FakeVault implements VaultPort {
@@ -40,83 +39,34 @@ class FakeVault implements VaultPort {
   onNoteRenamed(): void {}
 }
 
-class FakePort implements ProjectManagementPort {
-  repoBoardsByUrl = new Map<string, RepositoryBoardsData>();
-  defaultRepoBoards: RepositoryBoardsData = {
-    repoNodeId: 'R_kgDOAAAA',
-    boards: [],
-  };
-  result: ProjectIdentityData | null = null;
+class FakeSetup implements ProjectSetupPort {
+  discoveries = new Map<string, ProjectDiscovery>();
+  defaultDiscovery = new ProjectDiscovery({
+    targetHandle: 'R_kgDOAAAA',
+    projects: [],
+  });
+  addressing = new ProjectAddressing({
+    projectHandle: 'PVT_123',
+    statusFieldHandle: 'PVTF_456',
+    statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+  });
 
-  async fetchRepoBoards(repoUrl: string): Promise<RepositoryBoardsData> {
-    return this.repoBoardsByUrl.get(repoUrl) ?? this.defaultRepoBoards;
+  async discoverProjects(target: string): Promise<ProjectDiscovery> {
+    return this.discoveries.get(target) ?? this.defaultDiscovery;
   }
-  async fetchProjectIdentity(): Promise<ProjectIdentityData | null> {
-    return this.result;
+  async readProjectAddressing(): Promise<ProjectAddressing> {
+    return this.addressing;
   }
-  async createBoardWithStatusField(): Promise<never> {
+  async createProjectWithStatus(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async listRepoLabels(): Promise<never> {
+  async adoptProject(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async createRepoLabel(): Promise<never> {
+  async listProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async setProjectClosed(): Promise<void> {}
-  async lockIssue(): Promise<void> {}
-  async fetchProjectStates(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchProjectDetail(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchTrackedIssues(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchTask(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async updateTask(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async setTaskState(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchBoardItems(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async setBoardStatus(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async addBoardItem(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchUnpromotedIssues(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async addLabel(): Promise<void> {
-    throw new Error('not used in this test');
-  }
-  async fetchLatestIssueActivity(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchProject(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async createIssue(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async promoteCard(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async deleteCard(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async fetchViewerProjects(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async adoptBoard(): Promise<never> {
+  async probeProjects(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -130,12 +80,13 @@ const identity: ProjectIdentityData = {
   statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 
-function board(name: string): RepoBoardData {
-  return {
-    projectNodeId: `PVT_${name}`,
-    name,
-    boardUrl: `https://github.com/users/acme/projects/${name.length}`,
-  };
+function discovery(targetHandle: string, names: string[]): ProjectDiscovery {
+  return new ProjectDiscovery({
+    targetHandle,
+    projects: names.map(
+      (name) => new ProjectSummary({ handle: `PVT_${name}`, name }),
+    ),
+  });
 }
 
 function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
@@ -149,21 +100,20 @@ function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
   };
 }
 
-function makeAction(port: FakePort, vault: FakeVault): DiscoverProjectsAction {
-  return new DiscoverProjectsAction(vault, new AttachProjectAction(port));
+function makeAction(
+  setup: FakeSetup,
+  vault: FakeVault,
+): DiscoverProjectsAction {
+  return new DiscoverProjectsAction(vault, new AttachProjectAction(setup));
 }
 
 describe('DISC-1 — a project folder is discovered from its home note', () => {
   it('discovers github project notes with their project name and identity', async () => {
     const vault = new FakeVault();
     vault.notes = [githubNote()];
-    const port = new FakePort();
-    port.repoBoardsByUrl.set(repoUrl, {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('widgets')],
-    });
-    port.result = identity;
-    const action = makeAction(port, vault);
+    const setup = new FakeSetup();
+    setup.discoveries.set(repoUrl, discovery('R_kgDOAAAA', ['widgets']));
+    const action = makeAction(setup, vault);
 
     const result = await action.execute();
 
@@ -180,8 +130,8 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
         connections: { todoist: { tool: 'todoist', project: 'P1' } },
       }),
     ];
-    const port = new FakePort();
-    const action = makeAction(port, vault);
+    const setup = new FakeSetup();
+    const action = makeAction(setup, vault);
 
     const result = await action.execute();
 
@@ -199,13 +149,9 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
         },
       }),
     ];
-    const port = new FakePort();
-    port.repoBoardsByUrl.set(repoUrl, {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('widgets')],
-    });
-    port.result = identity;
-    const action = makeAction(port, vault);
+    const setup = new FakeSetup();
+    setup.discoveries.set(repoUrl, discovery('R_kgDOAAAA', ['widgets']));
+    const action = makeAction(setup, vault);
 
     const result = await action.execute();
 
@@ -221,13 +167,9 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
       'connection "work" repeats the "github" tool',
     );
     vault.notes = [githubNote({ connectionErrors: [validationError] })];
-    const port = new FakePort();
-    port.repoBoardsByUrl.set(repoUrl, {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('widgets')],
-    });
-    port.result = identity;
-    const action = makeAction(port, vault);
+    const setup = new FakeSetup();
+    setup.discoveries.set(repoUrl, discovery('R_kgDOAAAA', ['widgets']));
+    const action = makeAction(setup, vault);
 
     const result = await action.execute();
 
@@ -247,13 +189,9 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
       }),
       githubNote(),
     ];
-    const port = new FakePort();
-    port.repoBoardsByUrl.set(repoUrl, {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('widgets')],
-    });
-    port.result = identity;
-    const action = makeAction(port, vault);
+    const setup = new FakeSetup();
+    setup.discoveries.set(repoUrl, discovery('R_kgDOAAAA', ['widgets']));
+    const action = makeAction(setup, vault);
 
     const result = await action.execute();
 
@@ -279,17 +217,13 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
       }),
       githubNote(),
     ];
-    const port = new FakePort();
-    port.repoBoardsByUrl.set('https://github.com/acme/ambiguous', {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('Roadmap'), board('Backlog')],
-    });
-    port.repoBoardsByUrl.set(repoUrl, {
-      repoNodeId: 'R_kgDOAAAA',
-      boards: [board('widgets')],
-    });
-    port.result = identity;
-    const action = makeAction(port, vault);
+    const setup = new FakeSetup();
+    setup.discoveries.set(
+      'https://github.com/acme/ambiguous',
+      discovery('R_kgDOAAAA', ['Roadmap', 'Backlog']),
+    );
+    setup.discoveries.set(repoUrl, discovery('R_kgDOAAAA', ['widgets']));
+    const action = makeAction(setup, vault);
 
     const result = await action.execute();
 

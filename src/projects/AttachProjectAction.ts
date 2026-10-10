@@ -1,6 +1,6 @@
 import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
-import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { repoNameFromUrl } from './repoNameFromUrl.js';
 
@@ -9,7 +9,7 @@ export interface AttachProjectInput {
 }
 
 export class AttachProjectAction {
-  constructor(private readonly port: ProjectManagementPort) {}
+  constructor(private readonly setup: ProjectSetupPort) {}
 
   async execute(data: AttachProjectInput): Promise<ProjectIdentityData> {
     if (!data.repoUrl) {
@@ -19,10 +19,8 @@ export class AttachProjectAction {
     }
 
     const repoName = repoNameFromUrl(data.repoUrl);
-    const { repoNodeId, boards } = await this.port.fetchRepoBoards(
-      data.repoUrl,
-    );
-    const choice = deriveBoardChoice(repoName, boards);
+    const discovery = await this.setup.discoverProjects(data.repoUrl);
+    const choice = deriveBoardChoice(repoName, discovery.projects);
     if (choice.kind === 'ambiguous') {
       throw new DomainError(
         `AttachProjectAction: repository ${data.repoUrl} has several boards and none is titled "${repoName}"`,
@@ -31,22 +29,25 @@ export class AttachProjectAction {
     if (choice.kind === 'create') {
       return new ProjectIdentityData({
         repoUrl: data.repoUrl,
-        repoNodeId,
+        repoNodeId: discovery.targetHandle,
         projectNodeId: '',
         statusFieldId: '',
         statusOptions: [],
       });
     }
 
-    const identity = await this.port.fetchProjectIdentity({
-      repoUrl: data.repoUrl,
-      boardUrl: choice.board.boardUrl,
-    });
-    if (identity === null) {
+    const addressing = await this.setup.readProjectAddressing(choice.board);
+    if (addressing === null) {
       throw new DomainError(
-        `AttachProjectAction: board ${choice.board.boardUrl} could not be resolved`,
+        `AttachProjectAction: board ${choice.board.name} could not be resolved`,
       );
     }
-    return identity;
+    return new ProjectIdentityData({
+      repoUrl: data.repoUrl,
+      repoNodeId: discovery.targetHandle,
+      projectNodeId: addressing.projectHandle,
+      statusFieldId: addressing.statusFieldHandle,
+      statusOptions: [...addressing.statusOptions],
+    });
   }
 }

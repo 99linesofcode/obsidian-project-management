@@ -85,13 +85,16 @@ function sectionNode(
   return { id: 'S1', project_id: 'P1', name: 'Building', ...overrides };
 }
 
-function adapterWith(responses: Array<{ status: number; json: unknown }>): {
+function adapterWith(
+  responses: Array<{ status: number; json: unknown }>,
+  now: () => Date = () => new Date(),
+): {
   adapter: TaskManagerMirrorAdapter;
   transport: FakeTransport;
 } {
   const transport = new FakeTransport(responses);
   return {
-    adapter: new TaskManagerMirrorAdapter(transport, target()),
+    adapter: new TaskManagerMirrorAdapter(transport, target(), now),
     transport,
   };
 }
@@ -348,22 +351,41 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
     expect(tasks.map((task) => task.handle)).toEqual(['T1']);
   });
 
-  it('captures the untyped tasks as remote-born tasks', async () => {
-    const { adapter } = adapterWith([
-      { status: 200, json: [sectionNode()] },
-      {
-        status: 200,
-        json: [
-          taskNode(),
-          taskNode({ id: 'T2', labels: ['bug'] }),
-          taskNode({ id: 'T3', labels: [], checked: true }),
-        ],
-      },
-    ]);
+  it('captures the untyped tasks as remote-born tasks, active and completed', async () => {
+    const fixedNow = () => new Date('2026-10-08T12:00:00Z');
+    const { adapter, transport } = adapterWith(
+      [
+        { status: 200, json: [sectionNode()] },
+        {
+          status: 200,
+          json: [taskNode(), taskNode({ id: 'T2', labels: ['bug'] })],
+        },
+        {
+          status: 200,
+          json: {
+            items: [
+              taskNode({
+                id: 'C3',
+                task_id: 'T3',
+                labels: [],
+                checked: true,
+              }),
+            ],
+            next_cursor: null,
+          },
+        },
+      ],
+      fixedNow,
+    );
 
     const tasks = await adapter.capture(target());
 
     expect(tasks.map((task) => task.handle)).toEqual(['T2', 'T3']);
+    expect(transport.calls.map((call) => call.path)).toEqual([
+      '/sections?project_id=P1',
+      '/tasks?project_id=P1',
+      '/tasks/completed/by_completion_date?since=1970-01-01T00%3A00%3A00Z&until=2026-10-08T12%3A00%3A00.000Z&project_id=P1',
+    ]);
   });
 
   it('returns the decisive per-field time', async () => {
@@ -404,6 +426,20 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
     expect(project!.name).toBe('Widgets');
     expect(project!.archived).toBe(true);
     expect(transport.calls[1]!.path).toBe('/projects/P1/archive');
+  });
+
+  it('renames the project', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: { id: 'P1', name: 'New Name' } },
+    ]);
+
+    await adapter.renameProject(target(), 'New Name');
+
+    expect(transport.calls[0]).toEqual({
+      method: 'POST',
+      path: '/projects/P1',
+      body: JSON.stringify({ name: 'New Name' }),
+    });
   });
 });
 

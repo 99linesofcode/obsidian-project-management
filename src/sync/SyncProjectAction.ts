@@ -13,8 +13,10 @@ import type {
 } from '../projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
-import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
 import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
+import type { ProjectReactivationReconciler } from './ProjectReactivationReconciler.js';
+import type { ProjectTaskLocksReconciler } from './ProjectTaskLocksReconciler.js';
+import type { TaskCaptureReconciler } from './TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
@@ -28,11 +30,10 @@ export class SyncProjectAction {
 
   constructor(
     private readonly vault: VaultPort,
-    private readonly syncState: SyncStatePort,
+    syncState: SyncStatePort,
     private readonly probeProjects: ProbeProjectsAction,
     private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
-    private readonly halfFactory: SyncHalfFactory,
     private readonly completeTaskCascade: CompleteTaskCascadeAction,
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
@@ -41,6 +42,9 @@ export class SyncProjectAction {
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
     private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
     private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
+    private readonly taskCaptureReconciler?: () => TaskCaptureReconciler | undefined,
+    private readonly projectTaskLocksReconciler?: () => ProjectTaskLocksReconciler | undefined,
+    private readonly projectReactivationReconciler?: () => ProjectReactivationReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -61,6 +65,10 @@ export class SyncProjectAction {
 
     const lifecycleReconciler = this.projectLifecycleReconciler?.();
     const taskFieldReconciler = this.taskFieldReconciler?.();
+    const taskCaptureReconciler = this.taskCaptureReconciler?.();
+    const projectTaskLocksReconciler = this.projectTaskLocksReconciler?.();
+    const projectReactivationReconciler =
+      this.projectReactivationReconciler?.();
     if (lifecycleReconciler !== undefined) {
       await this.step('migrate home note', async () => {
         await this.migrateProjectHomeNote.execute({
@@ -97,61 +105,64 @@ export class SyncProjectAction {
 
     const boardState = await this.probe(project, note.connections);
 
-    const verdict =
-      lifecycleReconciler === undefined
-        ? await this.runLifecycle(project, note, boardState, syncedAt)
-        : await this.runNewLifecycle(
-            project,
-            note,
-            boardState,
-            lifecycleReconciler,
-          );
+    if (projectReactivationReconciler !== undefined) {
+      await this.step('reactivation', async () => {
+        await projectReactivationReconciler.reactivate(project);
+      });
+    }
+
+    let wasFrozen = false;
+    let verdict: ProjectLifecycleVerdict;
+    if (lifecycleReconciler === undefined) {
+      verdict = await this.runLifecycle(project, note, boardState, syncedAt);
+    } else {
+      const result = await this.runNewLifecycle(
+        project,
+        note,
+        boardState,
+        lifecycleReconciler,
+      );
+      verdict = result.verdict;
+      wasFrozen = result.wasFrozen;
+    }
+
+    if (projectTaskLocksReconciler !== undefined) {
+      await this.step('task locks', () =>
+        projectTaskLocksReconciler.reconcile({
+          project,
+          frozen: verdict.frozen,
+          wasFrozen,
+        }),
+      );
+    }
 
     await this.step('renames', () =>
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
     );
 
-    const halves = Object.entries(note.connections)
-      .map(([slug, connection]) => this.halfFactory.create(slug, connection))
-      .filter((half): half is ConnectionSyncHalf => half !== null);
-
-    if (taskFieldReconciler === undefined) {
-      await this.step('code host half', () =>
-        this.runBoardHalves(
-          project,
-          note.connections,
-          halves,
-          boardState,
-          verdict,
-          syncedAt,
-        ),
-      );
-    }
-
     await this.step('vault consistency', () =>
       this.runVaultConsistency(project, syncedAt),
     );
 
-    if (!verdict.frozen) {
-      if (taskFieldReconciler === undefined) {
-        await this.step('task manager half', () =>
-          this.runTaskHalves(project, note.connections, halves, syncedAt),
-        );
-      } else {
-        await this.step('task fields', () =>
-          taskFieldReconciler.reconcile(project),
+    if (!verdict.frozen && taskFieldReconciler !== undefined) {
+      if (taskCaptureReconciler !== undefined) {
+        await this.step('task capture', () =>
+          taskCaptureReconciler.capture(project, syncedAt),
         );
       }
+      await this.step('task fields', () =>
+        taskFieldReconciler.reconcile(project),
+      );
     }
 
     await this.step('deletions', async () => {
-      for (const half of halves) {
-        if (!half.requiresBoard) {
+      for (const [slug, connection] of Object.entries(note.connections)) {
+        if (connection.tool !== 'github') {
           continue;
         }
         await this.sweepDeletedNotes.execute({
           projectName: project,
-          connectionSlug: half.connectionSlug,
+          connectionSlug: slug,
         });
       }
     });
@@ -214,14 +225,17 @@ export class SyncProjectAction {
     note: ProjectNoteData,
     boardState: ProjectStateData | undefined,
     reconciler: ProjectLifecycleReconciler,
-  ): Promise<ProjectLifecycleVerdict> {
+  ): Promise<{ verdict: ProjectLifecycleVerdict; wasFrozen: boolean }> {
     try {
-      const { frozen } = await reconciler.reconcile(project);
+      const { frozen, wasFrozen } = await reconciler.reconcile(project);
       return {
-        remoteProjectId: null,
-        frozen,
-        notePath: note.path,
-        archivedAt: frozen ? '' : null,
+        verdict: {
+          remoteProjectId: null,
+          frozen,
+          notePath: note.path,
+          archivedAt: frozen ? '' : null,
+        },
+        wasFrozen,
       };
     } catch (error) {
       console.error(
@@ -229,75 +243,14 @@ export class SyncProjectAction {
         error,
       );
       return {
-        remoteProjectId: null,
-        frozen: note.archivedAt !== null || (boardState?.closed ?? false),
-        notePath: note.path,
-        archivedAt: note.archivedAt,
+        verdict: {
+          remoteProjectId: null,
+          frozen: note.archivedAt !== null || (boardState?.closed ?? false),
+          notePath: note.path,
+          archivedAt: note.archivedAt,
+        },
+        wasFrozen: false,
       };
-    }
-  }
-
-  private async runBoardHalves(
-    project: string,
-    connections: Record<string, ConnectionData>,
-    halves: ConnectionSyncHalf[],
-    boardState: ProjectStateData | undefined,
-    verdict: ProjectLifecycleVerdict,
-    syncedAt: string,
-  ): Promise<void> {
-    if (!boardState || verdict.frozen) {
-      return;
-    }
-
-    const lastUpdate = await this.syncState.getLastProjectUpdate(project);
-    const fullScanPending = await this.syncState.isFullScanPending(project);
-    const includeBoard = boardState.updatedAt !== lastUpdate || fullScanPending;
-    let failed = false;
-    for (const half of halves) {
-      if (!half.requiresBoard) {
-        continue;
-      }
-      try {
-        await half.execute({
-          projectName: project,
-          syncedAt,
-          includeBoard,
-          connections,
-        });
-      } catch (error) {
-        failed = true;
-        console.error(
-          `SyncProjectAction: code host half failed for ${project}`,
-          error,
-        );
-      }
-    }
-    if (!failed) {
-      await this.syncState.setLastProjectUpdate(project, boardState.updatedAt);
-      if (fullScanPending) {
-        await this.syncState.consumeFullScan(project);
-      }
-    }
-  }
-
-  private async runTaskHalves(
-    project: string,
-    connections: Record<string, ConnectionData>,
-    halves: ConnectionSyncHalf[],
-    syncedAt: string,
-  ): Promise<void> {
-    for (const half of halves) {
-      if (half.requiresBoard) {
-        continue;
-      }
-      await this.step(`task half ${half.connectionSlug}`, () =>
-        half.execute({
-          projectName: project,
-          syncedAt,
-          includeBoard: false,
-          connections,
-        }),
-      );
     }
   }
 

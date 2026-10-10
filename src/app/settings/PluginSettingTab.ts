@@ -100,11 +100,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
         populate: (setting) => this.populateTypeLabels(setting),
       },
       {
-        name: 'Multi-adapter engine',
-        desc: 'Reconcile task fields through the new multi-adapter core instead of the legacy task halves.',
-        populate: (setting) => this.populateMultiAdapterEngine(setting),
-      },
-      {
         name: 'Seed type labels',
         desc: 'Create the configured type labels on a repository (owner/name).',
         populate: (setting, _desc, refresh) =>
@@ -175,17 +170,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.typeLabels.join(', '))
         .onChange(async (value) => {
           this.plugin.settings.typeLabels = parseList(value);
-          await this.plugin.saveSettings();
-        }),
-    );
-  }
-
-  private populateMultiAdapterEngine(setting: Setting): void {
-    setting.addToggle((toggle) =>
-      toggle
-        .setValue(this.plugin.settings.multiAdapterEngine)
-        .onChange(async (value) => {
-          this.plugin.settings.multiAdapterEngine = value;
           await this.plugin.saveSettings();
         }),
     );

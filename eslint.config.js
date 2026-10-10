@@ -76,10 +76,10 @@ const MATRIX = {
     'registry',
     'sync',
   ],
-  projects: ['shared', 'vault'],
+  projects: ['shared', 'core', 'vault'],
   tasks: ['shared', 'projects', 'vault'],
   todos: ['shared', 'vault'],
-  sync: ['shared', 'projects', 'tasks', 'todos'],
+  sync: ['shared', 'core', 'projects', 'tasks', 'todos'],
   registry: ['shared', 'projects'],
   vault: ['shared'],
 };
@@ -97,10 +97,10 @@ const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
       : `the ${type} module may not import that element`,
 }));
 
-// Transitional reuse: the new core's vault adapter reuses the legacy vault
-// module's connections codec while the old chain is retired. The edge is
-// scoped to that one adapter file and to the one helper it imports, so the
-// infrastructure block still imports core only in general.
+// Transitional reuse: the new core's vault adapters reuse the legacy vault and
+// task modules' note codecs while the old chain is retired. Each edge is scoped
+// to one adapter file and the helpers it imports, so the infrastructure block
+// still imports core only in general.
 const transitionalPolicies = [
   {
     from: {
@@ -114,6 +114,86 @@ const transitionalPolicies = [
         element: {
           type: 'vault',
           fileInternalPath: ['connectionsOf.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultProjectCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'vault',
+          fileInternalPath: ['renderConnectionsBlock.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultProjectCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'shared',
+          fileInternalPath: ['projectHomePath.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'vault',
+          fileInternalPath: ['CapturedTaskNoteMapper.ts', 'freePath.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'tasks',
+          fileInternalPath: ['CreateTaskNoteAction.ts'],
+        },
+      },
+    },
+  },
+  {
+    from: {
+      element: {
+        type: 'infrastructure',
+        fileInternalPath: ['vault/VaultTaskCaptureAdapter.ts'],
+      },
+    },
+    allow: {
+      to: {
+        element: {
+          type: 'shared',
+          fileInternalPath: ['typeFromLabels.ts'],
         },
       },
     },
@@ -133,23 +213,11 @@ const transitionalPolicies = [
 const PROVIDER_SURFACE = {
   github: [
     'GitHubAdapter.ts',
-    'ApplyTaskToGithubAction.ts',
-    'SyncGithubTasksAction.ts',
     // The promote modal lists unpromoted issues from the provider's transport
     // shape; the type is part of what the app is allowed to see.
     'GithubTaskData.ts',
   ],
-  todoist: [
-    'TodoistAdapter.ts',
-    'ApplyTaskToTodoistAction.ts',
-    'SyncTodoistTasksAction.ts',
-    'ApplyTodoistCompletionAction.ts',
-    'ApplyTodoistRemoteChangesAction.ts',
-    'CaptureTodoistCreationsAction.ts',
-    'EnsureTodoistSectionsAction.ts',
-    'PropagateTodoistDeletionsAction.ts',
-    'RelinkRenamedTodoAction.ts',
-  ],
+  todoist: ['TodoistAdapter.ts'],
 };
 
 // The elements the matrix lets import a provider; the surface narrows those

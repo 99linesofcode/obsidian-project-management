@@ -2,12 +2,15 @@ import type { CanonicalField } from '../../core/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/data/CapturedProject.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 import type {
   TaskManagerResponse,
   TaskManagerTransport,
 } from './TaskManagerTransport.js';
 import { TaskManagerTarget } from './TaskManagerTarget.js';
+
+const COMPLETED_SINCE = '1970-01-01T00:00:00Z';
 
 interface RawTask {
   id: string;
@@ -28,13 +31,18 @@ interface RawSection {
 }
 
 export class TaskManagerMirrorAdapter implements MirrorAdapter {
-  private readonly target: TaskManagerTarget;
+  private readonly rawTarget: string;
 
   constructor(
     private readonly transport: TaskManagerTransport,
-    target: string,
+    target = '',
+    private readonly now: () => Date = () => new Date(),
   ) {
-    this.target = TaskManagerTarget.parse(target);
+    this.rawTarget = target;
+  }
+
+  private get target(): TaskManagerTarget {
+    return TaskManagerTarget.parse(this.rawTarget);
   }
 
   async readProject(target: string): Promise<CanonicalProject | null> {
@@ -67,8 +75,21 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     );
   }
 
+  async renameProject(target: string, name: string): Promise<void> {
+    const connection = TaskManagerTarget.parse(target);
+    await this.postOk(
+      `/projects/${connection.projectId}`,
+      { name },
+      'rename project',
+    );
+  }
+
   async archivedTime(_target: string): Promise<string | null> {
     return null;
+  }
+
+  async latestActivity(): Promise<never> {
+    throw new Error('task manager: does not support project activity');
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
@@ -175,15 +196,38 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     ensureSuccess(response);
   }
 
+  async lockTask(_handle: string): Promise<void> {
+    throw new Error('task manager: does not support task locking');
+  }
+
+  async unlockTask(_handle: string): Promise<void> {
+    throw new Error('task manager: does not support task unlocking');
+  }
+
   async capture(target: string): Promise<CanonicalTask[]> {
     const connection = TaskManagerTarget.parse(target);
     const sections = await this.sections(connection.projectId);
-    const tasks = await this.listTasks(connection.projectId);
+    const tasks = dedupeById([
+      ...(await this.listTasks(connection.projectId)),
+      ...(await this.listCompletedTasks(connection.projectId)),
+    ]);
     return tasks
       .filter((task) => !hasTypeLabel(task.labels))
       .map((task) =>
         toCanonicalTask(task, sectionName(sections, task.sectionId)),
       );
+  }
+
+  async captureProjects(): Promise<CapturedProject[]> {
+    const raw = await this.getList('/projects');
+    return raw.map(
+      (project) =>
+        new CapturedProject({
+          name: stringOrEmpty(project.name),
+          targets: [stringOrEmpty(project.id)],
+          createdAt: nullableString(project.created_at),
+        }),
+    );
   }
 
   fetchComplete(): boolean {
@@ -270,6 +314,16 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     return raw.map(parseTask);
   }
 
+  private async listCompletedTasks(projectId: string): Promise<RawTask[]> {
+    const path =
+      '/tasks/completed/by_completion_date' +
+      `?since=${encodeURIComponent(COMPLETED_SINCE)}` +
+      `&until=${encodeURIComponent(this.now().toISOString())}` +
+      `&project_id=${encodeURIComponent(projectId)}`;
+    const raw = await this.getList(path);
+    return raw.map((task) => ({ ...parseTask(task), completed: true }));
+  }
+
   private async getList(path: string): Promise<Record<string, unknown>[]> {
     const items: Record<string, unknown>[] = [];
     let cursor: string | null = null;
@@ -341,6 +395,14 @@ function parseTask(raw: Record<string, unknown>): RawTask {
     updatedAt: stringOrEmpty(raw.updated_at),
     completedAt: nullableString(raw.completed_at),
   };
+}
+
+function dedupeById(tasks: readonly RawTask[]): RawTask[] {
+  const byId = new Map<string, RawTask>();
+  for (const task of tasks) {
+    byId.set(task.id, task);
+  }
+  return [...byId.values()];
 }
 
 function parseSection(raw: Record<string, unknown>): RawSection {

@@ -129,7 +129,7 @@ describe('CoreBaselineStoreAdapter — the core baseline store', () => {
         'conformance',
         new Baseline('Done', false),
       ),
-    ).rejects.toThrow(/forbidden baseline key/);
+    ).rejects.toThrow(/forbidden storage key/);
 
     expect(Object.prototype.hasOwnProperty('Status')).toBe(false);
   });

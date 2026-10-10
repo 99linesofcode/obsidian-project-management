@@ -75,6 +75,10 @@ class RecordingOrigin implements OriginPort {
     });
   }
 
+  async readTask(): Promise<CanonicalTask | null> {
+    return null;
+  }
+
   async applyField(): Promise<void> {}
 
   async trash(): Promise<void> {}

@@ -2,7 +2,15 @@ import type { CanonicalField } from '../../core/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/data/CapturedProject.js';
+import { ProjectActivityObservation } from '../../core/data/ProjectActivityObservation.js';
+import { ProjectAddressing } from '../../core/data/ProjectAddressing.js';
+import { ProjectCandidate } from '../../core/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../core/data/ProjectDiscovery.js';
+import { ProjectState } from '../../core/data/ProjectState.js';
+import { ProjectSummary } from '../../core/data/ProjectSummary.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
+import type { ProjectSetupPort } from '../../core/ports/ProjectSetupPort.js';
 import type {
   CodeHostResponse,
   CodeHostTransport,
@@ -172,7 +180,8 @@ const VIEWER_BOARDS_QUERY = `
         nodes {
           id
           title
-          repositories(first: 1) { nodes { id } }
+          createdAt
+          repositories(first: 100) { nodes { url } }
         }
       }
     }
@@ -225,6 +234,30 @@ const SET_PROJECT_CLOSED_MUTATION = `
   mutation SetProjectClosed($projectId: ID!, $closed: Boolean!) {
     updateProjectV2(input: { projectId: $projectId, closed: $closed }) {
       projectV2 { id }
+    }
+  }
+`;
+
+const RENAME_PROJECT_MUTATION = `
+  mutation RenameProject($projectId: ID!, $title: String!) {
+    updateProjectV2(input: { projectId: $projectId, title: $title }) {
+      projectV2 { id }
+    }
+  }
+`;
+
+const LOCK_TASK_MUTATION = `
+  mutation LockTask($nodeId: ID!) {
+    lockLockable(input: { lockableId: $nodeId }) {
+      lockedRecord { ... on Issue { locked } }
+    }
+  }
+`;
+
+const UNLOCK_TASK_MUTATION = `
+  mutation UnlockTask($nodeId: ID!) {
+    unlockLockable(input: { lockableId: $nodeId }) {
+      unlockedRecord { ... on Issue { locked } }
     }
   }
 `;
@@ -293,17 +326,23 @@ interface BoardSnapshot {
   cards: Map<string, RawCard>;
 }
 
-export class CodeHostMirrorAdapter implements MirrorAdapter {
-  private readonly target: CodeHostTarget;
+export class CodeHostMirrorAdapter
+  implements MirrorAdapter, ProjectSetupPort
+{
+  private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
   constructor(
     private readonly transport: CodeHostTransport,
-    target: string,
+    target = '',
     private readonly boardIdentity?: () => Promise<BoardIdentity | null>,
     private readonly statusOptions: readonly string[] = [],
   ) {
-    this.target = CodeHostTarget.parse(target);
+    this.rawTarget = target;
+  }
+
+  private get target(): CodeHostTarget {
+    return CodeHostTarget.parse(this.rawTarget);
   }
 
   private board(repoUrl: string): Promise<BoardIdentity | null> {
@@ -392,19 +431,25 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     return createdProjectId(created);
   }
 
-  private async ensureStatusField(projectId: string): Promise<StatusField> {
+  private async ensureStatusField(
+    projectId: string,
+    statusOptions: readonly string[],
+  ): Promise<StatusField> {
     const data = await this.graphql(PROJECT_FIELDS_QUERY, { projectId });
     const existing = statusField(data.node);
     if (existing !== null) {
       return existing;
     }
-    return this.createStatusField(projectId);
+    return this.createStatusField(projectId, statusOptions);
   }
 
-  private async createStatusField(projectId: string): Promise<StatusField> {
+  private async createStatusField(
+    projectId: string,
+    statusOptions: readonly string[],
+  ): Promise<StatusField> {
     const created = await this.graphql(CREATE_STATUS_FIELD_MUTATION, {
       projectId,
-      options: this.statusOptions.map((name) => ({
+      options: statusOptions.map((name) => ({
         name,
         color: 'GRAY',
         description: '',
@@ -443,11 +488,8 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     const repositoryId = await this.repoNodeId(repo);
     const projectId =
       (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
-    await this.graphql(LINK_BOARD_MUTATION, {
-      projectId,
-      repositoryId,
-    });
-    const status = await this.ensureStatusField(projectId);
+    await this.linkBoard(projectId, repositoryId);
+    const status = await this.ensureStatusField(projectId, this.statusOptions);
     this.boards.set(
       connection.repoUrl,
       Promise.resolve({
@@ -463,6 +505,13 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     });
   }
 
+  private async linkBoard(
+    projectId: string,
+    repositoryId: string,
+  ): Promise<void> {
+    await this.graphql(LINK_BOARD_MUTATION, { projectId, repositoryId });
+  }
+
   async setArchived(target: string, archived: boolean): Promise<void> {
     const connection = CodeHostTarget.parse(target);
     const board = await this.requireBoard(connection.repoUrl);
@@ -472,8 +521,199 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     });
   }
 
+  async renameProject(target: string, name: string): Promise<void> {
+    const connection = CodeHostTarget.parse(target);
+    const board = await this.requireBoard(connection.repoUrl);
+    await this.graphql(RENAME_PROJECT_MUTATION, {
+      projectId: board.projectNodeId,
+      title: name,
+    });
+  }
+
+  async lockTask(handle: string): Promise<void> {
+    const nodeId = await this.issueNodeId(handle);
+    await this.graphql(LOCK_TASK_MUTATION, { nodeId });
+  }
+
+  async unlockTask(handle: string): Promise<void> {
+    const nodeId = await this.issueNodeId(handle);
+    await this.graphql(UNLOCK_TASK_MUTATION, { nodeId });
+  }
+
   async archivedTime(_target: string): Promise<string | null> {
     return null;
+  }
+
+  async discoverProjects(target: string): Promise<ProjectDiscovery> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const data = await this.graphql(REPO_BOARDS_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+    });
+    const repository = data.repository;
+    if (!isRecord(repository) || typeof repository.id !== 'string') {
+      throw new Error(
+        `code host: repository ${repo.owner}/${repo.name} not found`,
+      );
+    }
+    const projects = nodesOf(repository, 'projectsV2')
+      .filter(isRecord)
+      .flatMap(parseRepoBoard)
+      .map(
+        (board) =>
+          new ProjectSummary({
+            handle: board.projectNodeId,
+            name: board.name,
+          }),
+      );
+    return new ProjectDiscovery({ targetHandle: repository.id, projects });
+  }
+
+  async readProjectAddressing(
+    project: ProjectSummary,
+  ): Promise<ProjectAddressing | null> {
+    const data = await this.graphql(PROJECT_FIELDS_QUERY, {
+      projectId: project.handle,
+    });
+    const node = data.node;
+    if (!isRecord(node) || typeof node.id !== 'string') {
+      return null;
+    }
+    const status = statusField(node);
+    if (status === null) {
+      throw new Error(`code host: project ${project.handle} has no Status field`);
+    }
+    return new ProjectAddressing({
+      projectHandle: project.handle,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  async createProjectWithStatus(
+    target: string,
+    name: string,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const repositoryId = await this.repoNodeId(repo);
+    const projectId =
+      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
+    await this.linkBoard(projectId, repositoryId);
+    const status = await this.ensureStatusField(projectId, statusOptions);
+    return new ProjectAddressing({
+      projectHandle: projectId,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  async adoptProject(
+    target: string,
+    project: ProjectSummary,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const repositoryId = await this.repoNodeId(repo);
+    const status = await this.ensureStatusField(project.handle, statusOptions);
+    await this.linkBoard(project.handle, repositoryId);
+    return new ProjectAddressing({
+      projectHandle: project.handle,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  async listProjects(): Promise<readonly ProjectCandidate[]> {
+    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
+    return nodesOf(data.viewer, 'projectsV2')
+      .filter(isRecord)
+      .flatMap((node) =>
+        typeof node.id === 'string'
+          ? [
+              new ProjectCandidate({
+                project: new ProjectSummary({
+                  handle: node.id,
+                  name: typeof node.title === 'string' ? node.title : '',
+                }),
+                targets: repoUrlsOf(node),
+              }),
+            ]
+          : [],
+      );
+  }
+
+  async probeProjects(
+    handles: readonly string[],
+  ): Promise<readonly ProjectState[]> {
+    if (handles.length === 0) {
+      return [];
+    }
+    const variables: Record<string, string> = {};
+    const selections = handles.map((id, index) => {
+      variables[`id${index}`] = id;
+      return `p${index}: node(id: $id${index}) { ... on ProjectV2 { id updatedAt closed } }`;
+    });
+    const declarations = handles
+      .map((_, index) => `$id${index}: ID!`)
+      .join(', ');
+    const query = `query ProjectStates(${declarations}) {\n  ${selections.join('\n  ')}\n}`;
+    const data = await this.graphql(query, variables);
+    return Object.values(data).flatMap((raw) =>
+      isRecord(raw) &&
+      typeof raw.id === 'string' &&
+      typeof raw.updatedAt === 'string' &&
+      typeof raw.closed === 'boolean'
+        ? [
+            new ProjectState({
+              handle: raw.id,
+              updatedAt: raw.updatedAt,
+              archived: raw.closed,
+            }),
+          ]
+        : [],
+    );
+  }
+
+  async latestActivity(
+    target: string,
+    etag?: string,
+  ): Promise<ProjectActivityObservation> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const path = `/repos/${repo.owner}/${repo.name}/issues?state=all&sort=created&direction=desc&per_page=10`;
+    const response = await this.transport.getConditional(path, etag);
+    if (response.status === 304) {
+      return new ProjectActivityObservation({
+        changed: false,
+        newestCreatedAt: null,
+        etag: null,
+      });
+    }
+    if (response.status !== 200) {
+      throw new Error(
+        `code host: REST request failed with status ${response.status}`,
+      );
+    }
+    if (!Array.isArray(response.json)) {
+      throw new Error('code host: unexpected REST response shape');
+    }
+    const issues = response.json
+      .filter(isRecord)
+      .filter((entry) => !('pull_request' in entry));
+    const newest = issues[0];
+    const newestCreatedAt =
+      newest !== undefined && typeof newest.created_at === 'string'
+        ? newest.created_at
+        : null;
+    return new ProjectActivityObservation({
+      changed: true,
+      newestCreatedAt,
+      etag: response.etag ?? null,
+    });
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
@@ -574,6 +814,21 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
       .filter((issue) => issue.state === 'open' && !hasTypeLabel(issue.labels))
       .map((issue) =>
         toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null),
+      );
+  }
+
+  async captureProjects(): Promise<CapturedProject[]> {
+    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
+    return nodesOf(data.viewer, 'projectsV2')
+      .filter(isRecord)
+      .map(
+        (node) =>
+          new CapturedProject({
+            name: typeof node.title === 'string' ? node.title : '',
+            targets: repoUrlsOf(node),
+            createdAt:
+              typeof node.createdAt === 'string' ? node.createdAt : null,
+          }),
       );
   }
 
@@ -893,6 +1148,16 @@ function nodesOf(container: unknown, key: string): unknown[] {
     return [];
   }
   return inner.nodes;
+}
+
+function repoUrlsOf(node: Record<string, unknown>): readonly string[] {
+  return nodesOf(node, 'repositories')
+    .filter(isRecord)
+    .flatMap((repository) =>
+      typeof repository.url === 'string' && repository.url !== ''
+        ? [repository.url]
+        : [],
+    );
 }
 
 function parseRepoBoard(node: Record<string, unknown>): RepoBoard[] {

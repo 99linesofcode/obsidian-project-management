@@ -161,6 +161,43 @@ describe('VaultOriginAdapter — the origin read (F02 NWM-28)', () => {
     expect(observed.current).toBeNull();
     expect(observed.fieldTime).toBeNull();
   });
+
+  it('reads the whole note as the canonical task for materialization', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, NOTE, MTIME);
+
+    const task = await adapter.readTask(NOTE_PATH);
+
+    expect(task).toEqual(
+      new CanonicalTask({
+        handle: NOTE_PATH,
+        entityId: NOTE_PATH,
+        title: 'fix the bug',
+        body: 'Body text',
+        status: 'Building',
+        completed: true,
+        parent: null,
+        labels: ['alpha', 'beta'],
+      }),
+    );
+  });
+
+  it('reports a note without a type as no task', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(
+      NOTE_PATH,
+      ['---', 'status: Building', '---', 'Body text'].join('\n'),
+      MTIME,
+    );
+
+    expect(await adapter.readTask(NOTE_PATH)).toBeNull();
+  });
+
+  it('reports an absent note as no task', async () => {
+    const { adapter } = setup();
+
+    expect(await adapter.readTask('Projecten/Acme/taken/gone.md')).toBeNull();
+  });
 });
 
 describe('VaultOriginAdapter — the origin write (F02 NWM-3)', () => {

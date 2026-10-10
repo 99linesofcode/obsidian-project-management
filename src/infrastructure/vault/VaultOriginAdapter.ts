@@ -2,10 +2,12 @@ import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
 import type { CanonicalField } from '../../core/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../core/data/CanonicalTask.js';
 import { OriginObservation } from '../../core/data/OriginObservation.js';
 import type { OriginPort } from '../../core/ports/OriginPort.js';
 
 interface TaskNote {
+  type: string;
   title: string;
   status: string;
   body: string;
@@ -37,6 +39,28 @@ export class VaultOriginAdapter implements OriginPort {
       currentCompleted: note.completed,
       fieldTime: new Date(file.stat.mtime).toISOString(),
       trustworthy: true,
+    });
+  }
+
+  async readTask(handle: string): Promise<CanonicalTask | null> {
+    const file = this.app.vault.getAbstractFileByPath(handle);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+
+    const note = parseTaskNote(await this.app.vault.read(file), handle);
+    if (note.type === '') {
+      return null;
+    }
+    return new CanonicalTask({
+      handle,
+      entityId: handle,
+      title: note.title,
+      body: note.body,
+      status: note.status,
+      completed: note.completed,
+      parent: null,
+      labels: note.labels,
     });
   }
 
@@ -87,6 +111,7 @@ export class VaultOriginAdapter implements OriginPort {
 function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
   return {
+    type: fields.get('type') ?? '',
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
     body: bodyOf(content),

@@ -18,36 +18,26 @@ import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
 import { CreateTaskNoteAction } from './tasks/CreateTaskNoteAction.js';
-import { ApplyTaskToGithubAction } from './github/ApplyTaskToGithubAction.js';
-import { ApplyTaskToTodoistAction } from './todoist/ApplyTaskToTodoistAction.js';
-import { ApplyTaskToVaultAction } from './tasks/ApplyTaskToVaultAction.js';
-import { ApplyTodoistCompletionAction } from './todoist/ApplyTodoistCompletionAction.js';
-import { ApplyTodoistRemoteChangesAction } from './todoist/ApplyTodoistRemoteChangesAction.js';
-import { BoardStatusAction } from './projects/BoardStatusAction.js';
-import { CaptureTodoistCreationsAction } from './todoist/CaptureTodoistCreationsAction.js';
-import { CaptureRemoteProjectsAction } from './projects/CaptureRemoteProjectsAction.js';
+import type { CaptureResult } from './projects/CaptureRemoteProjectsAction.js';
+import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
+import { CaptureTasksAction } from './core/CaptureTasksAction.js';
+import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
+import { VaultTaskCaptureAdapter } from './infrastructure/vault/VaultTaskCaptureAdapter.js';
+import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
+import type { CaptureSource } from './core/ports/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
-import { EnsureTodoistSectionsAction } from './todoist/EnsureTodoistSectionsAction.js';
 import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
-import { PropagateStatusAction } from './tasks/PropagateStatusAction.js';
 import { PromoteIssueAction } from './tasks/PromoteIssueAction.js';
 import { PromoteCardAction } from './tasks/PromoteCardAction.js';
 import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
-import { PropagateTodoistDeletionsAction } from './todoist/PropagateTodoistDeletionsAction.js';
 import { ReconcileProjectLifecycleAction } from './projects/ReconcileProjectLifecycleAction.js';
 import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
-import { RelinkRenamedTodoAction } from './todoist/RelinkRenamedTodoAction.js';
-import { RelocateTaskStatusAction } from './tasks/RelocateTaskStatusAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
-import { SyncGithubTasksAction } from './github/SyncGithubTasksAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
-import type { SyncHalfFactory } from './sync/SyncHalves.js';
-import { SyncTodoistTasksAction } from './todoist/SyncTodoistTasksAction.js';
-import { VerdictResolver } from './shared/VerdictResolver.js';
 import { GitHubAdapter, type Transport } from './github/GitHubAdapter.js';
 import { VaultAdapter } from './vault/VaultAdapter.js';
 import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
@@ -88,7 +78,13 @@ import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMi
 import type { TaskManagerTransport } from './infrastructure/todoist/TaskManagerTransport.js';
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
 import type { TaskFieldReconciler } from './sync/TaskFieldReconciler.js';
+import type { TaskCaptureReconciler } from './sync/TaskCaptureReconciler.js';
 import type { ProjectLifecycleReconciler } from './sync/ProjectLifecycleReconciler.js';
+import type { ProjectTaskLocksReconciler } from './sync/ProjectTaskLocksReconciler.js';
+import type { ProjectReactivationReconciler } from './sync/ProjectReactivationReconciler.js';
+import { ReconcileProjectTaskLocksAction } from './core/ReconcileProjectTaskLocksAction.js';
+import { ReactivateFrozenProjectAction } from './core/ReactivateFrozenProjectAction.js';
+import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
 
 async function request(
   token: string,
@@ -115,6 +111,24 @@ function createCodeHostTransport(token: string): CodeHostTransport {
   return {
     post: (body) => request(token, 'POST', '/graphql', body),
     get: (path) => request(token, 'GET', path),
+    async getConditional(path, etag) {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (etag) {
+        headers['If-None-Match'] = etag;
+      }
+      const response = await requestUrl({
+        url: `https://api.github.com${path}`,
+        method: 'GET',
+        headers,
+        throw: false,
+      });
+      const responseEtag = response.headers['etag'];
+      return responseEtag === undefined
+        ? { status: response.status, json: response.json }
+        : { status: response.status, json: response.json, etag: responseEtag };
+    },
     patch: (path, body) => request(token, 'PATCH', path, body),
     postPath: (path, body) => request(token, 'POST', path, body),
     putPath: (path, body) => request(token, 'PUT', path, body),
@@ -148,9 +162,17 @@ function createTransport(token: string): Transport {
   };
 }
 
+interface ProjectCaptureReconciler {
+  capture(syncedAt: string): Promise<CaptureResult>;
+}
+
 interface CoreReconcilers {
   taskFields: TaskFieldReconciler;
   lifecycle: ProjectLifecycleReconciler;
+  taskLocks: ProjectTaskLocksReconciler;
+  reactivation: ProjectReactivationReconciler;
+  capture: ProjectCaptureReconciler;
+  taskCapture: TaskCaptureReconciler;
 }
 
 function composeCoreReconcilers(
@@ -159,6 +181,7 @@ function composeCoreReconcilers(
   syncState: SyncStateAdapter,
   secrets: SecretStore,
   baselineStorage: CoreBaselineStorage,
+  createTaskNote: CreateTaskNoteAction,
 ): CoreReconcilers {
   const codeHostTransport = createCodeHostTransport(
     secrets.load(GITHUB_TOKEN_KEY) ?? '',
@@ -177,19 +200,52 @@ function composeCoreReconcilers(
     plugin.settings.statusOptions,
   );
 
+  const origin = new VaultOriginAdapter(plugin.app);
+  const handles = new RegistryMirrorHandleAdapter(syncState);
   const taskFieldPass = new AssembleProjectPassAction(
     projectSource,
-    new VaultOriginAdapter(plugin.app),
+    origin,
     baselines,
-    new RegistryMirrorHandleAdapter(syncState),
+    handles,
     mirrorAdapters,
   );
+  const lifecycleOrigin = new VaultProjectLifecycleAdapter(vault, syncState);
   const lifecyclePass = new AssembleProjectLifecyclePassAction(
     projectSource,
-    new VaultProjectLifecycleAdapter(vault, syncState),
+    lifecycleOrigin,
     baselines,
     mirrorAdapters,
     new RegistryMirrorProjectAdapter(syncState),
+  );
+  const taskLocks = new ReconcileProjectTaskLocksAction(
+    projectSource,
+    origin,
+    handles,
+    mirrorAdapters,
+    plugin.settings.doneOptionName,
+  );
+  const reactivation = new ReactivateFrozenProjectAction(
+    projectSource,
+    lifecycleOrigin,
+    baselines,
+    mirrorAdapters,
+    new CoreProjectWatchAdapter(baselineStorage),
+  );
+
+  const capture = new CaptureProjectsAction(
+    mirrorAdapters,
+    new VaultProjectCaptureAdapter(vault),
+    new RegistryProjectCursorAdapter(syncState),
+  );
+  const captureTasks = new CaptureTasksAction(
+    projectSource,
+    mirrorAdapters,
+    new VaultTaskCaptureAdapter(
+      vault,
+      syncState,
+      createTaskNote,
+      (application) => application === 'github',
+    ),
   );
 
   return {
@@ -199,9 +255,24 @@ function composeCoreReconcilers(
       },
     },
     lifecycle: {
-      reconcile: async (project) => ({
-        frozen: (await lifecyclePass.invoke(project)).frozen,
-      }),
+      reconcile: async (project) => {
+        const record = await lifecyclePass.invoke(project);
+        return { frozen: record.frozen, wasFrozen: record.wasFrozen };
+      },
+    },
+    taskLocks: {
+      reconcile: (input) => taskLocks.invoke(input),
+    },
+    reactivation: {
+      reactivate: (project) => reactivation.invoke(project),
+    },
+    capture: {
+      capture: (syncedAt) => capture.invoke(syncedAt),
+    },
+    taskCapture: {
+      capture: async (project, syncedAt) => {
+        await captureTasks.invoke(project, syncedAt);
+      },
     },
   };
 }
@@ -212,6 +283,7 @@ function mirrorAdapterFactory(
   taskManager: TaskManagerTransport,
   statusOptions: readonly string[],
 ): MirrorAdapterFactoryPort {
+  const captureSources = buildCaptureSources(codeHost, taskManager);
   return {
     create: (application, target, connectionSlug, projectName) =>
       createMirrorAdapter(
@@ -222,7 +294,27 @@ function mirrorAdapterFactory(
         taskManager,
         statusOptions,
       ),
+    captureSources: () => captureSources,
   };
+}
+
+function buildCaptureSources(
+  codeHost: CodeHostTransport,
+  taskManager: TaskManagerTransport,
+): readonly CaptureSource[] {
+  const sources: CaptureSource[] = [];
+  const registrations: Array<[string, AdapterDescriptor, MirrorAdapter]> = [
+    ['todoist', todoistDescriptor(), new TaskManagerMirrorAdapter(taskManager)],
+    ['github', githubDescriptor(), new CodeHostMirrorAdapter(codeHost)],
+  ];
+  for (const [application, descriptor, adapter] of registrations) {
+    const registered = gateMirror(descriptor, adapter);
+    const capture = registered?.projectCapture;
+    if (capture !== undefined) {
+      sources.push({ application, capture });
+    }
+  }
+  return sources;
 }
 
 function createMirrorAdapter(
@@ -267,7 +359,7 @@ function composePlugin(
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
-  captureRemoteProjects: CaptureRemoteProjectsAction;
+  projectCapture: () => Promise<CaptureResult>;
   seedArtifacts: SeedVaultArtifactsAction;
   seedTypeLabels: SeedTypeLabelsAction;
   adapters: RegistrationResult;
@@ -283,41 +375,29 @@ function composePlugin(
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
   const github = new GitHubAdapter(transport);
+  const codeHostSetup = new CodeHostMirrorAdapter(
+    createCodeHostTransport(secrets.load(GITHUB_TOKEN_KEY) ?? ''),
+  );
   const seedTypeLabels = new SeedTypeLabelsAction(github);
   const createTaskNote = new CreateTaskNoteAction(
     vault,
     syncState,
     plugin.settings.taskTemplatePath,
   );
-  const boardStatus = new BoardStatusAction(syncState, github);
-  const propagateStatus = new PropagateStatusAction(
-    github,
-    syncState,
-    boardStatus,
-    plugin.settings.doneOptionName,
-  );
   const handleDeletedNote = new HandleDeletedNoteAction(
     syncState,
     github,
     plugin.settings.doneOptionName,
   );
-  const applyTaskToGithub = new ApplyTaskToGithubAction(github, syncState);
   const completeTaskCascade = new CompleteTaskCascadeAction(
     vault,
     plugin.settings.doneOptionName,
   );
-  const applyTaskToVault = new ApplyTaskToVaultAction(
-    vault,
-    syncState,
-    createTaskNote,
-    plugin.settings.taskTemplatePath,
-    completeTaskCascade,
-  );
   const discoverProjects = new DiscoverProjectsAction(
     vault,
-    new AttachProjectAction(github),
+    new AttachProjectAction(codeHostSetup),
   );
-  const probeProjects = new ProbeProjectsAction(github, syncState);
+  const probeProjects = new ProbeProjectsAction(codeHostSetup, syncState);
 
   const todoist = new TodoistAdapter(
     transportFromSecret(secrets, TODOIST_TOKEN_KEY, createTodoistTransport),
@@ -329,50 +409,15 @@ function composePlugin(
     syncState,
     plugin.settings.doneOptionName,
   );
-  const applyTaskToTodoist = new ApplyTaskToTodoistAction(todoist, syncState);
-  const applyTodoistCompletion = new ApplyTodoistCompletionAction(
-    vault,
-    syncState,
-    applyTaskToVault,
-    plugin.settings.doneOptionName,
-  );
-  const propagateTodoistDeletions = new PropagateTodoistDeletionsAction(
-    todoist,
-    vault,
-    syncState,
-  );
 
   const syncChecklist = new SyncChecklistAction(
     vault,
     plugin.settings.todoTemplatePath,
   );
   const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
-  const relinkRenamedTodo = new RelinkRenamedTodoAction(vault, syncState);
-  const relocateTaskStatus = new RelocateTaskStatusAction(syncState);
 
-  const applyTodoistRemoteChanges = new ApplyTodoistRemoteChangesAction(
-    vault,
-    syncState,
-    propagateStatus,
-    relocateTaskStatus,
-    relinkRenamedTodo,
-    plugin.settings.doneOptionName,
-  );
-  const captureTodoistCreations = new CaptureTodoistCreationsAction(
-    vault,
-    syncState,
-    plugin.settings.todoTemplatePath,
-    plugin.settings.doneOptionName,
-  );
-  const captureRemoteProjects = new CaptureRemoteProjectsAction(
-    github,
-    todoist,
-    vault,
-    syncState,
-    plugin.settings.doneOptionName,
-  );
   const ensureProjectBoard = new EnsureProjectBoardAction(
-    github,
+    codeHostSetup,
     syncState,
     plugin.settings.statusOptions,
   );
@@ -399,67 +444,35 @@ function composePlugin(
   );
   promoteCardToIssue.register(plugin);
 
-  const halfFactory: SyncHalfFactory = {
-    create: (slug, connection) => {
-      if (connection.tool === 'github') {
-        return new SyncGithubTasksAction(
-          slug,
-          github,
-          syncState,
-          vault,
-          applyTaskToGithub,
-          applyTaskToVault,
-          new VerdictResolver(plugin.settings.doneOptionName),
-          plugin.settings.doneOptionName,
-        );
-      }
-      if (connection.tool === 'todoist') {
-        return new SyncTodoistTasksAction(
-          slug,
-          connection.project,
-          todoist,
-          github,
-          vault,
-          syncState,
-          new EnsureTodoistSectionsAction(todoist),
-          applyTaskToTodoist,
-          applyTodoistRemoteChanges,
-          captureTodoistCreations,
-          applyTodoistCompletion,
-          propagateTodoistDeletions,
-          plugin.settings.doneOptionName,
-        );
-      }
-      return null;
-    },
-  };
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
   let composedCoreReconcilers: CoreReconcilers | undefined;
-  const coreReconcilers = (): CoreReconcilers | undefined => {
-    if (!plugin.settings.multiAdapterEngine) {
-      return undefined;
-    }
+  const coreReconcilers = (): CoreReconcilers => {
     composedCoreReconcilers ??= composeCoreReconcilers(
       plugin,
       vault,
       syncState,
       secrets,
       baselineStorage,
+      createTaskNote,
     );
     return composedCoreReconcilers;
   };
-  const taskFieldReconciler = (): TaskFieldReconciler | undefined =>
-    coreReconcilers()?.taskFields;
-  const projectLifecycleReconciler = ():
-    | ProjectLifecycleReconciler
-    | undefined => coreReconcilers()?.lifecycle;
+  const taskFieldReconciler = (): TaskFieldReconciler =>
+    coreReconcilers().taskFields;
+  const projectLifecycleReconciler = (): ProjectLifecycleReconciler =>
+    coreReconcilers().lifecycle;
+  const taskCaptureReconciler = (): TaskCaptureReconciler =>
+    coreReconcilers().taskCapture;
+  const projectTaskLocksReconciler = (): ProjectTaskLocksReconciler =>
+    coreReconcilers().taskLocks;
+  const projectReactivationReconciler = (): ProjectReactivationReconciler =>
+    coreReconcilers().reactivation;
   const syncProject = new SyncProjectAction(
     vault,
     syncState,
     probeProjects,
     reconcileProjectLifecycle,
     detectNoteRenames,
-    halfFactory,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
@@ -468,32 +481,35 @@ function composePlugin(
     new RekeyRenamedConnectionsAction(syncState),
     taskFieldReconciler,
     projectLifecycleReconciler,
+    taskCaptureReconciler,
+    projectTaskLocksReconciler,
+    projectReactivationReconciler,
   );
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,
     );
   });
+  const projectCapture = (): Promise<CaptureResult> =>
+    coreReconcilers().capture.capture(new Date().toISOString());
   const scheduler = new SyncScheduler(
     vault,
     queue,
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
     () =>
-      captureRemoteProjects
-        .execute({ syncedAt: new Date().toISOString() })
-        .then((result) => {
-          if (result.errors.length > 0) {
-            console.error('Project capture collected errors', result.errors);
-          }
-          return result.captured;
-        }),
+      projectCapture().then((result) => {
+        if (result.errors.length > 0) {
+          console.error('Project capture collected errors', result.errors);
+        }
+        return result.captured;
+      }),
   );
 
   return {
     scheduler,
     discoverProjects,
-    captureRemoteProjects,
+    projectCapture,
     seedArtifacts,
     seedTypeLabels,
     adapters: registerAdapters([
@@ -549,7 +565,7 @@ export default class ProjectManagementPlugin extends Plugin {
     const {
       scheduler,
       discoverProjects,
-      captureRemoteProjects,
+      projectCapture,
       seedArtifacts,
       seedTypeLabels,
       adapters,
@@ -561,11 +577,7 @@ export default class ProjectManagementPlugin extends Plugin {
     this.addChild(scheduler);
 
     this.app.workspace.onLayoutReady(() => {
-      void this.discoverAndSync(
-        discoverProjects,
-        syncState,
-        captureRemoteProjects,
-      );
+      void this.discoverAndSync(discoverProjects, syncState, projectCapture);
     });
 
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
@@ -574,7 +586,7 @@ export default class ProjectManagementPlugin extends Plugin {
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
     syncState: SyncStateAdapter,
-    captureRemoteProjects: CaptureRemoteProjectsAction,
+    projectCapture: () => Promise<CaptureResult>,
   ): Promise<void> {
     try {
       const { projects, errors } = await discoverProjects.execute();
@@ -591,9 +603,7 @@ export default class ProjectManagementPlugin extends Plugin {
           `Project discovery: ${errors.length} project(s) could not be attached`,
         );
       }
-      const capture = await captureRemoteProjects.execute({
-        syncedAt: new Date().toISOString(),
-      });
+      const capture = await projectCapture();
       if (capture.errors.length > 0) {
         new Notice(
           `Project capture: ${capture.errors.length} board(s) could not be captured`,

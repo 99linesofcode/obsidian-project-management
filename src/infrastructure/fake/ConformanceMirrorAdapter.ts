@@ -2,16 +2,24 @@ import type { CanonicalField } from '../../core/canonicalField.js';
 import { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/data/CapturedProject.js';
+import { ProjectActivityObservation } from '../../core/data/ProjectActivityObservation.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 
 export class ConformanceMirrorAdapter implements MirrorAdapter {
   private readonly tasks = new Map<string, CanonicalTask>();
   private readonly archived = new Map<string, boolean>();
+  private readonly names = new Map<string, string>();
+  private readonly activities = new Map<string, ProjectActivityObservation>();
   private readonly projectTimes = new Map<string, string>();
   private readonly missingProjects = new Set<string>();
   private readonly absentProjects = new Set<string>();
   private readonly throwingProjects = new Set<string>();
+  private readonly throwingTasks = new Set<string>();
+  private readonly throwingLocks = new Set<string>();
   readonly createCalls: string[] = [];
+  readonly createTaskCalls: string[] = [];
+  readonly lockedHandles = new Set<string>();
   private readonly fieldTimes = new Map<
     string,
     Partial<Record<CanonicalField, string>>
@@ -25,6 +33,14 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
     this.archived.set(target, archived);
   }
 
+  seedProjectName(target: string, name: string): void {
+    this.names.set(target, name);
+  }
+
+  seedActivity(target: string, observation: ProjectActivityObservation): void {
+    this.activities.set(target, observation);
+  }
+
   seedMissingProject(target: string): void {
     this.missingProjects.add(target);
   }
@@ -35,6 +51,14 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
 
   seedThrowingProject(target: string): void {
     this.throwingProjects.add(target);
+  }
+
+  seedThrowingTask(target: string): void {
+    this.throwingTasks.add(target);
+  }
+
+  seedThrowingLock(handle: string): void {
+    this.throwingLocks.add(handle);
   }
 
   setProjectTime(target: string, time: string | null): void {
@@ -80,7 +104,12 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
   async createProject(target: string, name: string): Promise<CanonicalProject> {
     this.createCalls.push(target);
     this.absentProjects.delete(target);
+    this.names.set(target, name);
     return new CanonicalProject({ handle: target, name, archived: false });
+  }
+
+  async renameProject(target: string, name: string): Promise<void> {
+    this.names.set(target, name);
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
@@ -91,10 +120,21 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
     return this.projectTimes.get(target) ?? null;
   }
 
+  async latestActivity(target: string): Promise<ProjectActivityObservation> {
+    return (
+      this.activities.get(target) ??
+      new ProjectActivityObservation({
+        changed: false,
+        newestCreatedAt: null,
+        etag: null,
+      })
+    );
+  }
+
   private readProjectSync(target: string): CanonicalProject {
     return new CanonicalProject({
       handle: target,
-      name: target,
+      name: this.names.get(target) ?? target,
       archived: this.archived.get(target) ?? false,
     });
   }
@@ -107,7 +147,14 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
     return this.tasks.get(handle) ?? null;
   }
 
-  async createTask(_target: string, task: CanonicalTask): Promise<CanonicalTask> {
+  async createTask(
+    target: string,
+    task: CanonicalTask,
+  ): Promise<CanonicalTask> {
+    if (this.throwingTasks.has(target)) {
+      throw new Error(`conformance: task creation for ${target} failed`);
+    }
+    this.createTaskCalls.push(task.handle);
     this.tasks.set(task.handle, task);
     return task;
   }
@@ -124,7 +171,25 @@ export class ConformanceMirrorAdapter implements MirrorAdapter {
     this.tasks.delete(handle);
   }
 
+  async lockTask(handle: string): Promise<void> {
+    if (this.throwingLocks.has(handle)) {
+      throw new Error(`conformance: lock for ${handle} failed`);
+    }
+    this.lockedHandles.add(handle);
+  }
+
+  async unlockTask(handle: string): Promise<void> {
+    if (this.throwingLocks.has(handle)) {
+      throw new Error(`conformance: unlock for ${handle} failed`);
+    }
+    this.lockedHandles.delete(handle);
+  }
+
   async capture(): Promise<CanonicalTask[]> {
+    return [];
+  }
+
+  async captureProjects(): Promise<CapturedProject[]> {
     return [];
   }
 

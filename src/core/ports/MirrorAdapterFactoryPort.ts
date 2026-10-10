@@ -1,4 +1,10 @@
 import type { RegisteredAdapter } from '../data/RegisteredAdapter.js';
+import type { ProjectCapturePort } from './ProjectCapturePort.js';
+
+export interface CaptureSource {
+  readonly application: string;
+  readonly capture: ProjectCapturePort;
+}
 
 export interface MirrorAdapterFactoryPort {
   create(
@@ -7,4 +13,5 @@ export interface MirrorAdapterFactoryPort {
     connectionSlug: string,
     projectName: string,
   ): RegisteredAdapter | null;
+  captureSources?(): readonly CaptureSource[];
 }
