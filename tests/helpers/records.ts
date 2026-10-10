@@ -1,7 +1,7 @@
-import { TaskData } from '../../src/core/TaskData.js';
-import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
-import type { MirrorItem } from '../../src/core/data/MirrorItem.js';
-import type { PortState } from '../../src/core/data/PortState.js';
+import { TaskData } from '../../src/domain/data/TaskData.js';
+import type { EntityRecord } from '../../src/domain/data/EntityRecord.js';
+import type { MirrorItem } from '../../src/domain/data/MirrorItem.js';
+import type { PortState } from '../../src/domain/data/PortState.js';
 
 export function taskData(overrides: Partial<TaskData> = {}): TaskData {
   return new TaskData({

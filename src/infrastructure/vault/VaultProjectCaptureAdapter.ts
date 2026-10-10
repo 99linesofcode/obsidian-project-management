@@ -1,7 +1,7 @@
-import { AdoptedProject } from '../../core/data/AdoptedProject.js';
-import type { CapturedProject } from '../../core/data/CapturedProject.js';
-import type { ProjectCaptureVaultPort } from '../../core/ports/ProjectCaptureVaultPort.js';
-import { projectHomePath } from '../../core/projectHomePath.js';
+import { AdoptedProject } from '../../domain/data/AdoptedProject.js';
+import type { CapturedProject } from '../../domain/data/CapturedProject.js';
+import type { ProjectCaptureVaultPort } from '../../domain/ports/ProjectCaptureVaultPort.js';
+import { projectHomePath } from '../../domain/projectHomePath.js';
 import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 
 export interface CaptureProjectNote {

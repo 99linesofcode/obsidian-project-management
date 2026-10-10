@@ -1,12 +1,12 @@
-import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js';
-import type { TaskData } from '../../src/core/TaskData.js';
-import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
-import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
-import type { MirrorItem } from '../../src/core/data/MirrorItem.js';
-import type { PortState } from '../../src/core/data/PortState.js';
-import type { ConnectionStatePort } from '../../src/core/ports/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../src/core/ports/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../src/core/ports/TrackedEntityPort.js';
+import type { ProjectIdentityData } from '../../src/domain/data/ProjectIdentityData.js';
+import type { TaskData } from '../../src/domain/data/TaskData.js';
+import { projectFromNotePath } from '../../src/domain/projectFromNotePath.js';
+import type { EntityRecord } from '../../src/domain/data/EntityRecord.js';
+import type { MirrorItem } from '../../src/domain/data/MirrorItem.js';
+import type { PortState } from '../../src/domain/data/PortState.js';
+import type { ConnectionStatePort } from '../../src/domain/ports/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../../src/domain/ports/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../../src/domain/ports/TrackedEntityPort.js';
 
 interface SeededMirror {
   handle: string;

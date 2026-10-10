@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AdoptedProject } from '../../../src/core/data/AdoptedProject.js';
-import { CapturedProject } from '../../../src/core/data/CapturedProject.js';
+import { AdoptedProject } from '../../../src/domain/data/AdoptedProject.js';
+import { CapturedProject } from '../../../src/domain/data/CapturedProject.js';
 import {
   VaultProjectCaptureAdapter,
   type CaptureVault,

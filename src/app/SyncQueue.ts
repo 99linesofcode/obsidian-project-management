@@ -1,4 +1,4 @@
-import type { SyncProjectAction } from '../sync/SyncProjectAction.js';
+import type { SyncProjectAction } from '../domain/actions/SyncProjectAction.js';
 
 export class SyncQueue {
   private readonly pending: string[] = [];

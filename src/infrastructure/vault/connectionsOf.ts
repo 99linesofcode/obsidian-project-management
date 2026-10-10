@@ -1,4 +1,4 @@
-import type { ConnectionData } from '../../core/ConnectionData.js';
+import type { ConnectionData } from '../../domain/data/ConnectionData.js';
 import { frontmatterLines } from './frontmatterLines.js';
 import { parseConnectionsBlock } from './parseConnectionsBlock.js';
 

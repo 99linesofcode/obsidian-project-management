@@ -5,7 +5,7 @@ import {
   type SettingDefinitionItem,
 } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
-import { isRecord } from '../../core/isRecord.js';
+import { isRecord } from '../../domain/isRecord.js';
 import { TokenSettings } from './TokenSettings.js';
 import { DEFAULT_SETTINGS } from './settings.js';
 import { SEED_ARTIFACTS, type SeedArtifact } from '../seedArtifacts.js';

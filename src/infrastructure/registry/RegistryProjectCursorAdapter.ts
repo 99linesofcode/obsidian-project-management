@@ -1,4 +1,4 @@
-import type { ProjectCaptureCursorPort } from '../../core/ports/ProjectCaptureCursorPort.js';
+import type { ProjectCaptureCursorPort } from '../../domain/ports/ProjectCaptureCursorPort.js';
 
 export interface ProjectCursorStore {
   getProjectCursor(portId: string): Promise<string | null>;

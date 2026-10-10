@@ -47,7 +47,7 @@ describe('the provider-vocabulary gate', () => {
 
   it('fails a lowercase provider name in the core', () => {
     const root = fixtureRoot({
-      'src/core/leak.ts': "export const applicationId = 'github';\n",
+      'src/domain/leak.ts': "export const applicationId = 'github';\n",
     });
 
     expect(gateExitCode(root)).not.toBe(0);
@@ -55,7 +55,7 @@ describe('the provider-vocabulary gate', () => {
 
   it('fails a capitalized provider name in the core', () => {
     const root = fixtureRoot({
-      'src/core/leak.ts': "export const provider = 'Todoist';\n",
+      'src/domain/leak.ts': "export const provider = 'Todoist';\n",
     });
 
     expect(gateExitCode(root)).not.toBe(0);
@@ -104,7 +104,7 @@ describe('the provider-vocabulary gate', () => {
 
   it('does not flag a lowercase provider value in a non-neutral module', () => {
     const root = fixtureRoot({
-      'src/sync/legacy.ts': "export const tool = 'todoist';\n",
+      'src/app/legacy.ts': "export const tool = 'todoist';\n",
     });
 
     expect(gateExitCode(root)).toBe(0);

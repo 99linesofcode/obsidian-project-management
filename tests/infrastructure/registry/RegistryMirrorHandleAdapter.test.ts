@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RegistryMirrorHandleAdapter } from '../../../src/infrastructure/registry/RegistryMirrorHandleAdapter.js';
-import type { EntityRecord } from '../../../src/core/data/EntityRecord.js';
-import type { MirrorItem } from '../../../src/core/data/MirrorItem.js';
-import type { TrackedEntityPort } from '../../../src/core/ports/TrackedEntityPort.js';
+import type { EntityRecord } from '../../../src/domain/data/EntityRecord.js';
+import type { MirrorItem } from '../../../src/domain/data/MirrorItem.js';
+import type { TrackedEntityPort } from '../../../src/domain/ports/TrackedEntityPort.js';
 
 class FakeRegistry implements TrackedEntityPort {
   private readonly entities = new Map<string, string>();

@@ -5,7 +5,7 @@ not against the design brief: where the two disagree, the code is described and
 the disagreement is called out in
 [Code-vs-brief discrepancies](#5-code-vs-brief-discrepancies).
 
-The engine is the multi-adapter core (`src/core/`) plus its driven adapters
+The engine is the multi-adapter core (`src/domain/`) plus its driven adapters
 (`src/infrastructure/`), wired by the composition root `src/main.ts`. The core
 names no provider: it reconciles canonical fields across an origin and any
 number of mirror sides through one pure N-way merge. A connection produces a
@@ -45,7 +45,7 @@ no machine id.
 
 ### The cast
 
-**The core (`src/core/`) names no provider.** It owns the capability
+**The core (`src/domain/`) names no provider.** It owns the capability
 vocabulary, the canonical DTOs, the one pure N-way merge, the descriptor and
 registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 
@@ -127,7 +127,7 @@ namespace per application.**
   never poisons.
 - **`SyncProjectAction`** — the chain. One work item (a project folder name) and
   one entry point; it drives the vault-maintenance `ProjectShell` and the
-  `CoreReconcilers` bundle (the five core reconcilers, all in `src/sync/`) in
+  `CoreReconcilers` bundle (the five core reconcilers, all in `src/domain/`) in
   order, and wraps every core step so one failure logs and skips that step.
 - **`ProjectShell`** — the vault-maintenance half of the chain: home-note
   migration, connection re-keying, board-ensure, rename recovery, vault
@@ -968,29 +968,34 @@ code is documented above; the brief's version is recorded here.
 
 ## 6. Where to start reading
 
-The tree is module-first; each module owns one surface of the system.
+The tree is one component in three layers (ADR 002); each layer owns one
+surface of the system.
 
 - The wiring and construction order: `src/main.ts` (`onload`, `composePlugin`,
   `composeCoreReconcilers`, `mirrorAdapterFactory`).
-- The core engine: `src/core/` (`mergeField`, `MirrorSyncAction`,
+- The core: `src/domain/` — the pure engine (`mergeField`, `MirrorSyncAction`,
   `AssembleProjectPassAction`, `AssembleProjectLifecyclePassAction`,
-  `ProjectLifecycleSyncAction`, `registerAdapters`, `AdapterDescriptor`, the
-  ports under `src/core/ports/`, the DTOs under `src/core/data/`).
-- The capture and lifecycle reconcilers: `src/core/CaptureProjectsAction.ts`,
+  `ProjectLifecycleSyncAction`, `registerAdapters`, `AdapterDescriptor`), the
+  ports under `src/domain/ports/`, the DTOs under `src/domain/data/`, and every
+  use case under `src/domain/actions/`.
+- The use cases folded in from the former concept modules: `src/domain/actions/`
+  holds the discovery/attach/board actions (former `projects/`), the chain and
+  shell (`SyncProjectAction`, `ProjectShell`, `DetectNoteRenamesAction`,
+  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`), the cascade
+  (`CompleteTaskCascadeAction`) and the checklist/to-do actions (former
+  `todos/`); the reconciler interfaces and `CoreReconcilers` sit loose in
+  `src/domain/`.
+- The capture and lifecycle actions: `src/domain/actions/CaptureProjectsAction.ts`,
   `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`,
   `ReactivateFrozenProjectAction.ts`.
+- The neutral note arithmetic: `src/domain/` (`Checklist`, `splitFrontmatter`,
+  `withBody`, `ToDoNoteMapper`/`ToDoNoteParser`, the affiliation helpers).
 - The driven adapters: `src/infrastructure/` (`vault/`, `github/`, `todoist/`,
-  `registry/`, `fake/`).
-- The chain and the shell: `src/sync/` (`SyncProjectAction`, `ProjectShell`,
-  `CoreReconcilers`, `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
-  `HandleDeletedNoteAction`, the five reconciler interfaces).
-- The registry: `src/registry/` (`SyncStateAdapter`, `SyncStateSchema`,
-  `loadDataSafely`).
-- The projects module: `src/projects/` (`DiscoverProjectsAction`,
-  `AttachProjectAction`, `EnsureProjectBoardAction`, `deriveBoardChoice`,
-  `MigrateProjectHomeNoteAction`, `RekeyRenamedConnectionsAction`).
-- The vault: `src/vault/` (`VaultAdapter`, `ToDoNoteMapper`/`ToDoNoteParser`);
-  the task-note codecs live with their consumers
-  (`src/core/TaskNoteMapper.ts`, `src/infrastructure/vault/CapturedTaskNoteMapper.ts`).
+  `registry/`, `fake/`). Only `infrastructure/vault/VaultAdapter.ts` touches the
+  Obsidian API; the note codecs are in the domain.
+- The registry: `src/infrastructure/registry/` (`SyncStateAdapter`,
+  `SyncStateSchema`, `loadDataSafely`).
+- The task-note codecs live with their consumers (`src/domain/TaskNoteMapper.ts`,
+  `src/infrastructure/vault/CapturedTaskNoteMapper.ts`).
 - The driving side: `src/app/` (`SyncScheduler`, `SyncQueue`, the settings
   module, `SeedVaultArtifactsAction`).

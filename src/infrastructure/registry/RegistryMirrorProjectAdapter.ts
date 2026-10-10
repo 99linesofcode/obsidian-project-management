@@ -1,5 +1,5 @@
-import type { ConnectionStatePort } from '../../core/ports/ConnectionStatePort.js';
-import type { MirrorProjectPort } from '../../core/ports/MirrorProjectPort.js';
+import type { ConnectionStatePort } from '../../domain/ports/ConnectionStatePort.js';
+import type { MirrorProjectPort } from '../../domain/ports/MirrorProjectPort.js';
 
 export class RegistryMirrorProjectAdapter implements MirrorProjectPort {
   constructor(private readonly registry: ConnectionStatePort) {}

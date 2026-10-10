@@ -1,5 +1,5 @@
-import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
-import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
+import type { NoteReaderPort } from '../domain/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../domain/ports/NoteWriterPort.js';
 import type { ProjectManagementSettings } from './settings/settings.js';
 import {
   SEED_ARTIFACTS,

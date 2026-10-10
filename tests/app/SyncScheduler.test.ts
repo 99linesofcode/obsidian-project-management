@@ -15,11 +15,11 @@ vi.mock('obsidian', () => {
 
 import { SyncScheduler } from '../../src/app/SyncScheduler.js';
 import type { SyncQueue } from '../../src/app/SyncQueue.js';
-import type { ProjectNoteData } from '../../src/core/ProjectNoteData.js';
-import type { NoteEnumeratorPort } from '../../src/core/ports/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
-import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
+import type { ProjectNoteData } from '../../src/domain/data/ProjectNoteData.js';
+import type { NoteEnumeratorPort } from '../../src/domain/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../src/domain/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../src/domain/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../../src/domain/ports/VaultEventPort.js';
 
 class FakeVault
   implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort

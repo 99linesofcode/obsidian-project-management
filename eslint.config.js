@@ -13,21 +13,19 @@ import boundaries from 'eslint-plugin-boundaries';
 // root at src/main.ts is classified by the file descriptor in the settings
 // block below, not by an element pattern.
 //
+// One component, three layers (ADR 002): `domain` is the core, `infrastructure`
+// the driven adapters, `app` the driving side. The two provider namespaces stay
+// their own elements so they can be isolated from each other.
+//
 // Order matters: the plugin matches the first pattern that fits, so the two
 // provider patterns must precede the broad `infrastructure/**` pattern — or
 // the providers collapse into one element and stop being isolated from each
 // other (see tests/scripts/boundary-isolation.test.ts).
 const ELEMENT_PATTERNS = [
-  { type: 'core', pattern: 'src/core/**' },
+  { type: 'domain', pattern: 'src/domain/**' },
   { type: 'github', pattern: 'src/infrastructure/github/**' },
   { type: 'todoist', pattern: 'src/infrastructure/todoist/**' },
   { type: 'infrastructure', pattern: 'src/infrastructure/**' },
-  { type: 'vault', pattern: 'src/vault/**' },
-  { type: 'registry', pattern: 'src/registry/**' },
-  { type: 'tasks', pattern: 'src/tasks/**' },
-  { type: 'todos', pattern: 'src/todos/**' },
-  { type: 'projects', pattern: 'src/projects/**' },
-  { type: 'sync', pattern: 'src/sync/**' },
   { type: 'app', pattern: 'src/app/**' },
 ];
 
@@ -39,47 +37,31 @@ const ALL_ELEMENT_TYPES = [
 // the element types its module may import; every other edge is a violation.
 //
 // WHY these edges and no others:
-// - core is the inner block: the capability ports, canonical DTOs and the pure
-//   merge import nothing, so no outer block can leak in (the dependency rule);
-//   the ports and their DTOs live there precisely so no provider's shape leaks
-//   into neutral ground.
-// - infrastructure is the middle block of driven adapters; it may import core
-//   only, never the driving side or a sibling block.
+// - domain is the inner block: the capability ports, canonical DTOs, the pure
+//   merge and every use case import nothing, so no outer block can leak in
+//   (the dependency rule).
+// - infrastructure is the block of driven adapters; it may import domain only,
+//   never the driving side or a sibling block.
 // - github/todoist never import each other. A mirror's module may not depend
-//   on a sibling mirror; the sync halves meet only through core and sync.
-// - app is the composition root and wires every module.
-// - The domain and orchestration modules keep their real, legitimate edges:
-//   vault/tasks/todos/projects write notes, sync orchestrates them, and the
-//   registry reads project paths. Everything else is forbidden, which makes
-//   the matrix acyclic by construction (no circular module dependencies).
+//   on a sibling mirror; the mirrors meet only through domain.
+// - app is the driving side: it reaches the domain through the ports, and
+//   infrastructure only for the storage key it shares with the registry
+//   adapter.
+// Everything else is forbidden, which makes the matrix acyclic by construction
+// (no circular module dependencies).
 /** @type {Record<string, string[]>} */
 const MATRIX = {
-  app: [
-    'app',
-    'core',
-    'vault',
-    'registry',
-    'tasks',
-    'todos',
-    'projects',
-    'sync',
-  ],
-  core: [],
-  github: ['core'],
-  todoist: ['core'],
-  infrastructure: ['core'],
-  projects: ['core', 'vault'],
-  tasks: ['core', 'projects', 'vault'],
-  todos: ['core', 'vault'],
-  sync: ['core', 'projects', 'tasks', 'todos'],
-  registry: ['core', 'projects'],
-  vault: ['core'],
+  app: ['app', 'domain', 'infrastructure'],
+  domain: [],
+  github: ['domain'],
+  todoist: ['domain'],
+  infrastructure: ['domain'],
 };
 
 const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
   from: { element: { type } },
-  // An empty allow list (the core block) leaves the global disallow in force:
-  // core may import nothing.
+  // An empty allow list (the domain block) leaves the global disallow in force:
+  // domain may import nothing.
   ...(allowed.length === 0
     ? { disallow: { to: { element: { types: { anyOf: ALL_ELEMENT_TYPES } } } } }
     : { allow: { to: { element: { types: { anyOf: allowed } } } } }),
@@ -103,19 +85,7 @@ const compositionRootPolicies = [
       to: {
         element: {
           types: {
-            anyOf: [
-              'app',
-              'core',
-              'github',
-              'todoist',
-              'infrastructure',
-              'vault',
-              'registry',
-              'tasks',
-              'todos',
-              'projects',
-              'sync',
-            ],
+            anyOf: ['app', 'domain', 'github', 'todoist', 'infrastructure'],
           },
         },
       },

@@ -1,8 +1,8 @@
 import {
   AdapterDescriptor,
   SettingsRow,
-} from '../../core/AdapterDescriptor.js';
-import { REQUIRED_CAPABILITIES } from '../../core/Capabilities.js';
+} from '../../domain/AdapterDescriptor.js';
+import { REQUIRED_CAPABILITIES } from '../../domain/Capabilities.js';
 
 export function githubDescriptor(): AdapterDescriptor {
   return new AdapterDescriptor({

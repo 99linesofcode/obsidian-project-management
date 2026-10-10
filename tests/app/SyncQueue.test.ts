@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncQueue } from '../../src/app/SyncQueue.js';
-import type { SyncProjectAction } from '../../src/sync/SyncProjectAction.js';
+import type { SyncProjectAction } from '../../src/domain/actions/SyncProjectAction.js';
 
 // A fake chain that records the projects it runs, tracks concurrency, and can
 // block (so serialization is observable) or fail a project (so poisoning is
