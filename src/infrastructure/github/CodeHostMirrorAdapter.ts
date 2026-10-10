@@ -8,7 +8,7 @@ import { ProjectAddressing } from '../../core/application/data/ProjectAddressing
 import { ProjectCandidate } from '../../core/application/data/ProjectCandidate.js';
 import { ProjectDiscovery } from '../../core/application/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../core/application/data/ProjectSummary.js';
-import type { MirrorAdapter } from '../../core/port/MirrorAdapter.js';
+import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type { ProjectSetupPort } from '../../core/port/ProjectSetupPort.js';
 import type {
   CodeHostResponse,
@@ -325,7 +325,7 @@ interface BoardSnapshot {
   cards: Map<string, RawCard>;
 }
 
-export class CodeHostMirrorAdapter implements MirrorAdapter, ProjectSetupPort {
+export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
   private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 

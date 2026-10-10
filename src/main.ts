@@ -47,7 +47,7 @@ import { AssembleProjectPassAction } from './core/application/actions/AssemblePr
 import { AssembleProjectLifecyclePassAction } from './core/application/actions/AssembleProjectLifecyclePassAction.js';
 import type { AdapterDescriptor } from './core/application/data/AdapterDescriptor.js';
 import type { RegisteredAdapter } from './core/application/data/RegisteredAdapter.js';
-import type { MirrorAdapter } from './core/port/MirrorAdapter.js';
+import type { MirrorPort } from './core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
 import {
   CoreBaselineStoreAdapter,
@@ -221,8 +221,8 @@ interface Provider {
   mirror: (
     target: string,
     boardIdentity: () => Promise<BoardIdentity | null>,
-  ) => MirrorAdapter;
-  capture: () => MirrorAdapter;
+  ) => MirrorPort;
+  capture: () => MirrorPort;
   setup: () => ProjectSetupPort | null;
 }
 
@@ -292,7 +292,7 @@ function registeredApplicationIds(
 
 function gateMirror(
   descriptor: AdapterDescriptor,
-  adapter: MirrorAdapter,
+  adapter: MirrorPort,
 ): RegisteredAdapter | null {
   return (
     registerAdapters([

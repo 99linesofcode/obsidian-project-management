@@ -1,11 +1,11 @@
 import type { AdapterDescriptor } from './AdapterDescriptor.js';
-import type { MirrorAdapter } from '../../port/MirrorAdapter.js';
+import type { MirrorPort } from '../../port/MirrorPort.js';
 
 export class AdapterRegistration {
   readonly descriptor: AdapterDescriptor;
-  readonly adapter: MirrorAdapter;
+  readonly adapter: MirrorPort;
 
-  constructor(descriptor: AdapterDescriptor, adapter: MirrorAdapter) {
+  constructor(descriptor: AdapterDescriptor, adapter: MirrorPort) {
     this.descriptor = descriptor;
     this.adapter = adapter;
   }

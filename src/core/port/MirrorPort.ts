@@ -7,7 +7,7 @@ import type { TaskLockPort } from './TaskLockPort.js';
 import type { TaskSurfacePort } from './TaskSurfacePort.js';
 import type { TimestampedPort } from './TimestampedPort.js';
 
-export interface MirrorAdapter
+export interface MirrorPort
   extends
     ProjectPort,
     TaskSurfacePort,

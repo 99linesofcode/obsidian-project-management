@@ -3,7 +3,7 @@ import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalF
 import { CanonicalProject } from '../../core/application/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
 import { CapturedProject } from '../../core/application/data/CapturedProject.js';
-import type { MirrorAdapter } from '../../core/port/MirrorAdapter.js';
+import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
   TaskManagerResponse,
   TaskManagerTransport,
@@ -30,7 +30,7 @@ interface RawSection {
   name: string;
 }
 
-export class TaskManagerMirrorAdapter implements MirrorAdapter {
+export class TaskManagerMirrorAdapter implements MirrorPort {
   private readonly rawTarget: string;
 
   constructor(
