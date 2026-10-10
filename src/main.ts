@@ -17,7 +17,7 @@ import { AttachProjectAction } from './core/application/actions/AttachProjectAct
 import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
 import type { ProjectSetupPort } from './core/port/ProjectSetupPort.js';
 import type { IdentityStorePort } from './core/port/IdentityStorePort.js';
-import { CreateTaskNoteAction } from './core/application/actions/CreateTaskNoteAction.js';
+import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/application/actions/CaptureTasksAction.js';
@@ -32,7 +32,7 @@ import { EnsureProjectBoardAction } from './core/application/actions/EnsureProje
 import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './core/application/actions/MirrorTodoStatusAction.js';
 import { RekeyRenamedConnectionsAction } from './core/application/actions/RekeyRenamedConnectionsAction.js';
-import { SyncChecklistAction } from './core/application/actions/SyncChecklistAction.js';
+import { SyncChecklistAction } from './core/application/actions/sync-checklist/SyncChecklistAction.js';
 import { SyncProjectAction } from './core/application/actions/SyncProjectAction.js';
 import { VaultAdapter } from './infrastructure/vault/VaultAdapter.js';
 import { SyncStateAdapter } from './infrastructure/registry/SyncStateAdapter.js';

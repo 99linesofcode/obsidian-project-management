@@ -4,7 +4,7 @@ import type { DetectNoteRenamesAction } from '../../../../src/core/application/a
 import type { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
-import type { SyncChecklistAction } from '../../../../src/core/application/actions/SyncChecklistAction.js';
+import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
 import type { ProjectLifecycleReconciler } from '../../../../src/core/application/services/ProjectLifecycleReconciler.js';
 import type { ProjectTaskLocksReconciler } from '../../../../src/core/application/services/ProjectTaskLocksReconciler.js';

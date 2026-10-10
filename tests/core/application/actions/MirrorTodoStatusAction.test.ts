@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import { splitFrontmatter } from '../../../../src/core/domain/splitFrontmatter.js';
-import { ToDoNoteMapper } from '../../../../src/core/domain/ToDoNoteMapper.js';
+import { ToDoNoteMapper } from '../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
 import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';

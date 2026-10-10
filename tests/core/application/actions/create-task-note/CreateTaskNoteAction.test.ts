@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CreateTaskNoteAction } from '../../../../src/core/application/actions/CreateTaskNoteAction.js';
-import { splitFrontmatter } from '../../../../src/core/domain/splitFrontmatter.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
-import { entityRecord } from '../../../helpers/records.js';
-import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
+import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
+import { splitFrontmatter } from '../../../../../src/core/domain/splitFrontmatter.js';
+import type { NoteEnumeratorPort } from '../../../../../src/core/port/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../../../../src/core/port/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../../../../src/core/port/NoteWriterPort.js';
+import type { VaultEventPort } from '../../../../../src/core/port/VaultEventPort.js';
+import { entityRecord } from '../../../../helpers/records.js';
+import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';
 
 class FakeVault
   implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort

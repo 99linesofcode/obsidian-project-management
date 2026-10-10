@@ -12,7 +12,7 @@ import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteActio
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { RekeyRenamedConnectionsAction } from './RekeyRenamedConnectionsAction.js';
 import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
-import type { SyncChecklistAction } from './SyncChecklistAction.js';
+import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.js';
 
 export interface SyncProjectDependencies {
   vault: NoteReaderPort & NoteWriterPort & NoteEnumeratorPort;

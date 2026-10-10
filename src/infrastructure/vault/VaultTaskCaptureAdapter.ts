@@ -3,7 +3,7 @@ import type {
   TaskCaptureVaultPort,
 } from '../../core/port/TaskCaptureVaultPort.js';
 import { typeFromLabels } from '../../core/domain/typeFromLabels.js';
-import type { CreateTaskNoteAction } from '../../core/application/actions/CreateTaskNoteAction.js';
+import type { CreateTaskNoteAction } from '../../core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import type { NoteReaderPort } from '../../core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../core/port/NoteWriterPort.js';
 import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';

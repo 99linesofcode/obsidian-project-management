@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { SyncChecklistAction } from '../../../../src/core/application/actions/SyncChecklistAction.js';
-import { splitFrontmatter } from '../../../../src/core/domain/splitFrontmatter.js';
-import { ToDoNoteMapper } from '../../../../src/core/domain/ToDoNoteMapper.js';
-import { ToDoNoteParser } from '../../../../src/core/domain/ToDoNoteParser.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
+import { SyncChecklistAction } from '../../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
+import { splitFrontmatter } from '../../../../../src/core/domain/splitFrontmatter.js';
+import { ToDoNoteMapper } from '../../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
+import { ToDoNoteParser } from '../../../../../src/core/domain/ToDoNoteParser.js';
+import type { NoteEnumeratorPort } from '../../../../../src/core/port/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../../../../src/core/port/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../../../../src/core/port/NoteWriterPort.js';
+import type { VaultEventPort } from '../../../../../src/core/port/VaultEventPort.js';
 
 class FakeVault
   implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort

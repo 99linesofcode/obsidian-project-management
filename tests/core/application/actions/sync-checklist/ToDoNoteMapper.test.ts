@@ -3,11 +3,11 @@ import {
   ToDoNoteMapper,
   type ToDoNoteContext,
   type ToDoNoteInput,
-} from '../../../src/core/domain/ToDoNoteMapper.js';
+} from '../../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
 import {
   ToDoNoteParser,
   withToDoStatus,
-} from '../../../src/core/domain/ToDoNoteParser.js';
+} from '../../../../../src/core/domain/ToDoNoteParser.js';
 
 const input: ToDoNoteInput = {
   title: 'Fix the bug',

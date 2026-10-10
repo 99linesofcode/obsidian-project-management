@@ -1,20 +1,20 @@
-import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
-import type { ChecklistItem } from '../data/ChecklistItem.js';
-import { freePath } from '../../domain/freePath.js';
-import { stemOf } from '../../domain/stemOf.js';
-import { splitFrontmatter } from '../../domain/splitFrontmatter.js';
-import { slugify } from '../../domain/slugify.js';
-import { taskLinkFromAffiliation } from '../../domain/taskLinkFromAffiliation.js';
+import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
+import type { ChecklistItem } from '../../data/ChecklistItem.js';
+import { freePath } from '../../../domain/freePath.js';
+import { stemOf } from '../../../domain/stemOf.js';
+import { splitFrontmatter } from '../../../domain/splitFrontmatter.js';
+import { slugify } from '../../../domain/slugify.js';
+import { taskLinkFromAffiliation } from '../../../domain/taskLinkFromAffiliation.js';
+import { ToDoNoteMapper, type ToDoNoteContext } from './ToDoNoteMapper.js';
 import {
-  ToDoNoteMapper,
-  type ToDoNoteContext,
-} from '../../domain/ToDoNoteMapper.js';
-import { ToDoNoteParser, withToDoStatus } from '../../domain/ToDoNoteParser.js';
-import { withBody } from '../../domain/withBody.js';
-import { readTemplate } from '../../domain/readTemplate.js';
-import type { NoteEnumeratorPort } from '../../port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../port/NoteWriterPort.js';
+  ToDoNoteParser,
+  withToDoStatus,
+} from '../../../domain/ToDoNoteParser.js';
+import { withBody } from '../../../domain/withBody.js';
+import { readTemplate } from '../../../domain/readTemplate.js';
+import type { NoteEnumeratorPort } from '../../../port/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../../port/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../../port/NoteWriterPort.js';
 
 export interface SyncChecklistInput {
   notePath: string;
