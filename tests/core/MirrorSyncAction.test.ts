@@ -3,9 +3,11 @@ import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js'
 import { Baseline } from '../../src/core/data/Baseline.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
 import { MirrorSyncPass } from '../../src/core/data/MirrorSyncPass.js';
+import { OriginObservation } from '../../src/core/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
 import { SideObservation } from '../../src/core/data/SideObservation.js';
 import { MirrorSyncAction } from '../../src/core/MirrorSyncAction.js';
+import { originSideObservation } from '../../src/core/originSideObservation.js';
 import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../src/infrastructure/fake/conformanceDescriptor.js';
@@ -43,16 +45,16 @@ function vaultOrigin(
   baseline: Baseline,
   completed = false,
 ): SideObservation {
-  return new SideObservation({
-    side: 'vault',
-    role: 'origin',
-    current: status,
+  return originSideObservation(
+    'vault',
     baseline,
-    fieldTime: null,
-    timestampTrustworthy: true,
-    completeFetch: true,
-    currentCompleted: completed,
-  });
+    new OriginObservation({
+      current: status,
+      currentCompleted: completed,
+      fieldTime: null,
+      trustworthy: true,
+    }),
+  );
 }
 
 describe('MirrorSyncAction — the Status field end to end (F02 NWM-2, NWM-3)', () => {
