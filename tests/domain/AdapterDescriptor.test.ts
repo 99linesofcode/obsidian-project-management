@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AdapterDescriptor } from '../../src/domain/AdapterDescriptor.js';
-import type { Capability } from '../../src/domain/Capabilities.js';
+import { AdapterDescriptor } from '../../src/domain/data/AdapterDescriptor.js';
+import type { Capability } from '../../src/domain/capabilities.js';
 
 const MANDATORY: readonly Capability[] = [
   'project',

@@ -1,7 +1,4 @@
-export interface ProjectStatusOption {
-  id: string;
-  name: string;
-}
+import type { ProjectStatusOption } from './ProjectStatusOption.js';
 
 export class ProjectIdentityData {
   repoUrl: string;

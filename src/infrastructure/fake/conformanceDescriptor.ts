@@ -1,5 +1,5 @@
-import { AdapterDescriptor } from '../../domain/AdapterDescriptor.js';
-import { REQUIRED_CAPABILITIES } from '../../domain/Capabilities.js';
+import { AdapterDescriptor } from '../../domain/data/AdapterDescriptor.js';
+import { REQUIRED_CAPABILITIES } from '../../domain/capabilities.js';
 
 export function conformanceDescriptor(
   applicationId: string,

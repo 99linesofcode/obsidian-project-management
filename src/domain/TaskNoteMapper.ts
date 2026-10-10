@@ -22,13 +22,6 @@ export interface TaskNote {
   content: string;
 }
 
-export function titleFromNotePath(notePath: string, remoteId: number): string {
-  const basename = notePath.split('/').pop() ?? '';
-  const withoutExt = basename.replace(/\.md$/, '');
-  const withoutId = withoutExt.replace(new RegExp(`^${remoteId}-`), '');
-  return withoutId.replace(/-/g, ' ');
-}
-
 export const TaskNoteMapper = {
   map(task: TaskNoteSource, context: TaskNoteContext): TaskNote {
     const content = [

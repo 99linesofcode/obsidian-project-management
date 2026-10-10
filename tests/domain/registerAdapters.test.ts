@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { AdapterDescriptor } from '../../src/domain/AdapterDescriptor.js';
-import type { Capability } from '../../src/domain/Capabilities.js';
-import { REQUIRED_CAPABILITIES } from '../../src/domain/Capabilities.js';
+import { AdapterDescriptor } from '../../src/domain/data/AdapterDescriptor.js';
+import type { Capability } from '../../src/domain/capabilities.js';
+import { REQUIRED_CAPABILITIES } from '../../src/domain/capabilities.js';
 import { AdapterRegistration } from '../../src/domain/data/AdapterRegistration.js';
 import { registerAdapters } from '../../src/domain/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';

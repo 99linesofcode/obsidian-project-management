@@ -1,4 +1,4 @@
-import type { AdapterDescriptor } from '../AdapterDescriptor.js';
+import type { AdapterDescriptor } from './AdapterDescriptor.js';
 import type { MirrorAdapter } from '../ports/MirrorAdapter.js';
 
 export class AdapterRegistration {

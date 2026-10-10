@@ -1,4 +1,4 @@
-import type { AdapterDescriptor } from '../AdapterDescriptor.js';
+import type { AdapterDescriptor } from './AdapterDescriptor.js';
 import type { CapturePort } from '../ports/CapturePort.js';
 import type { CompleteFetchPort } from '../ports/CompleteFetchPort.js';
 import type { ProjectActivityPort } from '../ports/ProjectActivityPort.js';

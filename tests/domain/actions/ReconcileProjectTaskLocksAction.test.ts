@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CanonicalField } from '../../../src/domain/canonicalField.js';
-import { AdapterDescriptor } from '../../../src/domain/AdapterDescriptor.js';
+import { AdapterDescriptor } from '../../../src/domain/data/AdapterDescriptor.js';
 import { ReconcileProjectTaskLocksAction } from '../../../src/domain/actions/ReconcileProjectTaskLocksAction.js';
 import { AdapterRegistration } from '../../../src/domain/data/AdapterRegistration.js';
 import { CanonicalTask } from '../../../src/domain/data/CanonicalTask.js';

@@ -1,30 +1,8 @@
-import type { CanonicalField } from './canonicalField.js';
-import type { Capability } from './Capabilities.js';
+import type { CanonicalField } from '../canonicalField.js';
+import type { Capability } from '../capabilities.js';
+import type { SettingsRow } from './SettingsRow.js';
 
 export type Representation = 'native' | { readonly mappedTo: string };
-
-export type SettingsRowKind = 'text' | 'toggle' | 'number' | 'list';
-
-export class SettingsRow {
-  readonly key: string;
-  readonly label: string;
-  readonly kind: SettingsRowKind;
-  readonly description?: string;
-
-  constructor(init: {
-    key: string;
-    label: string;
-    kind: SettingsRowKind;
-    description?: string;
-  }) {
-    this.key = init.key;
-    this.label = init.label;
-    this.kind = init.kind;
-    if (init.description !== undefined) {
-      this.description = init.description;
-    }
-  }
-}
 
 export class AdapterDescriptor {
   readonly applicationId: string;

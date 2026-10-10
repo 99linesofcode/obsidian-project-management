@@ -9,7 +9,7 @@ import {
   type SecretStore,
 } from './app/settings/SecretStorageAdapter.js';
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
-import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
+import { ProjectManagementSettingTab } from './app/settings/ProjectManagementSettingTab.js';
 import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
@@ -45,7 +45,7 @@ import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirro
 import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
 import { AssembleProjectPassAction } from './domain/actions/AssembleProjectPassAction.js';
 import { AssembleProjectLifecyclePassAction } from './domain/actions/AssembleProjectLifecyclePassAction.js';
-import type { AdapterDescriptor } from './domain/AdapterDescriptor.js';
+import type { AdapterDescriptor } from './domain/data/AdapterDescriptor.js';
 import type { RegisteredAdapter } from './domain/data/RegisteredAdapter.js';
 import type { MirrorAdapter } from './domain/ports/MirrorAdapter.js';
 import type { MirrorAdapterFactoryPort } from './domain/ports/MirrorAdapterFactoryPort.js';

@@ -1,7 +1,4 @@
-export interface ProjectStatusOption {
-  readonly id: string;
-  readonly name: string;
-}
+import type { ProjectStatusOption } from './ProjectStatusOption.js';
 
 export class ProjectAddressing {
   readonly projectHandle: string;

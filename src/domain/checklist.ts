@@ -1,4 +1,4 @@
-import type { ChecklistItem } from './ChecklistItem.js';
+import type { ChecklistItem } from './data/ChecklistItem.js';
 
 // The markdown checklist core: parse and render the task-list lines of a note
 // body. Pure, no I/O. WHY it lives in the core: it is neutral note arithmetic

@@ -1,8 +1,6 @@
-import {
-  AdapterDescriptor,
-  SettingsRow,
-} from '../../domain/AdapterDescriptor.js';
-import { REQUIRED_CAPABILITIES } from '../../domain/Capabilities.js';
+import { AdapterDescriptor } from '../../domain/data/AdapterDescriptor.js';
+import { SettingsRow } from '../../domain/data/SettingsRow.js';
+import { REQUIRED_CAPABILITIES } from '../../domain/capabilities.js';
 
 export function todoistDescriptor(): AdapterDescriptor {
   return new AdapterDescriptor({

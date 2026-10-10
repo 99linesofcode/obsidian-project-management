@@ -1,5 +1,5 @@
-import type { AdapterDescriptor } from './AdapterDescriptor.js';
-import { isCapability, REQUIRED_CAPABILITIES } from './Capabilities.js';
+import type { AdapterDescriptor } from './data/AdapterDescriptor.js';
+import { isCapability, REQUIRED_CAPABILITIES } from './capabilities.js';
 import type { AdapterRegistration } from './data/AdapterRegistration.js';
 import { RegisteredAdapter } from './data/RegisteredAdapter.js';
 import { RegistrationError } from './data/RegistrationError.js';

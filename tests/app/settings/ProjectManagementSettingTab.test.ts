@@ -14,7 +14,7 @@ vi.mock('obsidian', () => ({
 
 import type { App } from 'obsidian';
 import type ProjectManagementPlugin from '../../../src/main.js';
-import { ProjectManagementSettingTab } from '../../../src/app/settings/PluginSettingTab.js';
+import { ProjectManagementSettingTab } from '../../../src/app/settings/ProjectManagementSettingTab.js';
 import { DEFAULT_SETTINGS } from '../../../src/app/settings/settings.js';
 import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
 import { todoistDescriptor } from '../../../src/infrastructure/todoist/todoistDescriptor.js';
