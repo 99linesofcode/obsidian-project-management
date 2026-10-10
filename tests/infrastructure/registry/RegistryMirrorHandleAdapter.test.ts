@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { RegistryMirrorHandleAdapter } from '../../../src/infrastructure/registry/RegistryMirrorHandleAdapter.js';
-import type { MirrorItemLookup } from '../../../src/infrastructure/registry/RegistryMirrorHandleAdapter.js';
+import type { EntityRecord } from '../../../src/core/data/EntityRecord.js';
+import type { MirrorItem } from '../../../src/core/data/MirrorItem.js';
+import type { TrackedEntityPort } from '../../../src/core/ports/TrackedEntityPort.js';
 
-class FakeRegistry implements MirrorItemLookup {
+class FakeRegistry implements TrackedEntityPort {
   private readonly entities = new Map<string, string>();
   private readonly items = new Map<string, string>();
   readonly setEntities: Array<{ id: string; notePath: string }> = [];
@@ -26,36 +28,7 @@ class FakeRegistry implements MirrorItemLookup {
     this.items.set(`${connection}\u0000${entityId}`, handle);
   }
 
-  async findByNotePath(notePath: string): Promise<{ id: string } | null> {
-    const id = this.entities.get(notePath);
-    return id === undefined ? null : { id };
-  }
-
-  async findMirrorItemByEntity(
-    connection: string,
-    entityId: string,
-  ): Promise<{ handle: string } | null> {
-    const handle = this.items.get(`${connection}\u0000${entityId}`);
-    return handle === undefined ? null : { handle };
-  }
-
-  async listMirrorItems(
-    _project: string,
-    connection: string,
-  ): Promise<Array<{ handle: string; item: { entityId: string } }>> {
-    const prefix = `${connection}\u0000`;
-    const listed: Array<{ handle: string; item: { entityId: string } }> = [];
-    for (const [key, handle] of this.items) {
-      if (key.startsWith(prefix)) {
-        listed.push({ handle, item: { entityId: key.slice(prefix.length) } });
-      }
-    }
-    return listed;
-  }
-
-  async getEntity(
-    id: string,
-  ): Promise<{ id: string; notePath: string } | null> {
+  async getEntity(id: string): Promise<EntityRecord | null> {
     for (const [notePath, entityId] of this.entities) {
       if (entityId === id) {
         return { id, notePath };
@@ -64,16 +37,56 @@ class FakeRegistry implements MirrorItemLookup {
     return null;
   }
 
-  async setEntity(record: { id: string; notePath: string }): Promise<void> {
+  async findByNotePath(notePath: string): Promise<EntityRecord | null> {
+    const id = this.entities.get(notePath);
+    return id === undefined ? null : { id, notePath };
+  }
+
+  async setEntity(record: EntityRecord): Promise<void> {
     this.entities.set(record.notePath, record.id);
     this.setEntities.push(record);
+  }
+
+  async removeEntity(id: string): Promise<void> {
+    for (const [notePath, entityId] of this.entities) {
+      if (entityId === id) {
+        this.entities.delete(notePath);
+      }
+    }
+  }
+
+  async listEntities(): Promise<EntityRecord[]> {
+    return [];
+  }
+
+  async findMirrorItem(
+    connection: string,
+    handle: string,
+  ): Promise<MirrorItem | null> {
+    const prefix = `${connection}\u0000`;
+    for (const [key, value] of this.items) {
+      if (key.startsWith(prefix) && value === handle) {
+        return { entityId: key.slice(prefix.length), base: null };
+      }
+    }
+    return null;
+  }
+
+  async findMirrorItemByEntity(
+    connection: string,
+    entityId: string,
+  ): Promise<{ handle: string; item: MirrorItem } | null> {
+    const handle = this.items.get(`${connection}\u0000${entityId}`);
+    return handle === undefined
+      ? null
+      : { handle, item: { entityId, base: null } };
   }
 
   async setMirrorItem(
     project: string,
     connection: string,
     handle: string,
-    item: { entityId: string; base: null },
+    item: MirrorItem,
   ): Promise<void> {
     this.items.set(`${connection}\u0000${item.entityId}`, handle);
     this.setItems.push({
@@ -96,6 +109,23 @@ class FakeRegistry implements MirrorItemLookup {
     }
     this.removedItems.push({ project, connection, handle });
   }
+
+  async listMirrorItems(
+    _project: string,
+    connection: string,
+  ): Promise<Array<{ handle: string; item: MirrorItem }>> {
+    const prefix = `${connection}\u0000`;
+    const listed: Array<{ handle: string; item: MirrorItem }> = [];
+    for (const [key, handle] of this.items) {
+      if (key.startsWith(prefix)) {
+        listed.push({
+          handle,
+          item: { entityId: key.slice(prefix.length), base: null },
+        });
+      }
+    }
+    return listed;
+  }
 }
 
 describe('RegistryMirrorHandleAdapter — entity to per-connection handle (F02 NWM-2)', () => {
@@ -110,12 +140,12 @@ describe('RegistryMirrorHandleAdapter — entity to per-connection handle (F02 N
     registry.seedItem('td-work', 'uuid-1', 'task-9');
     const handles = new RegistryMirrorHandleAdapter(registry);
 
-    expect(await handles.resolve('gh-main', 'Projecten/Acme/taken/fix.md')).toBe(
-      'https://github.com/acme/widgets/issues/42',
-    );
-    expect(await handles.resolve('td-work', 'Projecten/Acme/taken/fix.md')).toBe(
-      'task-9',
-    );
+    expect(
+      await handles.resolve('gh-main', 'Projecten/Acme/taken/fix.md'),
+    ).toBe('https://github.com/acme/widgets/issues/42');
+    expect(
+      await handles.resolve('td-work', 'Projecten/Acme/taken/fix.md'),
+    ).toBe('task-9');
   });
 
   it('returns null when the note path maps to no entity', async () => {

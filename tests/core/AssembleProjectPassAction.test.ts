@@ -172,7 +172,7 @@ function setup() {
 
   const origin = new VaultOriginAdapter(app);
   const projectSource = new VaultProjectSourceAdapter(
-    new VaultAdapter(app, () => {}),
+    new VaultAdapter(app, () => {}, new Set()),
   );
 
   const mirror = new ConformanceMirrorAdapter();

@@ -8,6 +8,9 @@ import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js
 import type { MirrorAdapterFactoryPort } from '../../src/core/ports/MirrorAdapterFactoryPort.js';
 import type { MirrorProjectPort } from '../../src/core/ports/MirrorProjectPort.js';
 import type { ProjectSourcePort } from '../../src/core/ports/ProjectSourcePort.js';
+import type { TrackedEntityPort } from '../../src/core/ports/TrackedEntityPort.js';
+import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
+import type { MirrorItem } from '../../src/core/data/MirrorItem.js';
 import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../src/infrastructure/fake/conformanceDescriptor.js';
@@ -78,17 +81,50 @@ class FakeVault {
   }
 }
 
-class FakeRegistry {
-  records: Array<{ id: string; notePath: string }> = [];
+class FakeRegistry implements TrackedEntityPort {
+  records: EntityRecord[] = [];
 
-  async listEntities(): Promise<Array<{ id: string; notePath: string }>> {
-    return this.records;
+  async getEntity(id: string): Promise<EntityRecord | null> {
+    return this.records.find((record) => record.id === id) ?? null;
   }
 
-  async setEntity(record: { id: string; notePath: string }): Promise<void> {
+  async findByNotePath(notePath: string): Promise<EntityRecord | null> {
+    return this.records.find((record) => record.notePath === notePath) ?? null;
+  }
+
+  async setEntity(record: EntityRecord): Promise<void> {
     this.records = this.records.map((candidate) =>
       candidate.id === record.id ? record : candidate,
     );
+  }
+
+  async removeEntity(id: string): Promise<void> {
+    this.records = this.records.filter((record) => record.id !== id);
+  }
+
+  async listEntities(): Promise<EntityRecord[]> {
+    return this.records;
+  }
+
+  async findMirrorItem(): Promise<MirrorItem | null> {
+    return null;
+  }
+
+  async findMirrorItemByEntity(): Promise<{
+    handle: string;
+    item: MirrorItem;
+  } | null> {
+    return null;
+  }
+
+  async setMirrorItem(): Promise<void> {}
+
+  async removeMirrorItem(): Promise<void> {}
+
+  async listMirrorItems(): Promise<
+    Array<{ handle: string; item: MirrorItem }>
+  > {
+    return [];
   }
 }
 
@@ -152,8 +188,7 @@ interface SetupOptions {
 function setup(options: SetupOptions) {
   const vault = new FakeVault();
   const homePath =
-    options.homePath ??
-    (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
+    options.homePath ?? (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
   vault.seed(homePath, HOME, MTIME);
   const registry = new FakeRegistry();
   registry.records = [{ id: 'e1', notePath: TASK_PATH }];

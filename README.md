@@ -145,12 +145,12 @@ keep:
   project- or task-management tool means writing one adapter, not touching the
   core.
 - **Modular monolith** — one plugin, internally divided into bounded modules
-  (`github`, `todoist`, `vault`, `tasks`, `todos`, `projects`, `sync`,
-  `registry`, `shared`), with a dependency matrix enforced by
+  (`core`, `infrastructure`, `app`, `projects`, `registry`, `sync`, `tasks`,
+  `todos`, `vault`), with a dependency matrix enforced by
   `eslint-plugin-boundaries` so modules cannot quietly reach into each other.
 - **Pragmatic DDD** — canonical data shapes (one task shape across all
-  providers), a registry as the shared kernel, and a pure reconciliation core
-  that is tested without faking Obsidian.
+  providers), a `data.json` registry as the sync-state memory, and a pure
+  reconciliation core that is tested without faking Obsidian.
 - **Action objects** — every sync operation is its own small class with one
   public method, so the sync chain reads as a list of composable steps.
 

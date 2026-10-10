@@ -1,17 +1,28 @@
 import { App, EventRef, TFile } from 'obsidian';
-import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
-import type { VaultPort } from '../shared/VaultPort.js';
-import { chooseHomeNotePath } from '../shared/projectHomePath.js';
+import type { ProjectNoteData } from '../core/ProjectNoteData.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../core/ports/VaultEventPort.js';
+import { chooseHomeNotePath } from '../core/projectHomePath.js';
+import { ConnectionValidator } from '../core/ConnectionValidator.js';
 import { folderChainForPath } from './folderChainForPath.js';
 import { projectNoteFromCache } from './projectNoteFromCache.js';
 
 export type EventRegistrar = (eventRef: EventRef) => void;
 
-export class VaultAdapter implements VaultPort {
+export class VaultAdapter
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
+{
+  private readonly connectionValidator: ConnectionValidator;
+
   constructor(
     private readonly app: App,
     private readonly registerEvent: EventRegistrar,
-  ) {}
+    registeredApplications: ReadonlySet<string>,
+  ) {
+    this.connectionValidator = new ConnectionValidator(registeredApplications);
+  }
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const file = this.app.vault.getAbstractFileByPath(path);
@@ -91,7 +102,11 @@ export class VaultAdapter implements VaultPort {
     const notes: ProjectNoteData[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const note = projectNoteFromCache(file.path, cache?.frontmatter);
+      const note = projectNoteFromCache(
+        file.path,
+        cache?.frontmatter,
+        this.connectionValidator,
+      );
       if (note) {
         notes.push(note);
       }

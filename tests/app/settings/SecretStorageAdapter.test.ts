@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SecretStorage } from 'obsidian';
-import {
-  GITHUB_TOKEN_KEY,
-  SecretStorageAdapter,
-} from '../../../src/app/settings/SecretStorageAdapter.js';
+import { SecretStorageAdapter } from '../../../src/app/settings/SecretStorageAdapter.js';
+
+const GITHUB_TOKEN_KEY = 'github-token';
 
 class FakeObsidianSecretStorage {
   private readonly values = new Map<string, string>();

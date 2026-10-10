@@ -11,9 +11,6 @@ import { registerAdapters } from '../../../src/core/registerAdapters.js';
 import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
 import { todoistDescriptor } from '../../../src/infrastructure/todoist/todoistDescriptor.js';
-import { TodoistTaskMapper } from '../../../src/todoist/TodoistTaskMapper.js';
-import { typeFromLabels } from '../../../src/shared/typeFromLabels.js';
-import { todoistTask } from '../../helpers/records.js';
 
 function target(): string {
   return 'P1';
@@ -148,34 +145,6 @@ describe('TaskManagerMirrorAdapter — the canonical read (F01 ACM-5)', () => {
     const task = await adapter.readTask('T1');
 
     expect(task!.status).toBe('');
-  });
-});
-
-describe('TaskManagerMirrorAdapter — the existing half is the characterization (MAT-4)', () => {
-  it('matches TodoistTaskMapper on the shared canonical fields', async () => {
-    const { adapter } = adapterWith([
-      { status: 200, json: taskNode() },
-      { status: 200, json: [sectionNode()] },
-    ]);
-
-    const task = await adapter.readTask('T1');
-    const existing = TodoistTaskMapper.parseTask(
-      todoistTask({
-        id: 'T1',
-        sectionId: 'S1',
-        content: 'Fix the bug',
-        labels: ['type: task'],
-        addedAt: '2026-09-18T09:00:00Z',
-        updatedAt: '2026-09-18T10:00:00Z',
-      }),
-      { id: 'S1', projectId: 'P1', name: 'Building' },
-      null,
-    );
-
-    expect(task!.title).toBe(existing.title);
-    expect(task!.status).toBe(existing.status);
-    expect(task!.parent).toBe(existing.parent);
-    expect(typeFromLabels([...task!.labels])).toBe(existing.type);
   });
 });
 

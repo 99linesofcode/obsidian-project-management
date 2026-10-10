@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { CanonicalTask } from '../../../src/core/data/CanonicalTask.js';
 import { VaultTaskCaptureAdapter } from '../../../src/infrastructure/vault/VaultTaskCaptureAdapter.js';
-import { CreateTaskNoteAction } from '../../../src/tasks/CreateTaskNoteAction.js';
+import { CreateTaskNoteAction } from '../../../src/core/CreateTaskNoteAction.js';
 import { splitFrontmatter } from '../../../src/vault/splitFrontmatter.js';
-import type { VaultPort } from '../../../src/shared/VaultPort.js';
+import type { NoteEnumeratorPort } from '../../../src/core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../../src/core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../../src/core/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../../../src/core/ports/VaultEventPort.js';
 import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
-class FakeVault implements VaultPort {
+class FakeVault
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
+{
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
 

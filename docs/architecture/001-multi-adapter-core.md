@@ -92,12 +92,11 @@ infrastructure beside the application adapters.
   every module) plus the provider-vocabulary gate
   (`scripts/lint-boundaries.mjs`, bite-tested in
   `tests/scripts/lint-boundaries.test.ts`). A provider name is allowed only in
-  the provider's own module (`github/`, `todoist/`, `infrastructure/<vendor>/`),
-  the composition root (`main.ts`) and the driving side (`app/`); the neutral
-  architecture (`core/`, `infrastructure/`) is checked case-insensitively, so a
-  provider name in the core fails. The legacy chain predates the core and its
-  pre-existing provider vocabulary is grandfathered until that chain is retired.
-  The gate, not prose, is what keeps the structure from drifting.
+  the provider's own module (`github/`, `todoist/`, `infrastructure/<vendor>/`)
+  and the composition root (`main.ts`). Everywhere else it fails: the neutral
+  architecture (`core/`, `infrastructure/`) is checked case-insensitively, the
+  rest for any capitalized or upper-case form. The gate, not prose, is what
+  keeps the structure from drifting.
 - **Deleted by this decision:** `shared/ConnectionTools.ts` (the closed
   application union), the `requiresBoard` boolean, the `tool === 'github'`
   branches, and the closed half-factory.

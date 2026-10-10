@@ -326,9 +326,7 @@ interface BoardSnapshot {
   cards: Map<string, RawCard>;
 }
 
-export class CodeHostMirrorAdapter
-  implements MirrorAdapter, ProjectSetupPort
-{
+export class CodeHostMirrorAdapter implements MirrorAdapter, ProjectSetupPort {
   private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
@@ -366,7 +364,11 @@ export class CodeHostMirrorAdapter
 
   private async resolveBoard(repoUrl: string): Promise<BoardIdentity | null> {
     const cached = await this.boardIdentity?.();
-    if (cached !== undefined && cached !== null && cached.projectNodeId !== '') {
+    if (
+      cached !== undefined &&
+      cached !== null &&
+      cached.projectNodeId !== ''
+    ) {
       return cached;
     }
     return this.deriveBoard(repoUrl);
@@ -582,7 +584,9 @@ export class CodeHostMirrorAdapter
     }
     const status = statusField(node);
     if (status === null) {
-      throw new Error(`code host: project ${project.handle} has no Status field`);
+      throw new Error(
+        `code host: project ${project.handle} has no Status field`,
+      );
     }
     return new ProjectAddressing({
       projectHandle: project.handle,
@@ -811,7 +815,7 @@ export class CodeHostMirrorAdapter
   async capture(target: string): Promise<CanonicalTask[]> {
     const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
     return snapshot.issues
-      .filter((issue) => issue.state === 'open' && !hasTypeLabel(issue.labels))
+      .filter((issue) => hasTypeLabel(issue.labels))
       .map((issue) =>
         toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null),
       );

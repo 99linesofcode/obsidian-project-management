@@ -2,20 +2,22 @@ import {
   parseChecklist,
   renderChecklist,
   type ChecklistItem,
-} from '../vault/Checklist.js';
-import { freePath } from '../vault/freePath.js';
-import { stemOf } from '../shared/stemOf.js';
+} from '../core/Checklist.js';
+import { freePath } from '../core/freePath.js';
+import { stemOf } from '../core/stemOf.js';
 import { splitFrontmatter } from '../vault/splitFrontmatter.js';
-import { slugify } from '../vault/TaskNoteMapper.js';
-import { taskLinkFromAffiliation } from '../shared/taskLinkFromAffiliation.js';
+import { slugify } from '../core/TaskNoteMapper.js';
+import { taskLinkFromAffiliation } from '../core/taskLinkFromAffiliation.js';
 import {
   ToDoNoteMapper,
   type ToDoNoteContext,
 } from '../vault/ToDoNoteMapper.js';
 import { ToDoNoteParser, withToDoStatus } from '../vault/ToDoNoteParser.js';
 import { withBody } from '../vault/withBody.js';
-import { readTemplate } from '../vault/readTemplate.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import { readTemplate } from '../core/readTemplate.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
 
 export interface SyncChecklistInput {
   notePath: string;
@@ -25,7 +27,9 @@ export interface SyncChecklistInput {
 
 export class SyncChecklistAction {
   constructor(
-    private readonly vault: VaultPort,
+    private readonly vault: NoteReaderPort &
+      NoteWriterPort &
+      NoteEnumeratorPort,
     private readonly todoTemplatePath: string,
   ) {}
 

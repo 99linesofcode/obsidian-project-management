@@ -1,14 +1,12 @@
-import type { ArchiveBaselineData } from '../../src/shared/ArchiveBaselineData.js';
-import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
-import type { TaskData } from '../../src/shared/TaskData.js';
-import type { WatchStateData } from '../../src/shared/WatchStateData.js';
+import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js';
+import type { TaskData } from '../../src/core/TaskData.js';
 import { projectFromNotePath } from '../../src/projects/projectFromNotePath.js';
-import type {
-  EntityRecord,
-  MirrorItem,
-  PortState,
-  SyncStatePort,
-} from '../../src/shared/SyncStatePort.js';
+import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
+import type { MirrorItem } from '../../src/core/data/MirrorItem.js';
+import type { PortState } from '../../src/core/data/PortState.js';
+import type { ConnectionStatePort } from '../../src/core/ports/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../../src/core/ports/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../../src/core/ports/TrackedEntityPort.js';
 
 interface SeededMirror {
   handle: string;
@@ -19,7 +17,9 @@ function portKey(projectName: string, portId: string): string {
   return `${projectName}\u0000${portId}`;
 }
 
-export class FakeSyncState implements SyncStatePort {
+export class FakeSyncState
+  implements IdentityStorePort, TrackedEntityPort, ConnectionStatePort
+{
   records = new Map<string, EntityRecord>();
   items = new Map<string, Map<string, MirrorItem>>();
   portStates = new Map<string, PortState>();
@@ -33,22 +33,13 @@ export class FakeSyncState implements SyncStatePort {
   }> = [];
   identities = new Map<string, ProjectIdentityData>();
   identitiesBySlug = new Map<string, ProjectIdentityData>();
-  lastUpdates = new Map<string, string>();
-  baselines = new Map<string, ArchiveBaselineData>();
-  watches = new Map<string, WatchStateData>();
   setCalls: EntityRecord[] = [];
   removed: string[] = [];
-  baselineSets: Array<{ projectName: string; baseline: ArchiveBaselineData }> =
-    [];
-  watchSets: Array<{ projectName: string; state: WatchStateData }> = [];
   portStateSets: Array<{
     projectName: string;
     portId: string;
     state: PortState;
   }> = [];
-  lastUpdateSets: Array<{ projectName: string; iso: string }> = [];
-  fullScanPending = new Set<string>();
-  fullScanConsumes: Array<{ project: string; pending: boolean }> = [];
 
   seed(record: EntityRecord, mirrors: Record<string, SeededMirror> = {}): void {
     this.records.set(record.id, record);
@@ -308,70 +299,6 @@ export class FakeSyncState implements SyncStatePort {
       this.identities.get(projectName) ??
       null
     );
-  }
-
-  async listIdentities(
-    projectName: string,
-  ): Promise<Array<{ slug: string; identity: ProjectIdentityData }>> {
-    const result: Array<{ slug: string; identity: ProjectIdentityData }> = [];
-    const prefix = `${projectName}\u0000`;
-    for (const [key, identity] of this.identitiesBySlug) {
-      if (key.startsWith(prefix)) {
-        result.push({ slug: key.slice(prefix.length), identity });
-      }
-    }
-    if (result.length === 0) {
-      const identity = this.identities.get(projectName);
-      if (identity !== undefined) {
-        result.push({ slug: 'github', identity });
-      }
-    }
-    return result;
-  }
-
-  async getLastProjectUpdate(projectName: string): Promise<string | null> {
-    return this.lastUpdates.get(projectName) ?? null;
-  }
-
-  async setLastProjectUpdate(projectName: string, iso: string): Promise<void> {
-    this.lastUpdates.set(projectName, iso);
-    this.lastUpdateSets.push({ projectName, iso });
-  }
-
-  async getArchiveBaseline(
-    projectName: string,
-  ): Promise<ArchiveBaselineData | null> {
-    return this.baselines.get(projectName) ?? null;
-  }
-
-  async setArchiveBaseline(
-    projectName: string,
-    baseline: ArchiveBaselineData,
-  ): Promise<void> {
-    this.baselines.set(projectName, baseline);
-    this.baselineSets.push({ projectName, baseline });
-  }
-
-  async getWatchState(projectName: string): Promise<WatchStateData> {
-    return this.watches.get(projectName) ?? { etag: null, cursor: null };
-  }
-
-  async setWatchState(
-    projectName: string,
-    state: WatchStateData,
-  ): Promise<void> {
-    this.watches.set(projectName, state);
-    this.watchSets.push({ projectName, state });
-  }
-
-  async isFullScanPending(projectName: string): Promise<boolean> {
-    return this.fullScanPending.has(projectName);
-  }
-
-  async consumeFullScan(projectName: string): Promise<boolean> {
-    const pending = this.fullScanPending.delete(projectName);
-    this.fullScanConsumes.push({ project: projectName, pending });
-    return pending;
   }
 
   projectCursors = new Map<string, string>();

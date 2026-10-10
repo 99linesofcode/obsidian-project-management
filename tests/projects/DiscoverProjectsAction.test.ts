@@ -5,11 +5,17 @@ import { ProjectAddressing } from '../../src/core/data/ProjectAddressing.js';
 import { ProjectDiscovery } from '../../src/core/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../src/core/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
-import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
-import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
+import type { ProjectNoteData } from '../../src/core/ProjectNoteData.js';
+import type { ProjectIdentityData } from '../../src/core/ProjectIdentityData.js';
+import type { NoteEnumeratorPort } from '../../src/core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 
-class FakeVault implements VaultPort {
+class FakeVault
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
+{
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -104,7 +110,14 @@ function makeAction(
   setup: FakeSetup,
   vault: FakeVault,
 ): DiscoverProjectsAction {
-  return new DiscoverProjectsAction(vault, new AttachProjectAction(setup));
+  const setupFactory: ProjectSetupFactoryPort = {
+    setupFor: (application) => (application === 'github' ? setup : null),
+  };
+  return new DiscoverProjectsAction(
+    vault,
+    setupFactory,
+    new AttachProjectAction(),
+  );
 }
 
 describe('DISC-1 — a project folder is discovered from its home note', () => {

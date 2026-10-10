@@ -1,4 +1,4 @@
-import { parseAffiliation } from '../shared/parseAffiliation.js';
+import { parseAffiliation } from '../core/parseAffiliation.js';
 import { splitFrontmatter } from './splitFrontmatter.js';
 import { rewriteFrontmatterFields } from './rewriteFrontmatterFields.js';
 

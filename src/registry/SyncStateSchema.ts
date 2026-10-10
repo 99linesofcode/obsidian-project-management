@@ -1,6 +1,7 @@
-import { isRecord } from '../shared/isRecord.js';
-import { TaskData } from '../shared/TaskData.js';
-import type { MirrorItem, PortState } from '../shared/SyncStatePort.js';
+import { isRecord } from '../core/isRecord.js';
+import { TaskData } from '../core/TaskData.js';
+import type { MirrorItem } from '../core/data/MirrorItem.js';
+import type { PortState } from '../core/data/PortState.js';
 
 export const SYNC_STATE_KEY = 'syncState';
 
@@ -13,8 +14,6 @@ export const ITEMS_KEY = 'items';
 export const IDENTITIES_KEY = 'identities';
 
 export const PROJECT_CURSORS_KEY = 'projectCursors';
-
-export const FULL_SCAN_PENDING_KEY = 'fullScanPending';
 
 export function str(value: unknown): string {
   return typeof value === 'string' ? value : '';

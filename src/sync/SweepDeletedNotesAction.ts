@@ -1,16 +1,20 @@
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
   projectName: string;
-  connectionSlug: string | null;
+  connections: ReadonlyArray<{
+    slug: string;
+    application: string;
+    target: string;
+  }>;
 }
 
 export class SweepDeletedNotesAction {
   constructor(
-    private readonly vault: VaultPort,
-    private readonly syncState: SyncStatePort,
+    private readonly vault: NoteReaderPort,
+    private readonly syncState: TrackedEntityPort,
     private readonly handleDeletedNote: HandleDeletedNoteAction,
   ) {}
 
@@ -25,7 +29,7 @@ export class SweepDeletedNotesAction {
           await this.handleDeletedNote.execute({
             notePath: record.notePath,
             projectName: input.projectName,
-            connectionSlug: input.connectionSlug,
+            connections: input.connections,
           });
         } catch (error) {
           console.error(

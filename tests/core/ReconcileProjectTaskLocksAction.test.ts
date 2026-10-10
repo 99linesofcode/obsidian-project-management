@@ -129,7 +129,7 @@ function setup() {
   return { action, mirror, origin };
 }
 
-describe('ReconcileProjectTaskLocksAction — lock a frozen project\'s task conversations (F02 NWM-29)', () => {
+describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conversations (F02 NWM-29)", () => {
   it('locks the tracked tasks that are not done when the project freezes', async () => {
     const { action, mirror, origin } = setup();
     origin.tasks.set(FIX, task(FIX, 'Building'));

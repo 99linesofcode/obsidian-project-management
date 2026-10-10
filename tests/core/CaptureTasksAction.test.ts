@@ -114,7 +114,7 @@ function harness(
   };
 }
 
-describe('CaptureTasksAction — adopting application-born tasks', () => {
+describe('CaptureTasksAction — adopting tracked tasks', () => {
   it('adopts a mirror-born task exactly once', async () => {
     const h = harness([task('A')]);
 

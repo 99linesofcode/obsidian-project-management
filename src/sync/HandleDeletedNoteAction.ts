@@ -1,17 +1,21 @@
-import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import type { TaskData } from '../shared/TaskData.js';
+import { CanonicalFieldWrite } from '../core/data/CanonicalFieldWrite.js';
+import type { MirrorAdapterFactoryPort } from '../core/ports/MirrorAdapterFactoryPort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
   projectName: string;
-  connectionSlug: string | null;
+  connections: ReadonlyArray<{
+    slug: string;
+    application: string;
+    target: string;
+  }>;
 }
 
 export class HandleDeletedNoteAction {
   constructor(
-    private readonly syncState: SyncStatePort,
-    private readonly projectManagement: ProjectManagementPort,
+    private readonly syncState: TrackedEntityPort,
+    private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly doneOptionName: string,
   ) {}
 
@@ -21,40 +25,45 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    const github =
-      input.connectionSlug === null
-        ? null
-        : await this.githubItem(input.connectionSlug, record.id);
-    const url = github?.handle ?? '';
-
-    const identity =
-      input.connectionSlug === null
-        ? null
-        : await this.syncState.getIdentity(
-            input.projectName,
-            input.connectionSlug,
-          );
-    if (identity && url !== '') {
-      await this.projectManagement.deleteCard(identity.projectNodeId, url);
-    }
-
-    const lane = github?.base?.status ?? '';
-    if (url !== '' && lane !== this.doneOptionName) {
-      await this.projectManagement.setTaskState(url, 'closed');
+    for (const connection of input.connections) {
+      await this.deleteMirror(record.id, input.projectName, connection);
     }
     await this.syncState.removeEntity(record.id);
   }
 
-  private async githubItem(
-    connectionSlug: string,
+  private async deleteMirror(
     entityId: string,
-  ): Promise<{ handle: string; base: TaskData | null } | null> {
+    projectName: string,
+    connection: HandleDeletedNoteInput['connections'][number],
+  ): Promise<void> {
     const found = await this.syncState.findMirrorItemByEntity(
-      connectionSlug,
+      connection.slug,
       entityId,
     );
-    return found === null
-      ? null
-      : { handle: found.handle, base: found.item.base };
+    if (found === null) {
+      return;
+    }
+
+    const adapter = this.mirrorAdapters.create(
+      connection.application,
+      connection.target,
+      connection.slug,
+      projectName,
+    );
+    if (adapter === null) {
+      return;
+    }
+
+    await adapter.tasks.deleteTask(found.handle);
+    const lane = found.item.base?.status ?? '';
+    if (lane !== this.doneOptionName) {
+      await adapter.tasks.applyField(
+        new CanonicalFieldWrite({
+          handle: found.handle,
+          field: 'completion',
+          value: 'true',
+        }),
+      );
+    }
   }
 }

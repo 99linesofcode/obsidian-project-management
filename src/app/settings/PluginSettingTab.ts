@@ -1,12 +1,11 @@
 import {
   App,
   PluginSettingTab,
-  Setting,
+  type Setting,
   type SettingDefinitionItem,
 } from 'obsidian';
 import type ProjectManagementPlugin from '../../main.js';
-import { isRecord } from '../../shared/isRecord.js';
-import { GITHUB_TOKEN_KEY, TODOIST_TOKEN_KEY } from './SecretStorageAdapter.js';
+import { isRecord } from '../../core/isRecord.js';
 import { TokenSettings } from './TokenSettings.js';
 import { DEFAULT_SETTINGS } from './settings.js';
 import { SEED_ARTIFACTS, type SeedArtifact } from '../seedArtifacts.js';
@@ -48,32 +47,9 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
     }));
   }
 
-  override display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-
-    for (const row of this.rows()) {
-      const setting = new Setting(containerEl)
-        .setName(row.name)
-        .setDesc(row.desc);
-      row.populate(setting, row.desc, () => this.display());
-    }
-  }
-
   private rows(): SettingRow[] {
     return [
-      {
-        name: 'GitHub token',
-        desc: 'Personal access token used to talk to the GitHub API.',
-        populate: (setting, desc, refresh) =>
-          this.populateTokenSetting(setting, desc, GITHUB_TOKEN_KEY, refresh),
-      },
-      {
-        name: 'Todoist token',
-        desc: 'Personal API token used to talk to the Todoist API.',
-        populate: (setting, desc, refresh) =>
-          this.populateTokenSetting(setting, desc, TODOIST_TOKEN_KEY, refresh),
-      },
+      ...this.tokenRows(),
       {
         name: 'Poll interval (minutes)',
         desc: 'How often to check for changes.',
@@ -81,7 +57,7 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       },
       {
         name: 'Done option name',
-        desc: 'The GitHub Projects single-select option that marks a task done.',
+        desc: 'The board option that marks a task done.',
         populate: (setting) => this.populateDoneOption(setting),
       },
       {
@@ -96,14 +72,8 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
       },
       {
         name: 'Type labels',
-        desc: 'The type-label vocabulary the seed action applies (comma-separated).',
+        desc: 'The type-label vocabulary (comma-separated).',
         populate: (setting) => this.populateTypeLabels(setting),
-      },
-      {
-        name: 'Seed type labels',
-        desc: 'Create the configured type labels on a repository (owner/name).',
-        populate: (setting, _desc, refresh) =>
-          this.populateLabelSeed(setting, refresh),
       },
       ...SEED_ARTIFACTS.map((artifact) => ({
         name: artifact.label,
@@ -112,6 +82,26 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           this.populateArtifactSetting(setting, artifact, refresh),
       })),
     ];
+  }
+
+  private tokenRows(): SettingRow[] {
+    const rows: SettingRow[] = [];
+    for (const descriptor of this.plugin.providerDescriptors) {
+      const key = descriptor.secretKeys[0];
+      const row = descriptor.settingsRows.find(
+        (candidate) => candidate.key === key,
+      );
+      if (key === undefined || row === undefined) {
+        continue;
+      }
+      rows.push({
+        name: row.label,
+        desc: row.description ?? '',
+        populate: (setting, desc, refresh) =>
+          this.populateTokenSetting(setting, desc, key, refresh),
+      });
+    }
+    return rows;
   }
 
   private populatePollInterval(setting: Setting): void {
@@ -173,28 +163,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
     );
-  }
-
-  private populateLabelSeed(setting: Setting, refresh: () => void): void {
-    let repo = '';
-    setting
-      .addText((text) =>
-        text.setPlaceholder('owner/name').onChange((value) => {
-          repo = value;
-        }),
-      )
-      .addButton((button) =>
-        button
-          .setButtonText('Seed')
-          .setTooltip('Create the configured type labels that are missing')
-          .onClick(async () => {
-            await this.plugin.seedTypeLabels.execute(
-              repo,
-              this.plugin.settings.typeLabels,
-            );
-            refresh();
-          }),
-      );
   }
 
   private populateArtifactSetting(

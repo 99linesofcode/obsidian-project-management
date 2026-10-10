@@ -1,16 +1,15 @@
-import type { ProjectNoteData } from '../shared/ProjectNoteData.js';
-import type { ProjectStateData } from '../shared/ProjectStateData.js';
-import type { ConnectionData } from '../shared/ConnectionData.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { ProjectNoteData } from '../core/ProjectNoteData.js';
+import type { ProjectStateData } from '../core/ProjectStateData.js';
+import type { ConnectionData } from '../core/ConnectionData.js';
+import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../core/ports/NoteWriterPort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../todos/MirrorTodoStatusAction.js';
 import type { ProbeProjectsAction } from './ProbeProjectsAction.js';
-import type {
-  ProjectLifecycleVerdict,
-  ReconcileProjectLifecycleAction,
-} from '../projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
@@ -29,22 +28,24 @@ export class SyncProjectAction {
   private stepErrors: unknown[] = [];
 
   constructor(
-    private readonly vault: VaultPort,
-    syncState: SyncStatePort,
+    private readonly vault: NoteReaderPort &
+      NoteWriterPort &
+      NoteEnumeratorPort,
+    private readonly setupFactory: ProjectSetupFactoryPort,
+    syncState: TrackedEntityPort,
     private readonly probeProjects: ProbeProjectsAction,
-    private readonly reconcileProjectLifecycle: ReconcileProjectLifecycleAction,
     private readonly detectNoteRenames: DetectNoteRenamesAction,
     private readonly completeTaskCascade: CompleteTaskCascadeAction,
     private readonly syncChecklist: SyncChecklistAction,
     private readonly mirrorTodoStatus: MirrorTodoStatusAction,
     handleDeletedNote: HandleDeletedNoteAction,
+    private readonly taskFieldReconciler: () => TaskFieldReconciler,
+    private readonly projectLifecycleReconciler: () => ProjectLifecycleReconciler,
+    private readonly taskCaptureReconciler: () => TaskCaptureReconciler,
+    private readonly projectTaskLocksReconciler: () => ProjectTaskLocksReconciler,
+    private readonly projectReactivationReconciler: () => ProjectReactivationReconciler,
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
-    private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
-    private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
-    private readonly taskCaptureReconciler?: () => TaskCaptureReconciler | undefined,
-    private readonly projectTaskLocksReconciler?: () => ProjectTaskLocksReconciler | undefined,
-    private readonly projectReactivationReconciler?: () => ProjectReactivationReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
@@ -63,21 +64,19 @@ export class SyncProjectAction {
       return this.stepErrors;
     }
 
-    const lifecycleReconciler = this.projectLifecycleReconciler?.();
-    const taskFieldReconciler = this.taskFieldReconciler?.();
-    const taskCaptureReconciler = this.taskCaptureReconciler?.();
-    const projectTaskLocksReconciler = this.projectTaskLocksReconciler?.();
-    const projectReactivationReconciler =
-      this.projectReactivationReconciler?.();
-    if (lifecycleReconciler !== undefined) {
-      await this.step('migrate home note', async () => {
-        await this.migrateProjectHomeNote.execute({
-          projectName: project,
-          notePath: note.path,
-          locationArchived: note.archivedAt !== null,
-        });
+    const lifecycleReconciler = this.projectLifecycleReconciler();
+    const taskFieldReconciler = this.taskFieldReconciler();
+    const taskCaptureReconciler = this.taskCaptureReconciler();
+    const projectTaskLocksReconciler = this.projectTaskLocksReconciler();
+    const projectReactivationReconciler = this.projectReactivationReconciler();
+
+    await this.step('migrate home note', async () => {
+      await this.migrateProjectHomeNote.execute({
+        projectName: project,
+        notePath: note.path,
+        locationArchived: note.archivedAt !== null,
       });
-    }
+    });
 
     if (this.rekeyRenamedConnections) {
       const warnings = await this.rekeyRenamedConnections.execute({
@@ -91,13 +90,15 @@ export class SyncProjectAction {
 
     if (this.ensureProjectBoard && note.archivedAt === null) {
       for (const [slug, connection] of Object.entries(note.connections)) {
-        if (connection.tool !== 'github') {
+        const setup = this.setupFactory.setupFor(connection.tool);
+        if (setup === null) {
           continue;
         }
         await this.step(`ensure board ${slug}`, () =>
           this.ensureProjectBoard!.execute({
             projectName: project,
             connectionSlug: slug,
+            setup,
           }),
         );
       }
@@ -105,36 +106,24 @@ export class SyncProjectAction {
 
     const boardState = await this.probe(project, note.connections);
 
-    if (projectReactivationReconciler !== undefined) {
-      await this.step('reactivation', async () => {
-        await projectReactivationReconciler.reactivate(project);
-      });
-    }
+    await this.step('reactivation', async () => {
+      await projectReactivationReconciler.reactivate(project);
+    });
 
-    let wasFrozen = false;
-    let verdict: ProjectLifecycleVerdict;
-    if (lifecycleReconciler === undefined) {
-      verdict = await this.runLifecycle(project, note, boardState, syncedAt);
-    } else {
-      const result = await this.runNewLifecycle(
+    const { frozen, wasFrozen } = await this.reconcileLifecycle(
+      project,
+      note,
+      boardState,
+      lifecycleReconciler,
+    );
+
+    await this.step('task locks', () =>
+      projectTaskLocksReconciler.reconcile({
         project,
-        note,
-        boardState,
-        lifecycleReconciler,
-      );
-      verdict = result.verdict;
-      wasFrozen = result.wasFrozen;
-    }
-
-    if (projectTaskLocksReconciler !== undefined) {
-      await this.step('task locks', () =>
-        projectTaskLocksReconciler.reconcile({
-          project,
-          frozen: verdict.frozen,
-          wasFrozen,
-        }),
-      );
-    }
+        frozen,
+        wasFrozen,
+      }),
+    );
 
     await this.step('renames', () =>
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
@@ -144,28 +133,27 @@ export class SyncProjectAction {
       this.runVaultConsistency(project, syncedAt),
     );
 
-    if (!verdict.frozen && taskFieldReconciler !== undefined) {
-      if (taskCaptureReconciler !== undefined) {
-        await this.step('task capture', () =>
-          taskCaptureReconciler.capture(project, syncedAt),
-        );
-      }
+    if (!frozen) {
+      await this.step('task capture', () =>
+        taskCaptureReconciler.capture(project, syncedAt),
+      );
       await this.step('task fields', () =>
         taskFieldReconciler.reconcile(project),
       );
     }
 
-    await this.step('deletions', async () => {
-      for (const [slug, connection] of Object.entries(note.connections)) {
-        if (connection.tool !== 'github') {
-          continue;
-        }
-        await this.sweepDeletedNotes.execute({
-          projectName: project,
-          connectionSlug: slug,
-        });
-      }
-    });
+    await this.step('deletions', () =>
+      this.sweepDeletedNotes.execute({
+        projectName: project,
+        connections: Object.entries(note.connections).map(
+          ([slug, connection]) => ({
+            slug,
+            application: connection.tool,
+            target: connection.project,
+          }),
+        ),
+      }),
+    );
 
     return this.stepErrors;
   }
@@ -183,8 +171,15 @@ export class SyncProjectAction {
   ): Promise<ProjectStateData | undefined> {
     try {
       const targets = Object.entries(connections)
-        .filter(([, connection]) => connection.tool === 'github')
-        .map(([slug]) => ({ projectName: project, connectionSlug: slug }));
+        .filter(
+          ([, connection]) =>
+            this.setupFactory.setupFor(connection.tool) !== null,
+        )
+        .map(([slug, connection]) => ({
+          projectName: project,
+          connectionSlug: slug,
+          application: connection.tool,
+        }));
       return (await this.probeProjects.execute(targets)).get(project);
     } catch (error) {
       console.error(`SyncProjectAction: probe failed for ${project}`, error);
@@ -192,63 +187,21 @@ export class SyncProjectAction {
     }
   }
 
-  private async runLifecycle(
-    project: string,
-    note: ProjectNoteData,
-    boardState: ProjectStateData | undefined,
-    syncedAt: string,
-  ): Promise<ProjectLifecycleVerdict> {
-    try {
-      return await this.reconcileProjectLifecycle.execute({
-        projectName: project,
-        notePath: note.path,
-        locationArchived: note.archivedAt !== null,
-        syncedAt,
-        ...(boardState === undefined ? {} : { closed: boardState.closed }),
-      });
-    } catch (error) {
-      console.error(
-        `SyncProjectAction: lifecycle failed for ${project}`,
-        error,
-      );
-      return {
-        remoteProjectId: null,
-        frozen: note.archivedAt !== null || (boardState?.closed ?? false),
-        notePath: note.path,
-        archivedAt: note.archivedAt,
-      };
-    }
-  }
-
-  private async runNewLifecycle(
+  private async reconcileLifecycle(
     project: string,
     note: ProjectNoteData,
     boardState: ProjectStateData | undefined,
     reconciler: ProjectLifecycleReconciler,
-  ): Promise<{ verdict: ProjectLifecycleVerdict; wasFrozen: boolean }> {
+  ): Promise<{ frozen: boolean; wasFrozen: boolean }> {
     try {
-      const { frozen, wasFrozen } = await reconciler.reconcile(project);
-      return {
-        verdict: {
-          remoteProjectId: null,
-          frozen,
-          notePath: note.path,
-          archivedAt: frozen ? '' : null,
-        },
-        wasFrozen,
-      };
+      return await reconciler.reconcile(project);
     } catch (error) {
       console.error(
         `SyncProjectAction: lifecycle failed for ${project}`,
         error,
       );
       return {
-        verdict: {
-          remoteProjectId: null,
-          frozen: note.archivedAt !== null || (boardState?.closed ?? false),
-          notePath: note.path,
-          archivedAt: note.archivedAt,
-        },
+        frozen: note.archivedAt !== null || (boardState?.closed ?? false),
         wasFrozen: false,
       };
     }

@@ -1,25 +1,22 @@
-import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
-import { DomainError } from '../shared/DomainError.js';
+import { ProjectIdentityData } from '../core/ProjectIdentityData.js';
+import { DomainError } from '../core/DomainError.js';
 import type { ProjectSetupPort } from '../core/ports/ProjectSetupPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { repoNameFromUrl } from './repoNameFromUrl.js';
 
 export interface AttachProjectInput {
   repoUrl: string;
+  setup: ProjectSetupPort;
 }
 
 export class AttachProjectAction {
-  constructor(private readonly setup: ProjectSetupPort) {}
-
   async execute(data: AttachProjectInput): Promise<ProjectIdentityData> {
     if (!data.repoUrl) {
-      throw new DomainError(
-        'AttachProjectAction: repoUrl is required on a github connection',
-      );
+      throw new DomainError('AttachProjectAction: repoUrl is required');
     }
 
     const repoName = repoNameFromUrl(data.repoUrl);
-    const discovery = await this.setup.discoverProjects(data.repoUrl);
+    const discovery = await data.setup.discoverProjects(data.repoUrl);
     const choice = deriveBoardChoice(repoName, discovery.projects);
     if (choice.kind === 'ambiguous') {
       throw new DomainError(
@@ -36,7 +33,7 @@ export class AttachProjectAction {
       });
     }
 
-    const addressing = await this.setup.readProjectAddressing(choice.board);
+    const addressing = await data.setup.readProjectAddressing(choice.board);
     if (addressing === null) {
       throw new DomainError(
         `AttachProjectAction: board ${choice.board.name} could not be resolved`,

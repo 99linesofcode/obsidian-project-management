@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAction.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { NoteEnumeratorPort } from '../../src/core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-class FakeVault implements VaultPort {
+class FakeVault
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
+{
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import { ToDoNoteParser } from '../../src/vault/ToDoNoteParser.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { NoteEnumeratorPort } from '../../src/core/ports/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
+import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 
 // Fakes at the vault port: a path-keyed note store recording every write, so
 // the cascade's gates (an already-done to-do, an already-checked line) are
 // observable.
-class FakeVault implements VaultPort {
+class FakeVault
+  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
+{
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {

@@ -1,6 +1,7 @@
 import type { AttachProjectAction } from './AttachProjectAction.js';
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import type { ProjectSetupFactoryPort } from '../core/ports/ProjectSetupFactoryPort.js';
+import type { ProjectIdentityData } from '../core/ProjectIdentityData.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
 
 export interface DiscoveredProject {
   projectName: string;
@@ -15,7 +16,8 @@ export interface DiscoveryResult {
 
 export class DiscoverProjectsAction {
   constructor(
-    private readonly vault: VaultPort,
+    private readonly vault: NoteEnumeratorPort,
+    private readonly setupFactory: ProjectSetupFactoryPort,
     private readonly attachProject: AttachProjectAction,
   ) {}
 
@@ -28,12 +30,14 @@ export class DiscoverProjectsAction {
     for (const note of notes) {
       errors.push(...note.connectionErrors);
       for (const [slug, connection] of Object.entries(note.connections)) {
-        if (connection.tool !== 'github') {
+        const setup = this.setupFactory.setupFor(connection.tool);
+        if (setup === null) {
           continue;
         }
         try {
           const identity = await this.attachProject.execute({
             repoUrl: connection.project,
+            setup,
           });
           projects.push({
             projectName: note.projectName,

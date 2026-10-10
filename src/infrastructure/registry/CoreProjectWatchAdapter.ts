@@ -2,7 +2,12 @@ import type {
   ProjectWatchPort,
   ProjectWatchState,
 } from '../../core/ports/ProjectWatchPort.js';
-import { ensureRecord, isRecord, readPath, stringOrNull } from './coreStorageRecord.js';
+import {
+  ensureRecord,
+  isRecord,
+  readPath,
+  stringOrNull,
+} from './coreStorageRecord.js';
 
 export interface CoreWatchStorage {
   load(): Promise<Record<string, unknown>>;

@@ -1,6 +1,6 @@
-import { normalizedStem } from '../shared/stemOf.js';
-import type { SyncStatePort } from '../shared/SyncStatePort.js';
-import type { VaultPort } from '../shared/VaultPort.js';
+import { normalizedStem } from '../core/stemOf.js';
+import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
+import type { TrackedEntityPort } from '../core/ports/TrackedEntityPort.js';
 
 export interface DetectNoteRenamesInput {
   projectName: string;
@@ -9,8 +9,8 @@ export interface DetectNoteRenamesInput {
 
 export class DetectNoteRenamesAction {
   constructor(
-    private readonly vault: VaultPort,
-    private readonly syncState: SyncStatePort,
+    private readonly vault: NoteEnumeratorPort,
+    private readonly syncState: TrackedEntityPort,
   ) {}
 
   async execute(input: DetectNoteRenamesInput): Promise<void> {

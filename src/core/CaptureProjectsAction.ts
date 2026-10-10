@@ -33,9 +33,7 @@ export class CaptureProjectsAction {
     source: CaptureSource,
     syncedAt: string,
   ): Promise<CaptureProjectsResult> {
-    const projects = sortedByCreatedAt(
-      await source.capture.captureProjects(),
-    );
+    const projects = sortedByCreatedAt(await source.capture.captureProjects());
     const adopted = await this.vault.listAdopted();
     const names = new Set(adopted.map((project) => project.projectName));
     const targets = new Set(

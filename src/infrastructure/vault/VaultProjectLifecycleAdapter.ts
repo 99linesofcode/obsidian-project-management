@@ -1,5 +1,6 @@
 import { OriginObservation } from '../../core/data/OriginObservation.js';
 import type { ProjectLifecycleOriginPort } from '../../core/ports/ProjectLifecycleOriginPort.js';
+import type { TrackedEntityPort } from '../../core/ports/TrackedEntityPort.js';
 
 export interface ProjectLifecycleVault {
   findHomeNotePath(project: string): Promise<string | null>;
@@ -7,17 +8,10 @@ export interface ProjectLifecycleVault {
   moveFolder(fromPrefix: string, toPrefix: string): Promise<void>;
 }
 
-export interface ProjectLifecycleRegistry {
-  listEntities(
-    projectName: string,
-  ): Promise<Array<{ id: string; notePath: string }>>;
-  setEntity(record: { id: string; notePath: string }): Promise<void>;
-}
-
 export class VaultProjectLifecycleAdapter implements ProjectLifecycleOriginPort {
   constructor(
     private readonly vault: ProjectLifecycleVault,
-    private readonly registry: ProjectLifecycleRegistry,
+    private readonly registry: TrackedEntityPort,
   ) {}
 
   async observeProject(project: string): Promise<OriginObservation> {

@@ -9,18 +9,20 @@ export class SettingsRow {
   readonly key: string;
   readonly label: string;
   readonly kind: SettingsRowKind;
-  readonly default: string | boolean | number | readonly string[];
+  readonly description?: string;
 
   constructor(init: {
     key: string;
     label: string;
     kind: SettingsRowKind;
-    default: string | boolean | number | readonly string[];
+    description?: string;
   }) {
     this.key = init.key;
     this.label = init.label;
     this.kind = init.kind;
-    this.default = init.default;
+    if (init.description !== undefined) {
+      this.description = init.description;
+    }
   }
 }
 

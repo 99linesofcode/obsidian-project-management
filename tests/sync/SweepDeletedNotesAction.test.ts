@@ -3,9 +3,15 @@ import { SweepDeletedNotesAction } from '../../src/sync/SweepDeletedNotesAction.
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 import { entityRecord } from '../helpers/records.js';
 import type { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
-import type { VaultPort } from '../../src/shared/VaultPort.js';
+import type { NoteReaderPort } from '../../src/core/ports/NoteReaderPort.js';
 
-class FakeVault {
+const githubConnection = {
+  slug: 'github',
+  application: 'github',
+  target: 'https://github.com/acme/widgets',
+};
+
+class FakeVault implements NoteReaderPort {
   notes = new Map<string, string>();
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
@@ -18,25 +24,30 @@ function harness() {
   const vault = new FakeVault();
   const syncState = new FakeSyncState();
   const deleted: string[] = [];
+  const calls: Array<{
+    notePath: string;
+    connections: ReadonlyArray<{ slug: string }>;
+  }> = [];
   let fail = false;
   const handleDeleted = {
-    execute: async (input: { notePath: string }) => {
+    execute: async (input: {
+      notePath: string;
+      connections: ReadonlyArray<{ slug: string }>;
+    }) => {
       if (fail) {
         throw new Error('delete failed');
       }
       deleted.push(input.notePath);
+      calls.push({ notePath: input.notePath, connections: input.connections });
     },
   } as unknown as HandleDeletedNoteAction;
-  const action = new SweepDeletedNotesAction(
-    vault as unknown as VaultPort,
-    syncState,
-    handleDeleted,
-  );
+  const action = new SweepDeletedNotesAction(vault, syncState, handleDeleted);
   return {
     action,
     vault,
     syncState,
     deleted,
+    calls,
     failNext: () => {
       fail = true;
     },
@@ -56,7 +67,7 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
-      connectionSlug: 'github',
+      connections: [githubConnection],
     });
 
     expect(h.deleted).toEqual(['Projecten/Acme Widgets/taken/42-gone.md']);
@@ -78,7 +89,7 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
-      connectionSlug: 'github',
+      connections: [githubConnection],
     });
 
     expect(h.deleted).toEqual([]);
@@ -96,7 +107,7 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
 
     await h.action.execute({
       projectName: 'Acme Widgets',
-      connectionSlug: 'github',
+      connections: [githubConnection],
     });
 
     expect(h.deleted).toEqual([]);
@@ -116,9 +127,33 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
     await expect(
       h.action.execute({
         projectName: 'Acme Widgets',
-        connectionSlug: 'github',
+        connections: [githubConnection],
       }),
     ).resolves.toBeUndefined();
     expect(h.deleted).toEqual([]);
+  });
+
+  it('hands every connection to the handler once per gone note', async () => {
+    const h = harness();
+    h.syncState.records.set(
+      'entity-1',
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Acme Widgets/taken/42-gone.md',
+      }),
+    );
+    const connections = [
+      { slug: 'todoist', application: 'todoist', target: 'P1' },
+      githubConnection,
+    ];
+
+    await h.action.execute({ projectName: 'Acme Widgets', connections });
+
+    expect(h.calls).toEqual([
+      {
+        notePath: 'Projecten/Acme Widgets/taken/42-gone.md',
+        connections,
+      },
+    ]);
   });
 });

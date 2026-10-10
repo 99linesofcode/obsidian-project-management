@@ -3,8 +3,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const PROVIDER_MODULE_ROOTS = [
-  'src/github',
-  'src/todoist',
   'src/infrastructure/github',
   'src/infrastructure/todoist',
 ];
@@ -12,10 +10,9 @@ const PROVIDER_MODULE_ROOTS = [
 const NEUTRAL_MODULE_ROOTS = ['src/core', 'src/infrastructure'];
 
 const COMPOSITION_ROOT = 'src/main.ts';
-const DRIVING_SIDE_ROOT = 'src/app';
 
 const providerNameAnyCase = /github|todoist/i;
-const providerNameCapitalized = /GitHub|Github|Todoist/;
+const providerNameCapitalized = /GitHub|Github|GITHUB|Todoist|TODOIST/;
 
 const toPosixPath = (path) => path.split(sep).join('/');
 
@@ -23,8 +20,7 @@ const isUnder = (path, root) => path === root || path.startsWith(`${root}/`);
 
 const isAllowedLocation = (path) =>
   PROVIDER_MODULE_ROOTS.some((root) => isUnder(path, root)) ||
-  path === COMPOSITION_ROOT ||
-  isUnder(path, DRIVING_SIDE_ROOT);
+  path === COMPOSITION_ROOT;
 
 const isNeutralModule = (path) =>
   NEUTRAL_MODULE_ROOTS.some((root) => isUnder(path, root));

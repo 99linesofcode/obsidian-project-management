@@ -1,4 +1,7 @@
-import { AdapterDescriptor } from '../../core/AdapterDescriptor.js';
+import {
+  AdapterDescriptor,
+  SettingsRow,
+} from '../../core/AdapterDescriptor.js';
 import {
   MANDATORY_FIELD_CAPABILITIES,
   UNIVERSAL_CAPABILITIES,
@@ -26,6 +29,13 @@ export function githubDescriptor(): AdapterDescriptor {
       label: 'native',
     },
     secretKeys: ['github-token'],
-    settingsRows: [],
+    settingsRows: [
+      new SettingsRow({
+        key: 'github-token',
+        label: 'GitHub token',
+        kind: 'text',
+        description: 'Personal access token used to talk to the GitHub API.',
+      }),
+    ],
   });
 }

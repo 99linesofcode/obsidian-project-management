@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { ConnectionValidator } from '../../src/core/ConnectionValidator.js';
 import { projectNoteFromCache } from '../../src/vault/projectNoteFromCache.js';
 
 const github = { tool: 'github', project: 'https://github.com/acme/widgets' };
 
+const connectionValidator = new ConnectionValidator(
+  new Set(['github', 'todoist']),
+);
+
 describe('DISC-1 — the project note is read from the cache', () => {
   it('maps a note declaring a non-empty connections map to a project note keyed by its folder', () => {
-    const active = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
-      connections: {
-        github,
-        todoist: { tool: 'todoist', project: 'P1' },
+    const active = projectNoteFromCache(
+      'Projecten/Acme Widgets/_home.md',
+      {
+        connections: {
+          github,
+          todoist: { tool: 'todoist', project: 'P1' },
+        },
       },
-    });
+      connectionValidator,
+    );
     expect(active).toEqual({
       path: 'Projecten/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
@@ -22,9 +31,13 @@ describe('DISC-1 — the project note is read from the cache', () => {
       connectionErrors: [],
     });
 
-    const archived = projectNoteFromCache('Archief/Acme Widgets/_home.md', {
-      connections: { github },
-    });
+    const archived = projectNoteFromCache(
+      'Archief/Acme Widgets/_home.md',
+      {
+        connections: { github },
+      },
+      connectionValidator,
+    );
     expect(archived).toEqual({
       path: 'Archief/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
@@ -49,7 +62,10 @@ describe('DISC-1 — the project note is read from the cache', () => {
       ],
     ];
     for (const [path, frontmatter] of cases) {
-      expect(projectNoteFromCache(path, frontmatter), path).toBeNull();
+      expect(
+        projectNoteFromCache(path, frontmatter, connectionValidator),
+        path,
+      ).toBeNull();
     }
   });
 
@@ -63,33 +79,58 @@ describe('DISC-1 — the project note is read from the cache', () => {
     ];
     for (const [path, projectName] of cases) {
       expect(
-        projectNoteFromCache(path, { connections: { github } })?.projectName,
+        projectNoteFromCache(
+          path,
+          { connections: { github } },
+          connectionValidator,
+        )?.projectName,
         path,
       ).toBe(projectName);
     }
   });
 
   it('drops invalid entries with a collected error', () => {
-    const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
-      connections: {
-        'Bad Slug': { tool: 'github', project: 'x' },
-        work: { tool: 'linear', project: 'x' },
-        empty: { tool: 'todoist', project: '' },
-        good: github,
+    const note = projectNoteFromCache(
+      'Projecten/Acme Widgets/_home.md',
+      {
+        connections: {
+          'Bad Slug': { tool: 'github', project: 'x' },
+          work: { tool: 'linear', project: 'x' },
+          empty: { tool: 'todoist', project: '' },
+          good: github,
+        },
       },
-    });
+      connectionValidator,
+    );
 
     expect(note?.connections).toEqual({ good: github });
     expect(note?.connectionErrors).toHaveLength(3);
   });
 
-  it('accepts two connections of the same tool under distinct slugs', () => {
-    const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
-      connections: {
-        'todoist-work': { tool: 'todoist', project: 'P-work' },
-        'todoist-personal': { tool: 'todoist', project: 'P-personal' },
-      },
+  it('accepts an application in the registered set beyond the built-in providers', () => {
+    const note = projectNoteFromCache(
+      'Projecten/Acme Widgets/_home.md',
+      { connections: { work: { tool: 'acme', project: 'P-acme' } } },
+      new ConnectionValidator(new Set(['github', 'todoist', 'acme'])),
+    );
+
+    expect(note?.connections).toEqual({
+      work: { tool: 'acme', project: 'P-acme' },
     });
+    expect(note?.connectionErrors).toHaveLength(0);
+  });
+
+  it('accepts two connections of the same tool under distinct slugs', () => {
+    const note = projectNoteFromCache(
+      'Projecten/Acme Widgets/_home.md',
+      {
+        connections: {
+          'todoist-work': { tool: 'todoist', project: 'P-work' },
+          'todoist-personal': { tool: 'todoist', project: 'P-personal' },
+        },
+      },
+      connectionValidator,
+    );
 
     expect(note?.connections).toEqual({
       'todoist-work': { tool: 'todoist', project: 'P-work' },
@@ -99,12 +140,16 @@ describe('DISC-1 — the project note is read from the cache', () => {
   });
 
   it('rejects a slug that does not start alphanumeric', () => {
-    const note = projectNoteFromCache('Projecten/Acme Widgets/_home.md', {
-      connections: {
-        '-work': { tool: 'todoist', project: 'P-work' },
-        good: github,
+    const note = projectNoteFromCache(
+      'Projecten/Acme Widgets/_home.md',
+      {
+        connections: {
+          '-work': { tool: 'todoist', project: 'P-work' },
+          good: github,
+        },
       },
-    });
+      connectionValidator,
+    );
 
     expect(note?.connections).toEqual({ good: github });
     expect(note?.connectionErrors).toHaveLength(1);
