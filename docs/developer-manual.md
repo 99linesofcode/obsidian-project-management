@@ -979,7 +979,7 @@ surface of the system.
   `registry/`, `fake/`). Only `infrastructure/vault/VaultAdapter.ts` touches the
   Obsidian API; the note codecs are in the domain.
 - The registry: `src/infrastructure/registry/` (`SyncStateAdapter`,
-  `SyncStateSchema`, `loadDataSafely`).
+  `syncStateSchema`, `loadDataSafely`).
 - The task-note codecs live with their consumers (`src/domain/TaskNoteMapper.ts`,
   `src/infrastructure/vault/CapturedTaskNoteMapper.ts`).
 - The driving side: `src/app/` (`SyncScheduler`, `SyncQueue`, the settings

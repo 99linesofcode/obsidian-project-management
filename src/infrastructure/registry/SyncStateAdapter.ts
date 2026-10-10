@@ -27,7 +27,7 @@ import {
   projectNode,
   readProjectsMap,
   str,
-} from './SyncStateSchema.js';
+} from './syncStateSchema.js';
 
 export interface SyncStateStorage {
   load(): Promise<Record<string, unknown>>;
@@ -37,7 +37,7 @@ export interface SyncStateStorage {
 
 const BACKUP_MIN_INTERVAL_MS = 60_000;
 
-export { SYNC_STATE_KEY } from './SyncStateSchema.js';
+export { SYNC_STATE_KEY } from './syncStateSchema.js';
 
 interface ItemRef {
   project: string;
