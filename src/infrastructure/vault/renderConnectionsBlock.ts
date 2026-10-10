@@ -1,4 +1,4 @@
-import type { ConnectionData } from '../../domain/data/ConnectionData.js';
+import type { ConnectionData } from '../../core/application/data/ConnectionData.js';
 
 export function renderConnectionsBlock(
   connections: Record<string, ConnectionData>,

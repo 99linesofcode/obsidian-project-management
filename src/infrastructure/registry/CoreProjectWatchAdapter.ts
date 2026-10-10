@@ -1,7 +1,7 @@
 import type {
   ProjectWatchPort,
   ProjectWatchState,
-} from '../../domain/ports/ProjectWatchPort.js';
+} from '../../core/port/ProjectWatchPort.js';
 import {
   ensureRecord,
   isRecord,

@@ -1,6 +1,6 @@
-import { OriginObservation } from '../../domain/data/OriginObservation.js';
-import type { ProjectLifecycleOriginPort } from '../../domain/ports/ProjectLifecycleOriginPort.js';
-import type { TrackedEntityPort } from '../../domain/ports/TrackedEntityPort.js';
+import { OriginObservation } from '../../core/application/data/OriginObservation.js';
+import type { ProjectLifecycleOriginPort } from '../../core/port/ProjectLifecycleOriginPort.js';
+import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
 
 export interface ProjectLifecycleVault {
   findHomeNotePath(project: string): Promise<string | null>;

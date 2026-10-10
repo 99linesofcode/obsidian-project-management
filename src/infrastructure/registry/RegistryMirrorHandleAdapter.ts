@@ -1,5 +1,5 @@
-import type { MirrorHandlePort } from '../../domain/ports/MirrorHandlePort.js';
-import type { TrackedEntityPort } from '../../domain/ports/TrackedEntityPort.js';
+import type { MirrorHandlePort } from '../../core/port/MirrorHandlePort.js';
+import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
 
 export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
   constructor(private readonly registry: TrackedEntityPort) {}

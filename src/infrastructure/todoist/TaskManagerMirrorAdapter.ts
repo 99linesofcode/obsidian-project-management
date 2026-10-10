@@ -1,9 +1,9 @@
-import type { CanonicalField } from '../../domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../domain/data/CanonicalFieldWrite.js';
-import { CanonicalProject } from '../../domain/data/CanonicalProject.js';
-import { CanonicalTask } from '../../domain/data/CanonicalTask.js';
-import { CapturedProject } from '../../domain/data/CapturedProject.js';
-import type { MirrorAdapter } from '../../domain/ports/MirrorAdapter.js';
+import type { CanonicalField } from '../../core/domain/canonicalField.js';
+import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
+import { CanonicalProject } from '../../core/application/data/CanonicalProject.js';
+import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/application/data/CapturedProject.js';
+import type { MirrorAdapter } from '../../core/port/MirrorAdapter.js';
 import type {
   TaskManagerResponse,
   TaskManagerTransport,

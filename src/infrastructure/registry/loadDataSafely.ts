@@ -1,4 +1,4 @@
-import { isRecord } from '../../domain/isRecord.js';
+import { isRecord } from '../../core/domain/isRecord.js';
 // Reads the data.json root so that a missing or unreadable file can never wipe
 // the registry. A missing file yields {} — there is nothing to lose. A file
 // that exists but cannot be read or parsed is QUARANTINED (moved aside by the

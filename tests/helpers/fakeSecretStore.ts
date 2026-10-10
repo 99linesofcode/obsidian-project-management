@@ -1,4 +1,4 @@
-import type { SecretStore } from '../../src/app/settings/SecretStorageAdapter.js';
+import type { SecretStore } from '../../src/ui/settings/secret-storage/SecretStorageAdapter.js';
 
 export class FakeSecretStore implements SecretStore {
   private readonly values = new Map<string, string>();

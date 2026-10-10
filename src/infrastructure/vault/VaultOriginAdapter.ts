@@ -1,11 +1,11 @@
 import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
-import type { CanonicalField } from '../../domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../domain/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../domain/data/CanonicalTask.js';
-import { OriginObservation } from '../../domain/data/OriginObservation.js';
-import type { OriginPort } from '../../domain/ports/OriginPort.js';
-import { slugify } from '../../domain/slugify.js';
+import type { CanonicalField } from '../../core/domain/canonicalField.js';
+import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
+import { OriginObservation } from '../../core/application/data/OriginObservation.js';
+import type { OriginPort } from '../../core/port/OriginPort.js';
+import { slugify } from '../../core/domain/slugify.js';
 
 interface TaskNote {
   type: string;

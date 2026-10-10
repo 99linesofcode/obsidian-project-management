@@ -1,12 +1,12 @@
-import { isRecord } from '../../domain/isRecord.js';
-import { projectFromNotePath } from '../../domain/projectFromNotePath.js';
-import { ProjectIdentityData } from '../../domain/data/ProjectIdentityData.js';
-import type { EntityRecord } from '../../domain/data/EntityRecord.js';
-import type { MirrorItem } from '../../domain/data/MirrorItem.js';
-import type { PortState } from '../../domain/data/PortState.js';
-import type { ConnectionStatePort } from '../../domain/ports/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../domain/ports/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../domain/ports/TrackedEntityPort.js';
+import { isRecord } from '../../core/domain/isRecord.js';
+import { projectFromNotePath } from '../../core/domain/projectFromNotePath.js';
+import { ProjectIdentityData } from '../../core/application/data/ProjectIdentityData.js';
+import type { EntityRecord } from '../../core/application/data/EntityRecord.js';
+import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
+import type { PortState } from '../../core/application/data/PortState.js';
+import type { ConnectionStatePort } from '../../core/port/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../../core/port/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
 import {
   PROJECT_CURSORS_KEY,
   SYNC_STATE_KEY,

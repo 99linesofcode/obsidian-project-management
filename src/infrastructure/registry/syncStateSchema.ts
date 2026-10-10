@@ -1,7 +1,7 @@
-import { isRecord } from '../../domain/isRecord.js';
-import { TaskData } from '../../domain/data/TaskData.js';
-import type { MirrorItem } from '../../domain/data/MirrorItem.js';
-import type { PortState } from '../../domain/data/PortState.js';
+import { isRecord } from '../../core/domain/isRecord.js';
+import { TaskData } from '../../core/application/data/TaskData.js';
+import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
+import type { PortState } from '../../core/application/data/PortState.js';
 
 export const SYNC_STATE_KEY = 'syncState';
 

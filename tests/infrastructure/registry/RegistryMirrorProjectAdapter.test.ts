@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RegistryMirrorProjectAdapter } from '../../../src/infrastructure/registry/RegistryMirrorProjectAdapter.js';
-import type { PortState } from '../../../src/domain/data/PortState.js';
-import type { ConnectionStatePort } from '../../../src/domain/ports/ConnectionStatePort.js';
+import type { PortState } from '../../../src/core/application/data/PortState.js';
+import type { ConnectionStatePort } from '../../../src/core/port/ConnectionStatePort.js';
 
 class FakeStore implements ConnectionStatePort {
   private readonly states = new Map<string, PortState>();
