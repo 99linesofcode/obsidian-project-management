@@ -1,6 +1,6 @@
-import { ConnectionEnvelope } from '../../domain/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../domain/data/DeclaredConnection.js';
-import type { ProjectSourcePort } from '../../domain/ports/ProjectSourcePort.js';
+import { ConnectionEnvelope } from '../../core/application/data/ConnectionEnvelope.js';
+import { DeclaredConnection } from '../../core/application/data/DeclaredConnection.js';
+import type { ProjectSourcePort } from '../../core/port/ProjectSourcePort.js';
 import { connectionsOf } from './connectionsOf.js';
 
 export interface NoteSource {

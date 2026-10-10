@@ -1,5 +1,5 @@
-import { projectAffiliationLink } from '../../domain/projectAffiliation.js';
-import { slugify } from '../../domain/slugify.js';
+import { projectAffiliationLink } from '../../core/domain/projectAffiliation.js';
+import { slugify } from '../../core/domain/slugify.js';
 
 export interface CapturedTaskNoteInput {
   title: string;

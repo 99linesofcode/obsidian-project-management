@@ -1,14 +1,14 @@
 import type {
   AdoptTaskInput,
   TaskCaptureVaultPort,
-} from '../../domain/ports/TaskCaptureVaultPort.js';
-import { typeFromLabels } from '../../domain/typeFromLabels.js';
-import type { CreateTaskNoteAction } from '../../domain/actions/CreateTaskNoteAction.js';
-import type { NoteReaderPort } from '../../domain/ports/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../domain/ports/NoteWriterPort.js';
-import type { TrackedEntityPort } from '../../domain/ports/TrackedEntityPort.js';
+} from '../../core/port/TaskCaptureVaultPort.js';
+import { typeFromLabels } from '../../core/domain/typeFromLabels.js';
+import type { CreateTaskNoteAction } from '../../core/application/actions/create-task-note/CreateTaskNoteAction.js';
+import type { NoteReaderPort } from '../../core/port/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../core/port/NoteWriterPort.js';
+import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
-import { freePath } from '../../domain/freePath.js';
+import { freePath } from '../../core/domain/freePath.js';
 
 export class VaultTaskCaptureAdapter implements TaskCaptureVaultPort {
   constructor(

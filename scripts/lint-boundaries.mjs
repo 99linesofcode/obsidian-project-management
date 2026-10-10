@@ -7,7 +7,7 @@ const PROVIDER_MODULE_ROOTS = [
   'src/infrastructure/todoist',
 ];
 
-const NEUTRAL_MODULE_ROOTS = ['src/domain', 'src/infrastructure'];
+const NEUTRAL_MODULE_ROOTS = ['src/core', 'src/infrastructure'];
 
 const COMPOSITION_ROOT = 'src/main.ts';
 

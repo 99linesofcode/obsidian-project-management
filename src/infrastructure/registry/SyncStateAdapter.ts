@@ -1,12 +1,12 @@
-import { isRecord } from '../../domain/isRecord.js';
-import { projectFromNotePath } from '../../domain/projectFromNotePath.js';
-import { ProjectIdentityData } from '../../domain/data/ProjectIdentityData.js';
-import type { EntityRecord } from '../../domain/data/EntityRecord.js';
-import type { MirrorItem } from '../../domain/data/MirrorItem.js';
-import type { PortState } from '../../domain/data/PortState.js';
-import type { ConnectionStatePort } from '../../domain/ports/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../domain/ports/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../domain/ports/TrackedEntityPort.js';
+import { isRecord } from '../../core/domain/isRecord.js';
+import { projectFromNotePath } from '../../core/domain/projectFromNotePath.js';
+import { ProjectIdentityDataTransferObject } from '../../core/application/data/ProjectIdentityDataTransferObject.js';
+import type { EntityRecord } from '../../core/application/data/EntityRecord.js';
+import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
+import type { PortState } from '../../core/application/data/PortState.js';
+import type { ConnectionStatePort } from '../../core/port/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../../core/port/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
 import {
   PROJECT_CURSORS_KEY,
   SYNC_STATE_KEY,
@@ -708,7 +708,7 @@ export class SyncStateAdapter
   async setIdentity(
     projectName: string,
     connectionSlug: string,
-    identity: ProjectIdentityData,
+    identity: ProjectIdentityDataTransferObject,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
@@ -722,7 +722,7 @@ export class SyncStateAdapter
   async getIdentity(
     projectName: string,
     connectionSlug: string,
-  ): Promise<ProjectIdentityData | null> {
+  ): Promise<ProjectIdentityDataTransferObject | null> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       const node = projectNode(readProjectsMap(container), projectName);
@@ -760,8 +760,10 @@ export class SyncStateAdapter
     });
   }
 
-  private mapIdentity(raw: Record<string, unknown>): ProjectIdentityData {
-    return new ProjectIdentityData({
+  private mapIdentity(
+    raw: Record<string, unknown>,
+  ): ProjectIdentityDataTransferObject {
+    return new ProjectIdentityDataTransferObject({
       repoUrl: typeof raw.repoUrl === 'string' ? raw.repoUrl : '',
       repoNodeId: typeof raw.repoNodeId === 'string' ? raw.repoNodeId : '',
       projectNodeId:

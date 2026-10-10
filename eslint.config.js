@@ -13,20 +13,21 @@ import boundaries from 'eslint-plugin-boundaries';
 // root at src/main.ts is classified by the file descriptor in the settings
 // block below, not by an element pattern.
 //
-// One component, three layers (ADR 002): `domain` is the core, `infrastructure`
-// the driven adapters, `app` the driving side. The two provider namespaces stay
-// their own elements so they can be isolated from each other.
+// Module-first (ADR 004): `core` is the module's hexagon (application +
+// domain + port), `infrastructure` the driven adapters, `ui` the driving side.
+// The two provider namespaces stay their own elements so they can be isolated
+// from each other.
 //
 // Order matters: the plugin matches the first pattern that fits, so the two
 // provider patterns must precede the broad `infrastructure/**` pattern — or
 // the providers collapse into one element and stop being isolated from each
 // other (see tests/scripts/boundary-isolation.test.ts).
 const ELEMENT_PATTERNS = [
-  { type: 'domain', pattern: 'src/domain/**' },
+  { type: 'core', pattern: 'src/core/**' },
   { type: 'github', pattern: 'src/infrastructure/github/**' },
   { type: 'todoist', pattern: 'src/infrastructure/todoist/**' },
   { type: 'infrastructure', pattern: 'src/infrastructure/**' },
-  { type: 'app', pattern: 'src/app/**' },
+  { type: 'ui', pattern: 'src/ui/**' },
 ];
 
 const ALL_ELEMENT_TYPES = [
@@ -37,25 +38,25 @@ const ALL_ELEMENT_TYPES = [
 // the element types its module may import; every other edge is a violation.
 //
 // WHY these edges and no others:
-// - domain is the inner block: the capability ports, canonical DTOs, the pure
-//   merge and every use case import nothing, so no outer block can leak in
-//   (the dependency rule).
-// - infrastructure is the block of driven adapters; it may import domain only,
+// - core is the module's hexagon: the ports, canonical DTOs, the pure merge
+//   and every use case import nothing, so no outer block can leak in (the
+//   dependency rule).
+// - infrastructure is the block of driven adapters; it may import core only,
 //   never the driving side or a sibling block.
 // - github/todoist never import each other. A mirror's module may not depend
-//   on a sibling mirror; the mirrors meet only through domain.
-// - app is the driving side: it reaches the domain through the ports, and
+//   on a sibling mirror; the mirrors meet only through core.
+// - ui is the driving side: it reaches the core through the ports, and
 //   infrastructure only for the storage key it shares with the registry
 //   adapter.
 // Everything else is forbidden, which makes the matrix acyclic by construction
 // (no circular module dependencies).
 /** @type {Record<string, string[]>} */
 const MATRIX = {
-  app: ['app', 'domain', 'infrastructure'],
-  domain: [],
-  github: ['domain'],
-  todoist: ['domain'],
-  infrastructure: ['domain'],
+  ui: ['ui', 'core', 'infrastructure'],
+  core: [],
+  github: ['core'],
+  todoist: ['core'],
+  infrastructure: ['core'],
 };
 
 const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
@@ -85,17 +86,17 @@ const compositionRootPolicies = [
       to: {
         element: {
           types: {
-            anyOf: ['app', 'domain', 'github', 'todoist', 'infrastructure'],
+            anyOf: ['ui', 'core', 'github', 'todoist', 'infrastructure'],
           },
         },
       },
     },
   },
-  // The plugin class lives in main.ts (Obsidian's manifest entry), so app
+  // The plugin class lives in main.ts (Obsidian's manifest entry), so ui
   // files type their back-reference to it. Type-only by importKind: a value
   // import from the composition root stays a violation.
   {
-    from: { element: { type: 'app' } },
+    from: { element: { type: 'ui' } },
     allow: { to: { file: { categories: [COMPOSITION_ROOT_CATEGORY] } } },
     importKind: 'type',
   },

@@ -1,13 +1,13 @@
 import { App, EventRef, TFile } from 'obsidian';
-import type { ProjectNoteData } from '../../domain/data/ProjectNoteData.js';
-import type { NoteEnumeratorPort } from '../../domain/ports/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../domain/ports/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../domain/ports/NoteWriterPort.js';
-import type { VaultEventPort } from '../../domain/ports/VaultEventPort.js';
-import { chooseHomeNotePath } from '../../domain/projectHomePath.js';
-import { ConnectionValidator } from '../../domain/ConnectionValidator.js';
-import { folderChainForPath } from '../../domain/folderChainForPath.js';
-import { projectNoteFromCache } from '../../domain/projectNoteFromCache.js';
+import type { ProjectNoteDataTransferObject } from '../../core/application/data/ProjectNoteDataTransferObject.js';
+import type { NoteEnumeratorPort } from '../../core/port/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../core/port/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../core/port/NoteWriterPort.js';
+import type { VaultEventPort } from '../../core/port/VaultEventPort.js';
+import { chooseHomeNotePath } from '../../core/domain/projectHomePath.js';
+import { ConnectionValidator } from '../../core/domain/ConnectionValidator.js';
+import { folderChainForPath } from '../../core/domain/folderChainForPath.js';
+import { projectNoteFromCache } from '../../core/domain/projectNoteFromCache.js';
 
 export type EventRegistrar = (eventRef: EventRef) => void;
 
@@ -98,8 +98,8 @@ export class VaultAdapter
     }
   }
 
-  async findProjectNotes(): Promise<ProjectNoteData[]> {
-    const notes: ProjectNoteData[] = [];
+  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
+    const notes: ProjectNoteDataTransferObject[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);
       const note = projectNoteFromCache(

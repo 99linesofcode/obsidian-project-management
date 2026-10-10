@@ -14,34 +14,37 @@ task manager. The vault is the origin of truth; every remote is a mirror.
 
 ## 1. Project Structure
 
-One component, three layers (ADR 002). The repository _is_ the single bounded
-context — mirroring the vault's project management onto external applications —
-so the skill's interior shape sits at the `src` root, above the layers. The
-architecture axis is carried by the layer folder (`app/`, `domain/`,
-`infrastructure/`); the role axis by file-name suffixes (`Action`, `Adapter`,
-`Port`, `Data`, `Mapper`, `Parser`). The composition root is `src/main.ts` at
-the src root, above the layers. Tests mirror the tree.
+Module-first (ADR 004). The repository _is_ the module — the single bounded
+context that mirrors the vault's project management onto external applications
+— so its interior is the layers: `ui/` (driving adapters), `core/` (the
+hexagon) and `infrastructure/` (driven adapters). OPM is one bounded context,
+so `core` holds `application/`, `domain/` and `port/` directly, with no
+`core/<component>/` wrapper. The architecture axis is carried by the folder;
+the role axis by file-name suffixes (`Action`, `Port`, `Adapter`,
+`DataTransferObject`, `Mapper`, `Parser`). The composition root is
+`src/main.ts`, above the layers. Tests mirror the tree.
 
 ```
 obsidian-project-management/
 ├── src/
-│   ├── domain/          # the core: the capability ports and canonical DTOs, the
-│   │                    # pure N-way merge, the descriptor/registrar, every use
-│   │                    # case (actions/), the pass assemblers, the reconcilers,
-│   │                    # and the neutral note arithmetic
+│   ├── ui/              # driving adapters: settings/ (tab, schema,
+│   │                    # secret-storage), sync/ (scheduler, queue)
+│   ├── core/            # the module's hexagon
+│   │   ├── application/ # use cases (actions/), DTOs (data/), the reconciler
+│   │   │                # interfaces (services/)
+│   │   ├── domain/      # the neutral note arithmetic and the domain error
+│   │   │                # (errors/)
+│   │   └── port/        # the capability and collaborator ports
 │   ├── infrastructure/  # driven adapters, one namespace per vendor:
 │   │                    # vault/ (origin, project source, lifecycle, capture,
 │   │                    # note codecs), github/ (mirror adapter + descriptor +
 │   │                    # transport), todoist/ (mirror adapter + descriptor +
-│   │                    # transport), registry/ (the data.json-backed registry:
-│   │                    # the pass seams' implementation and the core
-│   │                    # baselines/handles/project/cursor/watch), fake/
-│   │                    # (in-memory conformance adapter)
-│   ├── app/             # driving side: plugin lifecycle, scheduler, queue, settings
+│   │                    # transport), registry/ (the data.json-backed registry),
+│   │                    # fake/ (in-memory conformance adapter)
 │   └── main.ts          # the composition root — wires every adapter and action
 ├── tests/               # mirrors src/
 ├── docs/                # developer manual — flows as sequence diagrams; ADRs
-├── scripts/             # esbuild bundle, the provider-vocabulary gate
+├── scripts/             # esbuild bundle, the provider-vocabulary + naming gates
 ├── eslint.config.js     # boundary enforcement lives here (eslint-plugin-boundaries)
 ├── manifest.json        # the plugin manifest
 └── package.json
@@ -52,20 +55,24 @@ meaningful responsibility, named `*Action`. Adapters map raw provider payloads
 onto canonical DTOs at the boundary; the core never sees a provider shape.
 Pure calculations live in one-function files (`mergeField`, `mirrorSideKey`,
 `originSideObservation`). Delivery mechanics — the scheduler, the queue,
-timers — belong to `app/` and make no business decisions. Persistence is owned
+timers — belong to `ui/` and make no business decisions. Persistence is owned
 by the registry adapter; nothing else touches `data.json`.
 
-**The core.** `domain/` is the inner block: the capability ports, the canonical
-DTOs, the pure N-way merge, the adapter descriptor/registrar, every use case
-(`domain/actions/`), and the capture/lock/reactivation reconcilers. It names no
-provider. `infrastructure/` holds the driven adapters that implement those
-ports, one namespace per vendor. The composition root wires them. The old
-provider halves, the pairwise verdict and the legacy writers are deleted; the
-chain drives the vault-maintenance steps (board-ensure, rename recovery, vault
-consistency, deletion sweep) directly, documented in the developer manual.
+**The core.** `core/` is the module's hexagon. `application/` holds the use
+cases (`actions/`), the canonical DTOs (`data/`) and the reconciler interfaces
+(`services/`); `domain/` holds the neutral note arithmetic and the domain
+error (`errors/`); `port/` holds the capability and collaborator ports. It
+names no provider. `infrastructure/` holds the driven adapters that implement
+those ports, one namespace per vendor. The composition root wires them. The
+old provider halves, the pairwise verdict and the legacy writers are deleted;
+the chain drives the vault-maintenance steps (board-ensure, rename recovery,
+vault consistency, deletion sweep) directly, documented in the developer
+manual.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
-or concept exists. Modules split when they outgrow grasp, not before.
+or concept exists. A consumer folder appears when an action has exclusive
+collaborators (`create-task-note/`, `sync-checklist/`). Modules split when
+they outgrow grasp, not before.
 
 ## 2. High-Level System Diagram
 
@@ -110,13 +117,13 @@ name never appears in the core.
 | Component             | Responsibility                                                                                                                                                                                                                                                                                            | Technology                   | Target         |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                                                                         | host plugin API              | the vault      |
-| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                                             | host plugin API, `Component` | the vault      |
-| `src/domain/`         | The core: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, every use case (`actions/`), the pass assemblers, the reconcilers, and the neutral note arithmetic                                                                | TypeScript                   | in-process     |
+| `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                                             | host plugin API, `Component` | the vault      |
+| `src/core/`           | The module's hexagon: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, every use case (`actions/`), the pass assemblers, the reconciler interfaces, and the neutral note arithmetic                                          | TypeScript                   | in-process     |
 | `src/infrastructure/` | Driven adapters, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters and note codecs, the GitHub and Todoist mirror adapters, the registry (the pass seams' implementation plus the core baselines/handles/project/cursor/watch), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
 
-**The core's ports (`src/domain/ports/`).** The core owns these; each states the
+**The core's ports (`src/core/port/`).** The core owns these; each states the
 core's need, never the tool's API it wraps. An adapter registers from its own
 module and exposes only the ports its descriptor declares.
 
@@ -154,7 +161,7 @@ module and exposes only the ports its descriptor declares.
   `ProjectCaptureVaultPort` and `TaskCaptureVaultPort` (the vault sinks), and
   `ProjectWatchPort` (the reactivation watch).
 
-**The pass's seams (`src/domain/ports/`).** The chain and the driving
+**The pass's seams (`src/core/port/`).** The chain and the driving
 side reach the vault and the registry through seven narrow, provider-neutral
 seams, each naming only the methods its call sites use:
 
@@ -166,7 +173,7 @@ seams, each naming only the methods its call sites use:
   `TrackedEntityPort` (the tracked entities and their mirror items) and
   `ConnectionStatePort` (a project's per-connection port state and its
   re-keying). Implementer: `SyncStateAdapter`. Its records `EntityRecord`,
-  `MirrorItem` and `PortState` live in `src/domain/data/`.
+  `MirrorItem` and `PortState` live in `src/core/application/data/`.
 
 The seven seams are the whole vault and registry contract. The former
 monolithic `VaultPort` and `SyncStatePort` are gone, so every consumer — the
@@ -190,13 +197,13 @@ therefore stay narrow by design; the count is a consequence of the split, not
 redundancy.
 
 The API tokens are not settings and not a port: they live in Obsidian's
-SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
+SecretStorage behind `SecretStorageAdapter` (`src/ui/settings/`), which the
 composition root reads at adapter construction and the settings tab sets and
 clears. `data.json` is secret-free.
 
 ### The multi-adapter core
 
-The `domain/` block is the shape of ADR 001. It consists of the port layer, the
+The `core/` block is the shape of ADR 001. It consists of the port layer, the
 canonical DTOs and the pure core.
 
 - **Capability vocabulary.** `Capabilities.ts` holds the thirteen capability
@@ -317,7 +324,7 @@ canonical DTOs and the pure core.
   carrying the provider's own vocabulary, its transport boundary, its opaque
   target and its descriptor. The conformance adapter is the reference
   implementation; a real mirror adapter is a new namespace beside it, with no
-  domain edit. `infrastructure/` imports `domain/` only, and the provider-vocabulary
+  domain edit. `infrastructure/` imports `core/` only, and the provider-vocabulary
   gate keeps each namespace the sole home for its provider's name.
 - **The GitHub mirror adapter** (`infrastructure/github/`) implements the
   capability ports for the code host: title and body as the issue, Status as the
@@ -437,29 +444,34 @@ over HTTPS.
   config with prettier (`pnpm run lint`), prettier (`pnpm run format:check`).
 - **Mechanical gates** (and what each makes impossible):
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
-    are the `src/` layer folders — `domain`, `app`, and `infrastructure` (with
+    are the `src/` layer folders — `core`, `ui`, and `infrastructure` (with
     the two provider namespaces, `infrastructure/github/` and
     `infrastructure/todoist/`, as their own elements) — plus the src root (the
-    composition root); `domain/` is the inner block and imports no module;
-    `infrastructure/` may import `domain/` only; the provider namespaces never
-    import each other; `app/` reaches the domain through the ports and
+    composition root); `core/` is the hexagon and imports no module;
+    `infrastructure/` may import `core/` only; the provider namespaces never
+    import each other; `ui/` reaches the core through the ports and
     infrastructure only for the storage key it shares with the registry
     adapter; the composition root wires everything. An unlisted import edge
-    fails the lint, so the dependency graph stays acyclic and the inner block
+    fails the lint, so the dependency graph stays acyclic and the hexagon
     stays neutral.
   - **`boundaries/no-unknown-files`** and **`no-unknown-dependencies`** —
     every source file must belong to an element and every local import must
-    resolve to one, so a new top-level module (including `domain/` and
+    resolve to one, so a new top-level module (including `core/` and
     `infrastructure/`) cannot slip in unclassified.
   - **`pnpm run lint:boundaries`** (`scripts/lint-boundaries.mjs`) — the
     provider-vocabulary gate. A provider name may appear only in the provider's
     own module (`infrastructure/<vendor>/`) and the composition root
     (`main.ts`); a capitalized provider name anywhere else fails. Inside the
-    neutral architecture (`domain/`, `infrastructure/`) the check is
-    case-insensitive, so any provider name in the domain fails. The gate is
-    bite-tested (`tests/scripts/lint-boundaries.test.ts`): a deliberate domain
+    neutral architecture (`core/`, `infrastructure/`) the check is
+    case-insensitive, so any provider name in the core fails. The gate is
+    bite-tested (`tests/scripts/lint-boundaries.test.ts`): a deliberate core
     violation exits non-zero while the legitimate provider path exits zero, so a
     green gate on an empty tree cannot pass unnoticed.
+  - **`pnpm run lint:naming`** (`scripts/lint-naming.mjs`) — the role-folder ↔
+    suffix gate: a class in a role folder carries that folder's suffix
+    (`core/port/` → `*Port`, `core/domain/errors/` → `*Error`,
+    `core/application/actions/` → `*Action`). Bite-tested
+    (`tests/scripts/lint-naming.test.ts`): a mis-suffixed file exits non-zero.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
     compile error.
   - **`pnpm test`** — behavioral tests per module, including the core pass
@@ -487,7 +499,7 @@ retired — the chain drives its steps directly (ADR 003). The developer manual
 records the remaining code-vs-brief discrepancy (the scheduler's injected
 pre-tick capture).
 
-The multi-adapter core (`domain/` + `infrastructure/`) is wired end to end: the
+The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
 GitHub and Todoist mirror adapters implement the capability ports, the vault
 origin adapters complete the origin round-trip, the pass assembler and the core
 baseline store assemble a whole project pass and persist its baselines, the
@@ -545,7 +557,7 @@ Date of Last Update: 2026-10-09
   project capture is guarded by a per-surface creation watermark; a task capture
   scans the whole application listing for the tracked tasks (those carrying a
   type label) and skips the mirror items already stamped, so it needs no cursor.
-- **Reconciler** — the `src/domain/` interface through which `SyncProjectAction`
+- **Reconciler** — the `src/core/` interface through which `SyncProjectAction`
   drives one assembled core action (task fields, lifecycle, task locks,
   reactivation, capture).
 
@@ -555,25 +567,29 @@ The house standards this repository adheres to — stated here in full.
 Enforced by `eslint-plugin-boundaries` (elements = the layer folders) and the
 `lint:boundaries` vocabulary grep:
 
-- **Folder structure**: one component, three layers (ADR 002), lowercase; the
-  layer folder locates the layer, the name locates the role.
+- **Folder structure**: module-first (ADR 004), lowercase; the repo is the
+  module, its interior is `ui/` (driving), `core/` (hexagon) and
+  `infrastructure/` (driven); a single-context module keeps `application/`,
+  `domain/` and `port/` at `core`'s root, with no component wrapper. The
+  folder locates the role; a consumer folder (`create-task-note/`) holds an
+  action's exclusive collaborators.
 - **File naming**: PascalCase classes with role suffixes (`*Action`,
-  `*Adapter`, `*Port`, `*Mapper`, `*Data`, `*Parser`); camelCase pure
-  functions, one per file (`mergeField.ts`, `mirrorSideKey.ts`). Tests
-  mirror the tree: `tests/<module>/…`.
+  `*Adapter`, `*Port`, `*Mapper`, `*Parser`, `*DataTransferObject`);
+  camelCase pure functions, one per file (`mergeField.ts`, `mirrorSideKey.ts`).
+  Tests mirror the tree: `tests/<module>/…`.
 - **Entry point**: `src/main.ts` — above the layers, never inside one; the
   composition root.
-- **Dependency matrix**: `domain/` imports no module; `infrastructure/` imports
-  `domain/` only; provider namespaces never import each other; `app/` reaches
-  the domain through the ports and infrastructure only for the storage key it
-  shares with the registry adapter; the composition root wires everything; no
-  circular module dependencies.
+- **Dependency matrix**: `core/` imports no module; `infrastructure/` imports
+  `core/` only; provider namespaces never import each other; `ui/` reaches the
+  core through the ports and infrastructure only for the storage key it shares
+  with the registry adapter; the composition root wires everything; no circular
+  module dependencies.
 - **Provider neutrality**: a provider name appears only in the provider's own
   module (`infrastructure/<vendor>/`) and the composition root; cross-cutting
   vocabulary is neutral (a provider name is a
-  value argument, never a namespace key). The neutral architecture (`domain/`,
+  value argument, never a namespace key). The neutral architecture (`core/`,
   `infrastructure/`) is checked case-insensitively, so any provider name in the
-  domain fails.
+  core fails.
 - **Class vs function**: a class carries injected collaborators or behaviour —
   actions, adapters, the `DataTransferObject` base that serializes a DTO for
   hashing; a DTO is a `readonly` field holder, not a behaviour object; a pure

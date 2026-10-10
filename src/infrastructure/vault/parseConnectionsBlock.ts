@@ -1,9 +1,9 @@
-import type { ConnectionData } from '../../domain/data/ConnectionData.js';
+import type { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
 
 export function parseConnectionsBlock(
   frontmatterLines: string[],
-): Record<string, ConnectionData> {
-  const connections: Record<string, ConnectionData> = {};
+): Record<string, ConnectionDataTransferObject> {
+  const connections: Record<string, ConnectionDataTransferObject> = {};
   let currentSlug: string | null = null;
   let inBlock = false;
   let slugIndent = -1;

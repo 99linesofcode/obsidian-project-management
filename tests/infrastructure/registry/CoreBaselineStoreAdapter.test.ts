@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Baseline } from '../../../src/domain/data/Baseline.js';
+import { Baseline } from '../../../src/core/application/data/Baseline.js';
 import { CoreBaselineStoreAdapter } from '../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
 import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 

@@ -1,6 +1,6 @@
 # ADR 002 — Architecture-first tree: one component, three layers at the root
 
-- **Status:** accepted
+- **Status:** superseded by ADR 004
 - **Date:** 2026-10-10
 
 ## Context

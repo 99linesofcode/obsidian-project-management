@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
+    "lint:naming": "node scripts/lint-naming.mjs",
     "typecheck": "tsc --noEmit",
     "audit": "pnpm audit",
     "format": "prettier --write .",

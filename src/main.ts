@@ -2,53 +2,53 @@ import { Notice, Plugin, requestUrl } from 'obsidian';
 import {
   mergeSettingsIntoData,
   settingsFromData,
-  type ProjectManagementSettings,
-} from './app/settings/settings.js';
+} from './ui/settings/settings.js';
+import type { ProjectManagementSettings } from './core/application/data/ProjectManagementSettings.js';
 import {
   SecretStorageAdapter,
   type SecretStore,
-} from './app/settings/SecretStorageAdapter.js';
-import { transportFromSecret } from './app/settings/transportFromSecret.js';
-import { ProjectManagementSettingTab } from './app/settings/ProjectManagementSettingTab.js';
-import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
-import { SyncScheduler } from './app/SyncScheduler.js';
-import { SyncQueue } from './app/SyncQueue.js';
-import { AttachProjectAction } from './domain/actions/AttachProjectAction.js';
-import type { ProjectSetupFactoryPort } from './domain/ports/ProjectSetupFactoryPort.js';
-import type { ProjectSetupPort } from './domain/ports/ProjectSetupPort.js';
-import type { IdentityStorePort } from './domain/ports/IdentityStorePort.js';
-import { CreateTaskNoteAction } from './domain/actions/CreateTaskNoteAction.js';
-import type { CaptureProjectsResult } from './domain/actions/CaptureProjectsAction.js';
-import { CaptureProjectsAction } from './domain/actions/CaptureProjectsAction.js';
-import { CaptureTasksAction } from './domain/actions/CaptureTasksAction.js';
+} from './ui/settings/secret-storage/SecretStorageAdapter.js';
+import { transportFromSecret } from './ui/settings/secret-storage/transportFromSecret.js';
+import { ProjectManagementSettingTab } from './ui/settings/ProjectManagementSettingTab.js';
+import { SeedVaultArtifactsAction } from './core/application/actions/SeedVaultArtifactsAction.js';
+import { SyncScheduler } from './ui/sync/SyncScheduler.js';
+import { SyncQueue } from './ui/sync/SyncQueue.js';
+import { AttachProjectAction } from './core/application/actions/AttachProjectAction.js';
+import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
+import type { ProjectSetupPort } from './core/port/ProjectSetupPort.js';
+import type { IdentityStorePort } from './core/port/IdentityStorePort.js';
+import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
+import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
+import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
+import { CaptureTasksAction } from './core/application/actions/CaptureTasksAction.js';
 import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
 import { VaultTaskCaptureAdapter } from './infrastructure/vault/VaultTaskCaptureAdapter.js';
 import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
-import type { CaptureSource } from './domain/ports/MirrorAdapterFactoryPort.js';
-import { CompleteTaskCascadeAction } from './domain/actions/CompleteTaskCascadeAction.js';
-import { DetectNoteRenamesAction } from './domain/actions/DetectNoteRenamesAction.js';
-import { DiscoverProjectsAction } from './domain/actions/DiscoverProjectsAction.js';
-import { EnsureProjectBoardAction } from './domain/actions/EnsureProjectBoardAction.js';
-import { HandleDeletedNoteAction } from './domain/actions/HandleDeletedNoteAction.js';
-import { MirrorTodoStatusAction } from './domain/actions/MirrorTodoStatusAction.js';
-import { RekeyRenamedConnectionsAction } from './domain/actions/RekeyRenamedConnectionsAction.js';
-import { SyncChecklistAction } from './domain/actions/SyncChecklistAction.js';
-import { SyncProjectAction } from './domain/actions/SyncProjectAction.js';
+import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
+import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
+import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
+import { DiscoverProjectsAction } from './core/application/actions/DiscoverProjectsAction.js';
+import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
+import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
+import { MirrorTodoStatusAction } from './core/application/actions/MirrorTodoStatusAction.js';
+import { RekeyRenamedConnectionsAction } from './core/application/actions/RekeyRenamedConnectionsAction.js';
+import { SyncChecklistAction } from './core/application/actions/sync-checklist/SyncChecklistAction.js';
+import { SyncProjectAction } from './core/application/actions/SyncProjectAction.js';
 import { VaultAdapter } from './infrastructure/vault/VaultAdapter.js';
 import { SyncStateAdapter } from './infrastructure/registry/SyncStateAdapter.js';
 import { loadDataSafely } from './infrastructure/registry/loadDataSafely.js';
 import { createTodoistTransport } from './infrastructure/todoist/TodoistTransport.js';
-import { AdapterRegistration } from './domain/data/AdapterRegistration.js';
-import type { RegistrationResult } from './domain/data/RegistrationResult.js';
-import { registerAdapters } from './domain/registerAdapters.js';
+import { AdapterRegistration } from './core/application/data/AdapterRegistration.js';
+import type { RegistrationResult } from './core/application/data/RegistrationResult.js';
+import { registerAdapters } from './core/domain/registerAdapters.js';
 import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
-import { AssembleProjectPassAction } from './domain/actions/AssembleProjectPassAction.js';
-import { AssembleProjectLifecyclePassAction } from './domain/actions/AssembleProjectLifecyclePassAction.js';
-import type { AdapterDescriptor } from './domain/data/AdapterDescriptor.js';
-import type { RegisteredAdapter } from './domain/data/RegisteredAdapter.js';
-import type { MirrorAdapter } from './domain/ports/MirrorAdapter.js';
-import type { MirrorAdapterFactoryPort } from './domain/ports/MirrorAdapterFactoryPort.js';
+import { AssembleProjectPassAction } from './core/application/actions/AssembleProjectPassAction.js';
+import { AssembleProjectLifecyclePassAction } from './core/application/actions/AssembleProjectLifecyclePassAction.js';
+import type { AdapterDescriptor } from './core/application/data/AdapterDescriptor.js';
+import type { RegisteredAdapter } from './core/application/data/RegisteredAdapter.js';
+import type { MirrorPort } from './core/port/MirrorPort.js';
+import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
 import {
   CoreBaselineStoreAdapter,
   type CoreBaselineStorage,
@@ -66,12 +66,12 @@ import type { CodeHostTransport } from './infrastructure/github/CodeHostTranspor
 import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
-import { ReconcileProjectTaskLocksAction } from './domain/actions/ReconcileProjectTaskLocksAction.js';
-import { ReactivateFrozenProjectAction } from './domain/actions/ReactivateFrozenProjectAction.js';
+import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
+import { ReactivateFrozenProjectAction } from './core/application/actions/ReactivateFrozenProjectAction.js';
 import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
-import type { CoreReconcilers } from './domain/CoreReconcilers.js';
-import { MigrateProjectHomeNoteAction } from './domain/actions/MigrateProjectHomeNoteAction.js';
-import { SweepDeletedNotesAction } from './domain/actions/SweepDeletedNotesAction.js';
+import type { CoreReconcilers } from './core/application/services/CoreReconcilers.js';
+import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
+import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
 
 async function request(
   token: string,
@@ -221,8 +221,8 @@ interface Provider {
   mirror: (
     target: string,
     boardIdentity: () => Promise<BoardIdentity | null>,
-  ) => MirrorAdapter;
-  capture: () => MirrorAdapter;
+  ) => MirrorPort;
+  capture: () => MirrorPort;
   setup: () => ProjectSetupPort | null;
 }
 
@@ -292,7 +292,7 @@ function registeredApplicationIds(
 
 function gateMirror(
   descriptor: AdapterDescriptor,
-  adapter: MirrorAdapter,
+  adapter: MirrorPort,
 ): RegisteredAdapter | null {
   return (
     registerAdapters([

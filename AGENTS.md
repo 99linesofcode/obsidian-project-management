@@ -11,15 +11,19 @@ record; the applications are mirrors the plugin keeps honest.
 
 ## Architecture
 
-- `src/core/` — the multi-adapter core: capability ports, canonical DTOs, the
-  pure N-way merge, the adapter descriptor/registrar, and the sync actions. It
-  names no provider.
+Module-first (ADR 004): the repo is the module, its interior is the layers.
+
+- `src/core/` — the module's hexagon: `application/` (the sync actions, the
+  canonical DTOs, the reconciler interfaces), `domain/` (the neutral note
+  arithmetic and the domain error), and `port/` (the capability and
+  collaborator ports). It names no provider.
 - `src/infrastructure/<vendor>/` — the driven adapters (GitHub, Todoist, the
   vault origin, the registry), one namespace per application.
-- `src/app/` — the driving side: commands, modals, settings, scheduler.
+- `src/ui/` — the driving side: the settings tab, the scheduler, the queue.
 - `src/main.ts` — the composition root.
-- The boundary gate (`node scripts/lint-boundaries.mjs`) enforces provider
-  neutrality and the block dependency rule mechanically.
+- The boundary gates (`node scripts/lint-boundaries.mjs`,
+  `node scripts/lint-naming.mjs`) enforce provider neutrality, the block
+  dependency rule and the role-folder suffix rule mechanically.
 
 See `ARCHITECTURE.md` for the full map and `docs/architecture/` for the ADRs.
 
@@ -28,6 +32,7 @@ See `ARCHITECTURE.md` for the full map and `docs/architecture/` for the ADRs.
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm run lint:boundaries`
+- `pnpm run lint:naming`
 - `pnpm test`
 - `pnpm run build`
 

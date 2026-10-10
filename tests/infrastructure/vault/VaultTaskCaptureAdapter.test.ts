@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CanonicalTask } from '../../../src/domain/data/CanonicalTask.js';
+import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
 import { VaultTaskCaptureAdapter } from '../../../src/infrastructure/vault/VaultTaskCaptureAdapter.js';
-import { CreateTaskNoteAction } from '../../../src/domain/actions/CreateTaskNoteAction.js';
-import { splitFrontmatter } from '../../../src/domain/splitFrontmatter.js';
-import type { NoteEnumeratorPort } from '../../../src/domain/ports/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../src/domain/ports/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../src/domain/ports/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../src/domain/ports/VaultEventPort.js';
+import { CreateTaskNoteAction } from '../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
+import { splitFrontmatter } from '../../../src/core/domain/splitFrontmatter.js';
+import type { NoteEnumeratorPort } from '../../../src/core/port/NoteEnumeratorPort.js';
+import type { NoteReaderPort } from '../../../src/core/port/NoteReaderPort.js';
+import type { NoteWriterPort } from '../../../src/core/port/NoteWriterPort.js';
+import type { VaultEventPort } from '../../../src/core/port/VaultEventPort.js';
 import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
 
