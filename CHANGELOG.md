@@ -1,3 +1,30 @@
+# [0.12.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.11.0...0.12.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **eslint:** scope the vault project-source edge to the imported codec ([2ad5b6c](https://github.com/99linesofcode/obsidian-project-management/commit/2ad5b6c99db72bce895cbffc31147c9f9ffbccec))
+* **registry:** keep core baselines at the data root so registry writes survive ([7240649](https://github.com/99linesofcode/obsidian-project-management/commit/72406499371156ba05f6d428939e5212030049e5))
+* **registry:** reject prototype-polluting keys in the core baseline store ([6f38bc0](https://github.com/99linesofcode/obsidian-project-management/commit/6f38bc058d958c2189ce1ec994a1a5d3de2ae36c))
+
+
+### Features
+
+* **core:** add the baseline store port and its registry adapter ([9bdd84d](https://github.com/99linesofcode/obsidian-project-management/commit/9bdd84d252c4356bcc6ffba1512e0191a205d289))
+* **core:** add the project source port and its vault adapter ([eb55958](https://github.com/99linesofcode/obsidian-project-management/commit/eb55958d427e4718c4b822107ad10e41da83c664))
+* **core:** assemble a project pass and persist its baselines ([88561a7](https://github.com/99linesofcode/obsidian-project-management/commit/88561a7d693c5943057e125be29a29e8a6919023))
+
+
+
+# [0.11.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.10.0...0.11.0) (2026-10-08)
+
+
+### Features
+
+* **infrastructure:** add the Todoist mirror adapter and its descriptor ([c37c897](https://github.com/99linesofcode/obsidian-project-management/commit/c37c8972589e4855736a3ba65c90969da15d378b))
+
+
+
 # [0.10.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.9.0...0.10.0) (2026-10-08)
 
 
@@ -52,24 +79,6 @@
 * seed vault templates and bases on first run ([895073a](https://github.com/99linesofcode/obsidian-project-management/commit/895073a79a540a532278f38d7f8585155f98bd77))
 * **settings:** expose declarative setting definitions ([2f3d528](https://github.com/99linesofcode/obsidian-project-management/commit/2f3d52849b04aa3bb9899b349cc04007bdda9bd3))
 * store API tokens in Obsidian SecretStorage ([5d5428f](https://github.com/99linesofcode/obsidian-project-management/commit/5d5428f646545b0e10409276a8d23988ee5f2665))
-
-
-
-# [0.7.0](https://github.com/99linesofcode/obsidian-project-management/compare/v0.5.1...0.7.0) (2026-10-06)
-
-
-### Features
-
-* **ci:** release the plugin the way Obsidian distributes it ([68f1b52](https://github.com/99linesofcode/obsidian-project-management/commit/68f1b525374ae602cbba2626c2d993e62b2b19ce))
-
-
-
-## [0.5.1](https://github.com/99linesofcode/obsidian-project-management/compare/v0.5.0...v0.5.1) (2026-10-06)
-
-
-### Bug Fixes
-
-* **lint:** classify the composition root and arm the unknown-file gate ([cfdcb32](https://github.com/99linesofcode/obsidian-project-management/commit/cfdcb3275626b5f76c0b964f75472e51ed0697e1))
 
 
 
