@@ -25,7 +25,7 @@ describe('the provider isolation matrix', () => {
     expect(
       lintExitCode(
         'src/infrastructure/github/probe.ts',
-        "import '../todoist/TodoistTransport.js';\n",
+        "import '../todoist/createTodoistTransport.js';\n",
       ),
     ).not.toBe(0);
   });

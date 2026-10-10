@@ -6,7 +6,7 @@ export interface ConnectionValidationResult {
   errors: unknown[];
 }
 
-export class ConnectionValidator {
+export class ConnectionValidationService {
   constructor(private readonly registeredApplications: ReadonlySet<string>) {}
 
   validate(raw: unknown): ConnectionValidationResult {

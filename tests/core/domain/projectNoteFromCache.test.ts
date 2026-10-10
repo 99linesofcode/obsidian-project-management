@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ConnectionValidator } from '../../../src/core/domain/ConnectionValidator.js';
+import { ConnectionValidationService } from '../../../src/core/domain/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../../src/core/domain/projectNoteFromCache.js';
 
 const github = { tool: 'github', project: 'https://github.com/acme/widgets' };
 
-const connectionValidator = new ConnectionValidator(
+const connectionValidator = new ConnectionValidationService(
   new Set(['github', 'todoist']),
 );
 
@@ -111,7 +111,7 @@ describe('DISC-1 — the project note is read from the cache', () => {
     const note = projectNoteFromCache(
       'Projecten/Acme Widgets/_home.md',
       { connections: { work: { tool: 'acme', project: 'P-acme' } } },
-      new ConnectionValidator(new Set(['github', 'todoist', 'acme'])),
+      new ConnectionValidationService(new Set(['github', 'todoist', 'acme'])),
     );
 
     expect(note?.connections).toEqual({
