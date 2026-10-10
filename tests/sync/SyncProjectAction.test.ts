@@ -12,6 +12,8 @@ import type {
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
+import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
+import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
@@ -28,6 +30,7 @@ class FakeVault implements VaultPort {
   projectNotes: ProjectNoteData[] = [];
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
+  renames: Array<{ from: string; to: string }> = [];
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
@@ -35,7 +38,9 @@ class FakeVault implements VaultPort {
   }
   async createNote(): Promise<void> {}
   async writeNote(): Promise<void> {}
-  async renameNote(): Promise<void> {}
+  async renameNote(from: string, to: string): Promise<void> {
+    this.renames.push({ from, to });
+  }
   async moveFolder(): Promise<void> {}
   async listNotesInFolder(folder: string): Promise<string[]> {
     return this.folders.get(folder) ?? [];
@@ -116,6 +121,26 @@ class FakeSweep {
   }
 }
 
+function reconcileRecorder(events: string[]): TaskFieldReconciler {
+  return {
+    reconcile: async (project) => {
+      events.push(`reconcile:${project}`);
+    },
+  };
+}
+
+function projectLifecycleRecorder(
+  events: string[],
+  frozen: boolean,
+): ProjectLifecycleReconciler {
+  return {
+    reconcile: async () => {
+      events.push('lifecycle');
+      return { frozen };
+    },
+  };
+}
+
 function projectNote(
   projectName: string,
   archivedAt: string | null,
@@ -143,6 +168,7 @@ interface HarnessOptions {
   taken?: string[];
   todos?: string[];
   ensureBoard?: boolean;
+  engine?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -229,6 +255,18 @@ function harness(options: HarnessOptions = {}) {
     },
   };
 
+  const reconciler: { current: TaskFieldReconciler | undefined } = {
+    current: options.engine ? reconcileRecorder(events) : undefined,
+  };
+  const lifecycleFrozen =
+    (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
+    (options.state?.closed ?? false);
+  const newLifecycle: { current: ProjectLifecycleReconciler | undefined } = {
+    current: options.engine
+      ? projectLifecycleRecorder(events, lifecycleFrozen)
+      : undefined,
+  };
+
   const action = new SyncProjectAction(
     vault,
     syncState,
@@ -241,9 +279,22 @@ function harness(options: HarnessOptions = {}) {
     mirrorStatus,
     handleDeleted,
     ensureBoard,
+    undefined,
+    () => reconciler.current,
+    () => newLifecycle.current,
   );
 
-  return { action, events, vault, syncState, probe, sweep, lifecycle };
+  return {
+    action,
+    events,
+    vault,
+    syncState,
+    probe,
+    sweep,
+    lifecycle,
+    reconciler,
+    newLifecycle,
+  };
 }
 
 const openState: ProjectStateData = {
@@ -501,5 +552,158 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).not.toContain('ensureBoard:Acme Widgets');
+  });
+});
+
+describe('the setting-gated cutover', () => {
+  it('runs the legacy task halves when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('sweep');
+    expect(h.events).toContain('todoist');
+    expect(h.events).not.toContain('reconcile:Acme Widgets');
+  });
+
+  it('runs the new pass instead of the task halves when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).not.toContain('sweep');
+    expect(h.events).not.toContain('todoist');
+  });
+
+  it('keeps probe, board-ensure and lifecycle when the engine is on', async () => {
+    const h = harness({ state: openState, ensureBoard: true, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('ensureBoard:Acme Widgets');
+    expect(h.events).toContain('lifecycle');
+    expect(h.events).toContain('renames');
+  });
+
+  it('accepts no task-field writes for a frozen project when the engine is on', async () => {
+    const h = harness({
+      projectNotes: [projectNote('Acme Widgets', '')],
+      state: { ...openState, closed: true },
+      engine: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).not.toContain('reconcile:Acme Widgets');
+    expect(h.events).toEqual(['lifecycle', 'renames']);
+  });
+
+  it('sweeps a gone note while the engine is on', async () => {
+    const h = harness({
+      state: openState,
+      engine: true,
+      statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).toContain(
+      'delete:Projecten/Acme Widgets/taken/42-gone.md',
+    );
+  });
+
+  it('reads the engine setting at execute time, so a toggle needs no reload', async () => {
+    const h = harness({ state: openState });
+    await h.action.execute('Acme Widgets');
+    expect(h.events).toContain('todoist');
+    expect(h.events).not.toContain('reconcile:Acme Widgets');
+
+    h.events.length = 0;
+    h.reconciler.current = reconcileRecorder(h.events);
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).not.toContain('todoist');
+  });
+
+  it('snapshots the engine once so a mid-run toggle cannot mix the chain', async () => {
+    const h = harness({ state: openState, engine: true });
+    const lifecycle = h.newLifecycle.current!;
+    h.newLifecycle.current = {
+      reconcile: async (project) => {
+        h.reconciler.current = undefined;
+        return lifecycle.reconcile(project);
+      },
+    };
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+    expect(h.events).not.toContain('todoist');
+  });
+});
+
+describe('the setting-gated lifecycle cutover', () => {
+  it('runs the legacy lifecycle step when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.lifecycle.calls).toHaveLength(1);
+    expect(h.newLifecycle.current).toBeUndefined();
+  });
+
+  it('runs the new lifecycle and skips the legacy step when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.lifecycle.calls).toEqual([]);
+    expect(h.events).toContain('lifecycle');
+  });
+
+  it('skips the task-field pass when the new lifecycle freezes the project', async () => {
+    const h = harness({
+      projectNotes: [projectNote('Acme Widgets', '')],
+      state: { ...openState, closed: true },
+      engine: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).not.toContain('reconcile:Acme Widgets');
+  });
+
+  it('runs the task-field pass when the new lifecycle leaves the project active', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toContain('reconcile:Acme Widgets');
+  });
+});
+
+describe('the setting-gated migration cutover', () => {
+  it('migrates a legacy-named home note when the engine is on', async () => {
+    const h = harness({ state: openState, engine: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.vault.renames).toEqual([
+      {
+        from: 'Projecten/Acme Widgets/_home.md',
+        to: 'Projecten/Acme Widgets/_Acme Widgets.md',
+      },
+    ]);
+  });
+
+  it('leaves migration to the legacy lifecycle when the engine is off', async () => {
+    const h = harness({ state: openState });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.vault.renames).toEqual([]);
   });
 });

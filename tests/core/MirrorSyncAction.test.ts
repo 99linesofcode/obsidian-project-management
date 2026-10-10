@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js';
 import { Baseline } from '../../src/core/data/Baseline.js';
 import { CanonicalTask } from '../../src/core/data/CanonicalTask.js';
+import { MirrorSide } from '../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../src/core/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../src/core/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../src/core/data/RegisteredAdapter.js';
@@ -40,6 +41,27 @@ function mirrorAdapter(applicationId: string): {
   return { adapter, registered: result.adapters.get(applicationId)! };
 }
 
+class FailingMirrorAdapter extends ConformanceMirrorAdapter {
+  override async applyField(): Promise<void> {
+    throw new Error('mirror write failed');
+  }
+}
+
+function failingMirrorAdapter(applicationId: string): {
+  adapter: FailingMirrorAdapter;
+  registered: RegisteredAdapter;
+} {
+  const adapter = new FailingMirrorAdapter();
+  const result = registerAdapters([
+    new AdapterRegistration(conformanceDescriptor(applicationId), adapter),
+  ]);
+  return { adapter, registered: result.adapters.get(applicationId)! };
+}
+
+function side(name: string, registered: RegisteredAdapter): MirrorSide {
+  return new MirrorSide({ side: name, handle: 't1', adapter: registered });
+}
+
 function vaultOrigin(
   status: string,
   baseline: Baseline,
@@ -66,7 +88,7 @@ describe('MirrorSyncAction — the Status field end to end (F02 NWM-2, NWM-3)', 
       entityId: 't1',
       field: 'Status',
       origin: vaultOrigin('Done', new Baseline('Building', false), true),
-      mirrors: [registered],
+      mirrors: [side('conformance', registered)],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
     });
 
@@ -93,7 +115,11 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
       entityId: 't1',
       field: 'Status',
       origin: vaultOrigin('Building', new Baseline('Building', false)),
-      mirrors: [alpha.registered, beta.registered, gamma.registered],
+      mirrors: [
+        side('alpha', alpha.registered),
+        side('beta', beta.registered),
+        side('gamma', gamma.registered),
+      ],
       baselines: new Map([
         ['alpha', new Baseline('Building', false)],
         ['beta', new Baseline('Building', false)],
@@ -108,5 +134,32 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
     expect(alpha.adapter.currentTask('t1')?.status).toBe('Review');
     expect(beta.adapter.currentTask('t1')?.status).toBe('Review');
     expect(gamma.adapter.currentTask('t1')?.status).toBe('Review');
+  });
+});
+
+describe('MirrorSyncAction — a failed mirror write (F02)', () => {
+  it('records the failed side and keeps fanning out to the rest', async () => {
+    const boom = failingMirrorAdapter('boom');
+    const alpha = mirrorAdapter('alpha');
+    boom.adapter.seed(task('t1', 'Building'));
+    alpha.adapter.seed(task('t1', 'Building'));
+
+    const pass = new MirrorSyncPass({
+      entityId: 't1',
+      field: 'Status',
+      origin: vaultOrigin('Done', new Baseline('Building', false), true),
+      mirrors: [side('boom', boom.registered), side('alpha', alpha.registered)],
+      baselines: new Map([
+        ['boom', new Baseline('Building', false)],
+        ['alpha', new Baseline('Building', false)],
+      ]),
+    });
+
+    const record = await new MirrorSyncAction().invoke(pass);
+
+    expect(record.failed).toEqual(['boom']);
+    expect(record.written).toEqual(['alpha']);
+    expect(record.advanced).toEqual(['alpha']);
+    expect(alpha.adapter.currentTask('t1')?.status).toBe('Done');
   });
 });

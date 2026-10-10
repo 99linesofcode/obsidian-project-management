@@ -14,12 +14,16 @@ import type {
 import type { SyncChecklistAction } from '../todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../tasks/CompleteTaskCascadeAction.js';
 import type { ConnectionSyncHalf, SyncHalfFactory } from './SyncHalves.js';
+import type { ProjectLifecycleReconciler } from './ProjectLifecycleReconciler.js';
+import type { TaskFieldReconciler } from './TaskFieldReconciler.js';
 import type { EnsureProjectBoardAction } from '../projects/EnsureProjectBoardAction.js';
 import type { RekeyRenamedConnectionsAction } from '../projects/RekeyRenamedConnectionsAction.js';
+import { MigrateProjectHomeNoteAction } from '../projects/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 
 export class SyncProjectAction {
   private readonly sweepDeletedNotes: SweepDeletedNotesAction;
+  private readonly migrateProjectHomeNote: MigrateProjectHomeNoteAction;
   private stepErrors: unknown[] = [];
 
   constructor(
@@ -35,12 +39,15 @@ export class SyncProjectAction {
     handleDeletedNote: HandleDeletedNoteAction,
     private readonly ensureProjectBoard?: EnsureProjectBoardAction,
     private readonly rekeyRenamedConnections?: RekeyRenamedConnectionsAction,
+    private readonly taskFieldReconciler?: () => TaskFieldReconciler | undefined,
+    private readonly projectLifecycleReconciler?: () => ProjectLifecycleReconciler | undefined,
   ) {
     this.sweepDeletedNotes = new SweepDeletedNotesAction(
       vault,
       syncState,
       handleDeletedNote,
     );
+    this.migrateProjectHomeNote = new MigrateProjectHomeNoteAction(vault);
   }
 
   async execute(project: string): Promise<unknown[]> {
@@ -50,6 +57,18 @@ export class SyncProjectAction {
     const note = await this.resolveProject(project);
     if (!note) {
       return this.stepErrors;
+    }
+
+    const lifecycleReconciler = this.projectLifecycleReconciler?.();
+    const taskFieldReconciler = this.taskFieldReconciler?.();
+    if (lifecycleReconciler !== undefined) {
+      await this.step('migrate home note', async () => {
+        await this.migrateProjectHomeNote.execute({
+          projectName: project,
+          notePath: note.path,
+          locationArchived: note.archivedAt !== null,
+        });
+      });
     }
 
     if (this.rekeyRenamedConnections) {
@@ -78,12 +97,15 @@ export class SyncProjectAction {
 
     const boardState = await this.probe(project, note.connections);
 
-    const verdict = await this.runLifecycle(
-      project,
-      note,
-      boardState,
-      syncedAt,
-    );
+    const verdict =
+      lifecycleReconciler === undefined
+        ? await this.runLifecycle(project, note, boardState, syncedAt)
+        : await this.runNewLifecycle(
+            project,
+            note,
+            boardState,
+            lifecycleReconciler,
+          );
 
     await this.step('renames', () =>
       this.detectNoteRenames.execute({ projectName: project, syncedAt }),
@@ -93,25 +115,33 @@ export class SyncProjectAction {
       .map(([slug, connection]) => this.halfFactory.create(slug, connection))
       .filter((half): half is ConnectionSyncHalf => half !== null);
 
-    await this.step('code host half', () =>
-      this.runBoardHalves(
-        project,
-        note.connections,
-        halves,
-        boardState,
-        verdict,
-        syncedAt,
-      ),
-    );
+    if (taskFieldReconciler === undefined) {
+      await this.step('code host half', () =>
+        this.runBoardHalves(
+          project,
+          note.connections,
+          halves,
+          boardState,
+          verdict,
+          syncedAt,
+        ),
+      );
+    }
 
     await this.step('vault consistency', () =>
       this.runVaultConsistency(project, syncedAt),
     );
 
     if (!verdict.frozen) {
-      await this.step('task manager half', () =>
-        this.runTaskHalves(project, note.connections, halves, syncedAt),
-      );
+      if (taskFieldReconciler === undefined) {
+        await this.step('task manager half', () =>
+          this.runTaskHalves(project, note.connections, halves, syncedAt),
+        );
+      } else {
+        await this.step('task fields', () =>
+          taskFieldReconciler.reconcile(project),
+        );
+      }
     }
 
     await this.step('deletions', async () => {
@@ -165,6 +195,34 @@ export class SyncProjectAction {
         syncedAt,
         ...(boardState === undefined ? {} : { closed: boardState.closed }),
       });
+    } catch (error) {
+      console.error(
+        `SyncProjectAction: lifecycle failed for ${project}`,
+        error,
+      );
+      return {
+        remoteProjectId: null,
+        frozen: note.archivedAt !== null || (boardState?.closed ?? false),
+        notePath: note.path,
+        archivedAt: note.archivedAt,
+      };
+    }
+  }
+
+  private async runNewLifecycle(
+    project: string,
+    note: ProjectNoteData,
+    boardState: ProjectStateData | undefined,
+    reconciler: ProjectLifecycleReconciler,
+  ): Promise<ProjectLifecycleVerdict> {
+    try {
+      const { frozen } = await reconciler.reconcile(project);
+      return {
+        remoteProjectId: null,
+        frozen,
+        notePath: note.path,
+        archivedAt: frozen ? '' : null,
+      };
     } catch (error) {
       console.error(
         `SyncProjectAction: lifecycle failed for ${project}`,

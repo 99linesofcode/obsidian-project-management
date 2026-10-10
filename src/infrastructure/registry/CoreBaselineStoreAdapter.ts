@@ -1,6 +1,8 @@
-import type { CanonicalField } from '../../core/canonicalField.js';
 import { Baseline } from '../../core/data/Baseline.js';
-import type { BaselineStorePort } from '../../core/ports/BaselineStorePort.js';
+import type {
+  BaselineField,
+  BaselineStorePort,
+} from '../../core/ports/BaselineStorePort.js';
 
 export interface CoreBaselineStorage {
   load(): Promise<Record<string, unknown>>;
@@ -15,7 +17,7 @@ export class CoreBaselineStoreAdapter implements BaselineStorePort {
 
   async read(
     entityId: string,
-    field: CanonicalField,
+    field: BaselineField,
     side: string,
   ): Promise<Baseline | null> {
     const data = await this.storage.load();
@@ -28,7 +30,7 @@ export class CoreBaselineStoreAdapter implements BaselineStorePort {
 
   async write(
     entityId: string,
-    field: CanonicalField,
+    field: BaselineField,
     side: string,
     baseline: Baseline,
   ): Promise<void> {

@@ -1,44 +1,107 @@
 import { describe, expect, it } from 'vitest';
+import { AssembleProjectPassAction } from '../../../src/core/AssembleProjectPassAction.js';
 import { AdapterRegistration } from '../../../src/core/data/AdapterRegistration.js';
 import { Baseline } from '../../../src/core/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/data/CanonicalTask.js';
+import { ConnectionEnvelope } from '../../../src/core/data/ConnectionEnvelope.js';
+import { DeclaredConnection } from '../../../src/core/data/DeclaredConnection.js';
+import { MirrorSide } from '../../../src/core/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/data/MirrorSyncPass.js';
+import { OriginObservation } from '../../../src/core/data/OriginObservation.js';
+import type { RegisteredAdapter } from '../../../src/core/data/RegisteredAdapter.js';
+import type { BaselineStorePort } from '../../../src/core/ports/BaselineStorePort.js';
+import type { MirrorAdapterFactoryPort } from '../../../src/core/ports/MirrorAdapterFactoryPort.js';
+import type { MirrorHandlePort } from '../../../src/core/ports/MirrorHandlePort.js';
+import type { OriginPort } from '../../../src/core/ports/OriginPort.js';
+import type { ProjectSourcePort } from '../../../src/core/ports/ProjectSourcePort.js';
 import { SideObservation } from '../../../src/core/data/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/registerAdapters.js';
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
-import { CodeHostTarget } from '../../../src/infrastructure/github/CodeHostTarget.js';
 import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
 import { GithubTaskMapper } from '../../../src/github/GithubTaskMapper.js';
 import { typeFromLabels } from '../../../src/shared/typeFromLabels.js';
 
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
 const PARENT_URL = 'https://github.com/acme/widgets/issues/40';
+const REPO_URL = 'https://github.com/acme/widgets';
 
 function target(): string {
-  return new CodeHostTarget({
-    repoUrl: 'https://github.com/acme/widgets',
-    projectNodeId: 'PVT_123',
-    statusFieldId: 'PVTF_456',
-    statusOptions: [
-      { id: 'PVTSSF_1', name: 'Unshaped' },
-      { id: 'PVTSSF_2', name: 'Done' },
-    ],
-  }).serialize();
+  return REPO_URL;
+}
+
+function repoBoardsResponse(): { status: number; json: unknown } {
+  return {
+    status: 200,
+    json: {
+      data: {
+        repository: {
+          id: 'R_kgDOAAAA',
+          projectsV2: {
+            nodes: [
+              {
+                id: 'PVT_123',
+                title: 'widgets',
+                url: 'https://github.com/orgs/acme/projects/1',
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+}
+
+function projectFieldsResponse(): { status: number; json: unknown } {
+  return {
+    status: 200,
+    json: {
+      data: {
+        node: {
+          id: 'PVT_123',
+          fields: {
+            nodes: [
+              {
+                id: 'PVTF_456',
+                name: 'Status',
+                options: [
+                  { id: 'PVTSSF_1', name: 'Unshaped' },
+                  { id: 'PVTSSF_2', name: 'Done' },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
 }
 
 class FakeTransport implements CodeHostTransport {
   readonly bodies: string[] = [];
   readonly paths: string[] = [];
+  readonly derivationBodies: string[] = [];
   private readonly responses: Array<{ status: number; json: unknown }>;
+  private readonly derivation: Array<{ status: number; json: unknown }>;
 
-  constructor(responses: Array<{ status: number; json: unknown }>) {
+  constructor(
+    responses: Array<{ status: number; json: unknown }>,
+    derivation: Array<{ status: number; json: unknown }> = [
+      repoBoardsResponse(),
+      projectFieldsResponse(),
+    ],
+  ) {
     this.responses = [...responses];
+    this.derivation = [...derivation];
   }
 
   async post(body: string): Promise<{ status: number; json: unknown }> {
+    if (body.includes('RepoBoards') || body.includes('ProjectFields')) {
+      this.derivationBodies.push(body);
+      return this.nextDerivation();
+    }
     this.bodies.push(body);
     return this.next();
   }
@@ -79,6 +142,14 @@ class FakeTransport implements CodeHostTransport {
     const response = this.responses.shift();
     if (response === undefined) {
       throw new Error('fake transport: no more responses queued');
+    }
+    return response;
+  }
+
+  private nextDerivation(): { status: number; json: unknown } {
+    const response = this.derivation.shift();
+    if (response === undefined) {
+      throw new Error('fake transport: no more derivation responses queued');
     }
     return response;
   }
@@ -516,6 +587,225 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
   });
 });
 
+describe('CodeHostMirrorAdapter — the board is derived from the repository (F02 NWM-2)', () => {
+  it('prefers the registry identity over deriving from the repository', async () => {
+    const transport = new FakeTransport([
+      boardResponse([issueNode()], [cardNode()]),
+    ]);
+    const adapter = new CodeHostMirrorAdapter(transport, target(), async () => ({
+      projectNodeId: 'PVT_123',
+      statusFieldId: 'PVTF_456',
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Unshaped' },
+        { id: 'PVTSSF_2', name: 'Done' },
+      ],
+    }));
+
+    const task = await adapter.readTask(ISSUE_URL);
+
+    expect(task!.status).toBe('Building');
+    expect(transport.derivationBodies).toEqual([]);
+  });
+
+  it('throws a clear error when the repository has no board', async () => {
+    const transport = new FakeTransport(
+      [],
+      [
+        {
+          status: 200,
+          json: {
+            data: {
+              repository: { id: 'R_kgDOAAAA', projectsV2: { nodes: [] } },
+            },
+          },
+        },
+      ],
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target());
+
+    await expect(adapter.readTask(ISSUE_URL)).rejects.toThrow(
+      'repository widgets has no board',
+    );
+  });
+});
+
+describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () => {
+  it('reconciles a board it created in the same pass', async () => {
+    const transport = new FakeTransport(
+      [
+        { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } },
+        {
+          status: 200,
+          json: { data: { viewer: { projectsV2: { nodes: [] } } } },
+        },
+        { status: 200, json: { data: { viewer: { id: 'U_1' } } } },
+        {
+          status: 200,
+          json: {
+            data: {
+              createProjectV2: {
+                projectV2: { id: 'PVT_NEW', url: 'https://example.test/p' },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              linkProjectV2ToRepository: {
+                repository: { id: 'R_kgDOAAAA' },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              createProjectV2Field: {
+                projectV2Field: {
+                  id: 'PVTF_NEW',
+                  name: 'Status',
+                  options: [
+                    { id: 'PVTSSF_1', name: 'Unshaped' },
+                    { id: 'PVTSSF_2', name: 'Done' },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: { node: { id: 'PVT_NEW', title: 'widgets', closed: false } },
+          },
+        },
+      ],
+      [
+        {
+          status: 200,
+          json: {
+            data: {
+              repository: { id: 'R_kgDOAAAA', projectsV2: { nodes: [] } },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: { data: { node: { id: 'PVT_NEW', fields: { nodes: [] } } } },
+        },
+      ],
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target(), undefined, [
+      'Unshaped',
+      'Done',
+    ]);
+
+    const before = await adapter.readProject(target());
+    const created = await adapter.createProject(target(), 'widgets');
+    const after = await adapter.readProject(target());
+
+    expect(before).toBeNull();
+    expect(created.handle).toBe(target());
+    expect(after?.handle).toBe('PVT_NEW');
+    expect(after?.archived).toBe(false);
+    expect(transport.bodies[5]).toContain('CreateStatusField');
+    expect(transport.bodies[5]).toContain('"name":"Unshaped"');
+    expect(transport.bodies[5]).toContain('"name":"Done"');
+  });
+
+  it('adopts an orphan board instead of creating a duplicate', async () => {
+    const transport = new FakeTransport(
+      [
+        { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } },
+        {
+          status: 200,
+          json: {
+            data: {
+              viewer: {
+                projectsV2: {
+                  nodes: [
+                    {
+                      id: 'PVT_ORPHAN',
+                      title: 'widgets',
+                      repositories: { nodes: [] },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              linkProjectV2ToRepository: {
+                repository: { id: 'R_kgDOAAAA' },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              createProjectV2Field: {
+                projectV2Field: {
+                  id: 'PVTF_ORPHAN',
+                  name: 'Status',
+                  options: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
+                },
+              },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: {
+              node: { id: 'PVT_ORPHAN', title: 'widgets', closed: false },
+            },
+          },
+        },
+      ],
+      [
+        {
+          status: 200,
+          json: {
+            data: {
+              repository: { id: 'R_kgDOAAAA', projectsV2: { nodes: [] } },
+            },
+          },
+        },
+        {
+          status: 200,
+          json: {
+            data: { node: { id: 'PVT_ORPHAN', fields: { nodes: [] } } },
+          },
+        },
+      ],
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target(), undefined, [
+      'Unshaped',
+    ]);
+
+    await adapter.readProject(target());
+    await adapter.createProject(target(), 'widgets');
+    const after = await adapter.readProject(target());
+
+    expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
+      false,
+    );
+    expect(transport.bodies.some((body) => body.includes('LinkBoard'))).toBe(
+      true,
+    );
+    expect(after?.handle).toBe('PVT_ORPHAN');
+  });
+});
+
 describe('githubDescriptor — registers with the core (F01 ACM-8, ACM-9)', () => {
   it('registers the code host as a mirror under the application id github', () => {
     const result = registerAdapters([
@@ -577,7 +867,9 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
         completeFetch: true,
         currentCompleted: false,
       }),
-      mirrors: [registered],
+      mirrors: [
+        new MirrorSide({ side: 'github', handle: ISSUE_URL, adapter: registered }),
+      ],
       baselines: new Map([['github', new Baseline('Building', false)]]),
     });
 
@@ -587,5 +879,124 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
     expect(record.written).toEqual(['github']);
     expect(transport.bodies[4]).toContain('SetBoardStatus');
     expect(transport.bodies[4]).toContain('"optionId":"PVTSSF_2"');
+  });
+});
+
+class FieldOrigin implements OriginPort {
+  readonly values = new Map<string, string | null>();
+  readonly applied: CanonicalFieldWrite[] = [];
+
+  async observe(_handle: string, field: string): Promise<OriginObservation> {
+    return new OriginObservation({
+      current: this.values.get(field) ?? null,
+      currentCompleted: false,
+      fieldTime: null,
+      trustworthy: true,
+    });
+  }
+
+  async applyField(write: CanonicalFieldWrite): Promise<void> {
+    this.applied.push(write);
+  }
+
+  async trash(): Promise<void> {}
+}
+
+class MemoryBaselines implements BaselineStorePort {
+  private readonly baselines = new Map<string, Baseline>();
+
+  async read(
+    entityId: string,
+    field: string,
+    side: string,
+  ): Promise<Baseline | null> {
+    return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
+  }
+
+  async write(
+    entityId: string,
+    field: string,
+    side: string,
+    baseline: Baseline,
+  ): Promise<void> {
+    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
+  }
+}
+
+describe('AssembleProjectPassAction drives the code host through a resolved handle (F02 NWM-2, NWM-3)', () => {
+  it('reads the issue by its resolved handle and reconciles its Status', async () => {
+    const entityId = 'Projecten/Acme/taken/fix-the-bug.md';
+    const transport = new FakeTransport(
+      Array.from({ length: 30 }, () =>
+        boardResponse([issueNode()], [cardNode()]),
+      ),
+    );
+    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const registered = registerAdapters([
+      new AdapterRegistration(githubDescriptor(), adapter),
+    ]).adapters.get('github')!;
+
+    const projectSource: ProjectSourcePort = {
+      readConnections: async () => [
+        new DeclaredConnection({
+          slug: 'gh',
+          envelope: new ConnectionEnvelope({
+            application: 'github',
+            target: target(),
+          }),
+        }),
+      ],
+      listEntities: async () => [entityId],
+    };
+    const origin = new FieldOrigin();
+    origin.values.set('title', 'Fix the bug');
+    origin.values.set('body', 'The bug happens on resize.');
+    origin.values.set('completion', 'false');
+    origin.values.set('Status', 'Todo');
+    origin.values.set('label', 'type: task');
+    origin.values.set('subtasks', PARENT_URL);
+    const baselines = new MemoryBaselines();
+    for (const [field, value] of origin.values) {
+      await baselines.write(
+        entityId,
+        field,
+        'origin',
+        new Baseline(value, false),
+      );
+    }
+    const mirrorAdapters: MirrorAdapterFactoryPort = {
+      create: (application): RegisteredAdapter | null =>
+        application === 'github' ? registered : null,
+    };
+    const handles: MirrorHandlePort = {
+      resolve: async (connection, entity) =>
+        connection === 'gh' && entity === entityId ? ISSUE_URL : null,
+    };
+    const action = new AssembleProjectPassAction(
+      projectSource,
+      origin,
+      baselines,
+      handles,
+      mirrorAdapters,
+    );
+
+    const records = await action.invoke('Acme');
+    const status = records.find((record) => record.field === 'Status')!;
+
+    expect(status.result.value).toBe('Building');
+    expect(status.result.winner).toBe('mirror:gh');
+    expect(origin.applied).toEqual([
+      new CanonicalFieldWrite({
+        handle: entityId,
+        field: 'Status',
+        value: 'Building',
+      }),
+    ]);
+    expect(
+      transport.derivationBodies.some((body) => body.includes('RepoBoards')),
+    ).toBe(true);
+    expect(
+      transport.derivationBodies.some((body) => body.includes('ProjectFields')),
+    ).toBe(true);
   });
 });

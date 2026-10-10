@@ -115,8 +115,8 @@ provider actions. A provider's name never appears in the chain.
 | `src/tasks/`          | Task actions: the vault writer, note creation, the completion cascade, promote, status propagation                                                                                                                                   | TypeScript                   | in-process       |
 | `src/todos/`          | Checklist ⇄ to-do note consistency in both directions                                                                                                                                                                                | TypeScript                   | the vault        |
 | `src/shared/`         | The kernel: the four ports, canonical DTOs, `Reconciliation`, `VerdictResolver`, `SyncVerdict` and the pure helpers                                                                                                                  | TypeScript                   | in-process       |
-| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store and project-source ports, and the pass assembler                                                       | TypeScript                   | in-process       |
-| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
+| `src/core/`           | The multi-adapter core: the F01 capability vocabulary and ports, the canonical DTOs, the pure N-way merge, the adapter descriptor/registrar, the generic mirror-sync action, the baseline-store, project-source, mirror-handle and adapter-factory ports, and the pass assembler                                                       | TypeScript                   | in-process       |
+| `src/infrastructure/` | Driven adapters for the core, one namespace per vendor — the in-memory conformance adapter, the vault origin and project-source adapters, the registry baseline store and mirror-handle adapter, and the GitHub and Todoist mirror adapters                                                                    | TypeScript                   | external tools   |
 
 ### Ports & adapters
 
@@ -157,8 +157,9 @@ clears. `data.json` is secret-free.
 ### The multi-adapter core (walking skeleton)
 
 The `core/` block is the target shape of ADR-001, proven end to end on one thin
-path (the `Status` field) with the plugin's runtime behaviour unchanged. It
-consists of the port layer and the pure core:
+path (the `Status` field). It runs in the runtime only when the
+`multiAdapterEngine` setting is on (default off); with it off the legacy chain
+is unchanged. It consists of the port layer and the pure core:
 
 - **Capability ports (≤5), capability-grouped.** `ProjectPort` (`project`,
   `lifecycle`), `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`,
@@ -192,7 +193,9 @@ consists of the port layer and the pure core:
   the one generic write entry. It also writes the reconciled value back to the
   origin (or trashes the note on a delete), and advances the baseline of every
   side written or already matching — a skipped write advances too; a failed
-  write advances nothing (NWM-17).
+  write advances nothing (NWM-17). A mirror write that throws is recorded on the
+  pass record's failed sides and fan-out continues to the remaining mirrors, so
+  one failing connection never abandons the rest.
 - **The origin port** (`OriginPort`). The core's need for the origin: observe a
   note's field as a canonical value plus its edit time, trusted by default
   (NWM-28); apply a canonical field write to the note; trash the note (never a
@@ -216,14 +219,72 @@ consists of the port layer and the pure core:
 - **The project source port** (`ProjectSourcePort`). The core's need to read a
   project's declared connections as `{application, target}` envelopes and to
   enumerate the project's task notes. Its adapter
-  (`infrastructure/vault/VaultProjectSourceAdapter`) reuses the legacy vault
-  module's connections codec and note reads.
+  (`infrastructure/vault/VaultProjectSourceAdapter`) discovers the home note
+  name-agnostically through the vault's project-note scan — the same discovery
+  the legacy chain and the lifecycle adapter use — so an unmigrated legacy-named
+  home note still scopes its mirrors, and reuses the legacy vault module's
+  connections codec and note reads.
 - **The pass assembler** (`AssembleProjectPassAction`). Given a project, it
-  resolves each connection envelope to its registered adapter, assembles the
-  origin side through `OriginPort` and each mirror's baseline through the
-  baseline store, runs `MirrorSyncAction` once per (entity, canonical value
-  field), and persists the advanced baselines. It is inert until a test (or a
-  later slice) drives it; the existing chain remains the runtime.
+  reads each declared connection with its slug, builds the connection's mirror
+  adapter through the factory (scoped by the connection's target), resolves the
+  entity to that connection's own handle through the mirror-handle port,
+  assembles the origin side through `OriginPort` and each mirror's baseline
+  through the baseline store, runs `MirrorSyncAction` once per (entity,
+  canonical value field) against a per-connection `MirrorSide`, and persists the
+  advanced baselines. The project source enumerates note paths, so a mirror side
+  is keyed `mirror:<slug>` — disjoint from the origin side's `origin` key, so a
+  connection slug of `origin` cannot collide — while the origin keeps the note
+  path as its handle. Two connections to the same application stay distinct
+  sides; a connection whose entity has no resolved handle is skipped.
+- **The mirror-handle port** (`MirrorHandlePort`). The core's need to resolve a
+  note path to the handle a given connection's application uses for it (an issue
+  URL, a task id). Its adapter
+  (`infrastructure/registry/RegistryMirrorHandleAdapter`) first maps the note
+  path to the registry entity's id (`findByNotePath`), then reads that entity's
+  per-connection item through the existing `findMirrorItemByEntity` lookup.
+- **The mirror-project port** (`MirrorProjectPort`). The core's need to resolve
+  and record the handle a connection's application uses for the mirror project
+  (a board, a project id). Its adapter
+  (`infrastructure/registry/RegistryMirrorProjectAdapter`) stores the handle in
+  the existing per-connection port state, preserving the rest of the
+  bookkeeping. A connection with no recorded handle and no readable mirror
+  project is onboarded: the lifecycle pass creates it through
+  `ProjectPort.createProject`, records the returned handle, and reconciles it in
+  the same pass rather than skipping it.
+- **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction` +
+  `AssembleProjectLifecyclePassAction`). The project-level peer of the
+  mirror-sync action: it resolves each connection's mirror project through
+  `MirrorProjectPort`, onboarding a missing one via `ProjectPort.createProject`
+  so a newly-connected project is onboarded in the same pass, then reads the
+  origin's archived state through `ProjectLifecycleOriginPort` and each
+  mirror's through `ProjectPort`, runs the same pure `mergeField` ladder over
+  the archived fact, and fans the reconciled freeze out to the origin and every
+  capable mirror. Any side can start the freeze or the unfreeze (NWM-15); the
+  reconciled freeze is the pass's `frozen` verdict, which gates the task-field
+  pass (NWM-16). Its per-side baselines live
+  in the same `coreBaselines` store under the `lifecycle` field. The archived
+  fact carries a timestamp: the origin's is the home note's edit time, trusted
+  by default (NWM-28), and each mirror's is read through `ProjectPort`'s
+  `archivedTime` — a provider that exposes none returns null, so the ladder
+  falls through to the vault tie-break. The origin adapter
+  (`infrastructure/vault/VaultProjectLifecycleAdapter`) discovers the home note
+  name-agnostically — the same discovery the legacy chain uses, so an
+  unmigrated note is never misread as archived — moves the project folder on a
+  freeze/unfreeze, and relocates the registry's entity paths in lockstep.
+- **The mirror-adapter factory port** (`MirrorAdapterFactoryPort`). The core's
+  need to build a mirror adapter for an application and a connection target. The
+  composition root implements it over the provider adapters, so one adapter
+  instance serves exactly one connection.
+- **The gated cutover.** `SyncProjectAction` reads the engine setting at execute
+  time through two reconciler providers, so toggling `multiAdapterEngine` takes
+  effect on the next sync without a reload. When it is on, `SyncProjectAction`
+  runs the assembled lifecycle pass for the freeze verdict and the assembled
+  pass for task-field reconciliation, migrates the project's home note through
+  the legacy migration action (which the skipped legacy lifecycle would
+  otherwise have run), and skips the legacy lifecycle step and the legacy
+  code-host and task halves; probe, board-ensure, capture, vault consistency and
+  the deletion sweep still run. When it is off, the legacy chain runs exactly as
+  before.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -329,10 +390,10 @@ over HTTPS.
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
     are the `src/` module folders plus the src root (the composition root);
     `core/` is the inner block and imports no module; `infrastructure/` may
-    import `core/` only, with one transitional, file-scoped exception — the
+    import `core/` only, with two transitional, file-scoped exceptions — the
     vault project-source adapter reuses the legacy `vault/` connections codec
-    and note reads while the old chain is retired; `shared/` imports from no
-    module; provider modules
+    and note reads, and the shared `projectHomePath` convention, while the old
+    chain is retired; `shared/` imports from no module; provider modules
     never import each other; neutral modules consume the kernel and the ports
     that live in it, never a provider adapter directly; the composition root
     wires everything. An unlisted import edge fails the lint, so the dependency
@@ -385,12 +446,19 @@ developer manual records the remaining code-vs-brief discrepancies.
 
 The multi-adapter core (`core/` + `infrastructure/`) is a walking skeleton:
 the shape is built and proven on the `Status` field through the conformance
-adapter, GitHub and Todoist mirror adapters now implement the capability
-ports, the vault origin adapter completes the origin round-trip, and the pass
-assembler plus the core baseline store assemble a whole project pass and
-persist its baselines. None of it is wired at the composition root; running
-the assembled pass in the runtime is a later slice, and the existing chain is
-unchanged.
+adapter, GitHub and Todoist mirror adapters implement the capability ports, the
+vault origin adapter completes the origin round-trip, and the pass assembler
+plus the core baseline store assemble a whole project pass and persist its
+baselines. Project lifecycle (archive/unarchive) reconciles through the same
+core: the lifecycle pass assembler reads the origin's and each mirror's
+archived state, runs the same N-way ladder, and fans the freeze out. The
+runtime cutover is gated by the `multiAdapterEngine` plugin setting (default
+off): with it on, the chain builds the origin and the per-connection mirror
+adapters from the project's connections and the stored secrets, runs the
+assembled lifecycle pass for the freeze verdict and the assembled pass for
+task-field reconciliation, and skips the legacy lifecycle step and the legacy
+task halves; with it off the legacy chain runs exactly as before. The legacy
+chain is not yet retired.
 
 ## 10. Project Identification
 

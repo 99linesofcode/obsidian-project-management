@@ -27,6 +27,40 @@ const PROJECT_CONTENT_QUERY = `
   }
 `;
 
+const REPO_BOARDS_QUERY = `
+  query RepoBoards($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) {
+      id
+      projectsV2(first: 100) {
+        nodes {
+          id
+          title
+          url
+        }
+      }
+    }
+  }
+`;
+
+const PROJECT_FIELDS_QUERY = `
+  query ProjectFields($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        id
+        fields(first: 20) {
+          nodes {
+            ... on ProjectV2SingleSelectField {
+              id
+              name
+              options { id name }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 const PROJECT_DETAIL_QUERY = `
   query ProjectDetail($owner: String!, $name: String!, $projectId: ID!) {
     repository(owner: $owner, name: $name) {
@@ -131,6 +165,20 @@ const VIEWER_QUERY = `
   }
 `;
 
+const VIEWER_BOARDS_QUERY = `
+  query ViewerBoards {
+    viewer {
+      projectsV2(first: 100) {
+        nodes {
+          id
+          title
+          repositories(first: 1) { nodes { id } }
+        }
+      }
+    }
+  }
+`;
+
 const CREATE_BOARD_MUTATION = `
   mutation CreateBoard($ownerId: ID!, $title: String!) {
     createProjectV2(input: { ownerId: $ownerId, title: $title }) {
@@ -204,6 +252,22 @@ interface RepoParts {
   name: string;
 }
 
+export interface BoardIdentity {
+  readonly projectNodeId: string;
+  readonly statusFieldId: string;
+  readonly statusOptions: readonly StatusOption[];
+}
+
+interface RepoBoard {
+  projectNodeId: string;
+  name: string;
+}
+
+interface StatusField {
+  id: string;
+  options: readonly StatusOption[];
+}
+
 interface RawIssue {
   url: string;
   nodeId: string;
@@ -231,18 +295,136 @@ interface BoardSnapshot {
 
 export class CodeHostMirrorAdapter implements MirrorAdapter {
   private readonly target: CodeHostTarget;
+  private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
   constructor(
     private readonly transport: CodeHostTransport,
     target: string,
+    private readonly boardIdentity?: () => Promise<BoardIdentity | null>,
+    private readonly statusOptions: readonly string[] = [],
   ) {
     this.target = CodeHostTarget.parse(target);
   }
 
+  private board(repoUrl: string): Promise<BoardIdentity | null> {
+    let board = this.boards.get(repoUrl);
+    if (board === undefined) {
+      board = this.resolveBoard(repoUrl);
+      this.boards.set(repoUrl, board);
+    }
+    return board;
+  }
+
+  private async requireBoard(repoUrl: string): Promise<BoardIdentity> {
+    const board = await this.board(repoUrl);
+    if (board === null) {
+      throw new Error(
+        `code host: repository ${repoParts(repoUrl).name} has no board`,
+      );
+    }
+    return board;
+  }
+
+  private async resolveBoard(repoUrl: string): Promise<BoardIdentity | null> {
+    const cached = await this.boardIdentity?.();
+    if (cached !== undefined && cached !== null && cached.projectNodeId !== '') {
+      return cached;
+    }
+    return this.deriveBoard(repoUrl);
+  }
+
+  private async deriveBoard(repoUrl: string): Promise<BoardIdentity | null> {
+    const repo = repoParts(repoUrl);
+    const data = await this.graphql(REPO_BOARDS_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+    });
+    const repository = data.repository;
+    if (!isRecord(repository) || typeof repository.id !== 'string') {
+      throw new Error(
+        `code host: repository ${repo.owner}/${repo.name} not found`,
+      );
+    }
+    const boards = nodesOf(repository, 'projectsV2')
+      .filter(isRecord)
+      .flatMap(parseRepoBoard);
+    const board = chooseBoard(repo.name, boards);
+    if (board === null) {
+      return null;
+    }
+    const fields = await this.graphql(PROJECT_FIELDS_QUERY, {
+      projectId: board.projectNodeId,
+    });
+    const status = statusField(fields.node);
+    if (status === null) {
+      throw new Error(
+        `code host: board ${board.projectNodeId} has no Status field`,
+      );
+    }
+    return {
+      projectNodeId: board.projectNodeId,
+      statusFieldId: status.id,
+      statusOptions: status.options,
+    };
+  }
+
+  private async findOrphanBoard(name: string): Promise<string | null> {
+    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
+    for (const node of nodesOf(data.viewer, 'projectsV2')) {
+      if (
+        isRecord(node) &&
+        node.title === name &&
+        typeof node.id === 'string' &&
+        nodesOf(node, 'repositories').length === 0
+      ) {
+        return node.id;
+      }
+    }
+    return null;
+  }
+
+  private async createBoard(name: string): Promise<string> {
+    const ownerId = await this.viewerId();
+    const created = await this.graphql(CREATE_BOARD_MUTATION, {
+      ownerId,
+      title: name,
+    });
+    return createdProjectId(created);
+  }
+
+  private async ensureStatusField(projectId: string): Promise<StatusField> {
+    const data = await this.graphql(PROJECT_FIELDS_QUERY, { projectId });
+    const existing = statusField(data.node);
+    if (existing !== null) {
+      return existing;
+    }
+    return this.createStatusField(projectId);
+  }
+
+  private async createStatusField(projectId: string): Promise<StatusField> {
+    const created = await this.graphql(CREATE_STATUS_FIELD_MUTATION, {
+      projectId,
+      options: this.statusOptions.map((name) => ({
+        name,
+        color: 'GRAY',
+        description: '',
+      })),
+    });
+    const field = createdStatusField(created);
+    if (field === null) {
+      throw new Error('code host: create board returned no Status field');
+    }
+    return field;
+  }
+
   async readProject(target: string): Promise<CanonicalProject | null> {
     const connection = CodeHostTarget.parse(target);
+    const board = await this.board(connection.repoUrl);
+    if (board === null) {
+      return null;
+    }
     const data = await this.graphql(PROJECT_CONTENT_QUERY, {
-      projectId: connection.projectNodeId,
+      projectId: board.projectNodeId,
     });
     const project = data.node;
     if (!isRecord(project) || typeof project.id !== 'string') {
@@ -259,33 +441,39 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     const connection = CodeHostTarget.parse(target);
     const repo = repoParts(connection.repoUrl);
     const repositoryId = await this.repoNodeId(repo);
-    const ownerId = await this.viewerId();
-    const created = await this.graphql(CREATE_BOARD_MUTATION, {
-      ownerId,
-      title: name,
-    });
-    const projectId = createdProjectId(created);
+    const projectId =
+      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
     await this.graphql(LINK_BOARD_MUTATION, {
       projectId,
       repositoryId,
     });
-    await this.graphql(CREATE_STATUS_FIELD_MUTATION, {
-      projectId,
-      options: connection.statusOptions.map((option) => ({
-        name: option.name,
-        color: 'GRAY',
-        description: '',
-      })),
+    const status = await this.ensureStatusField(projectId);
+    this.boards.set(
+      connection.repoUrl,
+      Promise.resolve({
+        projectNodeId: projectId,
+        statusFieldId: status.id,
+        statusOptions: status.options,
+      }),
+    );
+    return new CanonicalProject({
+      handle: connection.repoUrl,
+      name,
+      archived: false,
     });
-    return new CanonicalProject({ handle: projectId, name, archived: false });
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
     const connection = CodeHostTarget.parse(target);
+    const board = await this.requireBoard(connection.repoUrl);
     await this.graphql(SET_PROJECT_CLOSED_MUTATION, {
-      projectId: connection.projectNodeId,
+      projectId: board.projectNodeId,
       closed: archived,
     });
+  }
+
+  async archivedTime(_target: string): Promise<string | null> {
+    return null;
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
@@ -314,18 +502,19 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     const repo = repoParts(connection.repoUrl);
     const repositoryId = await this.repoNodeId(repo);
     const labelIds = await this.labelIds(repo, task.labels);
+    const board = await this.requireBoard(connection.repoUrl);
     const created = await this.graphql(CREATE_ISSUE_MUTATION, {
       repositoryId,
       title: task.title,
       body: task.body,
       labelIds,
-      projectV2Ids: [connection.projectNodeId],
+      projectV2Ids: [board.projectNodeId],
     });
     const url = createdIssueUrl(created);
     if (task.status !== '') {
       const item = await this.boardItem(connection, url);
       if (item !== null) {
-        await this.setLane(connection, item.itemId, task.status);
+        await this.setLane(item.itemId, task.status);
       }
     }
     return new CanonicalTask({
@@ -372,8 +561,9 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     if (item === null) {
       return;
     }
+    const board = await this.requireBoard(this.target.repoUrl);
     await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
-      projectId: this.target.projectNodeId,
+      projectId: board.projectNodeId,
       itemId: item.itemId,
     });
   }
@@ -411,7 +601,7 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     if (item === null) {
       throw new Error(`code host: no board card for ${write.handle}`);
     }
-    await this.setLane(this.target, item.itemId, write.value);
+    await this.setLane(item.itemId, write.value);
   }
 
   private async writeLabels(write: CanonicalFieldWrite): Promise<void> {
@@ -445,16 +635,13 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     });
   }
 
-  private async setLane(
-    connection: CodeHostTarget,
-    itemId: string,
-    status: string,
-  ): Promise<void> {
+  private async setLane(itemId: string, status: string): Promise<void> {
+    const board = await this.requireBoard(this.target.repoUrl);
     await this.graphql(SET_BOARD_STATUS_MUTATION, {
-      projectId: connection.projectNodeId,
+      projectId: board.projectNodeId,
       itemId,
-      fieldId: connection.statusFieldId,
-      optionId: optionIdByName(connection.statusOptions, status),
+      fieldId: board.statusFieldId,
+      optionId: optionIdByName(board.statusOptions, status),
     });
   }
 
@@ -498,10 +685,11 @@ export class CodeHostMirrorAdapter implements MirrorAdapter {
     connection: CodeHostTarget,
   ): Promise<BoardSnapshot> {
     const repo = repoParts(connection.repoUrl);
+    const board = await this.requireBoard(connection.repoUrl);
     const data = await this.graphql(PROJECT_DETAIL_QUERY, {
       owner: repo.owner,
       name: repo.name,
-      projectId: connection.projectNodeId,
+      projectId: board.projectNodeId,
     });
     const issues = nodesOf(data.repository, 'issues')
       .filter(isRecord)
@@ -705,6 +893,82 @@ function nodesOf(container: unknown, key: string): unknown[] {
     return [];
   }
   return inner.nodes;
+}
+
+function parseRepoBoard(node: Record<string, unknown>): RepoBoard[] {
+  if (typeof node.id !== 'string') {
+    return [];
+  }
+  return [
+    {
+      projectNodeId: node.id,
+      name: typeof node.title === 'string' ? node.title : '',
+    },
+  ];
+}
+
+function chooseBoard(
+  repoName: string,
+  boards: readonly RepoBoard[],
+): RepoBoard | null {
+  if (boards.length === 0) {
+    return null;
+  }
+  if (boards.length === 1) {
+    return boards[0]!;
+  }
+  const match = boards.find((board) => board.name === repoName);
+  if (match === undefined) {
+    throw new Error(
+      `code host: repository ${repoName} has several boards and none is titled "${repoName}"`,
+    );
+  }
+  return match;
+}
+
+function statusField(project: unknown): StatusField | null {
+  if (
+    !isRecord(project) ||
+    !isRecord(project.fields) ||
+    !Array.isArray(project.fields.nodes)
+  ) {
+    return null;
+  }
+  for (const node of project.fields.nodes) {
+    if (
+      !isRecord(node) ||
+      node.name !== 'Status' ||
+      typeof node.id !== 'string'
+    ) {
+      continue;
+    }
+    return { id: node.id, options: statusOptionsOf(node.options) };
+  }
+  return null;
+}
+
+function statusOptionsOf(options: unknown): readonly StatusOption[] {
+  if (!Array.isArray(options)) {
+    return [];
+  }
+  return options
+    .filter(isRecord)
+    .filter(
+      (option): option is { id: string; name: string } =>
+        typeof option.id === 'string' && typeof option.name === 'string',
+    )
+    .map((option) => ({ id: option.id, name: option.name }));
+}
+
+function createdStatusField(
+  created: Record<string, unknown>,
+): StatusField | null {
+  const payload = created.createProjectV2Field;
+  const node = isRecord(payload) ? payload.projectV2Field : undefined;
+  if (!isRecord(node) || typeof node.id !== 'string') {
+    return null;
+  }
+  return { id: node.id, options: statusOptionsOf(node.options) };
 }
 
 function createdProjectId(created: Record<string, unknown>): string {

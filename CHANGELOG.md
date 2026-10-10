@@ -1,3 +1,65 @@
+# [0.15.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.14.0...0.15.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** isolate a failing connection in the lifecycle pass ([da98a3e](https://github.com/99linesofcode/obsidian-project-management/commit/da98a3e51a7a7f78688102572577247124b93a54))
+* **core:** prefer the conventional home note in discovery ([61b8434](https://github.com/99linesofcode/obsidian-project-management/commit/61b8434871f917a8ba1ca592e134dfd0a344a7d6))
+* **core:** reconcile a board the code-host adapter just created ([d93e7dc](https://github.com/99linesofcode/obsidian-project-management/commit/d93e7dccbef5e0a6b42e6a88ce31e72ed8d8d03a))
+* **sync:** snapshot the reconcilers once per execute ([733c0c3](https://github.com/99linesofcode/obsidian-project-management/commit/733c0c3767097836122495ae353a737456917be6))
+
+
+### Features
+
+* **core:** onboard a newly-connected project's mirror ([8a42acb](https://github.com/99linesofcode/obsidian-project-management/commit/8a42acb57805f204954c9e02a32cb7573b83fab5))
+* **core:** sync a project whose home note still has a legacy name ([65ed2b3](https://github.com/99linesofcode/obsidian-project-management/commit/65ed2b34dfba59cead6af3a9594cca8232699282))
+* **sync:** migrate the project home note on the gated new path ([6708935](https://github.com/99linesofcode/obsidian-project-management/commit/67089358f07f4651bc3c7d7a4c2ef1c18617f2d9))
+
+
+
+# [0.14.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.1...0.14.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** discover the project home note name-agnostically ([6bc4e72](https://github.com/99linesofcode/obsidian-project-management/commit/6bc4e72febfe17ede353a3e325dde5858400bbac))
+
+
+### Features
+
+* **core:** carry the archived timestamp through the project port ([5e4e6bb](https://github.com/99linesofcode/obsidian-project-management/commit/5e4e6bba73a7fa585ae03371bbf04ea2e33aad27))
+* **core:** reconcile project lifecycle through the multi-adapter core ([2a6d99d](https://github.com/99linesofcode/obsidian-project-management/commit/2a6d99da91582d58efc63c3a750357468d04cacc))
+
+
+
+## [0.13.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.13.0...0.13.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **infrastructure:** derive the code-host board from the repository target ([2388c13](https://github.com/99linesofcode/obsidian-project-management/commit/2388c13933766e1b8a4d832e435213448978690c))
+
+
+
+# [0.13.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.12.0...0.13.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **core:** record a failed mirror write and keep fanning out ([c210efc](https://github.com/99linesofcode/obsidian-project-management/commit/c210efc191da29290100602df7d0f18e0cb2f025))
+* **core:** resolve mirror handles from note paths and namespace sides ([8e5aabc](https://github.com/99linesofcode/obsidian-project-management/commit/8e5aabc3daa857bcb5b480e958743b64ce97e775))
+* **sync:** keep the multi-adapter cutover live and sweep-covered ([07f2c8e](https://github.com/99linesofcode/obsidian-project-management/commit/07f2c8e10129983d555f8a74d4872fd44d12e4eb))
+
+
+### Features
+
+* **core:** resolve mirror handles per connection ([65955a3](https://github.com/99linesofcode/obsidian-project-management/commit/65955a3dab641cb7cf4519199710d748b6d5fbb0))
+* **infrastructure:** resolve mirror handles through the registry ([ae3b8c8](https://github.com/99linesofcode/obsidian-project-management/commit/ae3b8c8f16418eef0f2fea4139819bb780a2fe80))
+* **settings:** add the multi-adapter engine toggle, default off ([bcb9c41](https://github.com/99linesofcode/obsidian-project-management/commit/bcb9c4170abf962543bae9c72fae54856f74acfc))
+* **sync:** run the multi-adapter pass behind a setting ([4602d87](https://github.com/99linesofcode/obsidian-project-management/commit/4602d870fc049cf38839418bd0134e39571cef56))
+
+
+
 # [0.12.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.11.0...0.12.0) (2026-10-08)
 
 
@@ -13,72 +75,6 @@
 * **core:** add the baseline store port and its registry adapter ([9bdd84d](https://github.com/99linesofcode/obsidian-project-management/commit/9bdd84d252c4356bcc6ffba1512e0191a205d289))
 * **core:** add the project source port and its vault adapter ([eb55958](https://github.com/99linesofcode/obsidian-project-management/commit/eb55958d427e4718c4b822107ad10e41da83c664))
 * **core:** assemble a project pass and persist its baselines ([88561a7](https://github.com/99linesofcode/obsidian-project-management/commit/88561a7d693c5943057e125be29a29e8a6919023))
-
-
-
-# [0.11.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.10.0...0.11.0) (2026-10-08)
-
-
-### Features
-
-* **infrastructure:** add the Todoist mirror adapter and its descriptor ([c37c897](https://github.com/99linesofcode/obsidian-project-management/commit/c37c8972589e4855736a3ba65c90969da15d378b))
-
-
-
-# [0.10.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.9.0...0.10.0) (2026-10-08)
-
-
-### Features
-
-* **infrastructure:** add the GitHub mirror adapter and its descriptor ([b06eb7a](https://github.com/99linesofcode/obsidian-project-management/commit/b06eb7a80b935532ce5d872a9bdc227586eed961))
-
-
-
-# [0.9.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.8.0...0.9.0) (2026-10-08)
-
-
-### Bug Fixes
-
-* **infrastructure:** fail the origin write when the note cannot accept it ([6c75ccd](https://github.com/99linesofcode/obsidian-project-management/commit/6c75ccd89dee8a780e52d899bab6125292d4fd24))
-* **infrastructure:** keep the origin rename inside the note's folder ([0935337](https://github.com/99linesofcode/obsidian-project-management/commit/0935337138d7d91a11da2895f4dcc936704d0a9d))
-
-
-### Features
-
-* **core:** add the origin port and its observation ([6db5c7a](https://github.com/99linesofcode/obsidian-project-management/commit/6db5c7af0bff625bc1bc9c7158ef4434a076e5a7))
-* **core:** carry the origin's mtime into the merge side ([7a8e3c5](https://github.com/99linesofcode/obsidian-project-management/commit/7a8e3c5b74e52b2714fc686f53c0a3b3336b50fb))
-* **core:** write reconciled values back to the origin and advance baselines ([06aca0d](https://github.com/99linesofcode/obsidian-project-management/commit/06aca0d38ed90795c1e29343658ee79208bdcf80))
-* **infrastructure:** add the vault origin adapter ([dda408d](https://github.com/99linesofcode/obsidian-project-management/commit/dda408d0e1c35e44c738e0fd1aaac190e34d4788))
-
-
-
-# [0.8.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.7.0...0.8.0) (2026-10-07)
-
-
-### Bug Fixes
-
-* **app:** await the modal open and type the choose event ([5158261](https://github.com/99linesofcode/obsidian-project-management/commit/5158261848dca4a8b418a19ba2dd47ef28f0c102))
-* **deps:** bump devshell from `231cbce` to `81a5ee1` ([#76](https://github.com/99linesofcode/obsidian-project-management/issues/76)) ([768a41c](https://github.com/99linesofcode/obsidian-project-management/commit/768a41c05e59d748bdd20b6b0433e093531a1554))
-* make the connection model real end to end ([2b6de3f](https://github.com/99linesofcode/obsidian-project-management/commit/2b6de3ffc89b8a8ed8ec78db244045d49cd2ce99)), closes [#84](https://github.com/99linesofcode/obsidian-project-management/issues/84)
-* **todoist:** send requests through Obsidian requestUrl ([0c46167](https://github.com/99linesofcode/obsidian-project-management/commit/0c461671c3a1df796aaf8a3e15b7fe87e4a34779))
-* **vault:** trash notes through FileManager.trashFile ([a1c27dd](https://github.com/99linesofcode/obsidian-project-management/commit/a1c27ddff88c5b92cf729ff46dae05d5b6c64cd0))
-
-
-### Features
-
-* capture projects into the connection envelope ([bdddb2b](https://github.com/99linesofcode/obsidian-project-management/commit/bdddb2b16073daccde534b167bad0f14de32357b))
-* **core:** add the capability vocabulary, canonical DTOs and ports ([2130115](https://github.com/99linesofcode/obsidian-project-management/commit/2130115c75d33ac96892998b4f3adc8aa267cf62))
-* **core:** add the generic mirror-sync action ([7e79763](https://github.com/99linesofcode/obsidian-project-management/commit/7e79763a0f315a8e34d284e609886c9b17c4c5f3))
-* **core:** add the neutral adapter registrar ([ef2d41b](https://github.com/99linesofcode/obsidian-project-management/commit/ef2d41b6046c4ac2d988d9154fca4e661222b668))
-* **core:** add the single pure N-way merge ([f7a5a43](https://github.com/99linesofcode/obsidian-project-management/commit/f7a5a43fce866d3633deb67e1815d0e5f1ceeecd))
-* declare tool connections in project frontmatter ([05a2147](https://github.com/99linesofcode/obsidian-project-management/commit/05a2147c01f6d0022db52ab4f2214e3fc072d347))
-* **infrastructure:** add the conformance mirror adapter ([54d6e4a](https://github.com/99linesofcode/obsidian-project-management/commit/54d6e4a2ca61fad174a49e58a596bccf5f59f780))
-* **main:** register the conformance adapter at the composition root ([31c3a18](https://github.com/99linesofcode/obsidian-project-management/commit/31c3a1825263ccb57c385ce9cf74a7a43f43f6d2))
-* migrate archived project connections ([8a29007](https://github.com/99linesofcode/obsidian-project-management/commit/8a29007bc0183f285e5aee91cac0a35c48b3e44b))
-* **projects:** derive the GitHub board from the repository ([8e3a4e1](https://github.com/99linesofcode/obsidian-project-management/commit/8e3a4e1af4506b07ae588b2ddb60378a4c3ae9a7))
-* seed vault templates and bases on first run ([895073a](https://github.com/99linesofcode/obsidian-project-management/commit/895073a79a540a532278f38d7f8585155f98bd77))
-* **settings:** expose declarative setting definitions ([2f3d528](https://github.com/99linesofcode/obsidian-project-management/commit/2f3d52849b04aa3bb9899b349cc04007bdda9bd3))
-* store API tokens in Obsidian SecretStorage ([5d5428f](https://github.com/99linesofcode/obsidian-project-management/commit/5d5428f646545b0e10409276a8d23988ee5f2665))
 
 
 

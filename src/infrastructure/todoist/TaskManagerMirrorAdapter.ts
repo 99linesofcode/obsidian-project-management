@@ -67,6 +67,10 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
     );
   }
 
+  async archivedTime(_target: string): Promise<string | null> {
+    return null;
+  }
+
   async readTasks(target: string): Promise<CanonicalTask[]> {
     const connection = TaskManagerTarget.parse(target);
     const sections = await this.sections(connection.projectId);
