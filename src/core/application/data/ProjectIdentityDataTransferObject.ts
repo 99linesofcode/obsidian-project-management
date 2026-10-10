@@ -1,17 +1,23 @@
 import type { ProjectStatusOption } from './ProjectStatusOption.js';
 
 export class ProjectIdentityDataTransferObject {
-  repoUrl: string;
-  repoNodeId: string;
-  projectNodeId: string;
-  statusFieldId: string;
-  statusOptions: ProjectStatusOption[];
+  readonly target: string;
+  readonly targetHandle: string;
+  readonly projectHandle: string;
+  readonly statusFieldHandle: string;
+  readonly statusOptions: ProjectStatusOption[];
 
-  constructor(init: ProjectIdentityDataTransferObject) {
-    this.repoUrl = init.repoUrl;
-    this.repoNodeId = init.repoNodeId;
-    this.projectNodeId = init.projectNodeId;
-    this.statusFieldId = init.statusFieldId;
+  constructor(init: {
+    target: string;
+    targetHandle: string;
+    projectHandle: string;
+    statusFieldHandle: string;
+    statusOptions: ProjectStatusOption[];
+  }) {
+    this.target = init.target;
+    this.targetHandle = init.targetHandle;
+    this.projectHandle = init.projectHandle;
+    this.statusFieldHandle = init.statusFieldHandle;
     this.statusOptions = init.statusOptions;
   }
 }

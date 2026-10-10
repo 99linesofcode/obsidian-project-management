@@ -36,13 +36,13 @@ export class DiscoverProjectsAction {
         }
         try {
           const identity = await this.attachProject.execute({
-            repoUrl: connection.target,
+            target: connection.target,
             setup,
           });
           projects.push({
             projectName: note.projectName,
             connectionSlug: connection.slug,
-            identity: { ...identity, repoUrl: connection.target },
+            identity: { ...identity, target: connection.target },
           });
         } catch (error) {
           errors.push(error);

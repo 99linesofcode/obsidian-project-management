@@ -202,7 +202,7 @@ sequenceDiagram
   participant Q as SyncQueue
 
   P->>D: execute() on layout ready
-  D->>A: execute({ repoUrl }) per github connection
+  D->>A: execute({ target }) per connection
   A-->>D: ProjectIdentityData
   D->>P: projects and errors
   P->>P: syncState.setIdentity per project
@@ -810,11 +810,12 @@ sequenceDiagram
 ### 2.16 Discovery, attach and board-ensure (`ProjectSetupPort`)
 
 At `onLayoutReady`, `DiscoverProjectsAction` enumerates the vault's project
-notes and attaches each GitHub connection through `AttachProjectAction`, which
+notes and attaches each setup-capable connection through `AttachProjectAction`,
+which
 uses `ProjectSetupPort.discoverProjects` to resolve the repository and its
 boards, `deriveBoardChoice` to pick one, and `readProjectAddressing` to resolve
 the Status field and its options. A board that does not exist yet yields an
-identity with an empty `projectNodeId`, which `EnsureProjectBoardAction`
+identity with an empty `projectHandle`, which `EnsureProjectBoardAction`
 resolves later on the chain: it adopts a linked board, prefers the one titled
 with the repo name, creates one (with a Status field) when none exists, and
 adopts an unlinked same-name viewer board (the orphan of an interrupted
@@ -831,18 +832,18 @@ sequenceDiagram
   participant SS as IdentityStorePort
 
   P->>D: execute()
-  D->>A: execute({ repoUrl })
-  A->>Setup: discoverProjects(repoUrl)
+  D->>A: execute({ target })
+  A->>Setup: discoverProjects(target)
   A->>A: deriveBoardChoice(repoName, boards)
   alt a board exists
     A->>Setup: readProjectAddressing(board)
   else no board
-    Note over A: identity with empty projectNodeId
+    Note over A: identity with empty projectHandle
   end
   A-->>D: ProjectIdentityData
   D->>SS: setIdentity(projectName, connectionSlug, identity)
   Note over Ens: chain, active github connection
-  Ens->>Setup: discoverProjects(repoUrl), listProjects()
+  Ens->>Setup: discoverProjects(target), listProjects()
   Ens->>Setup: createProjectWithStatus or adoptProject
   Ens->>SS: setIdentity(merged)
 ```

@@ -763,13 +763,17 @@ export class SyncStateAdapter
   private mapIdentity(
     raw: Record<string, unknown>,
   ): ProjectIdentityDataTransferObject {
+    // The stored keys are neutral now; the old provider-shaped keys are read as
+    // a fallback so registries written before the rename still load.
+    const text = (...candidates: unknown[]): string =>
+      candidates.find((value): value is string => typeof value === 'string') ??
+      '';
+
     return new ProjectIdentityDataTransferObject({
-      repoUrl: typeof raw.repoUrl === 'string' ? raw.repoUrl : '',
-      repoNodeId: typeof raw.repoNodeId === 'string' ? raw.repoNodeId : '',
-      projectNodeId:
-        typeof raw.projectNodeId === 'string' ? raw.projectNodeId : '',
-      statusFieldId:
-        typeof raw.statusFieldId === 'string' ? raw.statusFieldId : '',
+      target: text(raw.target, raw.target),
+      targetHandle: text(raw.targetHandle, raw.repoNodeId),
+      projectHandle: text(raw.projectHandle, raw.projectNodeId),
+      statusFieldHandle: text(raw.statusFieldHandle, raw.statusFieldId),
       statusOptions: Array.isArray(raw.statusOptions)
         ? raw.statusOptions
             .filter(isRecord)

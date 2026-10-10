@@ -1,7 +1,7 @@
-export function repoNameFromUrl(repoUrl: string): string {
+export function nameFromTarget(target: string): string {
   let segments: string[];
   try {
-    segments = new URL(repoUrl).pathname
+    segments = new URL(target).pathname
       .split('/')
       .filter((segment) => segment.length > 0);
   } catch {

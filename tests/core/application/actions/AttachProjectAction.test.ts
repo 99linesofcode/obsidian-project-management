@@ -49,10 +49,10 @@ function addressing(): ProjectAddressing {
 }
 
 const identity: ProjectIdentityDataTransferObject = {
-  repoUrl,
-  repoNodeId: 'R_kgDOAAAA',
-  projectNodeId: 'PVT_123',
-  statusFieldId: 'PVTF_456',
+  target: repoUrl,
+  targetHandle: 'R_kgDOAAAA',
+  projectHandle: 'PVT_123',
+  statusFieldHandle: 'PVTF_456',
   statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 
@@ -67,7 +67,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     setup.addressings.set(linked.handle, addressing());
     const action = new AttachProjectAction();
 
-    const result = await action.execute({ repoUrl, setup });
+    const result = await action.execute({ target: repoUrl, setup });
 
     expect(setup.addressingCalls).toEqual([linked]);
     expect(result).toEqual(identity);
@@ -77,13 +77,13 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     const setup = new FakeSetup();
     const action = new AttachProjectAction();
 
-    const result = await action.execute({ repoUrl, setup });
+    const result = await action.execute({ target: repoUrl, setup });
 
     expect(result).toEqual({
-      repoUrl,
-      repoNodeId: 'R_kgDOAAAA',
-      projectNodeId: '',
-      statusFieldId: '',
+      target: repoUrl,
+      targetHandle: 'R_kgDOAAAA',
+      projectHandle: '',
+      statusFieldHandle: '',
       statusOptions: [],
     });
     expect(setup.addressingCalls).toEqual([]);
@@ -99,7 +99,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     setup.addressings.set(match.handle, addressing());
     const action = new AttachProjectAction();
 
-    const result = await action.execute({ repoUrl, setup });
+    const result = await action.execute({ target: repoUrl, setup });
 
     expect(setup.addressingCalls).toEqual([match]);
     expect(result).toEqual(identity);
@@ -113,18 +113,18 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
     });
     const action = new AttachProjectAction();
 
-    await expect(action.execute({ repoUrl, setup })).rejects.toThrow(
+    await expect(action.execute({ target: repoUrl, setup })).rejects.toThrow(
       /several boards/,
     );
     expect(setup.addressingCalls).toEqual([]);
   });
 
-  it('throws a domain error when a github connection is missing its repo url', async () => {
+  it('throws a domain error when a connection is missing its target', async () => {
     const setup = new FakeSetup();
     const action = new AttachProjectAction();
 
-    await expect(action.execute({ repoUrl: '', setup })).rejects.toThrow(
-      /repoUrl/,
+    await expect(action.execute({ target: '', setup })).rejects.toThrow(
+      /target/,
     );
     expect(setup.addressingCalls).toEqual([]);
   });

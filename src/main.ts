@@ -58,10 +58,8 @@ import { RegistryMirrorProjectAdapter } from './infrastructure/registry/Registry
 import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
 import { VaultProjectLifecycleAdapter } from './infrastructure/vault/VaultProjectLifecycleAdapter.js';
 import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
-import {
-  CodeHostMirrorAdapter,
-  type BoardIdentity,
-} from './infrastructure/github/CodeHostMirrorAdapter.js';
+import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
+import type { ProjectIdentityDataTransferObject } from './core/application/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
 import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
@@ -220,7 +218,7 @@ interface Provider {
   descriptor: AdapterDescriptor;
   mirror: (
     target: string,
-    boardIdentity: () => Promise<BoardIdentity | null>,
+    boardIdentity: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) => MirrorPort;
   capture: () => MirrorPort;
   setup: () => ProjectSetupPort | null;

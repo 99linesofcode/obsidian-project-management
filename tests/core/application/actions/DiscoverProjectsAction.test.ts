@@ -76,10 +76,10 @@ class FakeSetup implements ProjectSetupPort {
 
 const repoUrl = 'https://github.com/acme/widgets';
 const identity: ProjectIdentityDataTransferObject = {
-  repoUrl,
-  repoNodeId: 'R_kgDOAAAA',
-  projectNodeId: 'PVT_123',
-  statusFieldId: 'PVTF_456',
+  target: repoUrl,
+  targetHandle: 'R_kgDOAAAA',
+  projectHandle: 'PVT_123',
+  statusFieldHandle: 'PVTF_456',
   statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 

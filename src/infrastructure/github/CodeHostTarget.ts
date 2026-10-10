@@ -4,17 +4,17 @@ export interface StatusOption {
 }
 
 export class CodeHostTarget {
-  readonly repoUrl: string;
+  readonly target: string;
 
-  constructor(init: { repoUrl: string }) {
-    this.repoUrl = init.repoUrl;
+  constructor(init: { target: string }) {
+    this.target = init.target;
   }
 
   static parse(raw: string): CodeHostTarget {
-    const repoUrl = raw.trim();
-    if (repoUrl === '') {
+    const target = raw.trim();
+    if (target === '') {
       throw new Error('code host target must carry a repository');
     }
-    return new CodeHostTarget({ repoUrl });
+    return new CodeHostTarget({ target });
   }
 }
