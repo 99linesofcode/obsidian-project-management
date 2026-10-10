@@ -1,0 +1,799 @@
+import type { CanonicalField } from '../../core/canonicalField.js';
+import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
+import { CanonicalProject } from '../../core/data/CanonicalProject.js';
+import { CanonicalTask } from '../../core/data/CanonicalTask.js';
+import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
+import type {
+  CodeHostResponse,
+  CodeHostTransport,
+} from './CodeHostTransport.js';
+import { CodeHostTarget, type StatusOption } from './CodeHostTarget.js';
+
+const REPO_QUERY = `
+  query RepoNodeId($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) { id }
+  }
+`;
+
+const PROJECT_CONTENT_QUERY = `
+  query ProjectContent($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        id
+        title
+        closed
+      }
+    }
+  }
+`;
+
+const PROJECT_DETAIL_QUERY = `
+  query ProjectDetail($owner: String!, $name: String!, $projectId: ID!) {
+    repository(owner: $owner, name: $name) {
+      issues(first: 100, states: [OPEN, CLOSED]) {
+        nodes {
+          url
+          number
+          id
+          title
+          body
+          state
+          createdAt
+          lastEditedAt
+          updatedAt
+          labels(first: 20) { nodes { name } }
+          parent { url }
+        }
+      }
+    }
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        items(first: 100) {
+          nodes {
+            id
+            type
+            updatedAt
+            content {
+              ... on Issue { url }
+              ... on DraftIssue { title body }
+            }
+            fieldValues(first: 20) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field { ... on ProjectV2SingleSelectField { name } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const SET_BOARD_STATUS_MUTATION = `
+  mutation SetBoardStatus($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+    updateProjectV2ItemFieldValue(
+      input: {
+        projectId: $projectId
+        itemId: $itemId
+        fieldId: $fieldId
+        value: { singleSelectOptionId: $optionId }
+      }
+    ) {
+      projectV2Item { id }
+    }
+  }
+`;
+
+const DELETE_BOARD_ITEM_MUTATION = `
+  mutation DeleteBoardItem($projectId: ID!, $itemId: ID!) {
+    deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+      deletedItemId
+    }
+  }
+`;
+
+const CREATE_ISSUE_MUTATION = `
+  mutation CreateIssue(
+    $repositoryId: ID!
+    $title: String!
+    $body: String
+    $labelIds: [ID!]
+    $projectV2Ids: [ID!]
+  ) {
+    createIssue(
+      input: {
+        repositoryId: $repositoryId
+        title: $title
+        body: $body
+        labelIds: $labelIds
+        projectV2Ids: $projectV2Ids
+      }
+    ) {
+      issue { id url }
+    }
+  }
+`;
+
+const LABEL_QUERY = `
+  query Label($owner: String!, $name: String!, $label: String!) {
+    repository(owner: $owner, name: $name) {
+      label(name: $label) { id }
+    }
+  }
+`;
+
+const VIEWER_QUERY = `
+  query Viewer {
+    viewer { id }
+  }
+`;
+
+const CREATE_BOARD_MUTATION = `
+  mutation CreateBoard($ownerId: ID!, $title: String!) {
+    createProjectV2(input: { ownerId: $ownerId, title: $title }) {
+      projectV2 { id url }
+    }
+  }
+`;
+
+const LINK_BOARD_MUTATION = `
+  mutation LinkBoard($projectId: ID!, $repositoryId: ID!) {
+    linkProjectV2ToRepository(
+      input: { projectId: $projectId, repositoryId: $repositoryId }
+    ) {
+      repository { id }
+    }
+  }
+`;
+
+const CREATE_STATUS_FIELD_MUTATION = `
+  mutation CreateStatusField(
+    $projectId: ID!
+    $options: [ProjectV2SingleSelectFieldOptionInput!]!
+  ) {
+    createProjectV2Field(
+      input: {
+        projectId: $projectId
+        dataType: SINGLE_SELECT
+        name: "Status"
+        singleSelectOptions: $options
+      }
+    ) {
+      projectV2Field {
+        ... on ProjectV2SingleSelectField {
+          id
+          name
+          options { id name }
+        }
+      }
+    }
+  }
+`;
+
+const SET_PROJECT_CLOSED_MUTATION = `
+  mutation SetProjectClosed($projectId: ID!, $closed: Boolean!) {
+    updateProjectV2(input: { projectId: $projectId, closed: $closed }) {
+      projectV2 { id }
+    }
+  }
+`;
+
+const ADD_SUB_ISSUE_MUTATION = `
+  mutation AddSubIssue($issueId: ID!, $subIssueId: ID!) {
+    addSubIssue(input: { issueId: $issueId, subIssueId: $subIssueId }) {
+      issue { id }
+    }
+  }
+`;
+
+const REMOVE_SUB_ISSUE_MUTATION = `
+  mutation RemoveSubIssue($issueId: ID!, $subIssueId: ID!) {
+    removeSubIssue(input: { issueId: $issueId, subIssueId: $subIssueId }) {
+      issue { id }
+    }
+  }
+`;
+
+const LABEL_COLOR = 'cccccc';
+
+interface RepoParts {
+  owner: string;
+  name: string;
+}
+
+interface RawIssue {
+  url: string;
+  nodeId: string;
+  title: string;
+  body: string;
+  state: 'open' | 'closed';
+  createdAt: string | null;
+  lastEditedAt: string | null;
+  updatedAt: string;
+  labels: readonly string[];
+  parentUrl: string | null;
+}
+
+interface RawCard {
+  itemId: string;
+  issueUrl: string;
+  statusOptionName: string | undefined;
+  updatedAt: string | null;
+}
+
+interface BoardSnapshot {
+  issues: RawIssue[];
+  cards: Map<string, RawCard>;
+}
+
+export class CodeHostMirrorAdapter implements MirrorAdapter {
+  private readonly target: CodeHostTarget;
+
+  constructor(
+    private readonly transport: CodeHostTransport,
+    target: string,
+  ) {
+    this.target = CodeHostTarget.parse(target);
+  }
+
+  async readProject(target: string): Promise<CanonicalProject | null> {
+    const connection = CodeHostTarget.parse(target);
+    const data = await this.graphql(PROJECT_CONTENT_QUERY, {
+      projectId: connection.projectNodeId,
+    });
+    const project = data.node;
+    if (!isRecord(project) || typeof project.id !== 'string') {
+      return null;
+    }
+    return new CanonicalProject({
+      handle: project.id,
+      name: typeof project.title === 'string' ? project.title : '',
+      archived: project.closed === true,
+    });
+  }
+
+  async createProject(target: string, name: string): Promise<CanonicalProject> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const repositoryId = await this.repoNodeId(repo);
+    const ownerId = await this.viewerId();
+    const created = await this.graphql(CREATE_BOARD_MUTATION, {
+      ownerId,
+      title: name,
+    });
+    const projectId = createdProjectId(created);
+    await this.graphql(LINK_BOARD_MUTATION, {
+      projectId,
+      repositoryId,
+    });
+    await this.graphql(CREATE_STATUS_FIELD_MUTATION, {
+      projectId,
+      options: connection.statusOptions.map((option) => ({
+        name: option.name,
+        color: 'GRAY',
+        description: '',
+      })),
+    });
+    return new CanonicalProject({ handle: projectId, name, archived: false });
+  }
+
+  async setArchived(target: string, archived: boolean): Promise<void> {
+    const connection = CodeHostTarget.parse(target);
+    await this.graphql(SET_PROJECT_CLOSED_MUTATION, {
+      projectId: connection.projectNodeId,
+      closed: archived,
+    });
+  }
+
+  async readTasks(target: string): Promise<CanonicalTask[]> {
+    const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
+    return snapshot.issues
+      .filter((issue) => hasTypeLabel(issue.labels))
+      .map((issue) =>
+        toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null),
+      );
+  }
+
+  async readTask(handle: string): Promise<CanonicalTask | null> {
+    const snapshot = await this.boardSnapshot(this.target);
+    const issue = snapshot.issues.find((candidate) => candidate.url === handle);
+    if (issue === undefined) {
+      return null;
+    }
+    return toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null);
+  }
+
+  async createTask(
+    target: string,
+    task: CanonicalTask,
+  ): Promise<CanonicalTask> {
+    const connection = CodeHostTarget.parse(target);
+    const repo = repoParts(connection.repoUrl);
+    const repositoryId = await this.repoNodeId(repo);
+    const labelIds = await this.labelIds(repo, task.labels);
+    const created = await this.graphql(CREATE_ISSUE_MUTATION, {
+      repositoryId,
+      title: task.title,
+      body: task.body,
+      labelIds,
+      projectV2Ids: [connection.projectNodeId],
+    });
+    const url = createdIssueUrl(created);
+    if (task.status !== '') {
+      const item = await this.boardItem(connection, url);
+      if (item !== null) {
+        await this.setLane(connection, item.itemId, task.status);
+      }
+    }
+    return new CanonicalTask({
+      handle: url,
+      entityId: task.entityId,
+      title: task.title,
+      body: task.body,
+      status: task.status,
+      completed: task.completed,
+      parent: task.parent,
+      labels: task.labels,
+    });
+  }
+
+  async applyField(write: CanonicalFieldWrite): Promise<void> {
+    switch (write.field) {
+      case 'title':
+        await this.patchIssue(write.handle, { title: write.value ?? '' });
+        return;
+      case 'body':
+        await this.patchIssue(write.handle, { body: write.value ?? '' });
+        return;
+      case 'completion':
+        await this.patchIssue(write.handle, {
+          state: write.value === 'true' ? 'closed' : 'open',
+        });
+        return;
+      case 'Status':
+        await this.writeStatus(write);
+        return;
+      case 'label':
+        await this.writeLabels(write);
+        return;
+      case 'subtasks':
+        await this.writeParent(write);
+        return;
+      case 'identity':
+        return;
+    }
+  }
+
+  async deleteTask(handle: string): Promise<void> {
+    const item = await this.boardItem(this.target, handle);
+    if (item === null) {
+      return;
+    }
+    await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
+      projectId: this.target.projectNodeId,
+      itemId: item.itemId,
+    });
+  }
+
+  async capture(target: string): Promise<CanonicalTask[]> {
+    const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
+    return snapshot.issues
+      .filter((issue) => issue.state === 'open' && !hasTypeLabel(issue.labels))
+      .map((issue) =>
+        toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null),
+      );
+  }
+
+  fetchComplete(): boolean {
+    return true;
+  }
+
+  async fieldTime(
+    handle: string,
+    field: CanonicalField,
+  ): Promise<string | null> {
+    const snapshot = await this.boardSnapshot(this.target);
+    const issue = snapshot.issues.find((candidate) => candidate.url === handle);
+    if (issue === undefined) {
+      return null;
+    }
+    return fieldTime(issue, snapshot.cards.get(issue.url) ?? null, field);
+  }
+
+  private async writeStatus(write: CanonicalFieldWrite): Promise<void> {
+    if (write.value === null) {
+      throw new Error('code host: cannot clear the Status lane');
+    }
+    const item = await this.boardItem(this.target, write.handle);
+    if (item === null) {
+      throw new Error(`code host: no board card for ${write.handle}`);
+    }
+    await this.setLane(this.target, item.itemId, write.value);
+  }
+
+  private async writeLabels(write: CanonicalFieldWrite): Promise<void> {
+    const repo = repoParts(write.handle);
+    const number = issueNumber(write.handle);
+    const response = await this.transport.putPath(
+      issueLabelsPath(repo, number),
+      JSON.stringify({ labels: labelsFrom(write.value) }),
+    );
+    ensureSuccess(response);
+  }
+
+  private async writeParent(write: CanonicalFieldWrite): Promise<void> {
+    const snapshot = await this.boardSnapshot(this.target);
+    const issue = snapshot.issues.find(
+      (candidate) => candidate.url === write.handle,
+    );
+    if (issue === undefined) {
+      throw new Error(`code host: no issue for ${write.handle}`);
+    }
+    const parentUrl = write.value ?? issue.parentUrl;
+    if (parentUrl === null) {
+      return;
+    }
+    const parentNodeId = await this.issueNodeId(parentUrl);
+    const mutation =
+      write.value === null ? REMOVE_SUB_ISSUE_MUTATION : ADD_SUB_ISSUE_MUTATION;
+    await this.graphql(mutation, {
+      issueId: parentNodeId,
+      subIssueId: issue.nodeId,
+    });
+  }
+
+  private async setLane(
+    connection: CodeHostTarget,
+    itemId: string,
+    status: string,
+  ): Promise<void> {
+    await this.graphql(SET_BOARD_STATUS_MUTATION, {
+      projectId: connection.projectNodeId,
+      itemId,
+      fieldId: connection.statusFieldId,
+      optionId: optionIdByName(connection.statusOptions, status),
+    });
+  }
+
+  private async patchIssue(
+    handle: string,
+    input: Record<string, string>,
+  ): Promise<void> {
+    const repo = repoParts(handle);
+    const response = await this.transport.patch(
+      issuePath(repo, issueNumber(handle)),
+      JSON.stringify(input),
+    );
+    ensureSuccess(response);
+  }
+
+  private async issueNodeId(url: string): Promise<string> {
+    const repo = repoParts(url);
+    const response = await this.transport.get(
+      issuePath(repo, issueNumber(url)),
+    );
+    if (
+      response.status !== 200 ||
+      !isRecord(response.json) ||
+      typeof response.json.node_id !== 'string'
+    ) {
+      throw new Error(`code host: could not resolve issue ${url}`);
+    }
+    return response.json.node_id;
+  }
+
+  private async boardItem(
+    connection: CodeHostTarget,
+    url: string,
+  ): Promise<{ itemId: string } | null> {
+    const snapshot = await this.boardSnapshot(connection);
+    const card = snapshot.cards.get(url);
+    return card === undefined ? null : { itemId: card.itemId };
+  }
+
+  private async boardSnapshot(
+    connection: CodeHostTarget,
+  ): Promise<BoardSnapshot> {
+    const repo = repoParts(connection.repoUrl);
+    const data = await this.graphql(PROJECT_DETAIL_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+      projectId: connection.projectNodeId,
+    });
+    const issues = nodesOf(data.repository, 'issues')
+      .filter(isRecord)
+      .map(parseIssue);
+    const cards = new Map<string, RawCard>();
+    for (const node of nodesOf(data.node, 'items')) {
+      if (!isRecord(node)) {
+        continue;
+      }
+      const card = parseCard(node);
+      if (card !== null) {
+        cards.set(card.issueUrl, card);
+      }
+    }
+    return { issues, cards };
+  }
+
+  private async repoNodeId(repo: RepoParts): Promise<string> {
+    const data = await this.graphql(REPO_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+    });
+    if (!isRecord(data.repository) || typeof data.repository.id !== 'string') {
+      throw new Error(
+        `code host: repository ${repo.owner}/${repo.name} not found`,
+      );
+    }
+    return data.repository.id;
+  }
+
+  private async viewerId(): Promise<string> {
+    const data = await this.graphql(VIEWER_QUERY, {});
+    if (!isRecord(data.viewer) || typeof data.viewer.id !== 'string') {
+      throw new Error('code host: viewer not found');
+    }
+    return data.viewer.id;
+  }
+
+  private async labelIds(
+    repo: RepoParts,
+    labels: readonly string[],
+  ): Promise<string[]> {
+    const ids: string[] = [];
+    for (const label of labels) {
+      ids.push(await this.labelId(repo, label));
+    }
+    return ids;
+  }
+
+  private async labelId(repo: RepoParts, label: string): Promise<string> {
+    const data = await this.graphql(LABEL_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+      label,
+    });
+    if (
+      isRecord(data.repository) &&
+      isRecord(data.repository.label) &&
+      typeof data.repository.label.id === 'string'
+    ) {
+      return data.repository.label.id;
+    }
+    const response = await this.transport.postPath(
+      `/repos/${repo.owner}/${repo.name}/labels`,
+      JSON.stringify({ name: label, color: LABEL_COLOR }),
+    );
+    if (
+      (response.status !== 201 && response.status !== 200) ||
+      !isRecord(response.json) ||
+      typeof response.json.node_id !== 'string'
+    ) {
+      throw new Error(`code host: could not ensure label ${label}`);
+    }
+    return response.json.node_id;
+  }
+
+  private async graphql(
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const response = await this.transport.post(
+      JSON.stringify({ query, variables }),
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `code host: GraphQL request failed with status ${response.status}`,
+      );
+    }
+    const json = response.json;
+    if (!isRecord(json) || !isRecord(json.data)) {
+      throw new Error('code host: unexpected GraphQL response shape');
+    }
+    return json.data;
+  }
+}
+
+function toCanonicalTask(issue: RawIssue, card: RawCard | null): CanonicalTask {
+  return new CanonicalTask({
+    handle: issue.url,
+    entityId: issue.url,
+    title: issue.title,
+    body: issue.body,
+    status: card?.statusOptionName ?? '',
+    completed: issue.state === 'closed',
+    parent: issue.parentUrl,
+    labels: issue.labels,
+  });
+}
+
+function fieldTime(
+  issue: RawIssue,
+  card: RawCard | null,
+  field: CanonicalField,
+): string | null {
+  switch (field) {
+    case 'title':
+    case 'body':
+      return issue.lastEditedAt;
+    case 'Status':
+      return card?.updatedAt ?? null;
+    case 'completion':
+    case 'label':
+    case 'subtasks':
+      return issue.updatedAt === '' ? null : issue.updatedAt;
+    case 'identity':
+      return null;
+  }
+}
+
+function parseIssue(node: Record<string, unknown>): RawIssue {
+  return {
+    url: typeof node.url === 'string' ? node.url : '',
+    nodeId: typeof node.id === 'string' ? node.id : '',
+    title: typeof node.title === 'string' ? node.title : '',
+    body: typeof node.body === 'string' ? node.body : '',
+    state: node.state === 'CLOSED' ? 'closed' : 'open',
+    createdAt: typeof node.createdAt === 'string' ? node.createdAt : null,
+    lastEditedAt:
+      typeof node.lastEditedAt === 'string' ? node.lastEditedAt : null,
+    updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : '',
+    labels: labelNames(node.labels),
+    parentUrl:
+      isRecord(node.parent) && typeof node.parent.url === 'string'
+        ? node.parent.url
+        : null,
+  };
+}
+
+function parseCard(node: Record<string, unknown>): RawCard | null {
+  if (typeof node.id !== 'string') {
+    return null;
+  }
+  const content = isRecord(node.content) ? node.content : undefined;
+  const issueUrl =
+    content !== undefined && typeof content.url === 'string'
+      ? content.url
+      : undefined;
+  if (issueUrl === undefined) {
+    return null;
+  }
+  return {
+    itemId: node.id,
+    issueUrl,
+    statusOptionName: statusOptionName(node.fieldValues),
+    updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : null,
+  };
+}
+
+function statusOptionName(fieldValues: unknown): string | undefined {
+  if (!isRecord(fieldValues) || !Array.isArray(fieldValues.nodes)) {
+    return undefined;
+  }
+  for (const value of fieldValues.nodes) {
+    if (
+      isRecord(value) &&
+      typeof value.name === 'string' &&
+      isRecord(value.field) &&
+      value.field.name === 'Status'
+    ) {
+      return value.name;
+    }
+  }
+  return undefined;
+}
+
+function labelNames(labels: unknown): readonly string[] {
+  if (!isRecord(labels) || !Array.isArray(labels.nodes)) {
+    return [];
+  }
+  return labels.nodes
+    .filter(isRecord)
+    .flatMap((label) => (typeof label.name === 'string' ? [label.name] : []));
+}
+
+function nodesOf(container: unknown, key: string): unknown[] {
+  if (!isRecord(container)) {
+    return [];
+  }
+  const inner = container[key];
+  if (!isRecord(inner) || !Array.isArray(inner.nodes)) {
+    return [];
+  }
+  return inner.nodes;
+}
+
+function createdProjectId(created: Record<string, unknown>): string {
+  const project = isRecord(created.createProjectV2)
+    ? created.createProjectV2.projectV2
+    : undefined;
+  if (!isRecord(project) || typeof project.id !== 'string') {
+    throw new Error('code host: create board returned no project');
+  }
+  return project.id;
+}
+
+function createdIssueUrl(created: Record<string, unknown>): string {
+  const issue = isRecord(created.createIssue)
+    ? created.createIssue.issue
+    : undefined;
+  if (!isRecord(issue) || typeof issue.url !== 'string' || issue.url === '') {
+    throw new Error('code host: create issue returned no url');
+  }
+  return issue.url;
+}
+
+function hasTypeLabel(labels: readonly string[]): boolean {
+  return labels.some((label) => label.startsWith('type:'));
+}
+
+function labelsFrom(value: string | null): readonly string[] {
+  if (value === null || value === '') {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((label) => label.trim())
+    .filter((label) => label !== '');
+}
+
+function optionIdByName(
+  options: readonly StatusOption[],
+  name: string,
+): string {
+  const option = options.find((candidate) => candidate.name === name);
+  if (option === undefined) {
+    throw new Error(`code host: no status option named "${name}"`);
+  }
+  return option.id;
+}
+
+function repoParts(url: string): RepoParts {
+  const normalized = url.includes('://') ? url : `https://github.com/${url}`;
+  const segments = pathSegments(normalized);
+  const owner = segments[0];
+  const name = segments[1];
+  if (owner === undefined || name === undefined) {
+    throw new Error(`code host: invalid repository url ${url}`);
+  }
+  return { owner, name };
+}
+
+function issueNumber(handle: string): number {
+  const segments = pathSegments(handle);
+  const number = Number(segments[segments.length - 1]);
+  if (!Number.isInteger(number)) {
+    throw new Error(`code host: invalid issue url ${handle}`);
+  }
+  return number;
+}
+
+function issuePath(repo: RepoParts, number: number): string {
+  return `/repos/${repo.owner}/${repo.name}/issues/${number}`;
+}
+
+function issueLabelsPath(repo: RepoParts, number: number): string {
+  return `${issuePath(repo, number)}/labels`;
+}
+
+function pathSegments(url: string): string[] {
+  return new URL(url).pathname
+    .split('/')
+    .filter((segment) => segment.length > 0);
+}
+
+function ensureSuccess(response: CodeHostResponse): void {
+  if (response.status !== 200) {
+    throw new Error(
+      `code host: REST request failed with status ${response.status}`,
+    );
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
