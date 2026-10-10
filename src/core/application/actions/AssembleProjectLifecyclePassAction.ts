@@ -1,5 +1,5 @@
 import { Baseline } from '../data/Baseline.js';
-import type { DeclaredConnection } from '../data/DeclaredConnection.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../data/MirrorSide.js';
 import { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';
 import type { ProjectLifecycleRecord } from '../data/ProjectLifecycleRecord.js';
@@ -49,14 +49,14 @@ export class AssembleProjectLifecyclePassAction {
   }
 
   private async scopeMirrors(
-    connections: readonly DeclaredConnection[],
+    connections: readonly ConnectionDataTransferObject[],
     project: string,
   ): Promise<MirrorSide[]> {
     const mirrors: MirrorSide[] = [];
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
-        connection.envelope.application,
-        connection.envelope.target,
+        connection.application,
+        connection.target,
         connection.slug,
         project,
       );
@@ -81,7 +81,7 @@ export class AssembleProjectLifecyclePassAction {
   }
 
   private async resolveProject(
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     adapter: RegisteredAdapter,
     project: string,
   ): Promise<string> {
@@ -94,17 +94,15 @@ export class AssembleProjectLifecyclePassAction {
       return recorded;
     }
 
-    const existing = await adapter.project.readProject(
-      connection.envelope.target,
-    );
+    const existing = await adapter.project.readProject(connection.target);
     if (existing !== null) {
-      await this.renameIfDrifted(adapter, connection.envelope.target, project);
-      await this.record(connection, project, connection.envelope.target);
-      return connection.envelope.target;
+      await this.renameIfDrifted(adapter, connection.target, project);
+      await this.record(connection, project, connection.target);
+      return connection.target;
     }
 
     const created = await adapter.project.createProject(
-      connection.envelope.target,
+      connection.target,
       project,
     );
     await this.record(connection, project, created.handle);
@@ -123,14 +121,14 @@ export class AssembleProjectLifecyclePassAction {
   }
 
   private async record(
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     project: string,
     handle: string,
   ): Promise<void> {
     await this.mirrorProjects.record(
       project,
       connection.slug,
-      connection.envelope.application,
+      connection.application,
       handle,
     );
   }

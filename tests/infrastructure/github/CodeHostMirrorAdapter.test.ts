@@ -4,8 +4,7 @@ import { AdapterRegistration } from '../../../src/core/application/data/AdapterR
 import { Baseline } from '../../../src/core/application/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionEnvelope } from '../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../../src/core/application/data/OriginObservation.js';
@@ -1004,12 +1003,10 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
 
     const projectSource: ProjectSourcePort = {
       readConnections: async () => [
-        new DeclaredConnection({
+        new ConnectionDataTransferObject({
           slug: 'gh',
-          envelope: new ConnectionEnvelope({
-            application: 'github',
-            target: target(),
-          }),
+          application: 'github',
+          target: target(),
         }),
       ],
       listEntities: async () => [entityId],

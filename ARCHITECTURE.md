@@ -213,7 +213,7 @@ canonical DTOs and the pure core.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`, `MirrorSide`,
   `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
-  `ProjectLifecycleRecord`, `DeclaredConnection`, `ConnectionEnvelope`,
+  `ProjectLifecycleRecord`, `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
   `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `ProjectState`
   and `ProjectActivityObservation` — one canonical shape per concept, owned by

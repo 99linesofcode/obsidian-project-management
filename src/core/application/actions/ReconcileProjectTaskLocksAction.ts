@@ -1,4 +1,4 @@
-import type { DeclaredConnection } from '../data/DeclaredConnection.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../port/MirrorHandlePort.js';
 import type { OriginPort } from '../../port/OriginPort.js';
@@ -27,8 +27,8 @@ export class ReconcileProjectTaskLocksAction {
     const connections = await this.projectSource.readConnections(input.project);
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
-        connection.envelope.application,
-        connection.envelope.target,
+        connection.application,
+        connection.target,
         connection.slug,
         input.project,
       );
@@ -40,7 +40,7 @@ export class ReconcileProjectTaskLocksAction {
   }
 
   private async applyToConnection(
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     taskLock: TaskLockPort,
     input: ReconcileProjectTaskLocksInput,
   ): Promise<void> {

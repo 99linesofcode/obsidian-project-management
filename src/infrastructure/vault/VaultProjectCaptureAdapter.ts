@@ -1,12 +1,13 @@
 import { AdoptedProject } from '../../core/application/data/AdoptedProject.js';
 import type { CapturedProject } from '../../core/application/data/CapturedProject.js';
+import type { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
 import type { ProjectCaptureVaultPort } from '../../core/port/ProjectCaptureVaultPort.js';
 import { projectHomePath } from '../../core/domain/projectHomePath.js';
 import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 
 export interface CaptureProjectNote {
   projectName: string;
-  connections: Record<string, { tool: string; project: string }>;
+  connections: readonly ConnectionDataTransferObject[];
 }
 
 export interface CaptureVault {
@@ -21,12 +22,12 @@ export class VaultProjectCaptureAdapter implements ProjectCaptureVaultPort {
   async listAdopted(): Promise<readonly AdoptedProject[]> {
     const adopted: AdoptedProject[] = [];
     for (const note of await this.vault.findProjectNotes()) {
-      for (const connection of Object.values(note.connections)) {
+      for (const connection of note.connections) {
         adopted.push(
           new AdoptedProject({
             projectName: note.projectName,
-            application: connection.tool,
-            target: connection.project,
+            application: connection.application,
+            target: connection.target,
           }),
         );
       }

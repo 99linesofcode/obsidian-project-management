@@ -1,4 +1,4 @@
-import type { DeclaredConnection } from '../data/DeclaredConnection.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { CapturePort } from '../../port/CapturePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { ProjectSourcePort } from '../../port/ProjectSourcePort.js';
@@ -22,8 +22,8 @@ export class CaptureTasksAction {
     const errors: unknown[] = [];
     for (const connection of connections) {
       const adapter = this.factory.create(
-        connection.envelope.application,
-        connection.envelope.target,
+        connection.application,
+        connection.target,
         connection.slug,
         project,
       );
@@ -49,11 +49,11 @@ export class CaptureTasksAction {
 
   private async captureConnection(
     project: string,
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     capture: CapturePort,
     syncedAt: string,
   ): Promise<CaptureTasksResult> {
-    const tasks = await capture.capture(connection.envelope.target);
+    const tasks = await capture.capture(connection.target);
     const adopted = new Set(
       await this.vault.listAdopted(project, connection.slug),
     );
@@ -67,7 +67,7 @@ export class CaptureTasksAction {
       try {
         await this.vault.adopt({
           task,
-          application: connection.envelope.application,
+          application: connection.application,
           slug: connection.slug,
           projectName: project,
           syncedAt,

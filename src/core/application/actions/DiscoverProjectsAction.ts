@@ -29,20 +29,20 @@ export class DiscoverProjectsAction {
 
     for (const note of notes) {
       errors.push(...note.connectionErrors);
-      for (const [slug, connection] of Object.entries(note.connections)) {
-        const setup = this.setupFactory.setupFor(connection.tool);
+      for (const connection of note.connections) {
+        const setup = this.setupFactory.setupFor(connection.application);
         if (setup === null) {
           continue;
         }
         try {
           const identity = await this.attachProject.execute({
-            repoUrl: connection.project,
+            repoUrl: connection.target,
             setup,
           });
           projects.push({
             projectName: note.projectName,
-            connectionSlug: slug,
-            identity: { ...identity, repoUrl: connection.project },
+            connectionSlug: connection.slug,
+            identity: { ...identity, repoUrl: connection.target },
           });
         } catch (error) {
           errors.push(error);

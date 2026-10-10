@@ -1,9 +1,9 @@
-import type { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
+import type { FrontmatterConnection } from './FrontmatterConnection.js';
 
 export function parseConnectionsBlock(
   frontmatterLines: string[],
-): Record<string, ConnectionDataTransferObject> {
-  const connections: Record<string, ConnectionDataTransferObject> = {};
+): Record<string, FrontmatterConnection> {
+  const connections: Record<string, FrontmatterConnection> = {};
   let currentSlug: string | null = null;
   let inBlock = false;
   let slugIndent = -1;

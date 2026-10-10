@@ -1,7 +1,7 @@
-import type { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
+import type { FrontmatterConnection } from './FrontmatterConnection.js';
 
 export function renderConnectionsBlock(
-  connections: Record<string, ConnectionDataTransferObject>,
+  connections: Record<string, FrontmatterConnection>,
 ): string[] {
   const lines = ['connections:'];
   for (const [slug, connection] of Object.entries(connections)) {

@@ -3,7 +3,7 @@ import type { ConnectionStatePort } from '../../port/ConnectionStatePort.js';
 
 export interface RekeyRenamedConnectionsInput {
   projectName: string;
-  connections: Record<string, ConnectionDataTransferObject>;
+  connections: readonly ConnectionDataTransferObject[];
 }
 
 export class RekeyRenamedConnectionsAction {
@@ -13,22 +13,22 @@ export class RekeyRenamedConnectionsAction {
     const ports = await this.syncState.listPortStates(input.projectName);
     const matched = new Set<string>();
     const warnings: unknown[] = [];
-    for (const [slug, connection] of Object.entries(input.connections)) {
+    for (const connection of input.connections) {
       const existing = ports.find(
         (port) =>
-          port.slug !== slug &&
-          port.state.provider === connection.tool &&
-          port.state.project === connection.project,
+          port.slug !== connection.slug &&
+          port.state.provider === connection.application &&
+          port.state.project === connection.target,
       );
       if (existing !== undefined) {
         await this.syncState.rekeyPortState(
           input.projectName,
           existing.slug,
-          slug,
+          connection.slug,
         );
         matched.add(existing.slug);
       }
-      matched.add(slug);
+      matched.add(connection.slug);
     }
     for (const port of ports) {
       if (!matched.has(port.slug)) {

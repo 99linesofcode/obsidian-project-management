@@ -1,7 +1,7 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
 import { Baseline } from '../data/Baseline.js';
 import type { CanonicalTask } from '../data/CanonicalTask.js';
-import type { DeclaredConnection } from '../data/DeclaredConnection.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../data/MirrorSide.js';
 import { MirrorSyncPass } from '../data/MirrorSyncPass.js';
 import type { PassRecord } from '../data/PassRecord.js';
@@ -37,7 +37,7 @@ const MERGED_FIELDS: readonly CanonicalField[] = [
 ];
 
 interface ScopedMirror {
-  connection: DeclaredConnection;
+  connection: ConnectionDataTransferObject;
   adapter: RegisteredAdapter;
 }
 
@@ -66,14 +66,14 @@ export class AssembleProjectPassAction {
   }
 
   private scopeMirrors(
-    connections: readonly DeclaredConnection[],
+    connections: readonly ConnectionDataTransferObject[],
     project: string,
   ): ScopedMirror[] {
     const scoped: ScopedMirror[] = [];
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
-        connection.envelope.application,
-        connection.envelope.target,
+        connection.application,
+        connection.target,
         connection.slug,
         project,
       );
@@ -111,7 +111,7 @@ export class AssembleProjectPassAction {
   }
 
   private async resolveHandle(
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     adapter: RegisteredAdapter,
     notePath: string,
     project: string,
@@ -138,7 +138,7 @@ export class AssembleProjectPassAction {
   }
 
   private async materialize(
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     adapter: RegisteredAdapter,
     notePath: string,
     project: string,
@@ -166,10 +166,7 @@ export class AssembleProjectPassAction {
       notePath,
       pendingCreationHandle(notePath),
     );
-    const created = await adapter.tasks.createTask(
-      connection.envelope.target,
-      task,
-    );
+    const created = await adapter.tasks.createTask(connection.target, task);
     await this.handles.record(
       project,
       connection.slug,
@@ -180,15 +177,13 @@ export class AssembleProjectPassAction {
   }
 
   private async adopt(
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     adapter: RegisteredAdapter,
     notePath: string,
     project: string,
     task: CanonicalTask,
   ): Promise<string | null> {
-    const candidates = await adapter.tasks.readTasks(
-      connection.envelope.target,
-    );
+    const candidates = await adapter.tasks.readTasks(connection.target);
     const match = candidates.find(
       (candidate) => candidate.title === task.title,
     );
