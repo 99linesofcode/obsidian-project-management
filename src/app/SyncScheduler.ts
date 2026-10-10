@@ -70,11 +70,11 @@ export class SyncScheduler extends Component {
     });
   }
 
-  // Discovery: every pm-project is enqueued; the chain probes and gates the
-  // remote half itself, so the scheduler no longer probes. The pre-tick capture
-  // runs first so a remote-born project exists as a vault project before the
-  // enumeration; its names are enqueued explicitly because a freshly created
-  // note may not be visible to the metadata cache within the same tick.
+  // Discovery: every pm-project is enqueued; the chain gates the remote half
+  // itself. The pre-tick capture runs first so a remote-born project exists as a
+  // vault project before the enumeration; its names are enqueued explicitly
+  // because a freshly created note may not be visible to the metadata cache
+  // within the same tick.
   private async tick(): Promise<void> {
     let captured: string[] = [];
     if (this.captureProjects) {

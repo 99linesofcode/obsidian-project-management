@@ -11,7 +11,7 @@ names no provider: it reconciles canonical fields across an origin and any
 number of mirror sides through one pure N-way merge. A connection produces a
 mirror side; the vault is the origin. The old chain — the two provider halves,
 the pairwise verdict, the legacy writers — is gone; what remains around the core
-is an orchestration shell (probe, board-ensure, rename recovery, vault
+is an orchestration shell (board-ensure, rename recovery, vault
 consistency, the deletion sweep), documented here as it exists.
 
 ---
@@ -50,7 +50,7 @@ vocabulary, the canonical DTOs, the one pure N-way merge, the descriptor and
 registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 
 - **Capability ports.** `ProjectPort` (`project`, `lifecycle`),
-  `TaskSurfacePort` (`identity`, `title`, `body`, `subtasks`, `completion`,
+  `TaskSurfacePort` (`title`, `body`, `subtasks`, `completion`,
   `Status`, `label`), and the optional `CapturePort`, `ProjectCapturePort`,
   `CompleteFetchPort`, `TimestampedPort`, `TaskLockPort` (`task-locking`) and
   `ProjectActivityPort` (`project-activity`). An adapter implements only the
@@ -60,7 +60,7 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   `ProjectLifecycleOriginPort` (observe/apply a project's archived state). The
   origin is a role, not an application: it gets no descriptor.
 - **The setup port.** `ProjectSetupPort` (discover a target's projects, resolve
-  addressing, create/adopt a project, list viewer projects, probe state) is the
+  addressing, create/adopt a project, list viewer projects) is the
   code-host adapter's surface for discovery, attach and board-ensure.
 - **The supporting ports.** `ProjectSourcePort`, `BaselineStorePort`,
   `MirrorHandlePort`, `MirrorProjectPort`, `MirrorAdapterFactoryPort`,
@@ -71,9 +71,9 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   and the registry through `IdentityStorePort`, `TrackedEntityPort` and
   `ConnectionStatePort` — the whole vault and registry contract. The former
   monolithic `VaultPort` and `SyncStatePort` are gone.
-- **The vocabulary.** `Capabilities.ts` holds the fourteen capability names;
-  `canonicalField.ts` holds the seven canonical fields (`identity`, `title`,
-  `body`, `subtasks`, `completion`, `Status`, `label`).
+- **The vocabulary.** `Capabilities.ts` holds the thirteen capability names;
+  `canonicalField.ts` holds the six canonical fields (`title`, `body`,
+  `subtasks`, `completion`, `Status`, `label`).
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`, `MirrorSide`,
   `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
@@ -126,21 +126,22 @@ namespace per application.**
   project at a time, coalesces duplicates, swallows a failed run so the queue
   never poisons.
 - **`SyncProjectAction`** — the chain. One work item (a project folder name) and
-  one entry point; it drives the core reconcilers through five injected
-  interfaces (`TaskFieldReconciler`, `TaskCaptureReconciler`,
-  `ProjectLifecycleReconciler`, `ProjectTaskLocksReconciler`,
-  `ProjectReactivationReconciler`, all in `src/sync/`) and wraps every step so
-  one failure logs and skips that step.
+  one entry point; it drives the vault-maintenance `ProjectShell` and the
+  `CoreReconcilers` bundle (the five core reconcilers, all in `src/sync/`) in
+  order, and wraps every core step so one failure logs and skips that step.
+- **`ProjectShell`** — the vault-maintenance half of the chain: home-note
+  migration, connection re-keying, board-ensure, rename recovery, vault
+  consistency and the deletion sweep. Each of its steps isolates its own failure.
 - **`main.ts`** — the composition root. `composePlugin` builds the vault
   adapter, the mirror-adapter factory, the setup adapter and the shell actions;
-  `composeCoreReconcilers` lazily builds the core pass assemblers and their
+  `composeCoreReconcilers` eagerly builds the core pass assemblers and their
   infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
 - **`SeedVaultArtifactsAction`** — seeds the six vault-owned artifacts (three
   note templates, three Bases files) create-if-missing, on init and on demand
   from the settings tab.
-- **The retained shell actions.** `ProbeProjectsAction`,
-  `DetectNoteRenamesAction`, `SweepDeletedNotesAction`, `HandleDeletedNoteAction`,
+- **The retained shell actions.** `ProjectShell`, `DetectNoteRenamesAction`,
+  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`,
   `MigrateProjectHomeNoteAction`, `RekeyRenamedConnectionsAction`,
   `DiscoverProjectsAction`, `AttachProjectAction`, `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
@@ -155,16 +156,18 @@ pure `registerAdapters`, which:
 - rejects an application id that is not lowercase alphanumerics with dashes, a
   duplicate id, a descriptor missing a required field, an unknown capability, an
   unknown settings-row kind, or a descriptor missing the in-scope minimum
-  surface (`UNIVERSAL_CAPABILITIES` + `MANDATORY_FIELD_CAPABILITIES`); and
+  surface (`REQUIRED_CAPABILITIES`); and
 - returns each accepted adapter as a `RegisteredAdapter`, exposing only the
   ports its descriptor declares (`capture`, `projectCapture`, `completeFetch`,
   `timestamps`, `taskLock`, `activity` are gated by capability).
 
-`main.ts` builds the descriptors and gates each adapter through the neutral
-`registerAdapters` — the GitHub and Todoist mirrors via `gateMirror`, the
-conformance adapter in the stored registration; the kernel is not edited to add
-an application. A provider name is a value argument, never a namespace key in
-the core.
+`main.ts` holds one `providers` table — one entry per application, each naming
+its descriptor, its mirror factory, its capture source and its optional setup
+port. It derives the descriptor list, the setup factory and the mirror-adapter
+factory from that table, and gates each adapter through the neutral
+`registerAdapters` (the conformance adapter in the stored registration). Adding
+an application is one table entry; the kernel is not edited. A provider name is
+a value argument, never a namespace key in the core.
 
 ---
 
@@ -179,13 +182,14 @@ On load, `SyncScheduler.tick` first runs the injected project capture
 (`CaptureProjectsAction`, [§2.6](#26-project-capture)), then enumerates the
 vault's project notes and enqueues each project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
-item no-ops), migrates a legacy home note, re-keys a renamed connection,
-ensures a code-host board for each active github connection, probes the project,
-reactivates a frozen project with newer mirror work, reconciles the lifecycle
-into one freeze verdict, reconciles task locks on the transition, recovers
-renames, runs the vault-consistency step, and — when not frozen — runs the core
-task capture and the core task-field pass, then sweeps deletions. Every
-`step()` failure logs and skips that step without blocking the others.
+item no-ops), then drives two collaborators in order. `ProjectShell` migrates a
+legacy home note, re-keys a renamed connection, ensures a code-host board for
+each active github connection, recovers renames, runs the vault-consistency
+step, and finally sweeps deletions. The `CoreReconcilers` bundle reactivates a
+frozen project with newer mirror work, reconciles the lifecycle into one freeze
+verdict, reconciles task locks on the transition, and — when not frozen — runs
+the task capture and the task-field pass. Every step failure logs and skips that
+step without blocking the others.
 
 #### 2.1a Startup and the pre-tick capture
 
@@ -215,27 +219,18 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant Mig as MigrateProjectHomeNoteAction
-  participant Rek as RekeyRenamedConnectionsAction
-  participant Ens as EnsureProjectBoardAction
-  participant Probe as ProbeProjectsAction
+  participant Shell as ProjectShell
   participant React as ProjectReactivationReconciler
   participant Life as ProjectLifecycleReconciler
   participant Lock as ProjectTaskLocksReconciler
-  participant Ren as DetectNoteRenamesAction
 
   SP->>SP: resolveProject (no-op when missing)
-  SP->>Mig: execute(notePath, locationArchived)
-  SP->>Rek: execute(connections)
-  loop each active github connection
-    SP->>Ens: execute(project, connectionSlug)
-  end
-  SP->>Probe: execute(github targets)
+  SP->>Shell: migrate / rekey / ensureBoards
   SP->>React: reactivate(project)
   SP->>Life: reconcile(project)
   Life-->>SP: { frozen, wasFrozen }
   SP->>Lock: reconcile({ project, frozen, wasFrozen })
-  SP->>Ren: execute({ projectName, syncedAt })
+  SP->>Shell: renames
 ```
 
 #### 2.1c The core reconcilers and the sweep
@@ -243,6 +238,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
+  participant Shell as ProjectShell
   participant Chk as SyncChecklistAction
   participant Cas as CompleteTaskCascadeAction
   participant Mir as MirrorTodoStatusAction
@@ -250,28 +246,27 @@ sequenceDiagram
   participant TF as TaskFieldReconciler
   participant Sweep as SweepDeletedNotesAction
 
-  SP->>SP: runVaultConsistency
+  SP->>Shell: vaultConsistency(project, syncedAt)
   loop each taken note
-    SP->>Cas: execute(notePath, projectName, syncedAt)
-    SP->>Chk: execute(notePath, projectName, syncedAt)
+    Shell->>Cas: execute(notePath, projectName, syncedAt)
+    Shell->>Chk: execute(notePath, projectName, syncedAt)
   end
   loop each todos note
-    SP->>Mir: execute(todoPath, syncedAt)
+    Shell->>Mir: execute(todoPath, syncedAt)
   end
   alt not frozen
     SP->>TC: capture(project, syncedAt)
     SP->>TF: reconcile(project)
   end
-  loop each github connection
-    SP->>Sweep: execute({ projectName, connectionSlug, application, target })
-  end
+  SP->>Shell: deletions(project, connections)
+  Shell->>Sweep: execute({ projectName, connections })
 ```
 
-The five reconciler interfaces are the cutover seam: `SyncProjectAction` holds
-a `() => TaskFieldReconciler` (and the four peers), and `main.ts` fills each
-with an adapter over the assembled core action. The lifecycle reconciler returns
-`{ frozen, wasFrozen }`; when it throws, `SyncProjectAction` falls back to the
-probe's `closed` fact and `note.archivedAt`.
+The `CoreReconcilers` bundle is the cutover seam: `SyncProjectAction` holds one
+instance and `main.ts` fills each member with an adapter over the assembled core
+action. The lifecycle reconciler returns
+`{ frozen, wasFrozen }`; when it throws, `SyncProjectAction` falls back to
+`note.archivedAt`.
 
 ### 2.2 The N-way merge (`mergeField`)
 
@@ -957,24 +952,14 @@ code is documented above; the brief's version is recorded here.
 1. **The orchestration shell is retained, not fully replaced.** ADR 001 says the
    legacy halves, the old pure verdict and the legacy writers are deleted (they
    are), and describes the chain as running the core reconcilers. It does — but
-   `SyncProjectAction` still runs the board-ensure, probe, vault-consistency
+   `SyncProjectAction` still runs the board-ensure, vault-consistency
    (cascade, checklist, to-do mirror) and deletion-sweep steps around the
    injected core reconcilers; the surrounding shell is not core. The chain now
    reaches the vault and the registry through the narrow core seams, and selects
    setup-capable connections through the setup factory rather than a provider
    check. The ADR's "the chain builds the origin and the per-connection mirror
    adapters" is accurate, but the surrounding steps are not core.
-2. **The probe result is only a fallback.** `SyncProjectAction.probe` runs
-   `ProbeProjectsAction` and passes the `ProjectStateData` into
-   `reconcileLifecycle`, but the lifecycle reconciler ignores it; the probe's
-   `closed` fact is used only when the lifecycle reconciler throws. The primary
-   freeze verdict comes from the core lifecycle pass.
-3. **`identity` is declared but not reconciled by the task pass.** The
-   `identity` canonical field and capability exist, and `MirrorSyncAction`'s
-   `canonicalValue` supports it, but `AssembleProjectPassAction` merges only
-   `title`, `body`, `subtasks`, `completion`, `Status` and `label`. Identity is
-   carried by the registry's mirror items, not merged as a field.
-4. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
+2. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
    invokes an optional `captureProjects` callback and enqueues its returned
    names; `main.ts` wires that callback to `projectCapture()`. The scheduler
    itself makes no decision about what the capture does.
@@ -996,8 +981,8 @@ The tree is module-first; each module owns one surface of the system.
   `ReactivateFrozenProjectAction.ts`.
 - The driven adapters: `src/infrastructure/` (`vault/`, `github/`, `todoist/`,
   `registry/`, `fake/`).
-- The chain and the shell: `src/sync/` (`SyncProjectAction`,
-  `ProbeProjectsAction`, `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
+- The chain and the shell: `src/sync/` (`SyncProjectAction`, `ProjectShell`,
+  `CoreReconcilers`, `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
   `HandleDeletedNoteAction`, the five reconciler interfaces).
 - The registry: `src/registry/` (`SyncStateAdapter`, `SyncStateSchema`,
   `loadDataSafely`).

@@ -15,6 +15,7 @@ import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
 import { AttachProjectAction } from './projects/AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from './core/ports/ProjectSetupFactoryPort.js';
+import type { ProjectSetupPort } from './core/ports/ProjectSetupPort.js';
 import type { IdentityStorePort } from './core/ports/IdentityStorePort.js';
 import { CreateTaskNoteAction } from './core/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/CaptureProjectsAction.js';
@@ -30,7 +31,6 @@ import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
-import { ProbeProjectsAction } from './sync/ProbeProjectsAction.js';
 import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
 import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
 import { SyncProjectAction } from './sync/SyncProjectAction.js';
@@ -65,16 +65,12 @@ import {
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
 import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TaskManagerTransport } from './infrastructure/todoist/TaskManagerTransport.js';
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
-import type { TaskFieldReconciler } from './sync/TaskFieldReconciler.js';
-import type { TaskCaptureReconciler } from './sync/TaskCaptureReconciler.js';
-import type { ProjectLifecycleReconciler } from './sync/ProjectLifecycleReconciler.js';
-import type { ProjectTaskLocksReconciler } from './sync/ProjectTaskLocksReconciler.js';
-import type { ProjectReactivationReconciler } from './sync/ProjectReactivationReconciler.js';
 import { ReconcileProjectTaskLocksAction } from './core/ReconcileProjectTaskLocksAction.js';
 import { ReactivateFrozenProjectAction } from './core/ReactivateFrozenProjectAction.js';
 import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
+import type { CoreReconcilers } from './sync/CoreReconcilers.js';
+import { ProjectShell } from './sync/ProjectShell.js';
 
 async function request(
   token: string,
@@ -125,17 +121,9 @@ function createCodeHostTransport(token: string): CodeHostTransport {
   };
 }
 
-interface ProjectCaptureReconciler {
-  capture(syncedAt: string): Promise<CaptureProjectsResult>;
-}
-
-interface CoreReconcilers {
-  taskFields: TaskFieldReconciler;
-  lifecycle: ProjectLifecycleReconciler;
-  taskLocks: ProjectTaskLocksReconciler;
-  reactivation: ProjectReactivationReconciler;
-  capture: ProjectCaptureReconciler;
-  taskCapture: TaskCaptureReconciler;
+interface CoreComposition {
+  reconcilers: CoreReconcilers;
+  projectCapture: () => Promise<CaptureProjectsResult>;
 }
 
 function composeCoreReconcilers(
@@ -145,7 +133,7 @@ function composeCoreReconcilers(
   baselineStorage: CoreBaselineStorage,
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
-): CoreReconcilers {
+): CoreComposition {
   const projectSource = new VaultProjectSourceAdapter(vault);
   const baselines = new CoreBaselineStoreAdapter(baselineStorage);
 
@@ -198,72 +186,88 @@ function composeCoreReconcilers(
   );
 
   return {
-    taskFields: {
-      reconcile: async (project) => {
-        await taskFieldPass.invoke(project);
+    reconcilers: {
+      taskFields: {
+        reconcile: async (project) => {
+          await taskFieldPass.invoke(project);
+        },
+      },
+      lifecycle: {
+        reconcile: async (project) => {
+          const record = await lifecyclePass.invoke(project);
+          return { frozen: record.frozen, wasFrozen: record.wasFrozen };
+        },
+      },
+      taskLocks: {
+        reconcile: (input) => taskLocks.invoke(input),
+      },
+      reactivation: {
+        reactivate: (project) => reactivation.invoke(project),
+      },
+      taskCapture: {
+        capture: async (project, syncedAt) => {
+          await captureTasks.invoke(project, syncedAt);
+        },
       },
     },
-    lifecycle: {
-      reconcile: async (project) => {
-        const record = await lifecyclePass.invoke(project);
-        return { frozen: record.frozen, wasFrozen: record.wasFrozen };
-      },
-    },
-    taskLocks: {
-      reconcile: (input) => taskLocks.invoke(input),
-    },
-    reactivation: {
-      reactivate: (project) => reactivation.invoke(project),
-    },
-    capture: {
-      capture: (syncedAt) => capture.invoke(syncedAt),
-    },
-    taskCapture: {
-      capture: async (project, syncedAt) => {
-        await captureTasks.invoke(project, syncedAt);
-      },
-    },
+    projectCapture: () => capture.invoke(new Date().toISOString()),
   };
+}
+
+interface Provider {
+  applicationId: string;
+  descriptor: AdapterDescriptor;
+  mirror: (
+    target: string,
+    boardIdentity: () => Promise<BoardIdentity | null>,
+  ) => MirrorAdapter;
+  capture: () => MirrorAdapter;
+  setup: () => ProjectSetupPort | null;
 }
 
 function mirrorAdapterFactory(
   syncState: IdentityStorePort,
-  codeHost: CodeHostTransport,
-  taskManager: TaskManagerTransport,
-  statusOptions: readonly string[],
+  providers: readonly Provider[],
 ): MirrorAdapterFactoryPort {
-  const captureSources = buildCaptureSources(codeHost, taskManager);
+  const captureSources = buildCaptureSources(providers);
   return {
-    create: (application, target, connectionSlug, projectName) =>
-      createMirrorAdapter(
-        application,
-        target,
-        () => syncState.getIdentity(projectName, connectionSlug),
-        codeHost,
-        taskManager,
-        statusOptions,
-      ),
+    create: (application, target, connectionSlug, projectName) => {
+      const provider = providerFor(providers, application);
+      if (provider === null) {
+        return null;
+      }
+      return gateMirror(
+        provider.descriptor,
+        provider.mirror(target, () =>
+          syncState.getIdentity(projectName, connectionSlug),
+        ),
+      );
+    },
     captureSources: () => captureSources,
   };
 }
 
 function buildCaptureSources(
-  codeHost: CodeHostTransport,
-  taskManager: TaskManagerTransport,
+  providers: readonly Provider[],
 ): readonly CaptureSource[] {
   const sources: CaptureSource[] = [];
-  const registrations: Array<[string, AdapterDescriptor, MirrorAdapter]> = [
-    ['todoist', todoistDescriptor(), new TaskManagerMirrorAdapter(taskManager)],
-    ['github', githubDescriptor(), new CodeHostMirrorAdapter(codeHost)],
-  ];
-  for (const [application, descriptor, adapter] of registrations) {
-    const registered = gateMirror(descriptor, adapter);
+  for (const provider of providers) {
+    const registered = gateMirror(provider.descriptor, provider.capture());
     const capture = registered?.projectCapture;
     if (capture !== undefined) {
-      sources.push({ application, capture });
+      sources.push({ application: provider.applicationId, capture });
     }
   }
   return sources;
+}
+
+function providerFor(
+  providers: readonly Provider[],
+  application: string,
+): Provider | null {
+  return (
+    providers.find((provider) => provider.applicationId === application) ?? null
+  );
 }
 
 function secretKeyOf(descriptor: AdapterDescriptor): string {
@@ -283,29 +287,6 @@ function registeredApplicationIds(
   return new Set(
     [...descriptors, conformance].map((descriptor) => descriptor.applicationId),
   );
-}
-
-function createMirrorAdapter(
-  application: string,
-  target: string,
-  boardIdentity: () => Promise<BoardIdentity | null>,
-  codeHost: CodeHostTransport,
-  taskManager: TaskManagerTransport,
-  statusOptions: readonly string[],
-): RegisteredAdapter | null {
-  if (application === 'github') {
-    return gateMirror(
-      githubDescriptor(),
-      new CodeHostMirrorAdapter(codeHost, target, boardIdentity, statusOptions),
-    );
-  }
-  if (application === 'todoist') {
-    return gateMirror(
-      todoistDescriptor(),
-      new TaskManagerMirrorAdapter(taskManager, target),
-    );
-  }
-  return null;
 }
 
 function gateMirror(
@@ -335,7 +316,41 @@ function composePlugin(
   const conformance = conformanceDescriptor('conformance');
   const codeHostDescriptor = githubDescriptor();
   const taskManagerDescriptor = todoistDescriptor();
-  const providerDescriptors = [codeHostDescriptor, taskManagerDescriptor];
+  const codeHostTransport = transportFromSecret(
+    secrets,
+    secretKeyOf(codeHostDescriptor),
+    createCodeHostTransport,
+  );
+  const taskManagerTransport = transportFromSecret(
+    secrets,
+    secretKeyOf(taskManagerDescriptor),
+    createTodoistTransport,
+  );
+  const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
+  const providers: Provider[] = [
+    {
+      applicationId: 'github',
+      descriptor: codeHostDescriptor,
+      mirror: (target, boardIdentity) =>
+        new CodeHostMirrorAdapter(
+          codeHostTransport,
+          target,
+          boardIdentity,
+          plugin.settings.statusOptions,
+        ),
+      capture: () => new CodeHostMirrorAdapter(codeHostTransport),
+      setup: () => codeHostSetup,
+    },
+    {
+      applicationId: 'todoist',
+      descriptor: taskManagerDescriptor,
+      mirror: (target) =>
+        new TaskManagerMirrorAdapter(taskManagerTransport, target),
+      capture: () => new TaskManagerMirrorAdapter(taskManagerTransport),
+      setup: () => null,
+    },
+  ];
+  const providerDescriptors = providers.map((provider) => provider.descriptor);
   const vault = new VaultAdapter(
     plugin.app,
     (eventRef) => plugin.registerEvent(eventRef),
@@ -343,26 +358,11 @@ function composePlugin(
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
-  const codeHostTransport = transportFromSecret(
-    secrets,
-    secretKeyOf(codeHostDescriptor),
-    createCodeHostTransport,
-  );
-  const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
   const setupFactory: ProjectSetupFactoryPort = {
     setupFor: (application) =>
-      application === 'github' ? codeHostSetup : null,
+      providerFor(providers, application)?.setup() ?? null,
   };
-  const mirrorAdapters = mirrorAdapterFactory(
-    syncState,
-    codeHostTransport,
-    transportFromSecret(
-      secrets,
-      secretKeyOf(taskManagerDescriptor),
-      createTodoistTransport,
-    ),
-    plugin.settings.statusOptions,
-  );
+  const mirrorAdapters = mirrorAdapterFactory(syncState, providers);
   const createTaskNote = new CreateTaskNoteAction(
     vault,
     syncState,
@@ -382,7 +382,6 @@ function composePlugin(
     setupFactory,
     new AttachProjectAction(),
   );
-  const probeProjects = new ProbeProjectsAction(setupFactory, syncState);
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -396,53 +395,32 @@ function composePlugin(
   );
 
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
-  let composedCoreReconcilers: CoreReconcilers | undefined;
-  const coreReconcilers = (): CoreReconcilers => {
-    composedCoreReconcilers ??= composeCoreReconcilers(
-      plugin,
-      vault,
-      syncState,
-      baselineStorage,
-      createTaskNote,
-      mirrorAdapters,
-    );
-    return composedCoreReconcilers;
-  };
-  const taskFieldReconciler = (): TaskFieldReconciler =>
-    coreReconcilers().taskFields;
-  const projectLifecycleReconciler = (): ProjectLifecycleReconciler =>
-    coreReconcilers().lifecycle;
-  const taskCaptureReconciler = (): TaskCaptureReconciler =>
-    coreReconcilers().taskCapture;
-  const projectTaskLocksReconciler = (): ProjectTaskLocksReconciler =>
-    coreReconcilers().taskLocks;
-  const projectReactivationReconciler = (): ProjectReactivationReconciler =>
-    coreReconcilers().reactivation;
-  const syncProject = new SyncProjectAction(
+  const { reconcilers, projectCapture } = composeCoreReconcilers(
+    plugin,
     vault,
-    setupFactory,
     syncState,
-    probeProjects,
+    baselineStorage,
+    createTaskNote,
+    mirrorAdapters,
+  );
+  const shell = new ProjectShell({
+    vault,
+    syncState,
+    setupFactory,
     detectNoteRenames,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
     handleDeletedNote,
-    taskFieldReconciler,
-    projectLifecycleReconciler,
-    taskCaptureReconciler,
-    projectTaskLocksReconciler,
-    projectReactivationReconciler,
     ensureProjectBoard,
-    new RekeyRenamedConnectionsAction(syncState),
-  );
+    rekeyRenamedConnections: new RekeyRenamedConnectionsAction(syncState),
+  });
+  const syncProject = new SyncProjectAction(vault, shell, reconcilers);
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,
     );
   });
-  const projectCapture = (): Promise<CaptureProjectsResult> =>
-    coreReconcilers().capture.capture(new Date().toISOString());
   const scheduler = new SyncScheduler(
     vault,
     queue,

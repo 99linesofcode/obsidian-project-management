@@ -1,10 +1,5 @@
 import type { AdapterDescriptor } from './AdapterDescriptor.js';
-import type { Capability } from './Capabilities.js';
-import {
-  isCapability,
-  MANDATORY_FIELD_CAPABILITIES,
-  UNIVERSAL_CAPABILITIES,
-} from './Capabilities.js';
+import { isCapability, REQUIRED_CAPABILITIES } from './Capabilities.js';
 import type { AdapterRegistration } from './data/AdapterRegistration.js';
 import { RegisteredAdapter } from './data/RegisteredAdapter.js';
 import { RegistrationError } from './data/RegistrationError.js';
@@ -64,16 +59,12 @@ function rejectionReason(
       return `unknown settings-row kind: ${row.kind}`;
     }
   }
-  for (const capability of requiredCapabilities()) {
+  for (const capability of REQUIRED_CAPABILITIES) {
     if (!descriptor.capabilities.includes(capability)) {
       return `out of scope: missing ${capability}`;
     }
   }
   return null;
-}
-
-function requiredCapabilities(): readonly Capability[] {
-  return [...UNIVERSAL_CAPABILITIES, ...MANDATORY_FIELD_CAPABILITIES];
 }
 
 function gatePorts(registration: AdapterRegistration): RegisteredAdapter {

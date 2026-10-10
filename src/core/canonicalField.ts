@@ -1,8 +1,2 @@
 export type CanonicalField =
-  | 'identity'
-  | 'title'
-  | 'body'
-  | 'subtasks'
-  | 'completion'
-  | 'Status'
-  | 'label';
+  'title' | 'body' | 'subtasks' | 'completion' | 'Status' | 'label';

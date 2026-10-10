@@ -58,9 +58,6 @@ class FakeSetup implements ProjectSetupPort {
   async listProjects(): Promise<readonly ProjectCandidate[]> {
     return this.candidates;
   }
-  async probeProjects(): Promise<never> {
-    throw new Error('not used in this test');
-  }
 }
 
 const repoUrl = 'https://github.com/acme/widgets';

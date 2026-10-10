@@ -7,7 +7,6 @@ const MANDATORY: readonly Capability[] = [
   'lifecycle',
   'Status',
   'label',
-  'identity',
   'title',
   'body',
   'subtasks',

@@ -135,8 +135,6 @@ function fieldValue(note: TaskNote, field: CanonicalField): string | null {
       return note.parent;
     case 'label':
       return note.labels.join(',');
-    case 'identity':
-      return null;
   }
 }
 
@@ -157,7 +155,6 @@ function writeIntoNote(content: string, write: CanonicalFieldWrite): string {
     case 'subtasks':
       return withParent(content, write.value);
     case 'title':
-    case 'identity':
       return content;
   }
 }

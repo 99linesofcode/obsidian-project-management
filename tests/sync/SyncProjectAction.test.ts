@@ -4,7 +4,6 @@ import type { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAc
 import type { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
-import type { ProbeProjectsAction } from '../../src/sync/ProbeProjectsAction.js';
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
 import type { ProjectLifecycleReconciler } from '../../src/sync/ProjectLifecycleReconciler.js';
@@ -13,7 +12,6 @@ import type { ProjectReactivationReconciler } from '../../src/sync/ProjectReacti
 import type { TaskCaptureReconciler } from '../../src/sync/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../src/sync/TaskFieldReconciler.js';
 import type { ProjectNoteData } from '../../src/core/ProjectNoteData.js';
-import type { ProjectStateData } from '../../src/core/ProjectStateData.js';
 import type { ConnectionData } from '../../src/core/ConnectionData.js';
 import type { ProjectSetupPort } from '../../src/core/ports/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../src/core/ports/ProjectSetupFactoryPort.js';
@@ -24,6 +22,8 @@ import type { NoteWriterPort } from '../../src/core/ports/NoteWriterPort.js';
 import type { VaultEventPort } from '../../src/core/ports/VaultEventPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
+import { ProjectShell } from '../../src/sync/ProjectShell.js';
+import type { CoreReconcilers } from '../../src/sync/CoreReconcilers.js';
 
 class FakeVault
   implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
@@ -58,30 +58,6 @@ class FakeVault
   onNoteChanged(): void {}
   onNoteDeleted(): void {}
   onNoteRenamed(): void {}
-}
-
-class FakeProbe {
-  fail = false;
-  states = new Map<string, ProjectStateData>();
-  targets: Array<{
-    projectName: string;
-    connectionSlug: string;
-    application: string;
-  }> = [];
-
-  async execute(
-    targets: Array<{
-      projectName: string;
-      connectionSlug: string;
-      application: string;
-    }>,
-  ): Promise<Map<string, ProjectStateData>> {
-    this.targets = [...targets];
-    if (this.fail) {
-      throw new Error('probe failed');
-    }
-    return this.states;
-  }
 }
 
 function reconcileRecorder(events: string[]): TaskFieldReconciler {
@@ -153,13 +129,14 @@ function status(notePath: string): EntityRecord {
 
 interface HarnessOptions {
   projectNotes?: ProjectNoteData[];
-  state?: ProjectStateData | undefined;
+  frozen?: boolean;
   statuses?: EntityRecord[];
   taken?: string[];
   todos?: string[];
   ensureBoard?: boolean;
   connections?: Record<string, ConnectionData>;
   setupApplications?: string[];
+  failRenames?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -176,13 +153,11 @@ function harness(options: HarnessOptions = {}) {
     syncState.records.set(record.id, record);
   }
 
-  const probe = new FakeProbe();
-  if (options.state !== undefined) {
-    probe.states.set('Acme Widgets', options.state);
-  }
-
   const renames = {
     execute: async () => {
+      if (options.failRenames) {
+        throw new Error('renames failed');
+      }
       events.push('renames');
     },
   } as unknown as DetectNoteRenamesAction;
@@ -231,48 +206,41 @@ function harness(options: HarnessOptions = {}) {
   };
 
   const frozen =
-    (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
-    (options.state?.closed ?? false);
+    options.frozen ?? (vault.projectNotes[0]?.archivedAt ?? null) !== null;
 
-  const action = new SyncProjectAction(
+  const shell = new ProjectShell({
     vault,
-    setupFactory,
     syncState,
-    probe as unknown as ProbeProjectsAction,
-    renames,
-    cascade,
-    checklist,
-    mirrorStatus,
-    handleDeleted,
-    () => reconcileRecorder(events),
-    () => projectLifecycleRecorder(events, frozen),
-    () => taskCaptureRecorder(events),
-    () => taskLocksRecorder(events),
-    () => reactivationRecorder(events),
-    ensureBoard,
-    undefined,
-  );
+    setupFactory,
+    detectNoteRenames: renames,
+    completeTaskCascade: cascade,
+    syncChecklist: checklist,
+    mirrorTodoStatus: mirrorStatus,
+    handleDeletedNote: handleDeleted,
+    ensureProjectBoard: ensureBoard,
+  });
+  const reconcilers: CoreReconcilers = {
+    taskFields: reconcileRecorder(events),
+    lifecycle: projectLifecycleRecorder(events, frozen),
+    taskLocks: taskLocksRecorder(events),
+    reactivation: reactivationRecorder(events),
+    taskCapture: taskCaptureRecorder(events),
+  };
+
+  const action = new SyncProjectAction(vault, shell, reconcilers);
 
   return {
     action,
     events,
     vault,
     syncState,
-    probe,
     deletedConnections,
   };
 }
 
-const openState: ProjectStateData = {
-  projectId: 'PVT_123',
-  updatedAt: '2026-09-18T10:00:00Z',
-  closed: false,
-};
-
 describe('the multi-adapter pass', () => {
   it('runs the steps in order', async () => {
     const h = harness({
-      state: openState,
       taken: ['Projecten/Acme Widgets/taken/42-fix-the-bug.md'],
       todos: ['Projecten/Acme Widgets/todos/fix-the-bug.md'],
     });
@@ -301,8 +269,7 @@ describe('the multi-adapter pass', () => {
   });
 
   it('isolates a failing step: a failing step never starves the rest', async () => {
-    const h = harness({ state: openState });
-    h.probe.fail = true;
+    const h = harness({ failRenames: true });
 
     await h.action.execute('Acme Widgets');
 
@@ -310,19 +277,15 @@ describe('the multi-adapter pass', () => {
       'reactivate:Acme Widgets',
       'lifecycle',
       'taskLocks:false:false',
-      'renames',
       'capture:Acme Widgets',
       'reconcile:Acme Widgets',
     ]);
   });
 
-  it('freezes a project when the folder is archived or the board is closed', async () => {
+  it('freezes a project when the folder is archived or the lifecycle pass reports it frozen', async () => {
     for (const options of [
-      {
-        projectNotes: [projectNote('Acme Widgets', '')],
-        state: { ...openState, closed: true },
-      },
-      { state: { ...openState, closed: true } },
+      { projectNotes: [projectNote('Acme Widgets', '')] },
+      { frozen: true },
     ]) {
       const h = harness(options);
 
@@ -337,8 +300,8 @@ describe('the multi-adapter pass', () => {
     }
   });
 
-  it('ensures the board for an active project before the probe', async () => {
-    const h = harness({ state: openState, ensureBoard: true });
+  it('ensures the board for an active project before reconciliation', async () => {
+    const h = harness({ ensureBoard: true });
 
     await h.action.execute('Acme Widgets');
 
@@ -351,7 +314,6 @@ describe('the multi-adapter pass', () => {
   it('never ensures a board for an archived project', async () => {
     const h = harness({
       projectNotes: [projectNote('Acme Widgets', '')],
-      state: { ...openState, closed: true },
       ensureBoard: true,
     });
 
@@ -361,7 +323,7 @@ describe('the multi-adapter pass', () => {
   });
 
   it('migrates a legacy-named home note', async () => {
-    const h = harness({ state: openState });
+    const h = harness();
 
     await h.action.execute('Acme Widgets');
 
@@ -377,7 +339,6 @@ describe('the multi-adapter pass', () => {
 describe('the deletion sweep', () => {
   it('deletes a gone active-project note for each code-host connection', async () => {
     const h = harness({
-      state: openState,
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
@@ -390,7 +351,6 @@ describe('the deletion sweep', () => {
 
   it('leaves a present note alone', async () => {
     const h = harness({
-      state: openState,
       statuses: [status('Projecten/Acme Widgets/taken/42-fix-the-bug.md')],
     });
     h.vault.notes.set(
@@ -407,7 +367,6 @@ describe('the deletion sweep', () => {
 
   it('never sweeps an archived note', async () => {
     const h = harness({
-      state: openState,
       statuses: [status('Archief/Acme Widgets/taken/42-gone.md')],
     });
 
@@ -420,7 +379,6 @@ describe('the deletion sweep', () => {
 
   it('hands every connection to the deletion handler', async () => {
     const h = harness({
-      state: openState,
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
@@ -452,32 +410,7 @@ describe('SHELL-2 — setup-capable connections only', () => {
     expect(h.events).not.toContain('ensureBoard:Acme Widgets/linear');
   });
 
-  it('probes only connections whose application has a setup port', async () => {
-    const h = harness({
-      projectNotes: [
-        projectNote('Acme Widgets', null, {
-          github: {
-            tool: 'github',
-            project: 'https://github.com/acme/widgets',
-          },
-          linear: { tool: 'linear', project: 'L1' },
-        }),
-      ],
-      setupApplications: ['github'],
-    });
-
-    await h.action.execute('Acme Widgets');
-
-    expect(h.probe.targets).toEqual([
-      {
-        projectName: 'Acme Widgets',
-        connectionSlug: 'github',
-        application: 'github',
-      },
-    ]);
-  });
-
-  it('runs ensure-board and probes a setup-capable non-github connection', async () => {
+  it('runs ensure-board for a setup-capable non-github connection', async () => {
     const h = harness({
       projectNotes: [
         projectNote('Acme Widgets', null, {
@@ -491,13 +424,6 @@ describe('SHELL-2 — setup-capable connections only', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toContain('ensureBoard:Acme Widgets/linear');
-    expect(h.probe.targets).toEqual([
-      {
-        projectName: 'Acme Widgets',
-        connectionSlug: 'linear',
-        application: 'linear',
-      },
-    ]);
   });
 });
 

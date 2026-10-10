@@ -140,34 +140,6 @@ describe('PSU-1 — the code host resolves a repository to its projects', () => 
       { project: { handle: 'PVT_2', name: 'orphan' }, targets: [] },
     ]);
   });
-
-  it('probes every project in one aliased query', async () => {
-    const transport = new FakeTransport({
-      ProjectStates: {
-        p0: { id: 'PVT_1', updatedAt: '2026-09-18T10:00:00Z', closed: false },
-        p1: { id: 'PVT_2', updatedAt: '2026-09-19T10:00:00Z', closed: true },
-      },
-    });
-    const adapter = new CodeHostMirrorAdapter(transport);
-
-    const states = await adapter.probeProjects(['PVT_1', 'PVT_2']);
-
-    expect(states).toEqual([
-      { handle: 'PVT_1', updatedAt: '2026-09-18T10:00:00Z', archived: false },
-      { handle: 'PVT_2', updatedAt: '2026-09-19T10:00:00Z', archived: true },
-    ]);
-    expect(transport.bodies).toHaveLength(1);
-  });
-
-  it('probes nothing when no project has an identity', async () => {
-    const transport = new FakeTransport({});
-    const adapter = new CodeHostMirrorAdapter(transport);
-
-    const states = await adapter.probeProjects([]);
-
-    expect(states).toEqual([]);
-    expect(transport.bodies).toEqual([]);
-  });
 });
 
 describe('PSU-2 — the code host creates or adopts a project container', () => {

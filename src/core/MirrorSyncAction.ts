@@ -179,7 +179,5 @@ function canonicalValue(
       return task.parent;
     case 'label':
       return task.labels.join(',');
-    case 'identity':
-      return task.entityId;
   }
 }

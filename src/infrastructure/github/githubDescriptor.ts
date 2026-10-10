@@ -2,17 +2,13 @@ import {
   AdapterDescriptor,
   SettingsRow,
 } from '../../core/AdapterDescriptor.js';
-import {
-  MANDATORY_FIELD_CAPABILITIES,
-  UNIVERSAL_CAPABILITIES,
-} from '../../core/Capabilities.js';
+import { REQUIRED_CAPABILITIES } from '../../core/Capabilities.js';
 
 export function githubDescriptor(): AdapterDescriptor {
   return new AdapterDescriptor({
     applicationId: 'github',
     capabilities: [
-      ...UNIVERSAL_CAPABILITIES,
-      ...MANDATORY_FIELD_CAPABILITIES,
+      ...REQUIRED_CAPABILITIES,
       'capture',
       'task-locking',
       'project-activity',
@@ -20,7 +16,6 @@ export function githubDescriptor(): AdapterDescriptor {
       'complete-fetch',
     ],
     representations: {
-      identity: 'native',
       title: 'native',
       body: 'native',
       Status: { mappedTo: 'board-status' },

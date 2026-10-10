@@ -222,8 +222,6 @@ function applyToTask(
       return withTask(task, { parent: write.value });
     case 'label':
       return withTask(task, { labels: labelsFrom(write.value) });
-    case 'identity':
-      return task;
   }
 }
 

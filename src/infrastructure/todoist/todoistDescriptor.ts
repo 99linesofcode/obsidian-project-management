@@ -2,23 +2,18 @@ import {
   AdapterDescriptor,
   SettingsRow,
 } from '../../core/AdapterDescriptor.js';
-import {
-  MANDATORY_FIELD_CAPABILITIES,
-  UNIVERSAL_CAPABILITIES,
-} from '../../core/Capabilities.js';
+import { REQUIRED_CAPABILITIES } from '../../core/Capabilities.js';
 
 export function todoistDescriptor(): AdapterDescriptor {
   return new AdapterDescriptor({
     applicationId: 'todoist',
     capabilities: [
-      ...UNIVERSAL_CAPABILITIES,
-      ...MANDATORY_FIELD_CAPABILITIES,
+      ...REQUIRED_CAPABILITIES,
       'capture',
       'trustworthy per-field timestamps',
       'complete-fetch',
     ],
     representations: {
-      identity: 'native',
       title: 'native',
       body: 'native',
       Status: { mappedTo: 'section' },

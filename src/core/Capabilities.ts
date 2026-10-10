@@ -3,7 +3,6 @@ export const CAPABILITIES = [
   'lifecycle',
   'Status',
   'label',
-  'identity',
   'title',
   'body',
   'subtasks',
@@ -17,15 +16,15 @@ export const CAPABILITIES = [
 
 export type Capability = (typeof CAPABILITIES)[number];
 
-export const UNIVERSAL_CAPABILITIES: readonly Capability[] = [
+// The surface every adapter must declare: the ports the core's merge and
+// lifecycle passes call unconditionally. Every other capability is optional —
+// an adapter declares the ones it has, and an undeclared one has no interface
+// to call.
+export const REQUIRED_CAPABILITIES: readonly Capability[] = [
   'project',
   'lifecycle',
   'Status',
   'label',
-];
-
-export const MANDATORY_FIELD_CAPABILITIES: readonly Capability[] = [
-  'identity',
   'title',
   'body',
   'subtasks',

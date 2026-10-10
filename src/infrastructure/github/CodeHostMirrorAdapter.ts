@@ -7,7 +7,6 @@ import { ProjectActivityObservation } from '../../core/data/ProjectActivityObser
 import { ProjectAddressing } from '../../core/data/ProjectAddressing.js';
 import { ProjectCandidate } from '../../core/data/ProjectCandidate.js';
 import { ProjectDiscovery } from '../../core/data/ProjectDiscovery.js';
-import { ProjectState } from '../../core/data/ProjectState.js';
 import { ProjectSummary } from '../../core/data/ProjectSummary.js';
 import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
 import type { ProjectSetupPort } from '../../core/ports/ProjectSetupPort.js';
@@ -650,38 +649,6 @@ export class CodeHostMirrorAdapter implements MirrorAdapter, ProjectSetupPort {
       );
   }
 
-  async probeProjects(
-    handles: readonly string[],
-  ): Promise<readonly ProjectState[]> {
-    if (handles.length === 0) {
-      return [];
-    }
-    const variables: Record<string, string> = {};
-    const selections = handles.map((id, index) => {
-      variables[`id${index}`] = id;
-      return `p${index}: node(id: $id${index}) { ... on ProjectV2 { id updatedAt closed } }`;
-    });
-    const declarations = handles
-      .map((_, index) => `$id${index}: ID!`)
-      .join(', ');
-    const query = `query ProjectStates(${declarations}) {\n  ${selections.join('\n  ')}\n}`;
-    const data = await this.graphql(query, variables);
-    return Object.values(data).flatMap((raw) =>
-      isRecord(raw) &&
-      typeof raw.id === 'string' &&
-      typeof raw.updatedAt === 'string' &&
-      typeof raw.closed === 'boolean'
-        ? [
-            new ProjectState({
-              handle: raw.id,
-              updatedAt: raw.updatedAt,
-              archived: raw.closed,
-            }),
-          ]
-        : [],
-    );
-  }
-
   async latestActivity(
     target: string,
     etag?: string,
@@ -794,8 +761,6 @@ export class CodeHostMirrorAdapter implements MirrorAdapter, ProjectSetupPort {
         return;
       case 'subtasks':
         await this.writeParent(write);
-        return;
-      case 'identity':
         return;
     }
   }
@@ -1073,8 +1038,6 @@ function fieldTime(
     case 'label':
     case 'subtasks':
       return issue.updatedAt === '' ? null : issue.updatedAt;
-    case 'identity':
-      return null;
   }
 }
 

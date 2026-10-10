@@ -183,8 +183,6 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
           'write labels',
         );
         return;
-      case 'identity':
-        return;
     }
   }
 
@@ -243,9 +241,6 @@ export class TaskManagerMirrorAdapter implements MirrorAdapter {
       return null;
     }
     const task = parseTask(requireRecord(response, 'read task time'));
-    if (field === 'identity') {
-      return null;
-    }
     if (field === 'completion') {
       return task.completedAt;
     }

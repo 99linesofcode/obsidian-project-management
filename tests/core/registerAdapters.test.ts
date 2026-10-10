@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AdapterDescriptor } from '../../src/core/AdapterDescriptor.js';
 import type { Capability } from '../../src/core/Capabilities.js';
-import {
-  MANDATORY_FIELD_CAPABILITIES,
-  UNIVERSAL_CAPABILITIES,
-} from '../../src/core/Capabilities.js';
+import { REQUIRED_CAPABILITIES } from '../../src/core/Capabilities.js';
 import { AdapterRegistration } from '../../src/core/data/AdapterRegistration.js';
 import { registerAdapters } from '../../src/core/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
@@ -27,8 +24,7 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
     const descriptor = new AdapterDescriptor({
       applicationId: 'acme',
       capabilities: [
-        ...UNIVERSAL_CAPABILITIES,
-        ...MANDATORY_FIELD_CAPABILITIES,
+        ...REQUIRED_CAPABILITIES,
         'sprints' as unknown as Capability,
       ],
       representations: {},
@@ -106,10 +102,9 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
   it('rejects an adapter that cannot represent the mandatory surface (ACM-8, ACM-9)', () => {
     const descriptor = new AdapterDescriptor({
       applicationId: 'acme',
-      capabilities: [
-        ...UNIVERSAL_CAPABILITIES,
-        ...MANDATORY_FIELD_CAPABILITIES,
-      ].filter((capability) => capability !== 'subtasks'),
+      capabilities: [...REQUIRED_CAPABILITIES].filter(
+        (capability) => capability !== 'subtasks',
+      ),
       representations: {},
       secretKeys: [],
       settingsRows: [],
