@@ -37,7 +37,7 @@ import { SyncProjectAction } from './core/application/actions/SyncProjectAction.
 import { VaultAdapter } from './infrastructure/vault/VaultAdapter.js';
 import { SyncStateAdapter } from './infrastructure/registry/SyncStateAdapter.js';
 import { loadDataSafely } from './infrastructure/registry/loadDataSafely.js';
-import { createTodoistTransport } from './infrastructure/todoist/TodoistTransport.js';
+import { createTodoistTransport } from './infrastructure/todoist/createTodoistTransport.js';
 import { AdapterRegistration } from './core/application/data/AdapterRegistration.js';
 import type { RegistrationResult } from './core/application/data/RegistrationResult.js';
 import { registerAdapters } from './core/domain/registerAdapters.js';

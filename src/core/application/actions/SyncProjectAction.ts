@@ -91,7 +91,7 @@ export class SyncProjectAction {
 
   private async rekey(
     project: string,
-    connections: Record<string, ConnectionDataTransferObject>,
+    connections: readonly ConnectionDataTransferObject[],
   ): Promise<void> {
     await this.step('rekey connections', async () => {
       const rekey = this.deps.rekeyRenamedConnections;
@@ -116,15 +116,15 @@ export class SyncProjectAction {
     if (ensureBoard === undefined || note.archivedAt !== null) {
       return;
     }
-    for (const [slug, connection] of Object.entries(note.connections)) {
-      const setup = this.deps.setupFactory.setupFor(connection.tool);
+    for (const connection of note.connections) {
+      const setup = this.deps.setupFactory.setupFor(connection.application);
       if (setup === null) {
         continue;
       }
-      await this.step(`ensure board ${slug}`, () =>
+      await this.step(`ensure board ${connection.slug}`, () =>
         ensureBoard.execute({
           projectName: project,
-          connectionSlug: slug,
+          connectionSlug: connection.slug,
           setup,
         }),
       );
@@ -167,16 +167,12 @@ export class SyncProjectAction {
 
   private async deletions(
     project: string,
-    connections: Record<string, ConnectionDataTransferObject>,
+    connections: readonly ConnectionDataTransferObject[],
   ): Promise<void> {
     await this.step('deletions', () =>
       this.deps.sweepDeletedNotes.execute({
         projectName: project,
-        connections: Object.entries(connections).map(([slug, connection]) => ({
-          slug,
-          application: connection.tool,
-          target: connection.project,
-        })),
+        connections,
       }),
     );
   }

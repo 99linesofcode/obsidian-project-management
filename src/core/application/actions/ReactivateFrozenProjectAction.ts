@@ -1,4 +1,4 @@
-import type { DeclaredConnection } from '../data/DeclaredConnection.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { ProjectActivityPort } from '../../port/ProjectActivityPort.js';
@@ -26,8 +26,8 @@ export class ReactivateFrozenProjectAction {
     let reactivated = false;
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
-        connection.envelope.application,
-        connection.envelope.target,
+        connection.application,
+        connection.target,
         connection.slug,
         project,
       );
@@ -54,12 +54,12 @@ export class ReactivateFrozenProjectAction {
 
   private async reactivateOnNewerWork(
     project: string,
-    connection: DeclaredConnection,
+    connection: ConnectionDataTransferObject,
     activity: ProjectActivityPort,
   ): Promise<boolean> {
     const watch = await this.watches.read(project, connection.slug);
     const latest = await activity.latestActivity(
-      connection.envelope.target,
+      connection.target,
       watch.etag ?? undefined,
     );
     if (!latest.changed) {

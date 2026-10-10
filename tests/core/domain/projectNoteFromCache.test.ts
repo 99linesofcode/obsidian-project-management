@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ConnectionValidator } from '../../../src/core/domain/ConnectionValidator.js';
+import { ConnectionValidationService } from '../../../src/core/domain/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../../src/core/domain/projectNoteFromCache.js';
 
 const github = { tool: 'github', project: 'https://github.com/acme/widgets' };
 
-const connectionValidator = new ConnectionValidator(
+const connectionValidator = new ConnectionValidationService(
   new Set(['github', 'todoist']),
 );
 
@@ -24,10 +24,14 @@ describe('DISC-1 — the project note is read from the cache', () => {
       path: 'Projecten/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
       archivedAt: null,
-      connections: {
-        github,
-        todoist: { tool: 'todoist', project: 'P1' },
-      },
+      connections: [
+        {
+          slug: 'github',
+          application: 'github',
+          target: 'https://github.com/acme/widgets',
+        },
+        { slug: 'todoist', application: 'todoist', target: 'P1' },
+      ],
       connectionErrors: [],
     });
 
@@ -42,7 +46,13 @@ describe('DISC-1 — the project note is read from the cache', () => {
       path: 'Archief/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
       archivedAt: '',
-      connections: { github },
+      connections: [
+        {
+          slug: 'github',
+          application: 'github',
+          target: 'https://github.com/acme/widgets',
+        },
+      ],
       connectionErrors: [],
     });
   });
@@ -103,7 +113,13 @@ describe('DISC-1 — the project note is read from the cache', () => {
       connectionValidator,
     );
 
-    expect(note?.connections).toEqual({ good: github });
+    expect(note?.connections).toEqual([
+      {
+        slug: 'good',
+        application: 'github',
+        target: 'https://github.com/acme/widgets',
+      },
+    ]);
     expect(note?.connectionErrors).toHaveLength(3);
   });
 
@@ -111,12 +127,12 @@ describe('DISC-1 — the project note is read from the cache', () => {
     const note = projectNoteFromCache(
       'Projecten/Acme Widgets/_home.md',
       { connections: { work: { tool: 'acme', project: 'P-acme' } } },
-      new ConnectionValidator(new Set(['github', 'todoist', 'acme'])),
+      new ConnectionValidationService(new Set(['github', 'todoist', 'acme'])),
     );
 
-    expect(note?.connections).toEqual({
-      work: { tool: 'acme', project: 'P-acme' },
-    });
+    expect(note?.connections).toEqual([
+      { slug: 'work', application: 'acme', target: 'P-acme' },
+    ]);
     expect(note?.connectionErrors).toHaveLength(0);
   });
 
@@ -132,10 +148,14 @@ describe('DISC-1 — the project note is read from the cache', () => {
       connectionValidator,
     );
 
-    expect(note?.connections).toEqual({
-      'todoist-work': { tool: 'todoist', project: 'P-work' },
-      'todoist-personal': { tool: 'todoist', project: 'P-personal' },
-    });
+    expect(note?.connections).toEqual([
+      { slug: 'todoist-work', application: 'todoist', target: 'P-work' },
+      {
+        slug: 'todoist-personal',
+        application: 'todoist',
+        target: 'P-personal',
+      },
+    ]);
     expect(note?.connectionErrors).toHaveLength(0);
   });
 
@@ -151,7 +171,13 @@ describe('DISC-1 — the project note is read from the cache', () => {
       connectionValidator,
     );
 
-    expect(note?.connections).toEqual({ good: github });
+    expect(note?.connections).toEqual([
+      {
+        slug: 'good',
+        application: 'github',
+        target: 'https://github.com/acme/widgets',
+      },
+    ]);
     expect(note?.connectionErrors).toHaveLength(1);
   });
 });

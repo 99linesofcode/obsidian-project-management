@@ -1,8 +1,8 @@
-import type { MergeResult } from '../data/MergeResult.js';
+import type { MergeResult } from '../../domain/MergeResult.js';
 import type { MirrorSide } from '../data/MirrorSide.js';
 import type { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';
 import { ProjectLifecycleRecord } from '../data/ProjectLifecycleRecord.js';
-import { SideObservation } from '../data/SideObservation.js';
+import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
 import type { ProjectLifecycleOriginPort } from '../../port/ProjectLifecycleOriginPort.js';
 

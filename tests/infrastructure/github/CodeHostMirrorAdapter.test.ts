@@ -4,8 +4,7 @@ import { AdapterRegistration } from '../../../src/core/application/data/AdapterR
 import { Baseline } from '../../../src/core/application/data/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionEnvelope } from '../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../../src/core/application/data/OriginObservation.js';
@@ -15,7 +14,7 @@ import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdap
 import type { MirrorHandlePort } from '../../../src/core/port/MirrorHandlePort.js';
 import type { OriginPort } from '../../../src/core/port/OriginPort.js';
 import type { ProjectSourcePort } from '../../../src/core/port/ProjectSourcePort.js';
-import { SideObservation } from '../../../src/core/application/data/SideObservation.js';
+import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/domain/registerAdapters.js';
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
@@ -1004,12 +1003,10 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
 
     const projectSource: ProjectSourcePort = {
       readConnections: async () => [
-        new DeclaredConnection({
+        new ConnectionDataTransferObject({
           slug: 'gh',
-          envelope: new ConnectionEnvelope({
-            application: 'github',
-            target: target(),
-          }),
+          application: 'github',
+          target: target(),
         }),
       ],
       listEntities: async () => [entityId],

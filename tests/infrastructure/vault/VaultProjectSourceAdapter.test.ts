@@ -55,14 +55,8 @@ describe('VaultProjectSourceAdapter — the project source', () => {
     const connections = await source.readConnections('Acme');
 
     expect(connections).toEqual([
-      {
-        slug: 'conformance',
-        envelope: { application: 'conformance', target: 'board-1' },
-      },
-      {
-        slug: 'second',
-        envelope: { application: 'conformance', target: 'board-2' },
-      },
+      { slug: 'conformance', application: 'conformance', target: 'board-1' },
+      { slug: 'second', application: 'conformance', target: 'board-2' },
     ]);
   });
 
@@ -81,10 +75,8 @@ describe('VaultProjectSourceAdapter — the project source', () => {
 
       expect(connections).toHaveLength(2);
       expect(connections[0]?.slug).toBe('conformance');
-      expect(connections[0]?.envelope).toEqual({
-        application: 'conformance',
-        target: 'board-1',
-      });
+      expect(connections[0]?.application).toBe('conformance');
+      expect(connections[0]?.target).toBe('board-1');
     },
   );
 

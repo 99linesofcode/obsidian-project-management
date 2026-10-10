@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AdoptedProject } from '../../../src/core/application/data/AdoptedProject.js';
 import { CapturedProject } from '../../../src/core/application/data/CapturedProject.js';
+import type { ConnectionDataTransferObject } from '../../../src/core/application/data/ConnectionDataTransferObject.js';
 import {
   VaultProjectCaptureAdapter,
   type CaptureVault,
@@ -11,7 +12,7 @@ class FakeCaptureVault implements CaptureVault {
   readonly created: string[] = [];
   projectNotes: Array<{
     projectName: string;
-    connections: Record<string, { tool: string; project: string }>;
+    connections: readonly ConnectionDataTransferObject[];
   }> = [];
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {
@@ -78,16 +79,19 @@ describe('VaultProjectCaptureAdapter — adopting a captured project', () => {
     vault.projectNotes = [
       {
         projectName: 'Acme Widgets',
-        connections: {
-          github: {
-            tool: 'github',
-            project: 'https://github.com/acme/widgets',
+        connections: [
+          {
+            slug: 'github',
+            application: 'github',
+            target: 'https://github.com/acme/widgets',
           },
-        },
+        ],
       },
       {
         projectName: 'New Project',
-        connections: { todoist: { tool: 'todoist', project: 'P-new' } },
+        connections: [
+          { slug: 'todoist', application: 'todoist', target: 'P-new' },
+        ],
       },
     ];
     const adapter = new VaultProjectCaptureAdapter(vault);

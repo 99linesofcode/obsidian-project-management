@@ -3,8 +3,7 @@ import { AssembleProjectPassAction } from '../../../../src/core/application/acti
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import type { Baseline } from '../../../../src/core/application/data/Baseline.js';
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionEnvelope } from '../../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/application/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { BaselineStorePort } from '../../../../src/core/port/BaselineStorePort.js';
@@ -40,10 +39,10 @@ class MemoryBaselines implements BaselineStorePort {
 }
 
 class FixedProjectSource implements ProjectSourcePort {
-  connections: DeclaredConnection[] = [];
+  connections: ConnectionDataTransferObject[] = [];
   entities: readonly string[] = [ENTITY];
 
-  async readConnections(): Promise<readonly DeclaredConnection[]> {
+  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
     return this.connections;
   }
 
@@ -142,10 +141,14 @@ function seededTask(handle: string, status: string): CanonicalTask {
   });
 }
 
-function connection(slug: string, target: string): DeclaredConnection {
-  return new DeclaredConnection({
+function connection(
+  slug: string,
+  target: string,
+): ConnectionDataTransferObject {
+  return new ConnectionDataTransferObject({
     slug,
-    envelope: new ConnectionEnvelope({ application: 'github', target }),
+    application: 'github',
+    target,
   });
 }
 

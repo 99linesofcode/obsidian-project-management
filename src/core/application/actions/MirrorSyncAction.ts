@@ -1,11 +1,11 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
 import { CanonicalFieldWrite } from '../data/CanonicalFieldWrite.js';
 import type { CanonicalTask } from '../data/CanonicalTask.js';
-import type { MergeResult } from '../data/MergeResult.js';
+import type { MergeResult } from '../../domain/MergeResult.js';
 import type { MirrorSide } from '../data/MirrorSide.js';
 import type { MirrorSyncPass } from '../data/MirrorSyncPass.js';
 import { PassRecord } from '../data/PassRecord.js';
-import { SideObservation } from '../data/SideObservation.js';
+import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
 import type { OriginPort } from '../../port/OriginPort.js';
 

@@ -78,7 +78,7 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`, `MirrorSide`,
   `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
-  `ProjectLifecycleRecord`, `DeclaredConnection`, `ConnectionEnvelope`,
+  `ProjectLifecycleRecord`, `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
   `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `ProjectState`
   and `ProjectActivityObservation`.

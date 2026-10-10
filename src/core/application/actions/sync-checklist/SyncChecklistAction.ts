@@ -1,5 +1,5 @@
 import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
-import type { ChecklistItem } from '../../data/ChecklistItem.js';
+import type { ChecklistItem } from '../../../domain/ChecklistItem.js';
 import { freePath } from '../../../domain/freePath.js';
 import { stemOf } from '../../../domain/stemOf.js';
 import { splitFrontmatter } from '../../../domain/splitFrontmatter.js';

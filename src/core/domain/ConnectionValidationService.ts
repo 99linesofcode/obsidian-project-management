@@ -1,16 +1,16 @@
 import { isRecord } from './isRecord.js';
-import type { ConnectionDataTransferObject } from '../application/data/ConnectionDataTransferObject.js';
+import { ConnectionDataTransferObject } from '../application/data/ConnectionDataTransferObject.js';
 
 export interface ConnectionValidationResult {
-  connections: Record<string, ConnectionDataTransferObject>;
+  connections: readonly ConnectionDataTransferObject[];
   errors: unknown[];
 }
 
-export class ConnectionValidator {
+export class ConnectionValidationService {
   constructor(private readonly registeredApplications: ReadonlySet<string>) {}
 
   validate(raw: unknown): ConnectionValidationResult {
-    const connections: Record<string, ConnectionDataTransferObject> = {};
+    const connections: ConnectionDataTransferObject[] = [];
     const errors: unknown[] = [];
     if (!isRecord(raw)) {
       return { connections, errors };
@@ -22,7 +22,7 @@ export class ConnectionValidator {
         errors.push(result);
         continue;
       }
-      connections[slug] = result;
+      connections.push(result);
     }
     return { connections, errors };
   }
@@ -41,14 +41,17 @@ export class ConnectionValidator {
         `connection "${slug}" must be a map with tool and project`,
       );
     }
-    const tool = entry.tool;
-    if (typeof tool !== 'string' || !this.registeredApplications.has(tool)) {
+    const application = entry.tool;
+    if (
+      typeof application !== 'string' ||
+      !this.registeredApplications.has(application)
+    ) {
       return new Error(`connection "${slug}" names an unknown tool`);
     }
-    const project = entry.project;
-    if (typeof project !== 'string' || project === '') {
+    const target = entry.project;
+    if (typeof target !== 'string' || target === '') {
       return new Error(`connection "${slug}" must carry a non-empty project`);
     }
-    return { tool, project };
+    return new ConnectionDataTransferObject({ slug, application, target });
   }
 }

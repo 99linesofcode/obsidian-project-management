@@ -5,7 +5,7 @@ import type { NoteReaderPort } from '../../core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../core/port/NoteWriterPort.js';
 import type { VaultEventPort } from '../../core/port/VaultEventPort.js';
 import { chooseHomeNotePath } from '../../core/domain/projectHomePath.js';
-import { ConnectionValidator } from '../../core/domain/ConnectionValidator.js';
+import { ConnectionValidationService } from '../../core/domain/ConnectionValidationService.js';
 import { folderChainForPath } from '../../core/domain/folderChainForPath.js';
 import { projectNoteFromCache } from '../../core/domain/projectNoteFromCache.js';
 
@@ -14,14 +14,16 @@ export type EventRegistrar = (eventRef: EventRef) => void;
 export class VaultAdapter
   implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
 {
-  private readonly connectionValidator: ConnectionValidator;
+  private readonly connectionValidator: ConnectionValidationService;
 
   constructor(
     private readonly app: App,
     private readonly registerEvent: EventRegistrar,
     registeredApplications: ReadonlySet<string>,
   ) {
-    this.connectionValidator = new ConnectionValidator(registeredApplications);
+    this.connectionValidator = new ConnectionValidationService(
+      registeredApplications,
+    );
   }
 
   async getNoteByPath(path: string): Promise<{ content: string } | null> {

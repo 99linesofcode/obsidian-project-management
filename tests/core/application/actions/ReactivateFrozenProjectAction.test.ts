@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../../src/core/application/data/Baseline.js';
-import { ConnectionEnvelope } from '../../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { ProjectActivityObservation } from '../../../../src/core/application/data/ProjectActivityObservation.js';
 import type { OriginObservation } from '../../../../src/core/application/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
@@ -26,9 +25,9 @@ const PROJECT = 'Acme';
 const TARGET = 'board-a';
 
 class FakeProjectSource implements ProjectSourcePort {
-  connections: DeclaredConnection[] = [];
+  connections: ConnectionDataTransferObject[] = [];
 
-  async readConnections(): Promise<readonly DeclaredConnection[]> {
+  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
     return this.connections;
   }
 
@@ -97,13 +96,14 @@ class FakeWatches implements ProjectWatchPort {
   }
 }
 
-function connection(slug: string, target: string = TARGET): DeclaredConnection {
-  return new DeclaredConnection({
+function connection(
+  slug: string,
+  target: string = TARGET,
+): ConnectionDataTransferObject {
+  return new ConnectionDataTransferObject({
     slug,
-    envelope: new ConnectionEnvelope({
-      application: 'conformance',
-      target,
-    }),
+    application: 'conformance',
+    target,
   });
 }
 

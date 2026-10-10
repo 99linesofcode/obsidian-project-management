@@ -1,12 +1,12 @@
 import { isRecord } from './isRecord.js';
-import type { ConnectionValidator } from './ConnectionValidator.js';
+import type { ConnectionValidationService } from './ConnectionValidationService.js';
 import type { ProjectNoteDataTransferObject } from '../application/data/ProjectNoteDataTransferObject.js';
 import { projectNameFromPath } from './projectNameFromPath.js';
 
 export function projectNoteFromCache(
   path: string,
   frontmatter: unknown,
-  connectionValidator: ConnectionValidator,
+  connectionValidator: ConnectionValidationService,
 ): ProjectNoteDataTransferObject | null {
   if (!isRecord(frontmatter) || !isRecord(frontmatter.connections)) {
     return null;

@@ -1,5 +1,4 @@
-import { ConnectionEnvelope } from '../../core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
 import type { ProjectSourcePort } from '../../core/port/ProjectSourcePort.js';
 import { connectionsOf } from './connectionsOf.js';
 
@@ -14,7 +13,7 @@ export class VaultProjectSourceAdapter implements ProjectSourcePort {
 
   async readConnections(
     project: string,
-  ): Promise<readonly DeclaredConnection[]> {
+  ): Promise<readonly ConnectionDataTransferObject[]> {
     const path = await this.notes.findHomeNotePath(project);
     if (path === null) {
       return [];
@@ -25,12 +24,10 @@ export class VaultProjectSourceAdapter implements ProjectSourcePort {
     }
     return Object.entries(connectionsOf(note.content)).map(
       ([slug, connection]) =>
-        new DeclaredConnection({
+        new ConnectionDataTransferObject({
           slug,
-          envelope: new ConnectionEnvelope({
-            application: connection.tool,
-            target: connection.project,
-          }),
+          application: connection.tool,
+          target: connection.project,
         }),
     );
   }

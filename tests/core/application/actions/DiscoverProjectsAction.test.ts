@@ -99,7 +99,7 @@ function githubNote(
     path: 'Projecten/Acme Widgets/_home.md',
     projectName: 'Acme Widgets',
     archivedAt: null,
-    connections: { github: { tool: 'github', project: repoUrl } },
+    connections: [{ slug: 'github', application: 'github', target: repoUrl }],
     connectionErrors: [],
     ...overrides,
   };
@@ -139,7 +139,9 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const vault = new FakeVault();
     vault.notes = [
       githubNote({
-        connections: { todoist: { tool: 'todoist', project: 'P1' } },
+        connections: [
+          { slug: 'todoist', application: 'todoist', target: 'P1' },
+        ],
       }),
     ];
     const setup = new FakeSetup();
@@ -155,10 +157,10 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
     const vault = new FakeVault();
     vault.notes = [
       githubNote({
-        connections: {
-          github: { tool: 'github', project: repoUrl },
-          todoist: { tool: 'todoist', project: 'P1' },
-        },
+        connections: [
+          { slug: 'github', application: 'github', target: repoUrl },
+          { slug: 'todoist', application: 'todoist', target: 'P1' },
+        ],
       }),
     ];
     const setup = new FakeSetup();
@@ -197,7 +199,7 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
       githubNote({
         path: 'Projecten/Broken/_home.md',
         projectName: 'Broken',
-        connections: { github: { tool: 'github', project: '' } },
+        connections: [{ slug: 'github', application: 'github', target: '' }],
       }),
       githubNote(),
     ];
@@ -220,12 +222,13 @@ describe('DISC-1 — a project folder is discovered from its home note', () => {
       githubNote({
         path: 'Projecten/Ambiguous/_home.md',
         projectName: 'Ambiguous',
-        connections: {
-          github: {
-            tool: 'github',
-            project: 'https://github.com/acme/ambiguous',
+        connections: [
+          {
+            slug: 'github',
+            application: 'github',
+            target: 'https://github.com/acme/ambiguous',
           },
-        },
+        ],
       }),
       githubNote(),
     ];

@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AssembleProjectLifecyclePassAction } from '../../../../src/core/application/actions/AssembleProjectLifecyclePassAction.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../../src/core/application/data/Baseline.js';
-import { ConnectionEnvelope } from '../../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorProjectPort } from '../../../../src/core/port/MirrorProjectPort.js';
@@ -129,9 +128,9 @@ class FakeRegistry implements TrackedEntityPort {
 }
 
 class FakeProjectSource implements ProjectSourcePort {
-  connections: DeclaredConnection[] = [];
+  connections: ConnectionDataTransferObject[] = [];
 
-  async readConnections(): Promise<readonly DeclaredConnection[]> {
+  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
     return this.connections;
   }
 
@@ -154,10 +153,14 @@ function memoryStorage() {
   };
 }
 
-function connection(slug: string, target: string): DeclaredConnection {
-  return new DeclaredConnection({
+function connection(
+  slug: string,
+  target: string,
+): ConnectionDataTransferObject {
+  return new ConnectionDataTransferObject({
     slug,
-    envelope: new ConnectionEnvelope({ application: 'conformance', target }),
+    application: 'conformance',
+    target,
   });
 }
 

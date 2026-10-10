@@ -110,10 +110,14 @@ function reactivationRecorder(events: string[]): ProjectReactivationReconciler {
 function projectNote(
   projectName: string,
   archivedAt: string | null,
-  connections: Record<string, ConnectionDataTransferObject> = {
-    github: { tool: 'github', project: 'https://github.com/acme/widgets' },
-    todoist: { tool: 'todoist', project: 'P1' },
-  },
+  connections: readonly ConnectionDataTransferObject[] = [
+    {
+      slug: 'github',
+      application: 'github',
+      target: 'https://github.com/acme/widgets',
+    },
+    { slug: 'todoist', application: 'todoist', target: 'P1' },
+  ],
 ): ProjectNoteDataTransferObject {
   return {
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
@@ -135,7 +139,7 @@ interface HarnessOptions {
   taken?: string[];
   todos?: string[];
   ensureBoard?: boolean;
-  connections?: Record<string, ConnectionDataTransferObject>;
+  connections?: readonly ConnectionDataTransferObject[];
   setupApplications?: string[];
   failRenames?: boolean;
 }
@@ -397,13 +401,14 @@ describe('SHELL-2 — setup-capable connections only', () => {
   it('skips ensure-board for a connection whose application has no setup port', async () => {
     const h = harness({
       projectNotes: [
-        projectNote('Acme Widgets', null, {
-          github: {
-            tool: 'github',
-            project: 'https://github.com/acme/widgets',
+        projectNote('Acme Widgets', null, [
+          {
+            slug: 'github',
+            application: 'github',
+            target: 'https://github.com/acme/widgets',
           },
-          linear: { tool: 'linear', project: 'L1' },
-        }),
+          { slug: 'linear', application: 'linear', target: 'L1' },
+        ]),
       ],
       setupApplications: ['github'],
       ensureBoard: true,
@@ -418,9 +423,9 @@ describe('SHELL-2 — setup-capable connections only', () => {
   it('runs ensure-board for a setup-capable non-github connection', async () => {
     const h = harness({
       projectNotes: [
-        projectNote('Acme Widgets', null, {
-          linear: { tool: 'linear', project: 'L1' },
-        }),
+        projectNote('Acme Widgets', null, [
+          { slug: 'linear', application: 'linear', target: 'L1' },
+        ]),
       ],
       setupApplications: ['linear'],
       ensureBoard: true,
@@ -436,9 +441,9 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
   it('sweeps a gone note on a connection whose application has no setup port', async () => {
     const h = harness({
       projectNotes: [
-        projectNote('Acme Widgets', null, {
-          linear: { tool: 'linear', project: 'L1' },
-        }),
+        projectNote('Acme Widgets', null, [
+          { slug: 'linear', application: 'linear', target: 'L1' },
+        ]),
       ],
       setupApplications: [],
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],

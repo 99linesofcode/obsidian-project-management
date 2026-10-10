@@ -83,9 +83,13 @@ function projectNote(
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     archivedAt,
-    connections: {
-      github: { tool: 'github', project: 'https://github.com/acme/widgets' },
-    },
+    connections: [
+      {
+        slug: 'github',
+        application: 'github',
+        target: 'https://github.com/acme/widgets',
+      },
+    ],
     connectionErrors: [],
   };
 }

@@ -4,8 +4,7 @@ import { AdapterDescriptor } from '../../../../src/core/application/data/Adapter
 import { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionEnvelope } from '../../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import type { OriginObservation } from '../../../../src/core/application/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { CanonicalFieldWrite } from '../../../../src/core/application/data/CanonicalFieldWrite.js';
@@ -23,9 +22,9 @@ const FIX = 'Projecten/Acme/taken/fix.md';
 const SHIP = 'Projecten/Acme/taken/ship.md';
 
 class FakeProjectSource implements ProjectSourcePort {
-  connections: DeclaredConnection[] = [];
+  connections: ConnectionDataTransferObject[] = [];
 
-  async readConnections(): Promise<readonly DeclaredConnection[]> {
+  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
     return this.connections;
   }
 
@@ -100,12 +99,10 @@ function task(notePath: string, status: string): CanonicalTask {
 function setup() {
   const projectSource = new FakeProjectSource();
   projectSource.connections = [
-    new DeclaredConnection({
+    new ConnectionDataTransferObject({
       slug: 'a',
-      envelope: new ConnectionEnvelope({
-        application: 'conformance',
-        target: 'board-a',
-      }),
+      application: 'conformance',
+      target: 'board-a',
     }),
   ];
   const mirror = new ConformanceMirrorAdapter();
@@ -177,12 +174,10 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
   it('leaves a connection alone when its adapter cannot lock tasks', async () => {
     const projectSource = new FakeProjectSource();
     projectSource.connections = [
-      new DeclaredConnection({
+      new ConnectionDataTransferObject({
         slug: 'a',
-        envelope: new ConnectionEnvelope({
-          application: 'plain',
-          target: 'board-a',
-        }),
+        application: 'plain',
+        target: 'board-a',
       }),
     ];
     const mirror = new ConformanceMirrorAdapter();

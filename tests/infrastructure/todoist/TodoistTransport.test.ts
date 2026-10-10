@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const { requestUrl } = vi.hoisted(() => ({ requestUrl: vi.fn() }));
 vi.mock('obsidian', () => ({ requestUrl }));
 
-import { createTodoistTransport } from '../../../src/infrastructure/todoist/TodoistTransport.js';
+import { createTodoistTransport } from '../../../src/infrastructure/todoist/createTodoistTransport.js';
 
 describe('createTodoistTransport — the live transport goes through requestUrl', () => {
   it('sends the bearer token and maps the response text to json', async () => {

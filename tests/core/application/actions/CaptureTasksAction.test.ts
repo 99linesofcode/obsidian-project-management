@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CaptureTasksAction } from '../../../../src/core/application/actions/CaptureTasksAction.js';
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionEnvelope } from '../../../../src/core/application/data/ConnectionEnvelope.js';
-import { DeclaredConnection } from '../../../../src/core/application/data/DeclaredConnection.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { CapturePort } from '../../../../src/core/port/CapturePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
@@ -39,9 +38,11 @@ class FakeVault implements TaskCaptureVaultPort {
 }
 
 class FakeProjectSource implements ProjectSourcePort {
-  constructor(private readonly connections: readonly DeclaredConnection[]) {}
+  constructor(
+    private readonly connections: readonly ConnectionDataTransferObject[],
+  ) {}
 
-  async readConnections(): Promise<readonly DeclaredConnection[]> {
+  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
     return this.connections;
   }
 
@@ -67,10 +68,11 @@ function connection(
   application: string,
   target: string,
   slug: string,
-): DeclaredConnection {
-  return new DeclaredConnection({
+): ConnectionDataTransferObject {
+  return new ConnectionDataTransferObject({
     slug,
-    envelope: new ConnectionEnvelope({ application, target }),
+    application,
+    target,
   });
 }
 
@@ -90,7 +92,7 @@ function registered(capture: CapturePort): RegisteredAdapter {
 
 function harness(
   tasks: CanonicalTask[],
-  connections: readonly DeclaredConnection[] = [
+  connections: readonly ConnectionDataTransferObject[] = [
     connection('acme', 'T1', 'acme'),
   ],
 ): {

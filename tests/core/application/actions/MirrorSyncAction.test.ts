@@ -6,7 +6,7 @@ import { MirrorSide } from '../../../../src/core/application/data/MirrorSide.js'
 import { MirrorSyncPass } from '../../../../src/core/application/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../../../src/core/application/data/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
-import { SideObservation } from '../../../../src/core/application/data/SideObservation.js';
+import { SideObservation } from '../../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { originSideObservation } from '../../../../src/core/domain/originSideObservation.js';
 import { registerAdapters } from '../../../../src/core/domain/registerAdapters.js';
