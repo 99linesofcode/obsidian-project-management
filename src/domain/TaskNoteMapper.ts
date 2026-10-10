@@ -3,8 +3,6 @@ import { projectAffiliationLink } from './projectAffiliation.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';
 import { slugify } from './slugify.js';
 
-export { slugify };
-
 export interface TaskNoteSource {
   type: string;
   title: string;

@@ -1,13 +1,8 @@
-// The markdown checklist core: parse and render the task-list lines of a note
-// body. Pure, no imports. WHY it lives in core: it is neutral note arithmetic
-// the vault must not own; note-facing callers import it from here.
-export interface ChecklistItem {
-  text: string;
-  checked: boolean;
-  depth: number;
-  linkPath?: string;
-}
+import type { ChecklistItem } from './ChecklistItem.js';
 
+// The markdown checklist core: parse and render the task-list lines of a note
+// body. Pure, no I/O. WHY it lives in the core: it is neutral note arithmetic
+// the vault must not own; note-facing callers import it from here.
 interface ClassifiedLine {
   line: string;
   item: ChecklistItem | null;

@@ -1,5 +1,5 @@
 import { parseAffiliation } from '../parseAffiliation.js';
-import { parseChecklist, renderChecklist } from '../Checklist.js';
+import { parseChecklist, renderChecklist } from '../checklist.js';
 import { splitFrontmatter } from '../splitFrontmatter.js';
 import { stemOf } from '../stemOf.js';
 import { taskLinkFromAffiliation } from '../taskLinkFromAffiliation.js';

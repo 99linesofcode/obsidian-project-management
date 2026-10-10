@@ -1,4 +1,4 @@
-import { slugify } from './TaskNoteMapper.js';
+import { slugify } from './slugify.js';
 import { fillFrontmatterFields } from './fillFrontmatterFields.js';
 import { projectAffiliationLink } from './projectAffiliation.js';
 import { replaceTimestampPlaceholders } from './replaceTimestampPlaceholders.js';

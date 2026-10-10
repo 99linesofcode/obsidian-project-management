@@ -175,6 +175,20 @@ depends on the narrow seams above.
 
 A component that reaches around a port is a defect.
 
+**Why the port count is what it is.** The ports come in two families. The
+_capability ports_ — `ProjectPort`, `TaskSurfacePort` and the optional
+capabilities — are the adapter contract: an adapter declares the capabilities
+it has, and an undeclared one has no interface to call (ADR 001's ≤5 grouped
+surfaces). The _collaborator ports_ — the vault's note seams, the registry's
+identity / tracked-entity / connection-state seams, the capture sinks and the
+core-registry stores — are deliberately narrow: each names only the methods its
+call sites use, so a consumer that only reads notes depends on a read-only
+interface. Collapsing a collaborator port into one wide interface trades that
+interface segregation for a smaller file count, and the cost is real: a
+read-only test double would have to implement the whole surface. The seams
+therefore stay narrow by design; the count is a consequence of the split, not
+redundancy.
+
 The API tokens are not settings and not a port: they live in Obsidian's
 SecretStorage behind `SecretStorageAdapter` (`src/app/settings/`), which the
 composition root reads at adapter construction and the settings tab sets and
@@ -565,6 +579,13 @@ Enforced by `eslint-plugin-boundaries` (elements = the layer folders) and the
   value argument, never a namespace key). The neutral architecture (`domain/`,
   `infrastructure/`) is checked case-insensitively, so any provider name in the
   domain fails.
+- **Class vs function**: a class carries injected collaborators or behaviour —
+  actions, adapters, the `DataTransferObject` base that serializes a DTO for
+  hashing; a DTO is a `readonly` field holder, not a behaviour object; a pure
+  codec (a mapper or parser of the same note text) is a function or a plain
+  namespace object, never a stateful service. Everything pure is a lowercase
+  single-function file (`mergeField.ts`, `slugify.ts`, `checklist.ts`), one
+  concern per file; an interface consumed elsewhere gets its own file.
 - **Canonical DTOs**: one canonical shape per domain concept, owned by the
   core; diff/merge logic operates on canonical fields only. A DTO mimicking a
   provider's structure is a provider shape, whatever its file name.

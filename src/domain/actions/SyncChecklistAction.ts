@@ -1,12 +1,9 @@
-import {
-  parseChecklist,
-  renderChecklist,
-  type ChecklistItem,
-} from '../Checklist.js';
+import { parseChecklist, renderChecklist } from '../checklist.js';
+import type { ChecklistItem } from '../ChecklistItem.js';
 import { freePath } from '../freePath.js';
 import { stemOf } from '../stemOf.js';
 import { splitFrontmatter } from '../splitFrontmatter.js';
-import { slugify } from '../TaskNoteMapper.js';
+import { slugify } from '../slugify.js';
 import { taskLinkFromAffiliation } from '../taskLinkFromAffiliation.js';
 import { ToDoNoteMapper, type ToDoNoteContext } from '../ToDoNoteMapper.js';
 import { ToDoNoteParser, withToDoStatus } from '../ToDoNoteParser.js';

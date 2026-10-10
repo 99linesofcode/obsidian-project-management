@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseChecklist, renderChecklist } from '../../src/domain/Checklist.js';
+import { parseChecklist, renderChecklist } from '../../src/domain/checklist.js';
 
 describe('TODO-1 — checklist lines parse to their items', () => {
   it('parses flat items in order with their checked state and indentation depth', () => {
