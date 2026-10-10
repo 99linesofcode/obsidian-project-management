@@ -22,7 +22,8 @@ import type { NoteWriterPort } from '../../../src/domain/ports/NoteWriterPort.js
 import type { VaultEventPort } from '../../../src/domain/ports/VaultEventPort.js';
 import { entityRecord } from '../../helpers/records.js';
 import { FakeSyncState } from '../../helpers/fakeSyncState.js';
-import { ProjectShell } from '../../../src/domain/ProjectShell.js';
+import { MigrateProjectHomeNoteAction } from '../../../src/domain/actions/MigrateProjectHomeNoteAction.js';
+import { SweepDeletedNotesAction } from '../../../src/domain/actions/SweepDeletedNotesAction.js';
 import type { CoreReconcilers } from '../../../src/domain/CoreReconcilers.js';
 
 class FakeVault
@@ -208,17 +209,6 @@ function harness(options: HarnessOptions = {}) {
   const frozen =
     options.frozen ?? (vault.projectNotes[0]?.archivedAt ?? null) !== null;
 
-  const shell = new ProjectShell({
-    vault,
-    syncState,
-    setupFactory,
-    detectNoteRenames: renames,
-    completeTaskCascade: cascade,
-    syncChecklist: checklist,
-    mirrorTodoStatus: mirrorStatus,
-    handleDeletedNote: handleDeleted,
-    ensureProjectBoard: ensureBoard,
-  });
   const reconcilers: CoreReconcilers = {
     taskFields: reconcileRecorder(events),
     lifecycle: projectLifecycleRecorder(events, frozen),
@@ -227,7 +217,22 @@ function harness(options: HarnessOptions = {}) {
     taskCapture: taskCaptureRecorder(events),
   };
 
-  const action = new SyncProjectAction(vault, shell, reconcilers);
+  const action = new SyncProjectAction({
+    vault,
+    setupFactory,
+    reconcilers,
+    migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
+    detectNoteRenames: renames,
+    completeTaskCascade: cascade,
+    syncChecklist: checklist,
+    mirrorTodoStatus: mirrorStatus,
+    sweepDeletedNotes: new SweepDeletedNotesAction(
+      vault,
+      syncState,
+      handleDeleted,
+    ),
+    ensureProjectBoard: ensureBoard,
+  });
 
   return {
     action,

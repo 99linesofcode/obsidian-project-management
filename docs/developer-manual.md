@@ -10,9 +10,10 @@ The engine is the multi-adapter core (`src/domain/`) plus its driven adapters
 names no provider: it reconciles canonical fields across an origin and any
 number of mirror sides through one pure N-way merge. A connection produces a
 mirror side; the vault is the origin. The old chain — the two provider halves,
-the pairwise verdict, the legacy writers — is gone; what remains around the core
-is an orchestration shell (board-ensure, rename recovery, vault
-consistency, the deletion sweep), documented here as it exists.
+the pairwise verdict, the legacy writers — is gone; the chain
+(`SyncProjectAction`) now drives the core reconcilers and the vault-maintenance
+steps (board-ensure, rename recovery, vault consistency, the deletion sweep)
+directly, documented here as it exists.
 
 ---
 
@@ -66,12 +67,12 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   `MirrorHandlePort`, `MirrorProjectPort`, `MirrorAdapterFactoryPort`,
   `ProjectCaptureCursorPort`, `ProjectCaptureVaultPort`, `TaskCaptureVaultPort`
   and `ProjectWatchPort`.
-- **The shell's seams.** The retained chain reaches the vault through
+- **The pass's seams.** The chain reaches the vault through
   `NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort` and `VaultEventPort`,
   and the registry through `IdentityStorePort`, `TrackedEntityPort` and
   `ConnectionStatePort` — the whole vault and registry contract. The former
   monolithic `VaultPort` and `SyncStatePort` are gone.
-- **The vocabulary.** `Capabilities.ts` holds the thirteen capability names;
+- **The vocabulary.** `capabilities.ts` holds the thirteen capability names;
   `canonicalField.ts` holds the six canonical fields (`title`, `body`,
   `subtasks`, `completion`, `Status`, `label`).
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
@@ -115,7 +116,7 @@ namespace per application.**
 - **Conformance.** `ConformanceMirrorAdapter` + `conformanceDescriptor` — an
   in-memory adapter, inert unless a project names its application id.
 
-**The driving side and the orchestration shell.**
+**The driving side and the pass.**
 
 - **`SyncScheduler`** — delivery mechanics only. A poll interval and vault
   change/delete/rename events enqueue project names; renames bypass the
@@ -126,24 +127,21 @@ namespace per application.**
   project at a time, coalesces duplicates, swallows a failed run so the queue
   never poisons.
 - **`SyncProjectAction`** — the chain. One work item (a project folder name) and
-  one entry point; it drives the vault-maintenance `ProjectShell` and the
+  one entry point; it drives the vault-maintenance steps and the
   `CoreReconcilers` bundle (the five core reconcilers, all in `src/domain/`) in
-  order, and wraps every core step so one failure logs and skips that step.
-- **`ProjectShell`** — the vault-maintenance half of the chain: home-note
-  migration, connection re-keying, board-ensure, rename recovery, vault
-  consistency and the deletion sweep. Each of its steps isolates its own failure.
+  order, wrapping every step so one failure logs and skips that step.
 - **`main.ts`** — the composition root. `composePlugin` builds the vault
-  adapter, the mirror-adapter factory, the setup adapter and the shell actions;
-  `composeCoreReconcilers` eagerly builds the core pass assemblers and their
-  infrastructure peers.
+  adapter, the mirror-adapter factory, the setup adapter and the maintenance
+  actions; `composeCoreReconcilers` eagerly builds the core pass assemblers and
+  their infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
 - **`SeedVaultArtifactsAction`** — seeds the six vault-owned artifacts (three
   note templates, three Bases files) create-if-missing, on init and on demand
   from the settings tab.
-- **The retained shell actions.** `ProjectShell`, `DetectNoteRenamesAction`,
-  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`,
-  `MigrateProjectHomeNoteAction`, `RekeyRenamedConnectionsAction`,
-  `DiscoverProjectsAction`, `AttachProjectAction`, `EnsureProjectBoardAction`,
+- **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
+  `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,
+  `RekeyRenamedConnectionsAction`, `DiscoverProjectsAction`,
+  `AttachProjectAction`, `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
   and `CreateTaskNoteAction`.
 
@@ -182,14 +180,14 @@ On load, `SyncScheduler.tick` first runs the injected project capture
 (`CaptureProjectsAction`, [§2.6](#26-project-capture)), then enumerates the
 vault's project notes and enqueues each project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
-item no-ops), then drives two collaborators in order. `ProjectShell` migrates a
-legacy home note, re-keys a renamed connection, ensures a code-host board for
-each active github connection, recovers renames, runs the vault-consistency
-step, and finally sweeps deletions. The `CoreReconcilers` bundle reactivates a
-frozen project with newer mirror work, reconciles the lifecycle into one freeze
-verdict, reconciles task locks on the transition, and — when not frozen — runs
-the task capture and the task-field pass. Every step failure logs and skips that
-step without blocking the others.
+item no-ops), then drives every step in order. It migrates a legacy home note,
+re-keys a renamed connection, and ensures a code-host board for each active
+github connection; the `CoreReconcilers` bundle reactivates a frozen project with
+newer mirror work, reconciles the lifecycle into one freeze verdict, and
+reconciles task locks on the transition; then it recovers renames, runs the
+vault-consistency step, and — when not frozen — runs the task capture and the
+task-field pass, finally sweeping deletions. Every step failure logs and skips
+that step without blocking the others.
 
 #### 2.1a Startup and the pre-tick capture
 
@@ -219,18 +217,17 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant Shell as ProjectShell
   participant React as ProjectReactivationReconciler
   participant Life as ProjectLifecycleReconciler
   participant Lock as ProjectTaskLocksReconciler
 
   SP->>SP: resolveProject (no-op when missing)
-  SP->>Shell: migrate / rekey / ensureBoards
+  SP->>SP: migrate / rekey / ensureBoards
   SP->>React: reactivate(project)
   SP->>Life: reconcile(project)
   Life-->>SP: { frozen, wasFrozen }
   SP->>Lock: reconcile({ project, frozen, wasFrozen })
-  SP->>Shell: renames
+  SP->>SP: renames
 ```
 
 #### 2.1c The core reconcilers and the sweep
@@ -238,7 +235,6 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant Shell as ProjectShell
   participant Chk as SyncChecklistAction
   participant Cas as CompleteTaskCascadeAction
   participant Mir as MirrorTodoStatusAction
@@ -246,20 +242,20 @@ sequenceDiagram
   participant TF as TaskFieldReconciler
   participant Sweep as SweepDeletedNotesAction
 
-  SP->>Shell: vaultConsistency(project, syncedAt)
+  SP->>SP: vaultConsistency(project, syncedAt)
   loop each taken note
-    Shell->>Cas: execute(notePath, projectName, syncedAt)
-    Shell->>Chk: execute(notePath, projectName, syncedAt)
+    SP->>Cas: execute(notePath, projectName, syncedAt)
+    SP->>Chk: execute(notePath, projectName, syncedAt)
   end
   loop each todos note
-    Shell->>Mir: execute(todoPath, syncedAt)
+    SP->>Mir: execute(todoPath, syncedAt)
   end
   alt not frozen
     SP->>TC: capture(project, syncedAt)
     SP->>TF: reconcile(project)
   end
-  SP->>Shell: deletions(project, connections)
-  Shell->>Sweep: execute({ projectName, connections })
+  SP->>SP: deletions(project, connections)
+  SP->>Sweep: execute({ projectName, connections })
 ```
 
 The `CoreReconcilers` bundle is the cutover seam: `SyncProjectAction` holds one
@@ -675,7 +671,7 @@ sequenceDiagram
 `buildCaptureSources` gates the same two adapters once and collects their
 `projectCapture` surfaces.
 
-### 2.12 Vault consistency (retained shell)
+### 2.12 Vault consistency
 
 The chain's vault-consistency step keeps the markdown checklist and the vault
 to-do notes in step. `SyncChecklistAction` promotes an unlinked line to a new
@@ -705,7 +701,7 @@ sequenceDiagram
   end
 ```
 
-### 2.13 Completion and the cascade (retained shell)
+### 2.13 Completion and the cascade
 
 Done is one fact with one stamp. The invariant is `status === doneLane` if and
 only if `completedAt !== null`. `CompleteTaskCascadeAction` is the vault-side
@@ -736,7 +732,7 @@ sequenceDiagram
   end
 ```
 
-### 2.14 Deletion propagation (retained shell, factory-backed)
+### 2.14 Deletion propagation (factory-backed)
 
 A deleted note is swept by `SweepDeletedNotesAction`, which enumerates the
 project's entities and, for each whose note is gone, calls
@@ -775,7 +771,7 @@ The reverse case: a twin deleted by hand whose note survives is not a deletion
 of the note. The vault wins, and the projection recreates the twin in the same
 tick.
 
-### 2.15 Rename survival (retained shell)
+### 2.15 Rename survival
 
 A live rename event bypasses the debounce and enqueues the project immediately,
 but the recovery itself is the same as an offline rename:
@@ -928,7 +924,7 @@ lane can no longer revert a completion.
 - **The completion fact is separate from the Status representation.** The
   canonical `completion` field carries done-ness; `Status` carries the lane. A
   both-done conflict resolves by origin authority without collapsing the two.
-- **Flatten before delete (retained shell).** A slice twin is retired by moving
+- **Flatten before delete.** A slice twin is retired by moving
   every direct child to the top level, awaiting the moves, and only then
   deleting the twin; a failed flatten aborts before the delete and retries next
   tick.
@@ -939,8 +935,8 @@ lane can no longer revert a completion.
   value is a no-op; a lifecycle or task side that already matches is advanced
   without a remote write.
 - **The `coreBaselines` and `coreWatches` keys are siblings of `syncState`.**
-  The core's memory is separate from the shell's per-mirror bases, so a write on
-  one cannot clobber the other.
+  The core's memory is separate from the registry's per-mirror bases, so a write
+  on one cannot clobber the other.
 
 ---
 
@@ -949,17 +945,7 @@ lane can no longer revert a completion.
 These are places where the code and the design brief (ADR 001) disagree. The
 code is documented above; the brief's version is recorded here.
 
-1. **The orchestration shell is retained, not fully replaced.** ADR 001 says the
-   legacy halves, the old pure verdict and the legacy writers are deleted (they
-   are), and describes the chain as running the core reconcilers. It does — but
-   `SyncProjectAction` still runs the board-ensure, vault-consistency
-   (cascade, checklist, to-do mirror) and deletion-sweep steps around the
-   injected core reconcilers; the surrounding shell is not core. The chain now
-   reaches the vault and the registry through the narrow core seams, and selects
-   setup-capable connections through the setup factory rather than a provider
-   check. The ADR's "the chain builds the origin and the per-connection mirror
-   adapters" is accurate, but the surrounding steps are not core.
-2. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
+1. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
    invokes an optional `captureProjects` callback and enqueues its returned
    names; `main.ts` wires that callback to `projectCapture()`. The scheduler
    itself makes no decision about what the capture does.
@@ -979,12 +965,11 @@ surface of the system.
   ports under `src/domain/ports/`, the DTOs under `src/domain/data/`, and every
   use case under `src/domain/actions/`.
 - The use cases folded in from the former concept modules: `src/domain/actions/`
-  holds the discovery/attach/board actions (former `projects/`), the chain and
-  shell (`SyncProjectAction`, `ProjectShell`, `DetectNoteRenamesAction`,
-  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`), the cascade
-  (`CompleteTaskCascadeAction`) and the checklist/to-do actions (former
-  `todos/`); the reconciler interfaces and `CoreReconcilers` sit loose in
-  `src/domain/`.
+  holds the discovery/attach/board actions (former `projects/`), the chain
+  (`SyncProjectAction`, `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
+  `HandleDeletedNoteAction`), the cascade (`CompleteTaskCascadeAction`) and the
+  checklist/to-do actions (former `todos/`); the reconciler interfaces and
+  `CoreReconcilers` sit loose in `src/domain/`.
 - The capture and lifecycle actions: `src/domain/actions/CaptureProjectsAction.ts`,
   `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`,
   `ReactivateFrozenProjectAction.ts`.

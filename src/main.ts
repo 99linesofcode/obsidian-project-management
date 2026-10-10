@@ -70,7 +70,8 @@ import { ReconcileProjectTaskLocksAction } from './domain/actions/ReconcileProje
 import { ReactivateFrozenProjectAction } from './domain/actions/ReactivateFrozenProjectAction.js';
 import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
 import type { CoreReconcilers } from './domain/CoreReconcilers.js';
-import { ProjectShell } from './domain/ProjectShell.js';
+import { MigrateProjectHomeNoteAction } from './domain/actions/MigrateProjectHomeNoteAction.js';
+import { SweepDeletedNotesAction } from './domain/actions/SweepDeletedNotesAction.js';
 
 async function request(
   token: string,
@@ -403,19 +404,25 @@ function composePlugin(
     createTaskNote,
     mirrorAdapters,
   );
-  const shell = new ProjectShell({
+  const migrateHomeNote = new MigrateProjectHomeNoteAction(vault);
+  const sweepDeletedNotes = new SweepDeletedNotesAction(
     vault,
     syncState,
+    handleDeletedNote,
+  );
+  const syncProject = new SyncProjectAction({
+    vault,
     setupFactory,
+    reconcilers,
+    migrateHomeNote,
     detectNoteRenames,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
-    handleDeletedNote,
-    ensureProjectBoard,
+    sweepDeletedNotes,
     rekeyRenamedConnections: new RekeyRenamedConnectionsAction(syncState),
+    ensureProjectBoard,
   });
-  const syncProject = new SyncProjectAction(vault, shell, reconcilers);
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,

@@ -28,13 +28,13 @@ obsidian-project-management/
 │   ├── domain/          # the core: the capability ports and canonical DTOs, the
 │   │                    # pure N-way merge, the descriptor/registrar, every use
 │   │                    # case (actions/), the pass assemblers, the reconcilers,
-│   │                    # the retained shell, and the neutral note arithmetic
+│   │                    # and the neutral note arithmetic
 │   ├── infrastructure/  # driven adapters, one namespace per vendor:
 │   │                    # vault/ (origin, project source, lifecycle, capture,
 │   │                    # note codecs), github/ (mirror adapter + descriptor +
 │   │                    # transport), todoist/ (mirror adapter + descriptor +
 │   │                    # transport), registry/ (the data.json-backed registry:
-│   │                    # the shell seams' implementation and the core
+│   │                    # the pass seams' implementation and the core
 │   │                    # baselines/handles/project/cursor/watch), fake/
 │   │                    # (in-memory conformance adapter)
 │   ├── app/             # driving side: plugin lifecycle, scheduler, queue, settings
@@ -61,8 +61,8 @@ DTOs, the pure N-way merge, the adapter descriptor/registrar, every use case
 provider. `infrastructure/` holds the driven adapters that implement those
 ports, one namespace per vendor. The composition root wires them. The old
 provider halves, the pairwise verdict and the legacy writers are deleted; the
-shell around the core (board-ensure, rename recovery, vault consistency,
-deletion sweep) is retained and documented in the developer manual.
+chain drives the vault-maintenance steps (board-ensure, rename recovery, vault
+consistency, deletion sweep) directly, documented in the developer manual.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
 or concept exists. Modules split when they outgrow grasp, not before.
@@ -76,7 +76,7 @@ mirrors the plugin keeps honest. A serialized sync pass reads the vault,
 reconciles it against each mirror through one pure N-way merge, and writes the
 winner back to whichever side is behind. The registry in `data.json` is the
 memory that makes the merge possible: it holds each entity's identity and each
-mirror's last-synced baseline (the shell's per-mirror base and the core's
+mirror's last-synced baseline (the registry's per-mirror base and the core's
 `coreBaselines`).
 
 ```
@@ -107,12 +107,12 @@ name never appears in the core.
 
 ## 3. Core Components
 
-| Component             | Responsibility                                                                                                                                                                                                                                                                                             | Technology                   | Target         |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
-| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                                                                          | host plugin API              | the vault      |
-| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                                              | host plugin API, `Component` | the vault      |
-| `src/domain/`         | The core: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, every use case (`actions/`), the pass assemblers, the reconcilers, the retained shell, and the neutral note arithmetic                                             | TypeScript                   | in-process     |
-| `src/infrastructure/` | Driven adapters, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters and note codecs, the GitHub and Todoist mirror adapters, the registry (the shell seams' implementation plus the core baselines/handles/project/cursor/watch), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
+| Component             | Responsibility                                                                                                                                                                                                                                                                                            | Technology                   | Target         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                                                                         | host plugin API              | the vault      |
+| `src/app/`            | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                                             | host plugin API, `Component` | the vault      |
+| `src/domain/`         | The core: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, every use case (`actions/`), the pass assemblers, the reconcilers, and the neutral note arithmetic                                                                | TypeScript                   | in-process     |
+| `src/infrastructure/` | Driven adapters, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters and note codecs, the GitHub and Todoist mirror adapters, the registry (the pass seams' implementation plus the core baselines/handles/project/cursor/watch), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
 
@@ -154,7 +154,7 @@ module and exposes only the ports its descriptor declares.
   `ProjectCaptureVaultPort` and `TaskCaptureVaultPort` (the vault sinks), and
   `ProjectWatchPort` (the reactivation watch).
 
-**The shell's seams (`src/domain/ports/`).** The retained chain and the driving
+**The pass's seams (`src/domain/ports/`).** The chain and the driving
 side reach the vault and the registry through seven narrow, provider-neutral
 seams, each naming only the methods its call sites use:
 
@@ -170,7 +170,7 @@ seams, each naming only the methods its call sites use:
 
 The seven seams are the whole vault and registry contract. The former
 monolithic `VaultPort` and `SyncStatePort` are gone, so every consumer — the
-shell, the core's `CreateTaskNoteAction` and the driven adapters alike —
+chain, the core's `CreateTaskNoteAction` and the driven adapters alike —
 depends on the narrow seams above.
 
 A component that reaches around a port is a defect.
@@ -299,18 +299,19 @@ canonical DTOs and the pure core.
   pass is idempotent without a cursor. The vault sink routes by the connection's
   application — a code-host issue through `CreateTaskNoteAction`, a
   task-manager task through `CapturedTaskNoteMapper`.
-- **The cutover.** `SyncProjectAction` drives two collaborators: the
-  vault-maintenance `ProjectShell` (home-note migration, connection re-keying,
-  board-ensure, rename recovery, vault consistency and the deletion sweep) and
-  the `CoreReconcilers` bundle (the five reconcilers — `TaskFieldReconciler`,
-  `TaskCaptureReconciler`, `ProjectLifecycleReconciler`,
-  `ProjectTaskLocksReconciler`, `ProjectReactivationReconciler`). It runs the
-  reactivation action before the assembled lifecycle pass (unfreezing the origin
-  when newer mirror work appears), the assembled lifecycle pass for the freeze
-  verdict, the task-lock action on the freeze/unfreeze transition, the assembled
-  task capture for tracked tasks, and the assembled pass for task-field
-  reconciliation. The sweep enumerates the project's code-host connections
-  directly, and the capture pre-tick runs the assembled core capture.
+- **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
+  (home-note migration, connection re-keying, board-ensure, rename recovery,
+  vault consistency and the deletion sweep) and the `CoreReconcilers` bundle
+  (the five reconcilers — `TaskFieldReconciler`, `TaskCaptureReconciler`,
+  `ProjectLifecycleReconciler`, `ProjectTaskLocksReconciler`,
+  `ProjectReactivationReconciler`) directly, every step wrapped so one failure
+  logs and skips that step. It runs the reactivation action before the assembled
+  lifecycle pass (unfreezing the origin when newer mirror work appears), the
+  assembled lifecycle pass for the freeze verdict, the task-lock action on the
+  freeze/unfreeze transition, the assembled task capture for tracked tasks, and
+  the assembled pass for task-field reconciliation. The sweep enumerates the
+  project's code-host connections directly, and the capture pre-tick runs the
+  assembled core capture.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary, its opaque
@@ -332,7 +333,7 @@ canonical DTOs and the pure core.
   the project, capture, complete-fetch and per-field-timestamp surfaces. Its
   descriptor registers under the application id `todoist`.
 - **The registry adapters** (`infrastructure/registry/`) persist the core's
-  memory in `data.json` beside the shell's: `CoreBaselineStoreAdapter`
+  memory in `data.json` beside the registry's: `CoreBaselineStoreAdapter`
   (`coreBaselines`), `CoreProjectWatchAdapter` (`coreWatches`),
   `RegistryMirrorHandleAdapter`, `RegistryMirrorProjectAdapter` and
   `RegistryProjectCursorAdapter`.
@@ -358,7 +359,7 @@ canonical DTOs and the pure core.
   vault-owned uuid held in the registry — filenames and frontmatter carry no
   machine id.
 - **`data.json`** — the plugin's data file. It holds three containers:
-  - **`syncState`** (schema version 3) — the shell's registry: `projects.<name>.entities`
+  - **`syncState`** (schema version 3) — the per-mirror registry: `projects.<name>.entities`
     (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`
     (each mirror's last-synced base, a `TaskData`), the port bookkeeping
     (`provider`, `project`, `lastPoll`, `lanes`), per-connection identities
@@ -370,7 +371,7 @@ canonical DTOs and the pure core.
     shares with the settings save.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
     `lifecycle`), per-side `Baseline` (`value`, `completed`). A sibling of
-    `syncState`, so a shell registry write cannot clobber it.
+    `syncState`, so a registry write cannot clobber it.
   - **`coreWatches`** — the core's per-project, per-connection reactivation
     watch (`etag`, `cursor`). A sibling of `syncState`.
   - The settings keys (poll interval, done option, debounce, paths, status
@@ -393,7 +394,7 @@ No other persistent store. The mirrors hold copies, never authority.
   `CapturePort`, `ProjectCapturePort`, `CompleteFetchPort`, `TimestampedPort`).
   An API token, bearer.
 - **The host vault application** — the plugin API (vault read/write, events,
-  `requestUrl`, settings and data). Behind the shell's narrow note seams
+  `requestUrl`, settings and data). Behind the pass's narrow note seams
   (`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`, `VaultEventPort`)
   and the origin adapters; only the adapters import the host package.
 
@@ -481,16 +482,10 @@ over HTTPS.
 - **No permanent deletion.** A deleted note's echoes are removed from the
   mirrors, but the vault note itself is trashed, never destroyed.
 
-**Known debt / open items:** The retained vault-maintenance shell is the main
-debt. `ProjectShell` runs the board-ensure, vault-consistency (cascade,
-checklist, to-do mirror) and deletion-sweep steps beside the core reconcilers,
-but it reaches the vault and the registry through the narrow core seams
-(`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`, `TrackedEntityPort`)
-and selects setup-capable connections through the setup factory rather than a
-provider check. The boundary config and the provider-vocabulary gate carry
-historical allowances
-while the shell is retired. The developer manual records the remaining
-code-vs-brief discrepancies.
+**Known debt / open items:** None blocking. The vault-maintenance shell has been
+retired — the chain drives its steps directly (ADR 003). The developer manual
+records the remaining code-vs-brief discrepancy (the scheduler's injected
+pre-tick capture).
 
 The multi-adapter core (`domain/` + `infrastructure/`) is wired end to end: the
 GitHub and Todoist mirror adapters implement the capability ports, the vault
@@ -530,7 +525,7 @@ Date of Last Update: 2026-10-09
 - **Canonical field** — one of the six neutral field names (`title`, `body`,
   `subtasks`, `completion`, `Status`, `label`) the merge operates on.
 - **Baseline** — the last-synced snapshot of a side, stored in the registry;
-  the third input to a side's delta. The shell stores one per mirror base; the
+  the third input to a side's delta. The registry stores one per mirror base; the
   core stores one per entity, field and side under `coreBaselines`.
 - **Delta** — one side's change against its own baseline: a value, or a delete
   proven by a verified-complete fetch.
