@@ -649,8 +649,10 @@ describe('CodeHostMirrorAdapter — the board is derived from the repository (F0
       transport,
       target(),
       async () => ({
-        projectNodeId: 'PVT_123',
-        statusFieldId: 'PVTF_456',
+        target: target(),
+        targetHandle: 'R_kgDOAAAA',
+        projectHandle: 'PVT_123',
+        statusFieldHandle: 'PVTF_456',
         statusOptions: [
           { id: 'PVTSSF_1', name: 'Unshaped' },
           { id: 'PVTSSF_2', name: 'Done' },

@@ -7,6 +7,7 @@ import { ProjectActivityObservation } from '../../core/application/data/ProjectA
 import { ProjectAddressing } from '../../core/application/data/ProjectAddressing.js';
 import { ProjectCandidate } from '../../core/application/data/ProjectCandidate.js';
 import { ProjectDiscovery } from '../../core/application/data/ProjectDiscovery.js';
+import type { ProjectIdentityDataTransferObject } from '../../core/application/data/ProjectIdentityDataTransferObject.js';
 import { ProjectSummary } from '../../core/application/data/ProjectSummary.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type { ProjectSetupPort } from '../../core/port/ProjectSetupPort.js';
@@ -332,7 +333,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
   constructor(
     private readonly transport: CodeHostTransport,
     target = '',
-    private readonly boardIdentity?: () => Promise<BoardIdentity | null>,
+    private readonly boardIdentity?: () => Promise<ProjectIdentityDataTransferObject | null>,
     private readonly statusOptions: readonly string[] = [],
   ) {
     this.rawTarget = target;
@@ -342,39 +343,43 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
     return CodeHostTarget.parse(this.rawTarget);
   }
 
-  private board(repoUrl: string): Promise<BoardIdentity | null> {
-    let board = this.boards.get(repoUrl);
+  private board(target: string): Promise<BoardIdentity | null> {
+    let board = this.boards.get(target);
     if (board === undefined) {
-      board = this.resolveBoard(repoUrl);
-      this.boards.set(repoUrl, board);
+      board = this.resolveBoard(target);
+      this.boards.set(target, board);
     }
     return board;
   }
 
-  private async requireBoard(repoUrl: string): Promise<BoardIdentity> {
-    const board = await this.board(repoUrl);
+  private async requireBoard(target: string): Promise<BoardIdentity> {
+    const board = await this.board(target);
     if (board === null) {
       throw new Error(
-        `code host: repository ${repoParts(repoUrl).name} has no board`,
+        `code host: repository ${repoParts(target).name} has no board`,
       );
     }
     return board;
   }
 
-  private async resolveBoard(repoUrl: string): Promise<BoardIdentity | null> {
+  private async resolveBoard(target: string): Promise<BoardIdentity | null> {
     const cached = await this.boardIdentity?.();
     if (
       cached !== undefined &&
       cached !== null &&
-      cached.projectNodeId !== ''
+      cached.projectHandle !== ''
     ) {
-      return cached;
+      return {
+        projectNodeId: cached.projectHandle,
+        statusFieldId: cached.statusFieldHandle,
+        statusOptions: cached.statusOptions,
+      };
     }
-    return this.deriveBoard(repoUrl);
+    return this.deriveBoard(target);
   }
 
-  private async deriveBoard(repoUrl: string): Promise<BoardIdentity | null> {
-    const repo = repoParts(repoUrl);
+  private async deriveBoard(target: string): Promise<BoardIdentity | null> {
+    const repo = repoParts(target);
     const data = await this.graphql(REPO_BOARDS_QUERY, {
       owner: repo.owner,
       name: repo.name,
@@ -465,7 +470,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
 
   async readProject(target: string): Promise<CanonicalProject | null> {
     const connection = CodeHostTarget.parse(target);
-    const board = await this.board(connection.repoUrl);
+    const board = await this.board(connection.target);
     if (board === null) {
       return null;
     }
@@ -485,14 +490,14 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
 
   async createProject(target: string, name: string): Promise<CanonicalProject> {
     const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.repoUrl);
+    const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
     const projectId =
       (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
     await this.linkBoard(projectId, repositoryId);
     const status = await this.ensureStatusField(projectId, this.statusOptions);
     this.boards.set(
-      connection.repoUrl,
+      connection.target,
       Promise.resolve({
         projectNodeId: projectId,
         statusFieldId: status.id,
@@ -500,7 +505,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
       }),
     );
     return new CanonicalProject({
-      handle: connection.repoUrl,
+      handle: connection.target,
       name,
       archived: false,
     });
@@ -515,7 +520,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
 
   async setArchived(target: string, archived: boolean): Promise<void> {
     const connection = CodeHostTarget.parse(target);
-    const board = await this.requireBoard(connection.repoUrl);
+    const board = await this.requireBoard(connection.target);
     await this.graphql(SET_PROJECT_CLOSED_MUTATION, {
       projectId: board.projectNodeId,
       closed: archived,
@@ -524,7 +529,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
 
   async renameProject(target: string, name: string): Promise<void> {
     const connection = CodeHostTarget.parse(target);
-    const board = await this.requireBoard(connection.repoUrl);
+    const board = await this.requireBoard(connection.target);
     await this.graphql(RENAME_PROJECT_MUTATION, {
       projectId: board.projectNodeId,
       title: name,
@@ -547,7 +552,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
 
   async discoverProjects(target: string): Promise<ProjectDiscovery> {
     const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.repoUrl);
+    const repo = repoParts(connection.target);
     const data = await this.graphql(REPO_BOARDS_QUERY, {
       owner: repo.owner,
       name: repo.name,
@@ -600,7 +605,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
     statusOptions: readonly string[],
   ): Promise<ProjectAddressing> {
     const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.repoUrl);
+    const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
     const projectId =
       (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
@@ -619,7 +624,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
     statusOptions: readonly string[],
   ): Promise<ProjectAddressing> {
     const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.repoUrl);
+    const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
     const status = await this.ensureStatusField(project.handle, statusOptions);
     await this.linkBoard(project.handle, repositoryId);
@@ -654,7 +659,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
     etag?: string,
   ): Promise<ProjectActivityObservation> {
     const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.repoUrl);
+    const repo = repoParts(connection.target);
     const path = `/repos/${repo.owner}/${repo.name}/issues?state=all&sort=created&direction=desc&per_page=10`;
     const response = await this.transport.getConditional(path, etag);
     if (response.status === 304) {
@@ -710,10 +715,10 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
     task: CanonicalTask,
   ): Promise<CanonicalTask> {
     const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.repoUrl);
+    const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
     const labelIds = await this.labelIds(repo, task.labels);
-    const board = await this.requireBoard(connection.repoUrl);
+    const board = await this.requireBoard(connection.target);
     const created = await this.graphql(CREATE_ISSUE_MUTATION, {
       repositoryId,
       title: task.title,
@@ -770,7 +775,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
     if (item === null) {
       return;
     }
-    const board = await this.requireBoard(this.target.repoUrl);
+    const board = await this.requireBoard(this.target.target);
     await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
       projectId: board.projectNodeId,
       itemId: item.itemId,
@@ -860,7 +865,7 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
   }
 
   private async setLane(itemId: string, status: string): Promise<void> {
-    const board = await this.requireBoard(this.target.repoUrl);
+    const board = await this.requireBoard(this.target.target);
     await this.graphql(SET_BOARD_STATUS_MUTATION, {
       projectId: board.projectNodeId,
       itemId,
@@ -908,8 +913,8 @@ export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
   private async boardSnapshot(
     connection: CodeHostTarget,
   ): Promise<BoardSnapshot> {
-    const repo = repoParts(connection.repoUrl);
-    const board = await this.requireBoard(connection.repoUrl);
+    const repo = repoParts(connection.target);
+    const board = await this.requireBoard(connection.target);
     const data = await this.graphql(PROJECT_DETAIL_QUERY, {
       owner: repo.owner,
       name: repo.name,
@@ -1140,7 +1145,7 @@ function parseRepoBoard(node: Record<string, unknown>): RepoBoard[] {
 }
 
 function chooseBoard(
-  repoName: string,
+  targetName: string,
   boards: readonly RepoBoard[],
 ): RepoBoard | null {
   if (boards.length === 0) {
@@ -1149,10 +1154,10 @@ function chooseBoard(
   if (boards.length === 1) {
     return boards[0]!;
   }
-  const match = boards.find((board) => board.name === repoName);
+  const match = boards.find((board) => board.name === targetName);
   if (match === undefined) {
     throw new Error(
-      `code host: repository ${repoName} has several boards and none is titled "${repoName}"`,
+      `code host: repository ${targetName} has several boards and none is titled "${targetName}"`,
     );
   }
   return match;

@@ -69,10 +69,10 @@ function identity(
   overrides: Partial<ProjectIdentityDataTransferObject> = {},
 ): ProjectIdentityDataTransferObject {
   return {
-    repoUrl: '',
-    repoNodeId: '',
-    projectNodeId: '',
-    statusFieldId: '',
+    target: '',
+    targetHandle: '',
+    projectHandle: '',
+    statusFieldHandle: '',
     statusOptions: [],
     ...overrides,
   };
@@ -98,7 +98,7 @@ function setup(stored?: ProjectIdentityDataTransferObject) {
 
 describe('PRJ-1 — the board is derived from the repository', () => {
   it('creates, links and gives a Status field when the repo has no board', async () => {
-    const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
+    const h = setup(identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }));
 
     await h.action.execute({
       projectName,
@@ -111,16 +111,16 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     ]);
     expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual({
-      repoUrl,
-      repoNodeId: 'R_kgDOAAAA',
-      projectNodeId: 'PVT_new',
-      statusFieldId: 'PVTF_new',
+      target: repoUrl,
+      targetHandle: 'R_kgDOAAAA',
+      projectHandle: 'PVT_new',
+      statusFieldHandle: 'PVTF_new',
       statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
     });
   });
 
   it('adopts the single board linked to the repo', async () => {
-    const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
+    const h = setup(identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }));
     const linked = project('widgets');
     h.setup.discovery = new ProjectDiscovery({
       targetHandle: 'R_kgDOAAAA',
@@ -144,16 +144,16 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: linked }]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual({
-      repoUrl,
-      repoNodeId: 'R_kgDOAAAA',
-      projectNodeId: 'PVT_widgets',
-      statusFieldId: 'PVTF_live',
+      target: repoUrl,
+      targetHandle: 'R_kgDOAAAA',
+      projectHandle: 'PVT_widgets',
+      statusFieldHandle: 'PVTF_live',
       statusOptions: [{ id: 'PVTSSF_live', name: 'Shipped' }],
     });
   });
 
   it('adopts the board titled with the repo name when several are linked', async () => {
-    const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
+    const h = setup(identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }));
     const match = project('widgets');
     h.setup.discovery = new ProjectDiscovery({
       targetHandle: 'R_kgDOAAAA',
@@ -177,12 +177,12 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: match }]);
     expect(
-      (await h.syncState.getIdentity(projectName, SLUG))?.projectNodeId,
+      (await h.syncState.getIdentity(projectName, SLUG))?.projectHandle,
     ).toBe('PVT_widgets');
   });
 
   it('adopts an unlinked same-name viewer board instead of creating a duplicate', async () => {
-    const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
+    const h = setup(identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }));
     const orphan = project('widgets');
     h.setup.candidates = [candidate('widgets')];
     h.setup.addressings.set(
@@ -203,12 +203,12 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([{ target: repoUrl, project: orphan }]);
     expect(
-      (await h.syncState.getIdentity(projectName, SLUG))?.projectNodeId,
+      (await h.syncState.getIdentity(projectName, SLUG))?.projectHandle,
     ).toBe('PVT_orphan');
   });
 
   it('surfaces a discovery error when several boards match no repo name', async () => {
-    const h = setup(identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }));
+    const h = setup(identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }));
     h.setup.discovery = new ProjectDiscovery({
       targetHandle: 'R_kgDOAAAA',
       projects: [project('Roadmap'), project('Backlog')],
@@ -221,12 +221,14 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual(
-      identity({ repoUrl, repoNodeId: 'R_kgDOAAAA' }),
+      identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }),
     );
   });
 
   it('is idempotent: an identity that already has a board is left alone', async () => {
-    const h = setup(identity({ repoUrl, projectNodeId: 'PVT_existing' }));
+    const h = setup(
+      identity({ target: repoUrl, projectHandle: 'PVT_existing' }),
+    );
 
     await h.action.execute({
       projectName,
@@ -237,12 +239,12 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([]);
     expect(
-      (await h.syncState.getIdentity(projectName, SLUG))?.projectNodeId,
+      (await h.syncState.getIdentity(projectName, SLUG))?.projectHandle,
     ).toBe('PVT_existing');
   });
 
   it('leaves a repo-less project board-less', async () => {
-    const h = setup(identity({ repoUrl: '' }));
+    const h = setup(identity({ target: '' }));
 
     await h.action.execute({
       projectName,
@@ -253,7 +255,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     expect(h.setup.createCalls).toEqual([]);
     expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity(projectName, SLUG)).toEqual(
-      identity({ repoUrl: '' }),
+      identity({ target: '' }),
     );
   });
 });

@@ -4,7 +4,7 @@ import type { ProjectAddressing } from '../data/ProjectAddressing.js';
 import type { ProjectSummary } from '../data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
 import { deriveBoardChoice } from '../../domain/deriveBoardChoice.js';
-import { repoNameFromUrl } from '../../domain/repoNameFromUrl.js';
+import { nameFromTarget } from '../../domain/nameFromTarget.js';
 
 export interface EnsureProjectBoardInput {
   projectName: string;
@@ -24,34 +24,34 @@ export class EnsureProjectBoardAction {
       input.projectName,
       input.connectionSlug,
     );
-    if (identity?.projectNodeId) {
+    if (identity?.projectHandle) {
       return;
     }
 
-    const repoUrl = identity?.repoUrl ?? '';
-    if (repoUrl === '') {
+    const target = identity?.target ?? '';
+    if (target === '') {
       return;
     }
 
-    const repoName = repoNameFromUrl(repoUrl);
-    const discovery = await setup.discoverProjects(repoUrl);
-    const choice = deriveBoardChoice(repoName, discovery.projects);
+    const targetName = nameFromTarget(target);
+    const discovery = await setup.discoverProjects(target);
+    const choice = deriveBoardChoice(targetName, discovery.projects);
     if (choice.kind === 'ambiguous') {
       throw new Error(
-        `EnsureProjectBoardAction: repository ${repoUrl} has several boards and none is titled "${repoName}"; not creating or adopting one`,
+        `EnsureProjectBoardAction: target ${target} has several boards and none is titled "${targetName}"; not creating or adopting one`,
       );
     }
 
     const addressing =
       choice.kind === 'create'
-        ? await this.createOrAdoptOrphan(setup, repoUrl, repoName)
-        : await setup.adoptProject(repoUrl, choice.board, this.statusOptions);
+        ? await this.createOrAdoptOrphan(setup, target, targetName)
+        : await setup.adoptProject(target, choice.board, this.statusOptions);
 
     const merged = new ProjectIdentityDataTransferObject({
-      repoUrl,
-      repoNodeId: discovery.targetHandle,
-      projectNodeId: addressing.projectHandle,
-      statusFieldId: addressing.statusFieldHandle,
+      target,
+      targetHandle: discovery.targetHandle,
+      projectHandle: addressing.projectHandle,
+      statusFieldHandle: addressing.statusFieldHandle,
       statusOptions: [...addressing.statusOptions],
     });
     await this.syncState.setIdentity(
@@ -63,28 +63,28 @@ export class EnsureProjectBoardAction {
 
   private async createOrAdoptOrphan(
     setup: ProjectSetupPort,
-    repoUrl: string,
-    repoName: string,
+    target: string,
+    targetName: string,
   ): Promise<ProjectAddressing> {
-    const orphan = await this.findOrphanProject(setup, repoName);
+    const orphan = await this.findOrphanProject(setup, targetName);
     if (orphan === null) {
       return setup.createProjectWithStatus(
-        repoUrl,
-        repoName,
+        target,
+        targetName,
         this.statusOptions,
       );
     }
-    return setup.adoptProject(repoUrl, orphan, this.statusOptions);
+    return setup.adoptProject(target, orphan, this.statusOptions);
   }
 
   private async findOrphanProject(
     setup: ProjectSetupPort,
-    repoName: string,
+    targetName: string,
   ): Promise<ProjectSummary | null> {
     const candidates = await setup.listProjects();
     const orphan = candidates.find(
       (candidate) =>
-        candidate.project.name === repoName && candidate.targets.length === 0,
+        candidate.project.name === targetName && candidate.targets.length === 0,
     );
     return orphan?.project ?? null;
   }

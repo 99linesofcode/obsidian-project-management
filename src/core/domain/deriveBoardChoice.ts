@@ -6,7 +6,7 @@ export type BoardChoice =
   | { kind: 'ambiguous' };
 
 export function deriveBoardChoice(
-  repoName: string,
+  targetName: string,
   boards: readonly ProjectSummary[],
 ): BoardChoice {
   if (boards.length === 0) {
@@ -15,7 +15,7 @@ export function deriveBoardChoice(
   if (boards.length === 1) {
     return { kind: 'adopt', board: boards[0]! };
   }
-  const match = boards.find((board) => board.name === repoName);
+  const match = boards.find((board) => board.name === targetName);
   return match === undefined
     ? { kind: 'ambiguous' }
     : { kind: 'adopt', board: match };

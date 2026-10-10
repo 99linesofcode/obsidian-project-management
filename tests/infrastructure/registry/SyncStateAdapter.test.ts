@@ -50,10 +50,10 @@ const url = 'https://github.com/acme/widgets/issues/42';
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 
 const identity = {
-  repoUrl: 'https://github.com/acme/widgets',
-  repoNodeId: 'R_kgDOAAAA',
-  projectNodeId: 'PVT_123',
-  statusFieldId: 'PVTF_456',
+  target: 'https://github.com/acme/widgets',
+  targetHandle: 'R_kgDOAAAA',
+  projectHandle: 'PVT_123',
+  statusFieldHandle: 'PVTF_456',
   statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
 };
 

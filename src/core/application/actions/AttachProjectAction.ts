@@ -2,10 +2,10 @@ import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTr
 import { DomainError } from '../../domain/errors/DomainError.js';
 import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
 import { deriveBoardChoice } from '../../domain/deriveBoardChoice.js';
-import { repoNameFromUrl } from '../../domain/repoNameFromUrl.js';
+import { nameFromTarget } from '../../domain/nameFromTarget.js';
 
 export interface AttachProjectInput {
-  repoUrl: string;
+  target: string;
   setup: ProjectSetupPort;
 }
 
@@ -13,24 +13,24 @@ export class AttachProjectAction {
   async execute(
     data: AttachProjectInput,
   ): Promise<ProjectIdentityDataTransferObject> {
-    if (!data.repoUrl) {
-      throw new DomainError('AttachProjectAction: repoUrl is required');
+    if (!data.target) {
+      throw new DomainError('AttachProjectAction: target is required');
     }
 
-    const repoName = repoNameFromUrl(data.repoUrl);
-    const discovery = await data.setup.discoverProjects(data.repoUrl);
-    const choice = deriveBoardChoice(repoName, discovery.projects);
+    const targetName = nameFromTarget(data.target);
+    const discovery = await data.setup.discoverProjects(data.target);
+    const choice = deriveBoardChoice(targetName, discovery.projects);
     if (choice.kind === 'ambiguous') {
       throw new DomainError(
-        `AttachProjectAction: repository ${data.repoUrl} has several boards and none is titled "${repoName}"`,
+        `AttachProjectAction: target ${data.target} has several boards and none is titled "${targetName}"`,
       );
     }
     if (choice.kind === 'create') {
       return new ProjectIdentityDataTransferObject({
-        repoUrl: data.repoUrl,
-        repoNodeId: discovery.targetHandle,
-        projectNodeId: '',
-        statusFieldId: '',
+        target: data.target,
+        targetHandle: discovery.targetHandle,
+        projectHandle: '',
+        statusFieldHandle: '',
         statusOptions: [],
       });
     }
@@ -42,10 +42,10 @@ export class AttachProjectAction {
       );
     }
     return new ProjectIdentityDataTransferObject({
-      repoUrl: data.repoUrl,
-      repoNodeId: discovery.targetHandle,
-      projectNodeId: addressing.projectHandle,
-      statusFieldId: addressing.statusFieldHandle,
+      target: data.target,
+      targetHandle: discovery.targetHandle,
+      projectHandle: addressing.projectHandle,
+      statusFieldHandle: addressing.statusFieldHandle,
       statusOptions: [...addressing.statusOptions],
     });
   }
