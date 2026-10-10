@@ -54,7 +54,10 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
       }),
     );
 
-    await h.action.execute({ projectName: 'Acme Widgets' });
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: 'github',
+    });
 
     expect(h.deleted).toEqual(['Projecten/Acme Widgets/taken/42-gone.md']);
   });
@@ -73,7 +76,10 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
       'content',
     );
 
-    await h.action.execute({ projectName: 'Acme Widgets' });
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: 'github',
+    });
 
     expect(h.deleted).toEqual([]);
   });
@@ -88,7 +94,10 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
       }),
     );
 
-    await h.action.execute({ projectName: 'Acme Widgets' });
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: 'github',
+    });
 
     expect(h.deleted).toEqual([]);
   });
@@ -105,7 +114,10 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
     h.failNext();
 
     await expect(
-      h.action.execute({ projectName: 'Acme Widgets' }),
+      h.action.execute({
+        projectName: 'Acme Widgets',
+        connectionSlug: 'github',
+      }),
     ).resolves.toBeUndefined();
     expect(h.deleted).toEqual([]);
   });

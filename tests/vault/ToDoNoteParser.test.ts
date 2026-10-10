@@ -48,7 +48,6 @@ describe('TODO-2 — a to-do note parses to the canonical shape', () => {
   });
 
   it('returns null for content without frontmatter', () => {
-
     const parsed = ToDoNoteParser.parse('Just a note.');
 
     expect(parsed).toBeNull();

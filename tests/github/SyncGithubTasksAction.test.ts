@@ -9,6 +9,7 @@ import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import { VerdictResolver } from '../../src/shared/VerdictResolver.js';
 import type { BoardItemData } from '../../src/shared/BoardItemData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
 import type { ProjectDetailData } from '../../src/shared/ProjectDetailData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
@@ -17,8 +18,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the pipeline is exercised end-to-end through the real
-// writers, so the fetch → map → diff → apply orchestration is what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -93,13 +92,11 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return issue({ url, state });
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    optionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({ issueUrl, optionId });
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.boardStatusCalls.push({
+      issueUrl: status.issueUrl,
+      optionId: status.statusOptionId,
+    });
   }
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     this.addBoardItemCalls.push({ projectNodeId, issueUrl });
@@ -133,12 +130,18 @@ class FakeProjectManagement implements ProjectManagementPort {
     title: string;
     body: string;
     type: string;
+    projectV2Ids: string[];
   }> = [];
   createdIssueUrl = 'https://github.com/acme/widgets/issues/99';
   failCreateIssue = false;
   async createIssue(
     repoUrl: string,
-    payload: { title: string; body: string; type: string },
+    payload: {
+      title: string;
+      body: string;
+      type: string;
+      projectV2Ids: string[];
+    },
   ): Promise<{ url: string; nodeId: string }> {
     this.createIssueCalls.push({ repoUrl, ...payload });
     if (this.failCreateIssue) {
@@ -160,14 +163,27 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async adoptBoard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';
-// A legacy issue-backed name (the record's path) and the slug a fresh note
-// would get — the action must follow the record, never re-derive the path.
 const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const slugNotePath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 const projectName = 'Acme Widgets';
@@ -218,8 +234,6 @@ function card(overrides: Partial<BoardItemData> = {}): BoardItemData {
   };
 }
 
-// The note content the vault mapper reads back, so a test seeds a note that is
-// in step with the base it names.
 function noteFor(opts: {
   id?: string;
   type?: string;
@@ -248,7 +262,6 @@ interface Seed {
   notePath?: string;
 }
 
-// Seeds a tracked record (registry + base) and its note.
 function seed(vault: FakeVault, syncState: FakeSyncState, opts: Seed): void {
   const path = opts.notePath ?? notePath;
   const base = taskData({
@@ -292,6 +305,7 @@ function makeAction(
     new CompleteTaskCascadeAction(vault, doneLane),
   );
   return new SyncGithubTasksAction(
+    'github',
     projectManagement,
     syncState,
     vault,
@@ -302,7 +316,7 @@ function makeAction(
   );
 }
 
-const input = { projectName, syncedAt, includeBoard: true };
+const input = { projectName, syncedAt, includeBoard: true, connections: {} };
 
 describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('materialises a new typed issue and anchors a matching uuid', async () => {
@@ -559,7 +573,9 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     const projectManagement = new FakeProjectManagement();
     projectManagement.detail = {
       issues: [issueA],
-      cards: [{ itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url, updatedAt: null }],
+      cards: [
+        { itemId: 'PVTI_1', type: 'ISSUE', issueUrl: url, updatedAt: null },
+      ],
     };
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -881,7 +897,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
   it('skips the poll with a clear error when the project has no stored identity', async () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
-    // no identity registered for the project
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);
 
@@ -923,14 +938,10 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
         title: 'fix the bug',
         body: 'A fresh bug.',
         type: 'bug',
+        projectV2Ids: ['PVT_123'],
       },
     ]);
-    expect(projectManagement.addBoardItemCalls).toEqual([
-      {
-        projectNodeId: 'PVT_123',
-        issueUrl: projectManagement.createdIssueUrl,
-      },
-    ]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
     expect(projectManagement.boardStatusCalls).toEqual([
       { issueUrl: projectManagement.createdIssueUrl, optionId: 'PVTSSF_1' },
     ]);
@@ -963,8 +974,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     await action.execute(input);
 
     expect(projectManagement.createIssueCalls).toHaveLength(1);
-    // Registry-first: the entity and its placeholder survive the failure, so
-    // the next pass retries instead of materializing a second note.
     const record = await syncState.findByNotePath(bornPath);
     expect(record).not.toBeNull();
     expect(
@@ -987,12 +996,7 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     expect(
       await syncState.findMirrorItem('github', `pendingCreation:${record!.id}`),
     ).toBeNull();
-    expect(projectManagement.addBoardItemCalls).toEqual([
-      {
-        projectNodeId: 'PVT_123',
-        issueUrl: projectManagement.createdIssueUrl,
-      },
-    ]);
+    expect(projectManagement.addBoardItemCalls).toEqual([]);
   });
 
   it('heals an interrupted outward creation without a duplicate issue or note', async () => {
@@ -1005,9 +1009,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       bornPath,
       noteFor({ type: 'bug', body: 'A fresh bug.', status: defaultLane }),
     );
-    // The state a crash between createIssue and the mirror write leaves: the
-    // entity and its placeholder exist; the issue exists remotely, but the
-    // registry never learned its handle.
     const record = { id: 'uuid-born', notePath: bornPath };
     syncState.seed(record, {
       github: { handle: `pendingCreation:uuid-born`, base: null },
@@ -1028,8 +1029,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
 
     await action.execute(input);
 
-    // No duplicate: the orphan issue is adopted, not re-created, and no second
-    // note is materialized for it.
     expect(projectManagement.createIssueCalls).toEqual([]);
     expect(vault.created).toEqual([]);
     const item = await syncState.findMirrorItem('github', createdUrl);
@@ -1037,7 +1036,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     expect(
       await syncState.findMirrorItem('github', 'pendingCreation:uuid-born'),
     ).toBeNull();
-    // The per-issue loop heals the missing card (membership gap).
     expect(projectManagement.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: createdUrl },
     ]);
@@ -1055,10 +1053,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     );
     const record = { id: 'uuid-born', notePath: bornPath };
     const createdUrl = projectManagement.createdIssueUrl;
-    // The state a crash between the real mirror write and the placeholder
-    // removal leaves: the placeholder was inserted first, the real handle
-    // second. A first-match lookup (findMirrorItemByEntity) therefore sees the
-    // stale placeholder, not the real handle.
     syncState.seed(record, {
       github: { handle: 'pendingCreation:uuid-born', base: null },
     });
@@ -1089,17 +1083,13 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
 
     await action.execute(input);
 
-    // No duplicate: the coexistence is healed, so the outward phase sees the
-    // real mirror and never re-creates the issue.
     expect(projectManagement.createIssueCalls).toEqual([]);
     expect(vault.created).toEqual([]);
-    // The stale placeholder is gone; the note keeps its real mirror.
     expect(
       await syncState.findMirrorItem('github', 'pendingCreation:uuid-born'),
     ).toBeNull();
     const item = await syncState.findMirrorItem('github', createdUrl);
     expect(item?.entityId).toBe('uuid-born');
-    // The per-issue loop heals the missing card.
     expect(projectManagement.addBoardItemCalls).toEqual([
       { projectNodeId: 'PVT_123', issueUrl: createdUrl },
     ]);
@@ -1117,9 +1107,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     );
     const record = { id: 'uuid-born', notePath: bornPath };
     const createdUrl = projectManagement.createdIssueUrl;
-    // Placeholder first, real second — the exact coexistence a post-write crash
-    // leaves. The outward phase must read the real handle across ALL refs, not
-    // the first (placeholder) hit, or it materializes a duplicate.
     syncState.seed(record, {
       github: { handle: 'pendingCreation:uuid-born', base: null },
     });
@@ -1136,7 +1123,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
     };
 
     expect(await probe.hasRealGithubMirror(projectName, record.id)).toBe(true);
-    // The placeholder alone is not a real mirror.
     const barePath = 'Projecten/Acme Widgets/taken/bare.md';
     syncState.seed(
       { id: 'uuid-bare', notePath: barePath },
@@ -1166,8 +1152,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
 
     await action.execute(input);
 
-    // No issue is created for an unmappable lane, so there is no
-    // issue-without-card retry loop.
     expect(projectManagement.createIssueCalls).toEqual([]);
     expect(projectManagement.addBoardItemCalls).toEqual([]);
     expect(await syncState.findByNotePath(bornPath)).toBeNull();
@@ -1181,8 +1165,6 @@ describe('SYNC-2 — a remote change flows in and fans out', () => {
       baseStatus: defaultLane,
       noteStatus: defaultLane,
     });
-    // Corrupt the note so it no longer parses as a task: it must not hold the
-    // probe gate open forever.
     vault.notes.set(notePath, 'this is not a task note');
     const projectManagement = new FakeProjectManagement();
     const action = makeAction(vault, syncState, projectManagement);

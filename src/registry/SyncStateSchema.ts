@@ -2,35 +2,18 @@ import { isRecord } from '../shared/isRecord.js';
 import { TaskData } from '../shared/TaskData.js';
 import type { MirrorItem, PortState } from '../shared/SyncStatePort.js';
 
-// The container schema: the persisted shape's constants and the pure readers
-// and writers of its nested nodes. Migrations and the adapter share these so
-// the schema has exactly one definition.
-
-// The sync state lives under its own top-level key, so the plugin's settings
-// (which merge the data.json root) never absorb a `status.*`/`todoistItem.*`
-// key. Before t5 the records were flat at the root; `migrateLegacyState` moves
-// them under this key once, on load.
 export const SYNC_STATE_KEY = 'syncState';
 
-// The registry version marker. The layout below is v3; a container without it
-// is migrated once and marked.
 export const VERSION = 3;
 
 export const ENTITIES_KEY = 'entities';
 export const PROJECTS_KEY = 'projects';
 export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
+export const IDENTITIES_KEY = 'identities';
 
-// The project-capture cursors, keyed by remote SURFACE (portId). WHY a
-// container-level map and not a per-project node: the cursor guards a global
-// listing (all task-manager projects, all the viewer's boards), which has no
-// project to nest under. It is a new top-level dimension beside `projects`.
 export const PROJECT_CURSORS_KEY = 'projectCursors';
 
-// The one-shot marker that forces the first parent-aware fetch after a store
-// predates parent tracking. It lives on the PROJECT node (projects.<name>.
-// fullScanPending): a single container-level flag was consumed by whichever
-// project synced first, leaving every other project blind. Absent = pending.
 export const FULL_SCAN_PENDING_KEY = 'fullScanPending';
 
 export function str(value: unknown): string {
@@ -41,8 +24,9 @@ export function stringOrNull(value: unknown): string | null {
   return value === null || typeof value === 'string' ? value : null;
 }
 
-// The projects map of a container, created on demand.
-export function readProjectsMap(container: Record<string, unknown>): Record<string, unknown> {
+export function readProjectsMap(
+  container: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(container[PROJECTS_KEY]) ? container[PROJECTS_KEY] : {};
 }
 
@@ -73,7 +57,9 @@ export function ensureProjectNode(
   return projects[name] as Record<string, unknown>;
 }
 
-export function entityMap(node: Record<string, unknown>): Record<string, unknown> {
+export function entityMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(node[ENTITIES_KEY]) ? node[ENTITIES_KEY] : {};
 }
 
@@ -86,7 +72,9 @@ export function ensureEntityMap(
   return node[ENTITIES_KEY] as Record<string, unknown>;
 }
 
-export function portsMap(node: Record<string, unknown>): Record<string, unknown> {
+export function portsMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(node[PORTS_KEY]) ? node[PORTS_KEY] : {};
 }
 
@@ -96,6 +84,21 @@ export function portNode(
 ): Record<string, unknown> | null {
   const raw = portsMap(node)[portId];
   return isRecord(raw) ? raw : null;
+}
+
+export function identitiesMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  return isRecord(node[IDENTITIES_KEY]) ? node[IDENTITIES_KEY] : {};
+}
+
+export function ensureIdentitiesMap(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isRecord(node[IDENTITIES_KEY])) {
+    node[IDENTITIES_KEY] = {};
+  }
+  return node[IDENTITIES_KEY] as Record<string, unknown>;
 }
 
 export function ensurePortNode(
@@ -112,7 +115,9 @@ export function ensurePortNode(
   return ports[portId] as Record<string, unknown>;
 }
 
-export function itemsMap(port: Record<string, unknown>): Record<string, unknown> {
+export function itemsMap(
+  port: Record<string, unknown>,
+): Record<string, unknown> {
   return isRecord(port[ITEMS_KEY]) ? port[ITEMS_KEY] : {};
 }
 
@@ -144,8 +149,6 @@ export function mapBase(raw: unknown): TaskData | null {
   });
 }
 
-// A stored port item, as the core's MirrorItem. A malformed entry yields null
-// rather than a half-read item.
 export function mapMirrorItem(raw: unknown): MirrorItem | null {
   if (!isRecord(raw)) {
     return null;
@@ -159,6 +162,7 @@ export function mapPortState(
 ): PortState {
   return {
     provider: typeof raw.provider === 'string' ? raw.provider : portId,
+    project: typeof raw.project === 'string' ? raw.project : '',
     lastPoll: stringOrNull(raw.lastPoll),
     lanes: stringMap(raw.lanes),
   };

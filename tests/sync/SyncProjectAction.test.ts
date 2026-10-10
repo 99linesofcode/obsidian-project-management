@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../src/sync/SyncProjectAction.js';
 import type { DetectNoteRenamesAction } from '../../src/sync/DetectNoteRenamesAction.js';
-import type { CleanupNoteFrontmatterAction } from '../../src/sync/CleanupNoteFrontmatterAction.js';
 import type { EnsureProjectBoardAction } from '../../src/projects/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../src/sync/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../src/todos/MirrorTodoStatusAction.js';
@@ -12,8 +11,7 @@ import type {
 } from '../../src/projects/ReconcileProjectLifecycleAction.js';
 import type { SyncChecklistAction } from '../../src/todos/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../src/tasks/CompleteTaskCascadeAction.js';
-import type { SyncGithubTasksAction } from '../../src/github/SyncGithubTasksAction.js';
-import type { SyncTodoistTasksAction } from '../../src/todoist/SyncTodoistTasksAction.js';
+import type { SyncHalfFactory } from '../../src/sync/SyncHalves.js';
 import type { ProjectNoteData } from '../../src/shared/ProjectNoteData.js';
 import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { EntityRecord } from '../../src/shared/SyncStatePort.js';
@@ -21,9 +19,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports and at every composed step, recording into one shared
-// events array so the chain's step order and its error isolation are what's
-// under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -129,14 +124,14 @@ function projectNote(
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     archivedAt,
-    pm: 'github',
-    url: 'https://github.com/acme/widgets',
-    board: 'https://github.com/orgs/acme/projects/1',
+    connections: {
+      github: { tool: 'github', project: 'https://github.com/acme/widgets' },
+      todoist: { tool: 'todoist', project: 'P1' },
+    },
+    connectionErrors: [],
   };
 }
 
-// A tracked issue's registry entity; the deletion sweep reads only its note
-// path, so the base content is immaterial here.
 function status(notePath: string): EntityRecord {
   return entityRecord({ id: 'entity-42', notePath });
 }
@@ -172,11 +167,6 @@ function harness(options: HarnessOptions = {}) {
   lifecycle.frozen =
     (vault.projectNotes[0]?.archivedAt ?? null) !== null ||
     (options.state?.closed ?? false);
-  const cleanup = {
-    execute: async () => {
-      events.push('cleanup');
-    },
-  } as unknown as CleanupNoteFrontmatterAction;
   const renames = {
     execute: async () => {
       events.push('renames');
@@ -202,7 +192,7 @@ function harness(options: HarnessOptions = {}) {
     execute: async () => {
       events.push('todoist');
     },
-  } as unknown as SyncTodoistTasksAction;
+  };
   const handleDeleted = {
     execute: async (input: { notePath: string }) => {
       events.push(`delete:${input.notePath}`);
@@ -217,19 +207,39 @@ function harness(options: HarnessOptions = {}) {
       } as unknown as EnsureProjectBoardAction)
     : undefined;
 
+  const halfFactory: SyncHalfFactory = {
+    create: (slug, connection) => {
+      if (connection.tool === 'github') {
+        return {
+          connectionSlug: slug,
+          requiresBoard: true,
+          execute: (input) => sweep.execute(input),
+        };
+      }
+      if (connection.tool === 'todoist') {
+        return {
+          connectionSlug: slug,
+          requiresBoard: false,
+          execute: async () => {
+            await todoist.execute();
+          },
+        };
+      }
+      return null;
+    },
+  };
+
   const action = new SyncProjectAction(
     vault,
     syncState,
     probe as unknown as ProbeProjectsAction,
     lifecycle as unknown as ReconcileProjectLifecycleAction,
     renames,
-    sweep as unknown as SyncGithubTasksAction,
+    halfFactory,
     cascade,
     checklist,
     mirrorStatus,
-    todoist,
     handleDeleted,
-    cleanup,
     ensureBoard,
   );
 
@@ -243,7 +253,7 @@ const openState: ProjectStateData = {
 };
 
 describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
-  it('runs the frontmatter cleanup first, then the steps in order', async () => {
+  it('runs the steps in order', async () => {
     const h = harness({
       state: openState,
       taken: ['Projecten/Acme Widgets/taken/42-fix-the-bug.md'],
@@ -253,7 +263,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
-      'cleanup',
       'lifecycle',
       'renames',
       'sweep',
@@ -295,12 +304,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
           h.probe.fail = true;
         },
         assert: (h) => {
-          expect(h.events).toEqual([
-            'cleanup',
-            'lifecycle',
-            'renames',
-            'todoist',
-          ]);
+          expect(h.events).toEqual(['lifecycle', 'renames', 'todoist']);
         },
       },
       {
@@ -310,10 +314,10 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
         },
         assert: (h) => {
           expect(h.events).toEqual([
-            'cleanup',
             'lifecycle',
             'renames',
             'sweep',
+            'todoist',
           ]);
         },
       },
@@ -350,7 +354,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
 
       await h.action.execute('Acme Widgets');
 
-      expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames']);
+      expect(h.events).toEqual(['lifecycle', 'renames']);
     }
   });
 
@@ -359,7 +363,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events).toEqual(['cleanup', 'lifecycle', 'renames', 'todoist']);
+    expect(h.events).toEqual(['lifecycle', 'renames', 'todoist']);
   });
 
   it('sweeps only a gone active-project note, last, after the Todoist half', async () => {
@@ -369,7 +373,6 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
     });
     await gone.action.execute('Acme Widgets');
     expect(gone.events).toEqual([
-      'cleanup',
       'lifecycle',
       'renames',
       'sweep',
@@ -482,8 +485,7 @@ describe('SYNC-8 — the chain settles: a second pass writes nothing', () => {
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events.slice(0, 3)).toEqual([
-      'cleanup',
+    expect(h.events.slice(0, 2)).toEqual([
       'ensureBoard:Acme Widgets',
       'lifecycle',
     ]);

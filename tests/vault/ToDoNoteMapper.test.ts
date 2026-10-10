@@ -97,9 +97,9 @@ describe('TODO-1 — a template is rendered into the to-do', () => {
 
   it('replaces {{time}} with the sync time and appends missing managed fields', () => {
     const stamped = ['---', 'created: {{date}} {{time}}', '---'].join('\n');
-    expect(
-      ToDoNoteMapper.render(stamped, input, context).content,
-    ).toContain('created: 2026-09-18 12:00');
+    expect(ToDoNoteMapper.render(stamped, input, context).content).toContain(
+      'created: 2026-09-18 12:00',
+    );
 
     const minimal = ['---', 'status:', '---'].join('\n');
     expect(ToDoNoteMapper.render(minimal, input, context).content).toBe(
@@ -121,22 +121,23 @@ describe('TODO-1 — a template is rendered into the to-do', () => {
       'no frontmatter here',
       ['---', 'status:', ''].join('\n'),
     ]) {
-      expect(ToDoNoteMapper.render(bad, input, context).content, String(bad)).toBe(
-        fallback,
-      );
+      expect(
+        ToDoNoteMapper.render(bad, input, context).content,
+        String(bad),
+      ).toBe(fallback);
     }
   });
 });
 
 describe('TODO-2 — a to-do note parses back to its state', () => {
   it('reads status, completed and affiliation from the rendered note', () => {
-    expect(ToDoNoteParser.parse(ToDoNoteMapper.map(input, context).content)).toEqual(
-      {
-        status: 'open',
-        completed: null,
-        affiliation: ['[[_Acme Widgets]]', '[[42-fix-the-bug]]'],
-      },
-    );
+    expect(
+      ToDoNoteParser.parse(ToDoNoteMapper.map(input, context).content),
+    ).toEqual({
+      status: 'open',
+      completed: null,
+      affiliation: ['[[_Acme Widgets]]', '[[42-fix-the-bug]]'],
+    });
 
     const completed = ToDoNoteMapper.map(input, {
       ...context,

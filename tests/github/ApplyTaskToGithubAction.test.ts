@@ -3,14 +3,13 @@ import { ApplyTaskToGithubAction } from '../../src/github/ApplyTaskToGithubActio
 import { toIssueBody } from '../../src/vault/Checklist.js';
 import { hash } from '../../src/shared/hash.js';
 import type { GithubTaskData } from '../../src/github/GithubTaskData.js';
+import type { BoardStatusData } from '../../src/shared/BoardStatusData.js';
 import type { ProjectIdentityData } from '../../src/shared/ProjectIdentityData.js';
 import type { TaskData } from '../../src/shared/TaskData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { entityRecord, taskData } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: record the writes the writer asks for, so its field-level
-// gates (write only what differs) and its base advance are what's under test.
 class FakeProjectManagement implements ProjectManagementPort {
   updateCalls: Array<{ url: string; title: string; body: string }> = [];
   stateCalls: Array<{ url: string; state: 'open' | 'closed' }> = [];
@@ -35,13 +34,11 @@ class FakeProjectManagement implements ProjectManagementPort {
     this.stateCalls.push({ url, state });
     return issue({ url, state });
   }
-  async setBoardStatus(
-    _projectNodeId: string,
-    _statusFieldId: string,
-    issueUrl: string,
-    optionId: string,
-  ): Promise<void> {
-    this.boardStatusCalls.push({ issueUrl, optionId });
+  async setBoardStatus(status: BoardStatusData): Promise<void> {
+    this.boardStatusCalls.push({
+      issueUrl: status.issueUrl,
+      optionId: status.statusOptionId,
+    });
   }
   async addBoardItem(projectNodeId: string, issueUrl: string): Promise<void> {
     this.addBoardItemCalls.push({ projectNodeId, issueUrl });
@@ -90,7 +87,22 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async adoptBoard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -125,7 +137,6 @@ function issue(overrides: Partial<GithubTaskData> = {}): GithubTaskData {
   };
 }
 
-// The winning task (real body) or the raw remote view; both are canonical.
 function task(overrides: Partial<TaskData> = {}): TaskData {
   return taskData({
     id: 'uuid-42',
@@ -162,6 +173,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ title: 'Fix the bug', body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -181,6 +193,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task(),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -198,6 +211,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ completedAt: null }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -215,6 +229,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ completedAt: '' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -232,6 +247,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: 'Building' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -251,6 +267,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: 'Building' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -268,6 +285,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: '' }),
       hasCard: false,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -290,6 +308,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: '' }),
       hasCard: false,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -307,6 +326,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ status: 'Building' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -325,6 +345,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ title: 'Fix the Bug!', body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -348,6 +369,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -372,6 +394,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ body: 'The bug happens on resize.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -403,6 +426,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task(),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 
@@ -432,6 +456,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
         current: task({ body: 'Old body.' }),
         hasCard: true,
         projectName: 'Acme Widgets',
+        connectionSlug: 'github',
         syncedAt: '2026-09-18T12:00:00Z',
       }),
     ).rejects.toThrow('boom');
@@ -463,6 +488,7 @@ describe('SYNC-1 — a vault change flows outward to GitHub', () => {
       current: task({ body: 'Old body.' }),
       hasCard: true,
       projectName: 'Acme Widgets',
+      connectionSlug: 'github',
       syncedAt: '2026-09-18T12:00:00Z',
     });
 

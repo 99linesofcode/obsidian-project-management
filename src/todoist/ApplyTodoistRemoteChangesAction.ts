@@ -23,60 +23,31 @@ import type { RelocateTaskStatusAction } from '../tasks/RelocateTaskStatusAction
 
 export interface ApplyTodoistRemoteChangesInput {
   projectName: string;
+  connectionSlug: string;
+  githubConnectionSlug: string | null;
   syncedAt: string;
-  // The pass's shared Todoist snapshot. The half fetched the active and
-  // completed sets once; this absorber never lists the project itself.
   snapshot: TodoistTaskSnapshotData;
 }
 
-// The vault-owned fields the verdict reads off a mirrored note: its lane (the
-// status property) and its affiliation links.
 interface VaultFields {
   status: string;
   affiliation: string[];
 }
 
-// Everything the per-item verdict needs beyond the item itself.
 interface VerdictContext {
   projectName: string;
+  connectionSlug: string;
   syncedAt: string;
   sections: Record<string, string>;
   defaultLane: string | null;
   doneLane: string;
   hasLanes: boolean;
-  // A twin id's note stem, so a remote parent id resolves to the affiliation
-  // link a vault note carries.
   stemByTwinId: Map<string, string>;
-  // A twin id's entity uuid, so structural comparisons speak the canonical
-  // parent representation the base stores.
   uuidByTwinId: Map<string, string>;
-  // An entity's github handle, so a lane pull can propagate the move onto
-  // GitHub. The handle no longer lives on the entity.
   githubHandleByEntity: Map<string, string>;
+  githubConnectionSlug: string | null;
 }
 
-// UC: apply Todoist -> vault verdicts for anchored items (t5). An anchored item
-// is one whose todoist handle is in the registry; the note it mirrors is at
-// that record's notePath. On each pass the fetched remote state (the active set
-// plus the completed-since window) is compared to the mirror's base per field
-// (dt-08), because a hash alone cannot say which field moved:
-//
-//   - content rename  -> rename the vault note through the existing rename
-//                        propagation (checklists relink, bookkeeping follows)
-//   - lane (section)  -> rewrite the note's status and move the board card
-//                        (top-level tasks only; a subtask inherits its parent's
-//                        section, dt-02)
-//   - parent change   -> rewrite the note's affiliation
-//
-// A field changed on both sides is a conflict: the vault wins (dt-01), so the
-// remote value is not applied and the projection re-pushes the vault state on
-// this tick; the base is re-stamped either way so the next poll does not
-// re-trigger. Completion and reopen (a twin completed, or active again while
-// its base says completed) are owned by ApplyTodoistCompletionAction (t4) and
-// are not revisited here. A twin absent from both the active set and the
-// completed window is a Todoist-side deletion when its note survives (t6): the
-// record is evicted so the projection re-creates the twin in the same tick
-// (vault wins); a missing note is left to PropagateTodoistDeletionsAction.
 export class ApplyTodoistRemoteChangesAction {
   constructor(
     private readonly vault: VaultPort,
@@ -90,14 +61,12 @@ export class ApplyTodoistRemoteChangesAction {
   async execute(input: ApplyTodoistRemoteChangesInput): Promise<void> {
     const portState = await this.syncState.getPortState(
       input.projectName,
-      'todoist',
+      input.connectionSlug,
     );
     const sections = portState?.lanes ?? {};
 
-    // The pass's snapshot was fetched upstream, before any vault write.
     const { completed, active } = input.snapshot;
     const twinById = new Map<string, TodoistTaskData>();
-    // Completed first, then active, so a reopened twin reads as active.
     for (const twin of completed) {
       twinById.set(twin.id, twin);
     }
@@ -105,29 +74,40 @@ export class ApplyTodoistRemoteChangesAction {
       twinById.set(twin.id, twin);
     }
 
-    const identity = await this.syncState.getIdentity(input.projectName);
+    const identity =
+      input.githubConnectionSlug === null
+        ? null
+        : await this.syncState.getIdentity(
+            input.projectName,
+            input.githubConnectionSlug,
+          );
     const hasLanes = (identity?.statusOptions.length ?? 0) > 0;
     const defaultLane = identity?.statusOptions[0]?.name ?? null;
 
-    const records = await todoistEntries(this.syncState, input.projectName);
+    const records = await todoistEntries(
+      this.syncState,
+      input.connectionSlug,
+      input.projectName,
+    );
     const stemByTwinId = new Map<string, string>();
     const uuidByTwinId = new Map<string, string>();
     for (const entry of records) {
       stemByTwinId.set(entry.handle, stemOf(entry.record.notePath));
       uuidByTwinId.set(entry.handle, entry.record.id);
     }
-    // The github handle an entity holds, so a remote lane drag can mirror onto
-    // GitHub. The handle is a port item now, not an entity field.
     const githubHandleByEntity = new Map<string, string>();
-    for (const { handle, item } of await this.syncState.listMirrorItems(
-      input.projectName,
-      'github',
-    )) {
-      githubHandleByEntity.set(item.entityId, handle);
+    if (input.githubConnectionSlug !== null) {
+      for (const { handle, item } of await this.syncState.listMirrorItems(
+        input.projectName,
+        input.githubConnectionSlug,
+      )) {
+        githubHandleByEntity.set(item.entityId, handle);
+      }
     }
 
     const context: VerdictContext = {
       projectName: input.projectName,
+      connectionSlug: input.connectionSlug,
       syncedAt: input.syncedAt,
       sections,
       defaultLane,
@@ -136,31 +116,20 @@ export class ApplyTodoistRemoteChangesAction {
       stemByTwinId,
       uuidByTwinId,
       githubHandleByEntity,
+      githubConnectionSlug: input.githubConnectionSlug,
     };
 
     for (const entry of records) {
       const twin = twinById.get(entry.handle);
       if (!twin) {
-        // Absent from both the active set and the completed-since window. A
-        // completed twin naturally ages out of that window and is never in the
-        // active set, so a completed base says it is a persisted completed
-        // twin, not a deletion. Evicting it would re-create the twin every
-        // tick — the dt-17 churn — so a completed record is left untouched.
         if (hasCompletionStamp(entry.base)) {
           continue;
         }
-        // A missing note is a vault deletion (PropagateTodoistDeletionsAction
-        // owns it, later in the same tick). When the note survives, the twin
-        // was deleted on the Todoist side: the vault wins, so the record is
-        // evicted and the projection re-creates the twin later in this same
-        // tick — the self-heal.
         if (await this.vault.getNoteByPath(entry.record.notePath)) {
           await this.syncState.removeEntity(entry.record.id);
         }
         continue;
       }
-      // Completion and reopen are the completion action's (t4): a completed
-      // twin, or an active twin whose base says completed, is skipped here.
       if (twin.isCompleted || hasCompletionStamp(entry.base)) {
         continue;
       }
@@ -173,8 +142,6 @@ export class ApplyTodoistRemoteChangesAction {
       );
     }
   }
-
-
 
   private async applyVerdict(
     record: EntityRecord,
@@ -193,40 +160,33 @@ export class ApplyTodoistRemoteChangesAction {
     }
 
     const isTask = isTaskPath(record.notePath, context.projectName);
-    // A top-level task's lane is its section; a subtask inherits its parent's
-    // section (dt-02), so its lane is not a controlled field.
     const topLevel = twin.parentId === null;
     const laneControlled = isTask && topLevel && context.hasLanes;
-    // The lane the twin actually sits in. A completed twin never reaches here
-    // (the completion action owns it), so the lane is its section.
     const remoteLane = laneControlled
-      ? (laneForSection(context.sections, twin.sectionId) ?? context.defaultLane)
+      ? (laneForSection(context.sections, twin.sectionId) ??
+        context.defaultLane)
       : null;
     const remoteParent = parentUuid(context, twin.parentId);
 
-    // The canonical base: the stored diff view's content. An empty status is
-    // the canonical encoding for "lane not controlled" (a to-do or a subtask);
-    // a null parent is a top-level item.
     const baseContent = base?.title ?? '';
-    const baseLane = base?.status === undefined || base.status === '' ? null : base.status;
+    const baseLane =
+      base?.status === undefined || base.status === '' ? null : base.status;
     const baseParent = base?.parent ?? null;
 
     const contentChanged = twin.content !== baseContent;
-    // Only a lane-controlled item (a top-level task with lanes) has a lane to
-    // compare; a to-do or subtask carries the open/completed vocabulary in its
-    // base, which is not a lane, so comparing it would restamp the base every
-    // pass (the projection writes 'open'/'completed' there).
     const laneChanged =
       laneControlled && baseLane !== null && remoteLane !== baseLane;
     const parentChanged = remoteParent !== baseParent;
 
     const vaultLane = laneControlled ? fields.status : null;
-    const vaultParent = parentUuidFromAffiliation(fields.affiliation, context, isTask);
+    const vaultParent = parentUuidFromAffiliation(
+      fields.affiliation,
+      context,
+      isTask,
+    );
     const localContentChanged =
       slugify(baseContent) !== normalizedStem(record.notePath);
     const localLaneChanged = baseLane !== null && vaultLane !== baseLane;
-    // An unresolved parent link (its twin has no anchored note) is unknown, not
-    // a change: comparing it would read every unanchored parent as a vault edit.
     const localParentChanged =
       vaultParent !== undefined && vaultParent !== baseParent;
 
@@ -235,9 +195,6 @@ export class ApplyTodoistRemoteChangesAction {
       localContentChanged || localLaneChanged || localParentChanged;
 
     if (remoteChanged && localChanged) {
-      // The vault wins: leave the note alone and re-stamp from the remote, so
-      // the next poll reads it as settled. The projection re-pushes the vault
-      // state later in this same tick.
       await this.stamp(
         record,
         handle,
@@ -246,6 +203,7 @@ export class ApplyTodoistRemoteChangesAction {
         remoteLane,
         remoteParent,
         context.projectName,
+        context.connectionSlug,
       );
       return;
     }
@@ -269,13 +227,11 @@ export class ApplyTodoistRemoteChangesAction {
         remoteLane,
         remoteParent,
         context.projectName,
+        context.connectionSlug,
       );
     }
   }
 
-  // Renames the note to follow the remote content, then propagates the rename
-  // through the existing machinery: a task note moves its registry record, a
-  // to-do relinks its parent checklist line. Returns the new path.
   private async renameNote(
     oldPath: string,
     twin: TodoistTaskData,
@@ -302,10 +258,6 @@ export class ApplyTodoistRemoteChangesAction {
     return newPath;
   }
 
-  // A remote lane drag: rewrite the note's status, then mirror the move onto
-  // GitHub. An issue-backed note propagates its status (issue state + board
-  // card + baseline); a captured draft has no github handle, so only the note
-  // moves.
   private async applyLane(
     notePath: string,
     lane: string,
@@ -319,20 +271,17 @@ export class ApplyTodoistRemoteChangesAction {
     await this.vault.writeNote(notePath, withStatus(note.content, lane));
 
     const url = context.githubHandleByEntity.get(record.id) ?? '';
-    if (url !== '') {
+    if (url !== '' && context.githubConnectionSlug !== null) {
       await this.propagateStatus.execute({
         url,
         statusName: lane,
         notePath,
         projectName: context.projectName,
+        connectionSlug: context.githubConnectionSlug,
       });
     }
   }
 
-  // A remote parent change: rewrite the note's affiliation. A task gains the
-  // slice it was dragged under, or drops it when dragged back to top level. A
-  // to-do's parent drag is not applied — the vault stays the source of truth
-  // for to-do structure and the projection re-pushes it.
   private async applyParent(
     notePath: string,
     remoteParentTwin: string | null,
@@ -345,7 +294,6 @@ export class ApplyTodoistRemoteChangesAction {
     let parentLink: string | null = null;
     if (remoteParentTwin !== null) {
       parentLink = context.stemByTwinId.get(remoteParentTwin) ?? null;
-      // The parent has no anchored note yet; wait for the next tick.
       if (parentLink === null) {
         return;
       }
@@ -356,10 +304,6 @@ export class ApplyTodoistRemoteChangesAction {
       return;
     }
 
-    // The gate IS the diff: the note's current affiliation already names the
-    // desired parent, so the rewrite is skipped. This keeps a note whose
-    // affiliation was just rewritten (by the capture pass or the projection)
-    // out of a redundant write.
     const currentLinks = affiliationTargets(
       parseAffiliation(
         splitFrontmatter(note.content)?.fields.get('affiliation'),
@@ -379,8 +323,6 @@ export class ApplyTodoistRemoteChangesAction {
     await this.vault.writeNote(notePath, withAffiliation(note.content, value));
   }
 
-  // Writes the todoist mirror item's base as a diff view. The base is what the
-  // next poll compares against, so stamping it here settles the item.
   private async stamp(
     record: EntityRecord,
     handle: string,
@@ -389,6 +331,7 @@ export class ApplyTodoistRemoteChangesAction {
     remoteLane: string | null,
     remoteParent: string | null,
     projectName: string,
+    connectionSlug: string,
   ): Promise<void> {
     const view = toDiffViewWithBody(
       new TaskData({
@@ -405,27 +348,23 @@ export class ApplyTodoistRemoteChangesAction {
         updatedAt: twin.updatedAt || null,
       }),
     );
-    await this.syncState.setMirrorItem(projectName, 'todoist', handle, {
+    await this.syncState.setMirrorItem(projectName, connectionSlug, handle, {
       entityId: record.id,
       base: view,
     });
   }
 }
 
-// The entity uuid a parent twin id names, or null for a top-level item. Used so
-// the canonical base's parent is a uuid on both sides.
-function parentUuid(context: VerdictContext, twinId: string | null): string | null {
+function parentUuid(
+  context: VerdictContext,
+  twinId: string | null,
+): string | null {
   if (twinId === null) {
     return null;
   }
   return context.uuidByTwinId.get(twinId) ?? null;
 }
 
-// The parent entity uuid a note's affiliation implies. A task's first
-// non-project link is its slice; a to-do's second is its parent to-do when
-// nested, else its task. Returns null when the note has no parent link, and
-// undefined when it has one whose twin has no anchored note (unknown — not a
-// change).
 function parentUuidFromAffiliation(
   affiliation: string[],
   context: VerdictContext,
@@ -443,8 +382,6 @@ function parentUuidFromAffiliation(
   return context.uuidByTwinId.get(twinId) ?? undefined;
 }
 
-// A task note's rename target: the project's taken folder, keeping any leading
-// `<remoteId>-` prefix an issue-backed note carries (a captured draft has none).
 function taskRenameTarget(
   projectName: string,
   oldPath: string,
@@ -456,8 +393,6 @@ function taskRenameTarget(
   return `Projecten/${projectName}/taken/${stem}.md`;
 }
 
-// Rewrites just the affiliation line of a note, preserving every other field
-// and the body. Mirrors withStatus for task notes.
 function withAffiliation(content: string, value: string): string {
   return rewriteFrontmatterFields(
     content,
@@ -481,8 +416,6 @@ function readVaultFields(content: string): VaultFields | null {
   };
 }
 
-
 function isTaskPath(path: string, projectName: string): boolean {
   return path.startsWith(`Projecten/${projectName}/taken/`);
 }
-

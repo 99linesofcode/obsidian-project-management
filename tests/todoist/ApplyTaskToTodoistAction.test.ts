@@ -13,10 +13,6 @@ import type { VaultPort } from '../../src/shared/VaultPort.js';
 import { entityRecord, taskData, todoistTask } from '../helpers/records.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the vault records the anchor writes, the task manager
-// holds the project's tasks and records every mutation, and the registry holds
-// the per-note entity records. The writer's field gates and its base advance
-// are what's under test.
 class FakeVault implements VaultPort {
   modifiedTimes = new Map<string, string>();
 
@@ -169,8 +165,6 @@ function setup() {
   return { action, taskManager, vault, syncState };
 }
 
-// The tracked entity record for the task note, at the given todoist handle and
-// base. A null handle means the note is not yet mirrored to Todoist.
 function seedRecord(
   syncState: FakeSyncState,
   handle: string | null,
@@ -184,6 +178,7 @@ function seedRecord(
 
 const base = {
   projectId: 'P1',
+  connectionSlug: 'todoist',
   sectionId: 'S1',
   parentId: null,
   labels: ['task'],
@@ -208,7 +203,9 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
       expect(h.taskManager.ensureLabelCalls).toEqual(['task']);
       expect(h.vault.writes).toEqual([]);
       expect(h.syncState.handleOf('uuid-42', 'todoist')).toBe('T1');
-      expect(h.syncState.baseOf('uuid-42', 'todoist')?.title).toBe('Fix the bug');
+      expect(h.syncState.baseOf('uuid-42', 'todoist')?.title).toBe(
+        'Fix the bug',
+      );
       expect(h.syncState.baseOf('uuid-42', 'todoist')?.status).toBe('Building');
       expect(h.syncState.handleOf('uuid-42', 'github')).toBe(url);
       expect(id).toBe('T1');
@@ -343,7 +340,15 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
           expected: [{ id: 'T9', to: { parentId: 'T-parent' } }],
         },
       ];
-      for (const { name, seeded, task: t, current, sectionId, parentId, expected } of cases) {
+      for (const {
+        name,
+        seeded,
+        task: t,
+        current,
+        sectionId,
+        parentId,
+        expected,
+      } of cases) {
         const h = setup();
         seedRecord(h.syncState, 'T9', seeded);
 
@@ -465,13 +470,8 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
       h.syncState.seed(entityRecord({ id: 'task-uuid', notePath }), {
         todoist: { handle: 'T9' },
       });
-      h.syncState.seed(
-        entityRecord({ id: 'todo-uuid', notePath: todoPath }),
-      );
-      h.vault.notes.set(
-        todoPath,
-        '---\nid: todo-uuid\nstatus: open\n---\n',
-      );
+      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }));
+      h.vault.notes.set(todoPath, '---\nid: todo-uuid\nstatus: open\n---\n');
 
       const id = await h.action.executeToDo({
         todo: todo(),
@@ -479,6 +479,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -515,6 +516,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9p',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -540,6 +542,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9p',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -561,6 +564,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         projectId: 'P1',
         parentId: 'T9',
         projectName,
+        connectionSlug: 'todoist',
         notePath: 'note-edit-step-one',
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -573,9 +577,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
 
     it('creates a top-level to-do in its lane section when it has no parent twin', async () => {
       const h = setup();
-      h.syncState.seed(
-        entityRecord({ id: 'todo-uuid', notePath: todoPath }),
-      );
+      h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: todoPath }));
 
       const id = await h.action.executeToDo({
         todo: todo(),
@@ -584,6 +586,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
         parentId: null,
         sectionId: 'S2',
         projectName,
+        connectionSlug: 'todoist',
         notePath: todoPath,
         syncedAt: '2026-09-18T12:00:00Z',
       });
@@ -638,6 +641,7 @@ describe('SYNC-1 — a vault task flows outward to Todoist', () => {
           parentId: null,
           sectionId: 'S2',
           projectName,
+          connectionSlug: 'todoist',
           notePath: todoPath,
           syncedAt: '2026-09-18T12:00:00Z',
         });

@@ -6,13 +6,11 @@ import type {
   PortState,
 } from '../../src/shared/SyncStatePort.js';
 
-// A canonical task with sensible defaults, so a test names only the fields it
-// cares about. TaskData is a class, so the factory constructs it: the registry,
-// the diff views and the mappers all share one shape.
 export function taskData(overrides: Partial<TaskData> = {}): TaskData {
   return new TaskData({
     id: overrides.id ?? 'task-uuid',
-    notePath: overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
+    notePath:
+      overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     mirrors: overrides.mirrors ?? {},
     title: overrides.title ?? 'Fix the bug',
     body: overrides.body ?? '',
@@ -25,8 +23,6 @@ export function taskData(overrides: Partial<TaskData> = {}): TaskData {
   });
 }
 
-// A hub entity: its uuid and where its note lives. The mirrors are NOT on the
-// entity in v3 — a port item holds them.
 export function entityRecord(
   overrides: Partial<EntityRecord> = {},
 ): EntityRecord {
@@ -37,7 +33,6 @@ export function entityRecord(
   };
 }
 
-// One mirror item: the hub entity it belongs to and its last-synced diff view.
 export function mirrorItem(
   entityId: string,
   base: TaskData | null = null,
@@ -45,17 +40,15 @@ export function mirrorItem(
   return { entityId, base };
 }
 
-// One port's per-project state, with provider-agnostic defaults.
 export function portState(overrides: Partial<PortState> = {}): PortState {
   return {
     provider: overrides.provider ?? 'todoist',
+    project: overrides.project ?? '',
     lastPoll: overrides.lastPoll ?? null,
     lanes: overrides.lanes ?? {},
   };
 }
 
-// A Todoist task with sensible defaults. The provider clocks default to empty
-// strings so a test names only the field it cares about.
 export function todoistTask(
   overrides: Partial<TodoistTaskData> = {},
 ): TodoistTaskData {

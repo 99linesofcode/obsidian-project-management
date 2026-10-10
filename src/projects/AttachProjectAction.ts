@@ -1,23 +1,52 @@
-import type { AttachProjectData } from '../shared/AttachProjectData.js';
-import type { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
+import { ProjectIdentityData } from '../shared/ProjectIdentityData.js';
 import { DomainError } from '../shared/DomainError.js';
 import type { ProjectManagementPort } from '../shared/ProjectManagementPort.js';
+import { deriveBoardChoice } from './deriveBoardChoice.js';
+import { repoNameFromUrl } from './repoNameFromUrl.js';
 
-// UC1: attach a project. Resolves a project note's sync frontmatter to its
-// code-host identities. Skips providers this plugin does not handle; a note
-// claiming pm: github without a board url is a config error.
+export interface AttachProjectInput {
+  repoUrl: string;
+}
+
 export class AttachProjectAction {
   constructor(private readonly port: ProjectManagementPort) {}
 
-  async execute(data: AttachProjectData): Promise<ProjectIdentityData | null> {
-    if (data.pm !== 'github') {
-      return null;
-    }
-    if (!data.boardUrl) {
+  async execute(data: AttachProjectInput): Promise<ProjectIdentityData> {
+    if (!data.repoUrl) {
       throw new DomainError(
-        'AttachProjectAction: boardUrl is required on a note claiming pm: github',
+        'AttachProjectAction: repoUrl is required on a github connection',
       );
     }
-    return this.port.fetchProjectIdentity(data);
+
+    const repoName = repoNameFromUrl(data.repoUrl);
+    const { repoNodeId, boards } = await this.port.fetchRepoBoards(
+      data.repoUrl,
+    );
+    const choice = deriveBoardChoice(repoName, boards);
+    if (choice.kind === 'ambiguous') {
+      throw new DomainError(
+        `AttachProjectAction: repository ${data.repoUrl} has several boards and none is titled "${repoName}"`,
+      );
+    }
+    if (choice.kind === 'create') {
+      return new ProjectIdentityData({
+        repoUrl: data.repoUrl,
+        repoNodeId,
+        projectNodeId: '',
+        statusFieldId: '',
+        statusOptions: [],
+      });
+    }
+
+    const identity = await this.port.fetchProjectIdentity({
+      repoUrl: data.repoUrl,
+      boardUrl: choice.board.boardUrl,
+    });
+    if (identity === null) {
+      throw new DomainError(
+        `AttachProjectAction: board ${choice.board.boardUrl} could not be resolved`,
+      );
+    }
+    return identity;
   }
 }

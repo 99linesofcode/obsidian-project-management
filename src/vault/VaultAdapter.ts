@@ -4,13 +4,8 @@ import type { VaultPort } from '../shared/VaultPort.js';
 import { folderChainForPath } from './folderChainForPath.js';
 import { projectNoteFromCache } from './projectNoteFromCache.js';
 
-// Registers an Obsidian event ref for cleanup when the plugin unloads. The
-// plugin's registerEvent is injected so the adapter stays decoupled from it.
 export type EventRegistrar = (eventRef: EventRef) => void;
 
-// Implements the vault port against Obsidian's vault. Renames go through
-// app.fileManager.renameFile so backlinks update; writes use modify on an
-// existing file and create otherwise.
 export class VaultAdapter implements VaultPort {
   constructor(
     private readonly app: App,
@@ -28,8 +23,6 @@ export class VaultAdapter implements VaultPort {
   }
 
   async createNote(path: string, content: string): Promise<void> {
-    // Obsidian's create throws when the parent folder is missing, so build
-    // the folder chain first (mkdir -p semantics), then create the note.
     await this.ensureFolders(path);
     await this.app.vault.create(path, content);
   }
@@ -46,8 +39,6 @@ export class VaultAdapter implements VaultPort {
   async renameNote(oldPath: string, newPath: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(oldPath);
     if (file instanceof TFile) {
-      // A rename into a folder that does not exist yet throws, so build the
-      // destination chain first (mkdir -p semantics).
       await this.ensureFolders(newPath);
       await this.app.fileManager.renameFile(file, newPath);
     }
@@ -56,7 +47,6 @@ export class VaultAdapter implements VaultPort {
   async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
     const from = fromPrefix.endsWith('/') ? fromPrefix : `${fromPrefix}/`;
     const to = toPrefix.endsWith('/') ? toPrefix : `${toPrefix}/`;
-    // Every file type moves — project folders hold .base files and images too.
     const files = this.app.vault
       .getFiles()
       .filter((file) => file.path.startsWith(from));
@@ -81,8 +71,6 @@ export class VaultAdapter implements VaultPort {
       .map((file) => file.path);
   }
 
-  // The TFile's stat mtime, rendered as ISO 8601 so the conflict ladder can
-  // compare it against a provider's timestamps.
   async modifiedTime(path: string): Promise<string | null> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
@@ -94,14 +82,11 @@ export class VaultAdapter implements VaultPort {
   async trashNote(path: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (file instanceof TFile) {
-      // system: false keeps the file in the vault-internal .trash, recoverable.
-      await this.app.vault.trash(file, false);
+      await this.app.fileManager.trashFile(file);
     }
   }
 
   async findProjectNotes(): Promise<ProjectNoteData[]> {
-    // Reads each markdown file's frontmatter cache (no full-file reads) and
-    // keeps the notes that declare a pm property under Projecten/ or Archief/.
     const notes: ProjectNoteData[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);
@@ -114,9 +99,6 @@ export class VaultAdapter implements VaultPort {
   }
 
   onNoteChanged(cb: (path: string) => void): void {
-    // Only task notes under Projecten/ are synced; everything else is ignored.
-    // Both modify and create are watched: a note the plugin materialises during
-    // a poll tick fires 'create', not 'modify', and must enter the same chain.
     const handler = (file: unknown): void => {
       if (
         file instanceof TFile &&
@@ -131,7 +113,6 @@ export class VaultAdapter implements VaultPort {
   }
 
   onNoteDeleted(cb: (path: string) => void): void {
-    // Only task notes under Projecten/ are synced; everything else is ignored.
     const eventRef = this.app.vault.on('delete', (file) => {
       if (
         file instanceof TFile &&
@@ -145,8 +126,6 @@ export class VaultAdapter implements VaultPort {
   }
 
   onNoteRenamed(cb: (oldPath: string, newPath: string) => void): void {
-    // Only task notes under Projecten/ are synced; everything else is ignored.
-    // The file is the note at its new path, so the filter reads the new path.
     const eventRef = this.app.vault.on('rename', (file, oldPath) => {
       if (
         file instanceof TFile &&

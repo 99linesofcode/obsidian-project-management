@@ -7,10 +7,6 @@ import type { ProjectStateData } from '../../src/shared/ProjectStateData.js';
 import type { ProjectManagementPort } from '../../src/shared/ProjectManagementPort.js';
 import { FakeSyncState } from '../helpers/fakeSyncState.js';
 
-// Fakes at the ports: the sync state holds per-project identities and the
-// project management fake records each fleet probe and answers it from a
-// canned state map, so the action's identity resolution and re-keying is what's
-// under test.
 class FakeProjectManagement implements ProjectManagementPort {
   probeCalls: string[][] = [];
   states = new Map<string, ProjectStateData>();
@@ -75,7 +71,22 @@ class FakeProjectManagement implements ProjectManagementPort {
   async createProject(): Promise<never> {
     throw new Error('not used in this test');
   }
+  async fetchRepoBoards(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createBoardWithStatusField(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async listRepoLabels(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async createRepoLabel(): Promise<never> {
+    throw new Error('not used in this test');
+  }
   async fetchViewerProjects(): Promise<never> {
+    throw new Error('not used in this test');
+  }
+  async adoptBoard(): Promise<never> {
     throw new Error('not used in this test');
   }
 }
@@ -108,7 +119,10 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     projectManagement.states.set('PVT_2', state('PVT_2'));
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    const result = await action.execute(['Acme Widgets', 'Other']);
+    const result = await action.execute([
+      { projectName: 'Acme Widgets', connectionSlug: 'github' },
+      { projectName: 'Other', connectionSlug: 'github' },
+    ]);
 
     expect(projectManagement.probeCalls).toEqual([['PVT_1', 'PVT_2']]);
     expect([...result.keys()]).toEqual(['Acme Widgets', 'Other']);
@@ -122,7 +136,10 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     projectManagement.states.set('PVT_1', state('PVT_1'));
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    const result = await action.execute(['Acme Widgets', 'Unattached']);
+    const result = await action.execute([
+      { projectName: 'Acme Widgets', connectionSlug: 'github' },
+      { projectName: 'Unattached', connectionSlug: 'github' },
+    ]);
 
     expect(projectManagement.probeCalls).toEqual([['PVT_1']]);
     expect([...result.keys()]).toEqual(['Acme Widgets']);
@@ -134,7 +151,9 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const projectManagement = new FakeProjectManagement();
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    const result = await action.execute(['Gone']);
+    const result = await action.execute([
+      { projectName: 'Gone', connectionSlug: 'github' },
+    ]);
 
     expect(result.size).toBe(0);
   });
@@ -144,7 +163,10 @@ describe('PRB-1 — a quiet board is not fetched', () => {
     const projectManagement = new FakeProjectManagement();
     const action = new ProbeProjectsAction(projectManagement, syncState);
 
-    const result = await action.execute(['Acme Widgets', 'Other']);
+    const result = await action.execute([
+      { projectName: 'Acme Widgets', connectionSlug: 'github' },
+      { projectName: 'Other', connectionSlug: 'github' },
+    ]);
 
     expect(result.size).toBe(0);
     expect(projectManagement.probeCalls).toEqual([[]]);

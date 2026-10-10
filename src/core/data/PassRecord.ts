@@ -1,0 +1,21 @@
+import type { CanonicalField } from '../canonicalField.js';
+import type { MergeResult } from './MergeResult.js';
+
+export class PassRecord {
+  readonly field: CanonicalField;
+  readonly result: MergeResult;
+  readonly written: readonly string[];
+  readonly skipped: readonly string[];
+
+  constructor(init: {
+    field: CanonicalField;
+    result: MergeResult;
+    written: readonly string[];
+    skipped: readonly string[];
+  }) {
+    this.field = init.field;
+    this.result = init.result;
+    this.written = init.written;
+    this.skipped = init.skipped;
+  }
+}
