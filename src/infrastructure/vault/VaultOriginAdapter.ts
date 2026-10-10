@@ -1,10 +1,11 @@
 import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
-import type { CanonicalField } from '../../core/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../core/data/CanonicalTask.js';
-import { OriginObservation } from '../../core/data/OriginObservation.js';
-import type { OriginPort } from '../../core/ports/OriginPort.js';
+import type { CanonicalField } from '../../domain/canonicalField.js';
+import type { CanonicalFieldWrite } from '../../domain/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../domain/data/CanonicalTask.js';
+import { OriginObservation } from '../../domain/data/OriginObservation.js';
+import type { OriginPort } from '../../domain/ports/OriginPort.js';
+import { slugify } from '../../domain/slugify.js';
 
 interface TaskNote {
   type: string;
@@ -277,13 +278,4 @@ function renderLine(key: string, value: string | null): string {
 function folderOf(path: string): string | null {
   const slash = path.lastIndexOf('/');
   return slash === -1 ? null : path.slice(0, slash);
-}
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }

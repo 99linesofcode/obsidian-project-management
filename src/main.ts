@@ -9,46 +9,46 @@ import {
   type SecretStore,
 } from './app/settings/SecretStorageAdapter.js';
 import { transportFromSecret } from './app/settings/transportFromSecret.js';
-import { ProjectManagementSettingTab } from './app/settings/PluginSettingTab.js';
+import { ProjectManagementSettingTab } from './app/settings/ProjectManagementSettingTab.js';
 import { SeedVaultArtifactsAction } from './app/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './app/SyncScheduler.js';
 import { SyncQueue } from './app/SyncQueue.js';
-import { AttachProjectAction } from './projects/AttachProjectAction.js';
-import type { ProjectSetupFactoryPort } from './core/ports/ProjectSetupFactoryPort.js';
-import type { ProjectSetupPort } from './core/ports/ProjectSetupPort.js';
-import type { IdentityStorePort } from './core/ports/IdentityStorePort.js';
-import { CreateTaskNoteAction } from './core/CreateTaskNoteAction.js';
-import type { CaptureProjectsResult } from './core/CaptureProjectsAction.js';
-import { CaptureProjectsAction } from './core/CaptureProjectsAction.js';
-import { CaptureTasksAction } from './core/CaptureTasksAction.js';
+import { AttachProjectAction } from './domain/actions/AttachProjectAction.js';
+import type { ProjectSetupFactoryPort } from './domain/ports/ProjectSetupFactoryPort.js';
+import type { ProjectSetupPort } from './domain/ports/ProjectSetupPort.js';
+import type { IdentityStorePort } from './domain/ports/IdentityStorePort.js';
+import { CreateTaskNoteAction } from './domain/actions/CreateTaskNoteAction.js';
+import type { CaptureProjectsResult } from './domain/actions/CaptureProjectsAction.js';
+import { CaptureProjectsAction } from './domain/actions/CaptureProjectsAction.js';
+import { CaptureTasksAction } from './domain/actions/CaptureTasksAction.js';
 import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
 import { VaultTaskCaptureAdapter } from './infrastructure/vault/VaultTaskCaptureAdapter.js';
 import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
-import type { CaptureSource } from './core/ports/MirrorAdapterFactoryPort.js';
-import { CompleteTaskCascadeAction } from './tasks/CompleteTaskCascadeAction.js';
-import { DetectNoteRenamesAction } from './sync/DetectNoteRenamesAction.js';
-import { DiscoverProjectsAction } from './projects/DiscoverProjectsAction.js';
-import { EnsureProjectBoardAction } from './projects/EnsureProjectBoardAction.js';
-import { HandleDeletedNoteAction } from './sync/HandleDeletedNoteAction.js';
-import { MirrorTodoStatusAction } from './todos/MirrorTodoStatusAction.js';
-import { RekeyRenamedConnectionsAction } from './projects/RekeyRenamedConnectionsAction.js';
-import { SyncChecklistAction } from './todos/SyncChecklistAction.js';
-import { SyncProjectAction } from './sync/SyncProjectAction.js';
-import { VaultAdapter } from './vault/VaultAdapter.js';
-import { SyncStateAdapter } from './registry/SyncStateAdapter.js';
-import { loadDataSafely } from './registry/loadDataSafely.js';
+import type { CaptureSource } from './domain/ports/MirrorAdapterFactoryPort.js';
+import { CompleteTaskCascadeAction } from './domain/actions/CompleteTaskCascadeAction.js';
+import { DetectNoteRenamesAction } from './domain/actions/DetectNoteRenamesAction.js';
+import { DiscoverProjectsAction } from './domain/actions/DiscoverProjectsAction.js';
+import { EnsureProjectBoardAction } from './domain/actions/EnsureProjectBoardAction.js';
+import { HandleDeletedNoteAction } from './domain/actions/HandleDeletedNoteAction.js';
+import { MirrorTodoStatusAction } from './domain/actions/MirrorTodoStatusAction.js';
+import { RekeyRenamedConnectionsAction } from './domain/actions/RekeyRenamedConnectionsAction.js';
+import { SyncChecklistAction } from './domain/actions/SyncChecklistAction.js';
+import { SyncProjectAction } from './domain/actions/SyncProjectAction.js';
+import { VaultAdapter } from './infrastructure/vault/VaultAdapter.js';
+import { SyncStateAdapter } from './infrastructure/registry/SyncStateAdapter.js';
+import { loadDataSafely } from './infrastructure/registry/loadDataSafely.js';
 import { createTodoistTransport } from './infrastructure/todoist/TodoistTransport.js';
-import { AdapterRegistration } from './core/data/AdapterRegistration.js';
-import type { RegistrationResult } from './core/data/RegistrationResult.js';
-import { registerAdapters } from './core/registerAdapters.js';
+import { AdapterRegistration } from './domain/data/AdapterRegistration.js';
+import type { RegistrationResult } from './domain/data/RegistrationResult.js';
+import { registerAdapters } from './domain/registerAdapters.js';
 import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
-import { AssembleProjectPassAction } from './core/AssembleProjectPassAction.js';
-import { AssembleProjectLifecyclePassAction } from './core/AssembleProjectLifecyclePassAction.js';
-import type { AdapterDescriptor } from './core/AdapterDescriptor.js';
-import type { RegisteredAdapter } from './core/data/RegisteredAdapter.js';
-import type { MirrorAdapter } from './core/ports/MirrorAdapter.js';
-import type { MirrorAdapterFactoryPort } from './core/ports/MirrorAdapterFactoryPort.js';
+import { AssembleProjectPassAction } from './domain/actions/AssembleProjectPassAction.js';
+import { AssembleProjectLifecyclePassAction } from './domain/actions/AssembleProjectLifecyclePassAction.js';
+import type { AdapterDescriptor } from './domain/data/AdapterDescriptor.js';
+import type { RegisteredAdapter } from './domain/data/RegisteredAdapter.js';
+import type { MirrorAdapter } from './domain/ports/MirrorAdapter.js';
+import type { MirrorAdapterFactoryPort } from './domain/ports/MirrorAdapterFactoryPort.js';
 import {
   CoreBaselineStoreAdapter,
   type CoreBaselineStorage,
@@ -66,11 +66,12 @@ import type { CodeHostTransport } from './infrastructure/github/CodeHostTranspor
 import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
-import { ReconcileProjectTaskLocksAction } from './core/ReconcileProjectTaskLocksAction.js';
-import { ReactivateFrozenProjectAction } from './core/ReactivateFrozenProjectAction.js';
+import { ReconcileProjectTaskLocksAction } from './domain/actions/ReconcileProjectTaskLocksAction.js';
+import { ReactivateFrozenProjectAction } from './domain/actions/ReactivateFrozenProjectAction.js';
 import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
-import type { CoreReconcilers } from './sync/CoreReconcilers.js';
-import { ProjectShell } from './sync/ProjectShell.js';
+import type { CoreReconcilers } from './domain/CoreReconcilers.js';
+import { MigrateProjectHomeNoteAction } from './domain/actions/MigrateProjectHomeNoteAction.js';
+import { SweepDeletedNotesAction } from './domain/actions/SweepDeletedNotesAction.js';
 
 async function request(
   token: string,
@@ -403,19 +404,25 @@ function composePlugin(
     createTaskNote,
     mirrorAdapters,
   );
-  const shell = new ProjectShell({
+  const migrateHomeNote = new MigrateProjectHomeNoteAction(vault);
+  const sweepDeletedNotes = new SweepDeletedNotesAction(
     vault,
     syncState,
+    handleDeletedNote,
+  );
+  const syncProject = new SyncProjectAction({
+    vault,
     setupFactory,
+    reconcilers,
+    migrateHomeNote,
     detectNoteRenames,
     completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
-    handleDeletedNote,
-    ensureProjectBoard,
+    sweepDeletedNotes,
     rekeyRenamedConnections: new RekeyRenamedConnectionsAction(syncState),
+    ensureProjectBoard,
   });
-  const syncProject = new SyncProjectAction(vault, shell, reconcilers);
   const queue = new SyncQueue(syncProject, (project, errors) => {
     new Notice(
       `Project "${project}": ${errors.length} sync step(s) failed; see the console`,

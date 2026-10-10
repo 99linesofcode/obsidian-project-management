@@ -1,15 +1,15 @@
-import type { CanonicalField } from '../../core/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../core/data/CanonicalFieldWrite.js';
-import { CanonicalProject } from '../../core/data/CanonicalProject.js';
-import { CanonicalTask } from '../../core/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/data/CapturedProject.js';
-import { ProjectActivityObservation } from '../../core/data/ProjectActivityObservation.js';
-import { ProjectAddressing } from '../../core/data/ProjectAddressing.js';
-import { ProjectCandidate } from '../../core/data/ProjectCandidate.js';
-import { ProjectDiscovery } from '../../core/data/ProjectDiscovery.js';
-import { ProjectSummary } from '../../core/data/ProjectSummary.js';
-import type { MirrorAdapter } from '../../core/ports/MirrorAdapter.js';
-import type { ProjectSetupPort } from '../../core/ports/ProjectSetupPort.js';
+import type { CanonicalField } from '../../domain/canonicalField.js';
+import type { CanonicalFieldWrite } from '../../domain/data/CanonicalFieldWrite.js';
+import { CanonicalProject } from '../../domain/data/CanonicalProject.js';
+import { CanonicalTask } from '../../domain/data/CanonicalTask.js';
+import { CapturedProject } from '../../domain/data/CapturedProject.js';
+import { ProjectActivityObservation } from '../../domain/data/ProjectActivityObservation.js';
+import { ProjectAddressing } from '../../domain/data/ProjectAddressing.js';
+import { ProjectCandidate } from '../../domain/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../domain/data/ProjectDiscovery.js';
+import { ProjectSummary } from '../../domain/data/ProjectSummary.js';
+import type { MirrorAdapter } from '../../domain/ports/MirrorAdapter.js';
+import type { ProjectSetupPort } from '../../domain/ports/ProjectSetupPort.js';
 import type {
   CodeHostResponse,
   CodeHostTransport,

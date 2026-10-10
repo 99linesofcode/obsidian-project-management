@@ -1,8 +1,8 @@
-import { Baseline } from '../../core/data/Baseline.js';
+import { Baseline } from '../../domain/data/Baseline.js';
 import type {
   BaselineField,
   BaselineStorePort,
-} from '../../core/ports/BaselineStorePort.js';
+} from '../../domain/ports/BaselineStorePort.js';
 import {
   ensureRecord,
   isRecord,

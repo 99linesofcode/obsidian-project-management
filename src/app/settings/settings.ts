@@ -1,4 +1,4 @@
-import { SYNC_STATE_KEY } from '../../registry/SyncStateAdapter.js';
+import { SYNC_STATE_KEY } from '../../infrastructure/registry/SyncStateAdapter.js';
 
 export interface ProjectManagementSettings {
   pollIntervalMinutes: number;

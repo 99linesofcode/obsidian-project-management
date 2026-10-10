@@ -1,6 +1,6 @@
 import { Component } from 'obsidian';
-import type { NoteEnumeratorPort } from '../core/ports/NoteEnumeratorPort.js';
-import type { VaultEventPort } from '../core/ports/VaultEventPort.js';
+import type { NoteEnumeratorPort } from '../domain/ports/NoteEnumeratorPort.js';
+import type { VaultEventPort } from '../domain/ports/VaultEventPort.js';
 import type { SyncQueue } from './SyncQueue.js';
 
 // Obsidian runs in a browser where window is the global; the node type

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { EntityRecord } from '../../src/core/data/EntityRecord.js';
-import type { ConnectionStatePort } from '../../src/core/ports/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../src/core/ports/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../src/core/ports/TrackedEntityPort.js';
+import type { EntityRecord } from '../../src/domain/data/EntityRecord.js';
+import type { ConnectionStatePort } from '../../src/domain/ports/ConnectionStatePort.js';
+import type { IdentityStorePort } from '../../src/domain/ports/IdentityStorePort.js';
+import type { TrackedEntityPort } from '../../src/domain/ports/TrackedEntityPort.js';
 import { taskData } from './records.js';
 
 export interface SyncStateConformanceHarness {

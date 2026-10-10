@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Baseline } from '../../../src/core/data/Baseline.js';
+import { Baseline } from '../../../src/domain/data/Baseline.js';
 import { CoreBaselineStoreAdapter } from '../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
-import { SyncStateAdapter } from '../../../src/registry/SyncStateAdapter.js';
+import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 
 function fakeStorage(initial: Record<string, unknown> = {}) {
   let data: Record<string, unknown> = initial;
