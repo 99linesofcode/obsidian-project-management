@@ -1,4 +1,4 @@
-import type { MergeResult } from './MergeResult.js';
+import type { MergeResult } from '../../domain/MergeResult.js';
 
 export class ProjectLifecycleRecord {
   readonly frozen: boolean;

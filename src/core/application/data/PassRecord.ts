@@ -1,5 +1,5 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
-import type { MergeResult } from './MergeResult.js';
+import type { MergeResult } from '../../domain/MergeResult.js';
 
 export class PassRecord {
   readonly field: CanonicalField;

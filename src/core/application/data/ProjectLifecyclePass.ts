@@ -1,6 +1,6 @@
 import type { Baseline } from './Baseline.js';
 import type { MirrorSide } from './MirrorSide.js';
-import type { SideObservation } from './SideObservation.js';
+import type { SideObservation } from '../../domain/SideObservation.js';
 
 export class ProjectLifecyclePass {
   readonly project: string;

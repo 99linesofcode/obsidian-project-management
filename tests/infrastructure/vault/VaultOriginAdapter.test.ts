@@ -25,7 +25,7 @@ import { CanonicalFieldWrite } from '../../../src/core/application/data/Canonica
 import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
-import { SideObservation } from '../../../src/core/application/data/SideObservation.js';
+import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/domain/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';

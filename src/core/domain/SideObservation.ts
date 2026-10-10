@@ -1,4 +1,4 @@
-import type { Baseline } from './Baseline.js';
+import type { Baseline } from '../application/data/Baseline.js';
 
 export type SideRole = 'origin' | 'mirror';
 

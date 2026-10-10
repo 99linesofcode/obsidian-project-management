@@ -15,7 +15,7 @@ import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdap
 import type { MirrorHandlePort } from '../../../src/core/port/MirrorHandlePort.js';
 import type { OriginPort } from '../../../src/core/port/OriginPort.js';
 import type { ProjectSourcePort } from '../../../src/core/port/ProjectSourcePort.js';
-import { SideObservation } from '../../../src/core/application/data/SideObservation.js';
+import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/domain/registerAdapters.js';
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';

@@ -1,6 +1,6 @@
 import type { Baseline } from '../application/data/Baseline.js';
 import type { OriginObservation } from '../application/data/OriginObservation.js';
-import { SideObservation } from '../application/data/SideObservation.js';
+import { SideObservation } from './SideObservation.js';
 
 export function originSideObservation(
   side: string,

@@ -1,6 +1,6 @@
-import { Delta } from '../application/data/Delta.js';
-import { MergeResult } from '../application/data/MergeResult.js';
-import type { SideObservation } from '../application/data/SideObservation.js';
+import { Delta } from './Delta.js';
+import { MergeResult } from './MergeResult.js';
+import type { SideObservation } from './SideObservation.js';
 
 export function mergeField(
   origin: SideObservation,
