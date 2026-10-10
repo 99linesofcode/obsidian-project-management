@@ -1,6 +1,6 @@
 import { DataTransferObject } from './DataTransferObject.js';
 
-export class TaskData extends DataTransferObject {
+export class TaskDataTransferObject extends DataTransferObject {
   id: string;
   notePath: string;
   mirrors: Record<string, string>;
@@ -13,7 +13,7 @@ export class TaskData extends DataTransferObject {
   createdAt: string | null;
   updatedAt: string | null;
 
-  constructor(init: Omit<TaskData, keyof DataTransferObject>) {
+  constructor(init: Omit<TaskDataTransferObject, keyof DataTransferObject>) {
     super();
     this.id = init.id;
     this.notePath = init.notePath;

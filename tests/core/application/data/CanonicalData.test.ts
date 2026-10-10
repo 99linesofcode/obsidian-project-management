@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { TaskData } from '../../../../src/core/application/data/TaskData.js';
+import { TaskDataTransferObject } from '../../../../src/core/application/data/TaskDataTransferObject.js';
 
 // The canonical string is the snapshot the diff compares against (the base).
 // Its one job is to move when, and only when, a diffed field moves; field-by-
 // field attribution lives in the diff suite. These tests pin the two things the
 // diff cannot express by example: determinism, and that the field delimiter
 // keeps boundaries distinct.
-function task(overrides: Partial<TaskData> = {}): TaskData {
-  const base = new TaskData({
+function task(
+  overrides: Partial<TaskDataTransferObject> = {},
+): TaskDataTransferObject {
+  const base = new TaskDataTransferObject({
     id: 'task-1',
     notePath: 'Projecten/Acme Widgets/taken/fix-the-bug.md',
     mirrors: { github: 'https://github.com/acme/widgets/issues/42' },

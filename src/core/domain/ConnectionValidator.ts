@@ -1,8 +1,8 @@
 import { isRecord } from './isRecord.js';
-import type { ConnectionData } from '../application/data/ConnectionData.js';
+import type { ConnectionDataTransferObject } from '../application/data/ConnectionDataTransferObject.js';
 
 export interface ConnectionValidationResult {
-  connections: Record<string, ConnectionData>;
+  connections: Record<string, ConnectionDataTransferObject>;
   errors: unknown[];
 }
 
@@ -10,7 +10,7 @@ export class ConnectionValidator {
   constructor(private readonly registeredApplications: ReadonlySet<string>) {}
 
   validate(raw: unknown): ConnectionValidationResult {
-    const connections: Record<string, ConnectionData> = {};
+    const connections: Record<string, ConnectionDataTransferObject> = {};
     const errors: unknown[] = [];
     if (!isRecord(raw)) {
       return { connections, errors };
@@ -27,7 +27,10 @@ export class ConnectionValidator {
     return { connections, errors };
   }
 
-  private validateEntry(slug: string, entry: unknown): ConnectionData | Error {
+  private validateEntry(
+    slug: string,
+    entry: unknown,
+  ): ConnectionDataTransferObject | Error {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
       return new Error(
         `connection slug "${slug}" must start alphanumeric and carry only lowercase alphanumerics and dashes`,

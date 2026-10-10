@@ -1,5 +1,5 @@
-import type { ProjectIdentityData } from '../../src/core/application/data/ProjectIdentityData.js';
-import type { TaskData } from '../../src/core/application/data/TaskData.js';
+import type { ProjectIdentityDataTransferObject } from '../../src/core/application/data/ProjectIdentityDataTransferObject.js';
+import type { TaskDataTransferObject } from '../../src/core/application/data/TaskDataTransferObject.js';
 import { projectFromNotePath } from '../../src/core/domain/projectFromNotePath.js';
 import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/application/data/MirrorItem.js';
@@ -10,7 +10,7 @@ import type { TrackedEntityPort } from '../../src/core/port/TrackedEntityPort.js
 
 interface SeededMirror {
   handle: string;
-  base?: TaskData | null;
+  base?: TaskDataTransferObject | null;
 }
 
 function portKey(projectName: string, portId: string): string {
@@ -31,8 +31,8 @@ export class FakeSyncState
     projectName: string;
     state: { sections: Record<string, string>; lastCompletedPoll: string };
   }> = [];
-  identities = new Map<string, ProjectIdentityData>();
-  identitiesBySlug = new Map<string, ProjectIdentityData>();
+  identities = new Map<string, ProjectIdentityDataTransferObject>();
+  identitiesBySlug = new Map<string, ProjectIdentityDataTransferObject>();
   setCalls: EntityRecord[] = [];
   removed: string[] = [];
   portStateSets: Array<{
@@ -60,7 +60,7 @@ export class FakeSyncState
     return null;
   }
 
-  baseOf(entityId: string, portId: string): TaskData | null {
+  baseOf(entityId: string, portId: string): TaskDataTransferObject | null {
     const handle = this.handleOf(entityId, portId);
     return handle === null
       ? null
@@ -284,7 +284,7 @@ export class FakeSyncState
   async setIdentity(
     projectName: string,
     connectionSlug: string,
-    identity: ProjectIdentityData,
+    identity: ProjectIdentityDataTransferObject,
   ): Promise<void> {
     this.identitiesBySlug.set(portKey(projectName, connectionSlug), identity);
     this.identities.set(projectName, identity);
@@ -293,7 +293,7 @@ export class FakeSyncState
   async getIdentity(
     projectName: string,
     connectionSlug: string,
-  ): Promise<ProjectIdentityData | null> {
+  ): Promise<ProjectIdentityDataTransferObject | null> {
     return (
       this.identitiesBySlug.get(portKey(projectName, connectionSlug)) ??
       this.identities.get(projectName) ??

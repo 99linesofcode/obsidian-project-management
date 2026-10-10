@@ -15,7 +15,7 @@ vi.mock('obsidian', () => {
 
 import { SyncScheduler } from '../../../src/ui/sync/SyncScheduler.js';
 import type { SyncQueue } from '../../../src/ui/sync/SyncQueue.js';
-import type { ProjectNoteData } from '../../../src/core/application/data/ProjectNoteData.js';
+import type { ProjectNoteDataTransferObject } from '../../../src/core/application/data/ProjectNoteDataTransferObject.js';
 import type { NoteEnumeratorPort } from '../../../src/core/port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../../src/core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../src/core/port/NoteWriterPort.js';
@@ -32,7 +32,7 @@ class FakeVault
   noteChangedCb: ((path: string) => void) | null = null;
   noteDeletedCb: ((path: string) => void) | null = null;
   noteRenamedCb: ((oldPath: string, newPath: string) => void) | null = null;
-  projectNotes: ProjectNoteData[] = [];
+  projectNotes: ProjectNoteDataTransferObject[] = [];
 
   async getNoteByPath(): Promise<null> {
     return null;
@@ -45,7 +45,7 @@ class FakeVault
     return [];
   }
   async trashNote(): Promise<void> {}
-  async findProjectNotes(): Promise<ProjectNoteData[]> {
+  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.projectNotes;
   }
   onNoteChanged(cb: (path: string) => void): void {
@@ -78,7 +78,7 @@ class FakeQueue {
 function projectNote(
   projectName: string,
   archivedAt: string | null,
-): ProjectNoteData {
+): ProjectNoteDataTransferObject {
   return {
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,

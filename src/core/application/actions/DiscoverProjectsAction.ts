@@ -1,12 +1,12 @@
 import type { AttachProjectAction } from './AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from '../../port/ProjectSetupFactoryPort.js';
-import type { ProjectIdentityData } from '../data/ProjectIdentityData.js';
+import type { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
 import type { NoteEnumeratorPort } from '../../port/NoteEnumeratorPort.js';
 
 export interface DiscoveredProject {
   projectName: string;
   connectionSlug: string;
-  identity: ProjectIdentityData;
+  identity: ProjectIdentityDataTransferObject;
 }
 
 export interface DiscoveryResult {

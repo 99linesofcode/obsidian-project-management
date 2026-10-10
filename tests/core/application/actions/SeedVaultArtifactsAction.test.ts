@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SeedVaultArtifactsAction } from '../../../../src/core/application/actions/SeedVaultArtifactsAction.js';
 import { SEED_ARTIFACTS } from '../../../../src/core/application/actions/seedArtifacts.js';
-import {
-  DEFAULT_SETTINGS,
-  type ProjectManagementSettings,
-} from '../../../../src/ui/settings/settings.js';
+import { DEFAULT_SETTINGS } from '../../../../src/ui/settings/settings.js';
+import type { ProjectManagementSettings } from '../../../../src/core/application/data/ProjectManagementSettings.js';
 import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';

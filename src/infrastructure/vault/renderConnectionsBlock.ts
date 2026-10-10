@@ -1,7 +1,7 @@
-import type { ConnectionData } from '../../core/application/data/ConnectionData.js';
+import type { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
 
 export function renderConnectionsBlock(
-  connections: Record<string, ConnectionData>,
+  connections: Record<string, ConnectionDataTransferObject>,
 ): string[] {
   const lines = ['connections:'];
   for (const [slug, connection] of Object.entries(connections)) {

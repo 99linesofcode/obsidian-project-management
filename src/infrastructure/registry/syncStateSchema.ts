@@ -1,5 +1,5 @@
 import { isRecord } from '../../core/domain/isRecord.js';
-import { TaskData } from '../../core/application/data/TaskData.js';
+import { TaskDataTransferObject } from '../../core/application/data/TaskDataTransferObject.js';
 import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
 import type { PortState } from '../../core/application/data/PortState.js';
 
@@ -129,11 +129,11 @@ export function ensureItemsMap(
   return port[ITEMS_KEY] as Record<string, unknown>;
 }
 
-export function mapBase(raw: unknown): TaskData | null {
+export function mapBase(raw: unknown): TaskDataTransferObject | null {
   if (!isRecord(raw)) {
     return null;
   }
-  return new TaskData({
+  return new TaskDataTransferObject({
     id: str(raw.id),
     notePath: str(raw.notePath),
     mirrors: {},

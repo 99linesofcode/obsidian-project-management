@@ -4,7 +4,7 @@ import { ProjectAddressing } from '../../../../src/core/application/data/Project
 import { ProjectDiscovery } from '../../../../src/core/application/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../../../src/core/application/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
-import type { ProjectIdentityData } from '../../../../src/core/application/data/ProjectIdentityData.js';
+import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
 
 class FakeSetup implements ProjectSetupPort {
   discovery: ProjectDiscovery = new ProjectDiscovery({
@@ -48,7 +48,7 @@ function addressing(): ProjectAddressing {
   });
 }
 
-const identity: ProjectIdentityData = {
+const identity: ProjectIdentityDataTransferObject = {
   repoUrl,
   repoNodeId: 'R_kgDOAAAA',
   projectNodeId: 'PVT_123',

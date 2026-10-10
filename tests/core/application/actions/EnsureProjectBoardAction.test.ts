@@ -5,7 +5,7 @@ import { ProjectCandidate } from '../../../../src/core/application/data/ProjectC
 import { ProjectDiscovery } from '../../../../src/core/application/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../../../src/core/application/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
-import type { ProjectIdentityData } from '../../../../src/core/application/data/ProjectIdentityData.js';
+import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeSetup implements ProjectSetupPort {
@@ -66,8 +66,8 @@ const SLUG = 'github';
 const statusOptions = ['Unshaped', 'Shaping', 'Shaped', 'Building', 'Shipped'];
 
 function identity(
-  overrides: Partial<ProjectIdentityData> = {},
-): ProjectIdentityData {
+  overrides: Partial<ProjectIdentityDataTransferObject> = {},
+): ProjectIdentityDataTransferObject {
   return {
     repoUrl: '',
     repoNodeId: '',
@@ -86,7 +86,7 @@ function candidate(name: string, targets: string[] = []): ProjectCandidate {
   return new ProjectCandidate({ project: project(name), targets });
 }
 
-function setup(stored?: ProjectIdentityData) {
+function setup(stored?: ProjectIdentityDataTransferObject) {
   const setupPort = new FakeSetup();
   const syncState = new FakeSyncState();
   if (stored !== undefined) {

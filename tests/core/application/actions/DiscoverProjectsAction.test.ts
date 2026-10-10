@@ -6,8 +6,8 @@ import { ProjectDiscovery } from '../../../../src/core/application/data/ProjectD
 import { ProjectSummary } from '../../../../src/core/application/data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
-import type { ProjectNoteData } from '../../../../src/core/application/data/ProjectNoteData.js';
-import type { ProjectIdentityData } from '../../../../src/core/application/data/ProjectIdentityData.js';
+import type { ProjectNoteDataTransferObject } from '../../../../src/core/application/data/ProjectNoteDataTransferObject.js';
+import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
 import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
@@ -21,9 +21,9 @@ class FakeVault
   async modifiedTime(path: string): Promise<string | null> {
     return this.modifiedTimes.get(path) ?? null;
   }
-  notes: ProjectNoteData[] = [];
+  notes: ProjectNoteDataTransferObject[] = [];
 
-  async findProjectNotes(): Promise<ProjectNoteData[]> {
+  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.notes;
   }
 
@@ -75,7 +75,7 @@ class FakeSetup implements ProjectSetupPort {
 }
 
 const repoUrl = 'https://github.com/acme/widgets';
-const identity: ProjectIdentityData = {
+const identity: ProjectIdentityDataTransferObject = {
   repoUrl,
   repoNodeId: 'R_kgDOAAAA',
   projectNodeId: 'PVT_123',
@@ -92,7 +92,9 @@ function discovery(targetHandle: string, names: string[]): ProjectDiscovery {
   });
 }
 
-function githubNote(overrides: Partial<ProjectNoteData> = {}): ProjectNoteData {
+function githubNote(
+  overrides: Partial<ProjectNoteDataTransferObject> = {},
+): ProjectNoteDataTransferObject {
   return {
     path: 'Projecten/Acme Widgets/_home.md',
     projectName: 'Acme Widgets',

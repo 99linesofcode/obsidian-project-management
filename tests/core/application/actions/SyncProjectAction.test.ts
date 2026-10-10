@@ -11,8 +11,8 @@ import type { ProjectTaskLocksReconciler } from '../../../../src/core/applicatio
 import type { ProjectReactivationReconciler } from '../../../../src/core/application/services/ProjectReactivationReconciler.js';
 import type { TaskCaptureReconciler } from '../../../../src/core/application/services/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../../../src/core/application/services/TaskFieldReconciler.js';
-import type { ProjectNoteData } from '../../../../src/core/application/data/ProjectNoteData.js';
-import type { ConnectionData } from '../../../../src/core/application/data/ConnectionData.js';
+import type { ProjectNoteDataTransferObject } from '../../../../src/core/application/data/ProjectNoteDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
 import type { EntityRecord } from '../../../../src/core/application/data/EntityRecord.js';
@@ -34,7 +34,7 @@ class FakeVault
   async modifiedTime(path: string): Promise<string | null> {
     return this.modifiedTimes.get(path) ?? null;
   }
-  projectNotes: ProjectNoteData[] = [];
+  projectNotes: ProjectNoteDataTransferObject[] = [];
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
   renames: Array<{ from: string; to: string }> = [];
@@ -53,7 +53,7 @@ class FakeVault
     return this.folders.get(folder) ?? [];
   }
   async trashNote(): Promise<void> {}
-  async findProjectNotes(): Promise<ProjectNoteData[]> {
+  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.projectNotes;
   }
   onNoteChanged(): void {}
@@ -110,11 +110,11 @@ function reactivationRecorder(events: string[]): ProjectReactivationReconciler {
 function projectNote(
   projectName: string,
   archivedAt: string | null,
-  connections: Record<string, ConnectionData> = {
+  connections: Record<string, ConnectionDataTransferObject> = {
     github: { tool: 'github', project: 'https://github.com/acme/widgets' },
     todoist: { tool: 'todoist', project: 'P1' },
   },
-): ProjectNoteData {
+): ProjectNoteDataTransferObject {
   return {
     path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
@@ -129,13 +129,13 @@ function status(notePath: string): EntityRecord {
 }
 
 interface HarnessOptions {
-  projectNotes?: ProjectNoteData[];
+  projectNotes?: ProjectNoteDataTransferObject[];
   frozen?: boolean;
   statuses?: EntityRecord[];
   taken?: string[];
   todos?: string[];
   ensureBoard?: boolean;
-  connections?: Record<string, ConnectionData>;
+  connections?: Record<string, ConnectionDataTransferObject>;
   setupApplications?: string[];
   failRenames?: boolean;
 }

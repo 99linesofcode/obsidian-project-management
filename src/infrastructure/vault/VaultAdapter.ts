@@ -1,5 +1,5 @@
 import { App, EventRef, TFile } from 'obsidian';
-import type { ProjectNoteData } from '../../core/application/data/ProjectNoteData.js';
+import type { ProjectNoteDataTransferObject } from '../../core/application/data/ProjectNoteDataTransferObject.js';
 import type { NoteEnumeratorPort } from '../../core/port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../core/port/NoteWriterPort.js';
@@ -98,8 +98,8 @@ export class VaultAdapter
     }
   }
 
-  async findProjectNotes(): Promise<ProjectNoteData[]> {
-    const notes: ProjectNoteData[] = [];
+  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
+    const notes: ProjectNoteDataTransferObject[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);
       const note = projectNoteFromCache(

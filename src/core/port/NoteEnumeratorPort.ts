@@ -1,6 +1,6 @@
-import type { ProjectNoteData } from '../application/data/ProjectNoteData.js';
+import type { ProjectNoteDataTransferObject } from '../application/data/ProjectNoteDataTransferObject.js';
 
 export interface NoteEnumeratorPort {
   listNotesInFolder(folder: string): Promise<string[]>;
-  findProjectNotes(): Promise<ProjectNoteData[]>;
+  findProjectNotes(): Promise<ProjectNoteDataTransferObject[]>;
 }

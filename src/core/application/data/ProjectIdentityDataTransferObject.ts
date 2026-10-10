@@ -1,13 +1,13 @@
 import type { ProjectStatusOption } from './ProjectStatusOption.js';
 
-export class ProjectIdentityData {
+export class ProjectIdentityDataTransferObject {
   repoUrl: string;
   repoNodeId: string;
   projectNodeId: string;
   statusFieldId: string;
   statusOptions: ProjectStatusOption[];
 
-  constructor(init: ProjectIdentityData) {
+  constructor(init: ProjectIdentityDataTransferObject) {
     this.repoUrl = init.repoUrl;
     this.repoNodeId = init.repoNodeId;
     this.projectNodeId = init.projectNodeId;

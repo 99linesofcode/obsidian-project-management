@@ -1,5 +1,5 @@
-import type { ConnectionData } from '../data/ConnectionData.js';
-import type { ProjectNoteData } from '../data/ProjectNoteData.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import type { ProjectNoteDataTransferObject } from '../data/ProjectNoteDataTransferObject.js';
 import type { NoteEnumeratorPort } from '../../port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../port/NoteWriterPort.js';
@@ -76,7 +76,10 @@ export class SyncProjectAction {
     return this.stepErrors;
   }
 
-  private async migrate(project: string, note: ProjectNoteData): Promise<void> {
+  private async migrate(
+    project: string,
+    note: ProjectNoteDataTransferObject,
+  ): Promise<void> {
     await this.step('migrate home note', () =>
       this.deps.migrateHomeNote.execute({
         projectName: project,
@@ -88,7 +91,7 @@ export class SyncProjectAction {
 
   private async rekey(
     project: string,
-    connections: Record<string, ConnectionData>,
+    connections: Record<string, ConnectionDataTransferObject>,
   ): Promise<void> {
     await this.step('rekey connections', async () => {
       const rekey = this.deps.rekeyRenamedConnections;
@@ -107,7 +110,7 @@ export class SyncProjectAction {
 
   private async ensureBoards(
     project: string,
-    note: ProjectNoteData,
+    note: ProjectNoteDataTransferObject,
   ): Promise<void> {
     const ensureBoard = this.deps.ensureProjectBoard;
     if (ensureBoard === undefined || note.archivedAt !== null) {
@@ -164,7 +167,7 @@ export class SyncProjectAction {
 
   private async deletions(
     project: string,
-    connections: Record<string, ConnectionData>,
+    connections: Record<string, ConnectionDataTransferObject>,
   ): Promise<void> {
     await this.step('deletions', () =>
       this.deps.sweepDeletedNotes.execute({
@@ -180,14 +183,14 @@ export class SyncProjectAction {
 
   private async resolveProject(
     project: string,
-  ): Promise<ProjectNoteData | null> {
+  ): Promise<ProjectNoteDataTransferObject | null> {
     const notes = await this.deps.vault.findProjectNotes();
     return notes.find((note) => note.projectName === project) ?? null;
   }
 
   private async reconcileLifecycle(
     project: string,
-    note: ProjectNoteData,
+    note: ProjectNoteDataTransferObject,
   ): Promise<{ frozen: boolean; wasFrozen: boolean }> {
     try {
       return await this.deps.reconcilers.lifecycle.reconcile(project);

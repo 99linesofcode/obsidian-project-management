@@ -1,13 +1,13 @@
-import type { ProjectIdentityData } from '../application/data/ProjectIdentityData.js';
+import type { ProjectIdentityDataTransferObject } from '../application/data/ProjectIdentityDataTransferObject.js';
 
 export interface IdentityStorePort {
   getIdentity(
     projectName: string,
     connectionSlug: string,
-  ): Promise<ProjectIdentityData | null>;
+  ): Promise<ProjectIdentityDataTransferObject | null>;
   setIdentity(
     projectName: string,
     connectionSlug: string,
-    identity: ProjectIdentityData,
+    identity: ProjectIdentityDataTransferObject,
   ): Promise<void>;
 }

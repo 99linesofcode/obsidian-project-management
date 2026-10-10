@@ -1,9 +1,9 @@
-import type { ConnectionData } from '../data/ConnectionData.js';
+import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { ConnectionStatePort } from '../../port/ConnectionStatePort.js';
 
 export interface RekeyRenamedConnectionsInput {
   projectName: string;
-  connections: Record<string, ConnectionData>;
+  connections: Record<string, ConnectionDataTransferObject>;
 }
 
 export class RekeyRenamedConnectionsAction {

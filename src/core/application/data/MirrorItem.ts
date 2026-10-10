@@ -1,6 +1,6 @@
-import type { TaskData } from './TaskData.js';
+import type { TaskDataTransferObject } from './TaskDataTransferObject.js';
 
 export interface MirrorItem {
   entityId: string;
-  base: TaskData | null;
+  base: TaskDataTransferObject | null;
 }

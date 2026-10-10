@@ -1,4 +1,4 @@
-import { ProjectIdentityData } from '../data/ProjectIdentityData.js';
+import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
 import type { IdentityStorePort } from '../../port/IdentityStorePort.js';
 import type { ProjectAddressing } from '../data/ProjectAddressing.js';
 import type { ProjectSummary } from '../data/ProjectSummary.js';
@@ -47,7 +47,7 @@ export class EnsureProjectBoardAction {
         ? await this.createOrAdoptOrphan(setup, repoUrl, repoName)
         : await setup.adoptProject(repoUrl, choice.board, this.statusOptions);
 
-    const merged = new ProjectIdentityData({
+    const merged = new ProjectIdentityDataTransferObject({
       repoUrl,
       repoNodeId: discovery.targetHandle,
       projectNodeId: addressing.projectHandle,

@@ -1,4 +1,4 @@
-import { ProjectIdentityData } from '../data/ProjectIdentityData.js';
+import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
 import { DomainError } from '../../domain/errors/DomainError.js';
 import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
 import { deriveBoardChoice } from '../../domain/deriveBoardChoice.js';
@@ -10,7 +10,9 @@ export interface AttachProjectInput {
 }
 
 export class AttachProjectAction {
-  async execute(data: AttachProjectInput): Promise<ProjectIdentityData> {
+  async execute(
+    data: AttachProjectInput,
+  ): Promise<ProjectIdentityDataTransferObject> {
     if (!data.repoUrl) {
       throw new DomainError('AttachProjectAction: repoUrl is required');
     }
@@ -24,7 +26,7 @@ export class AttachProjectAction {
       );
     }
     if (choice.kind === 'create') {
-      return new ProjectIdentityData({
+      return new ProjectIdentityDataTransferObject({
         repoUrl: data.repoUrl,
         repoNodeId: discovery.targetHandle,
         projectNodeId: '',
@@ -39,7 +41,7 @@ export class AttachProjectAction {
         `AttachProjectAction: board ${choice.board.name} could not be resolved`,
       );
     }
-    return new ProjectIdentityData({
+    return new ProjectIdentityDataTransferObject({
       repoUrl: data.repoUrl,
       repoNodeId: discovery.targetHandle,
       projectNodeId: addressing.projectHandle,
