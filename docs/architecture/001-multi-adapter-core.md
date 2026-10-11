@@ -44,7 +44,7 @@ Full analysis in `planning/opm-multi-adapter/options.md`. In brief:
   surface the merge consumes. A capability an adapter lacks has no interface to
   call, so "declared-only surfaces" is structural, not a runtime guard.
 - **Registration — 2A.** Each adapter module exports a typed descriptor
-  (application id, capabilities, per-field representations, secret keys,
+  (application id, capabilities, secret keys,
   settings rows). The composition root assembles the descriptor list and passes
   it to a neutral, pure registrar that validates and returns a map. The kernel
   is not edited to add an application.

@@ -224,8 +224,8 @@ canonical DTOs and the pure core.
   verified-complete fetch plus a synced baseline); the origin's absence as a
   delete delta; the origin's edit time trusted by default. No I/O, no clocks.
 - **The descriptor and registrar.** Each adapter exports a typed
-  `AdapterDescriptor` (application id, capabilities, per-field
-  representations, secret keys, settings rows). The composition root assembles
+  `AdapterDescriptor` (application id, capabilities, secret keys, settings
+  rows). The composition root assembles
   a plain list of `AdapterRegistration`s and passes it to the pure
   `registerAdapters`, which validates (known capabilities, all required fields,
   the required capability floor (`REQUIRED_CAPABILITIES`), a unique lowercase

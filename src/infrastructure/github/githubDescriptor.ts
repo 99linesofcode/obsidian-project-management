@@ -13,14 +13,6 @@ export function githubDescriptor(): AdapterDescriptor {
       'trustworthy per-field timestamps',
       'complete-fetch',
     ],
-    representations: {
-      title: 'native',
-      body: 'native',
-      Status: { mappedTo: 'board-status' },
-      completion: { mappedTo: 'issue-state' },
-      subtasks: { mappedTo: 'parent-issue' },
-      label: 'native',
-    },
     secretKeys: ['github-token'],
     settingsRows: [
       new SettingsRow({

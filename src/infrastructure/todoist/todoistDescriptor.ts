@@ -11,14 +11,6 @@ export function todoistDescriptor(): AdapterDescriptor {
       'trustworthy per-field timestamps',
       'complete-fetch',
     ],
-    representations: {
-      title: 'native',
-      body: 'native',
-      Status: { mappedTo: 'section' },
-      completion: { mappedTo: 'task-completed' },
-      subtasks: { mappedTo: 'parent-task' },
-      label: 'native',
-    },
     secretKeys: ['todoist-token'],
     settingsRows: [
       new SettingsRow({

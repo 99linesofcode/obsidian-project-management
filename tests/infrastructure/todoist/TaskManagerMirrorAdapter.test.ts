@@ -441,8 +441,6 @@ describe('todoistDescriptor — registers with the core (F01 ACM-8, ACM-9)', () 
       'trustworthy per-field timestamps',
     );
     expect(descriptor.capabilities).toContain('complete-fetch');
-    expect(descriptor.represents('Status')).toBe(true);
-    expect(descriptor.represents('subtasks')).toBe(true);
   });
 });
 

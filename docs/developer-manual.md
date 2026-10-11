@@ -85,7 +85,7 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
 - **The descriptor and registrar.** `AdapterDescriptor` (application id,
-  capabilities, per-field representations, secret keys, settings rows),
+  capabilities, secret keys, settings rows),
   `AdapterRegistration` and the pure `registerAdapters`, which validates and
   returns a `RegistrationResult` of `RegisteredAdapter`s.
 - **The actions.** `MirrorSyncAction` (the one capability-parameterized

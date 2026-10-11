@@ -27,7 +27,6 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
         ...REQUIRED_CAPABILITIES,
         'sprints' as unknown as Capability,
       ],
-      representations: {},
       secretKeys: [],
       settingsRows: [],
     });
@@ -85,7 +84,6 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
         (capability) =>
           capability !== 'task-locking' && capability !== 'project-activity',
       ),
-      representations: base.representations,
       secretKeys: base.secretKeys,
       settingsRows: base.settingsRows,
     });
@@ -105,7 +103,6 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
       capabilities: [...REQUIRED_CAPABILITIES].filter(
         (capability) => capability !== 'subtasks',
       ),
-      representations: {},
       secretKeys: [],
       settingsRows: [],
     });
