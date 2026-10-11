@@ -591,8 +591,8 @@ Enforced by `eslint-plugin-boundaries` (elements = the layer folders) and the
   `infrastructure/`) is checked case-insensitively, so any provider name in the
   core fails.
 - **Class vs function**: a class carries injected collaborators or behaviour —
-  actions, adapters, the `DataTransferObject` base that serializes a DTO for
-  hashing; a DTO is a `readonly` field holder, not a behaviour object; a pure
+  actions, adapters, a value object that enforces an invariant; a DTO is a
+  `readonly` field holder, not a behaviour object; a pure
   codec (a mapper or parser of the same note text) is a function or a plain
   namespace object, never a stateful service. Everything pure is a lowercase
   single-function file (`mergeField.ts`, `slugify.ts`, `checklist.ts`), one

@@ -1,25 +1,5 @@
-import { TaskDataTransferObject } from '../../src/core/application/data/TaskDataTransferObject.js';
 import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
 import type { PortState } from '../../src/core/application/data/PortState.js';
-
-export function taskData(
-  overrides: Partial<TaskDataTransferObject> = {},
-): TaskDataTransferObject {
-  return new TaskDataTransferObject({
-    id: overrides.id ?? 'task-uuid',
-    notePath:
-      overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    mirrors: overrides.mirrors ?? {},
-    title: overrides.title ?? 'Fix the bug',
-    body: overrides.body ?? '',
-    status: overrides.status ?? '',
-    completedAt: overrides.completedAt ?? null,
-    type: overrides.type ?? '',
-    parent: overrides.parent ?? null,
-    createdAt: overrides.createdAt ?? null,
-    updatedAt: overrides.updatedAt ?? null,
-  });
-}
 
 export function entityRecord(
   overrides: Partial<EntityRecord> = {},
