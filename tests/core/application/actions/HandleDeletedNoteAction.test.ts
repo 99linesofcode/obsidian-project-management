@@ -4,7 +4,7 @@ import { CanonicalFieldWrite } from '../../../../src/core/application/data/Canon
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { TaskSurfacePort } from '../../../../src/core/port/TaskSurfacePort.js';
-import { entityRecord, taskData } from '../../../helpers/records.js';
+import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeTaskSurface implements TaskSurfacePort {
@@ -43,25 +43,16 @@ const application = 'github';
 const target = 'https://github.com/acme/widgets';
 const todoistTarget = 'P1';
 
-function seed(syncState: FakeSyncState, lane = 'Building'): void {
+function seed(syncState: FakeSyncState): void {
   syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
-    github: {
-      handle: url,
-      base: taskData({ id: 'uuid-42', notePath, status: lane }),
-    },
+    github: { handle: url },
   });
 }
 
-function seedBoth(syncState: FakeSyncState, lane = 'Building'): void {
+function seedBoth(syncState: FakeSyncState): void {
   syncState.seed(entityRecord({ id: 'uuid-42', notePath }), {
-    github: {
-      handle: url,
-      base: taskData({ id: 'uuid-42', notePath, status: lane }),
-    },
-    todoist: {
-      handle: 'T1',
-      base: taskData({ id: 'uuid-42', notePath, status: lane }),
-    },
+    github: { handle: url },
+    todoist: { handle: 'T1' },
   });
 }
 
@@ -69,7 +60,7 @@ function makeAction(
   syncState: FakeSyncState,
   mirrorAdapters: FakeMirrorAdapters,
 ) {
-  return new HandleDeletedNoteAction(syncState, mirrorAdapters, 'Shipped');
+  return new HandleDeletedNoteAction(syncState, mirrorAdapters);
 }
 
 describe('DEL-1 — a deleted note closes its issue and drops its record', () => {
@@ -91,23 +82,6 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
     ]);
     expect(syncState.removed).toEqual(['uuid-42']);
     expect(await syncState.findByNotePath(notePath)).toBeNull();
-  });
-
-  it('skips the close when the record already sits in the done lane', async () => {
-    const mirrorAdapters = new FakeMirrorAdapters();
-    const syncState = new FakeSyncState();
-    seed(syncState, 'Shipped');
-    const action = makeAction(syncState, mirrorAdapters);
-
-    await action.execute({
-      notePath,
-      projectName,
-      connections: [{ slug: 'github', application, target }],
-    });
-
-    expect(mirrorAdapters.tasks.deleted).toEqual([url]);
-    expect(mirrorAdapters.tasks.writes).toEqual([]);
-    expect(syncState.removed).toEqual(['uuid-42']);
   });
 
   it('does nothing for an untracked note', async () => {

@@ -1,5 +1,4 @@
 import type { ProjectIdentityDataTransferObject } from '../../src/core/application/data/ProjectIdentityDataTransferObject.js';
-import type { TaskDataTransferObject } from '../../src/core/application/data/TaskDataTransferObject.js';
 import { projectFromNotePath } from '../../src/core/domain/projectFromNotePath.js';
 import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/application/data/MirrorItem.js';
@@ -10,7 +9,6 @@ import type { TrackedEntityPort } from '../../src/core/port/TrackedEntityPort.js
 
 interface SeededMirror {
   handle: string;
-  base?: TaskDataTransferObject | null;
 }
 
 function portKey(projectName: string, portId: string): string {
@@ -44,10 +42,7 @@ export class FakeSyncState
   seed(record: EntityRecord, mirrors: Record<string, SeededMirror> = {}): void {
     this.records.set(record.id, record);
     for (const [portId, mirror] of Object.entries(mirrors)) {
-      this.put(portId, mirror.handle, {
-        entityId: record.id,
-        base: mirror.base ?? null,
-      });
+      this.put(portId, mirror.handle, { entityId: record.id });
     }
   }
 
@@ -58,13 +53,6 @@ export class FakeSyncState
       }
     }
     return null;
-  }
-
-  baseOf(entityId: string, portId: string): TaskDataTransferObject | null {
-    const handle = this.handleOf(entityId, portId);
-    return handle === null
-      ? null
-      : (this.items.get(portId)?.get(handle)?.base ?? null);
   }
 
   mirrorsOf(entityId: string): string[] {

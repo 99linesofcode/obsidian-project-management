@@ -4,7 +4,7 @@ import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumerato
 import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
 import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
-import { entityRecord, taskData } from '../../../helpers/records.js';
+import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeVault
@@ -53,7 +53,6 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: oldPath }), {
       github: {
         handle: 'https://github.com/acme/widgets/issues/42',
-        base: taskData({ id: 'uuid-1', notePath: oldPath, status: 'Building' }),
       },
     });
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);

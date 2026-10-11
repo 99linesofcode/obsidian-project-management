@@ -66,7 +66,7 @@ class FakeRegistry implements TrackedEntityPort {
     const prefix = `${connection}\u0000`;
     for (const [key, value] of this.items) {
       if (key.startsWith(prefix) && value === handle) {
-        return { entityId: key.slice(prefix.length), base: null };
+        return { entityId: key.slice(prefix.length) };
       }
     }
     return null;
@@ -79,7 +79,7 @@ class FakeRegistry implements TrackedEntityPort {
     const handle = this.items.get(`${connection}\u0000${entityId}`);
     return handle === undefined
       ? null
-      : { handle, item: { entityId, base: null } };
+      : { handle, item: { entityId } };
   }
 
   async setMirrorItem(
@@ -120,7 +120,7 @@ class FakeRegistry implements TrackedEntityPort {
       if (key.startsWith(prefix)) {
         listed.push({
           handle,
-          item: { entityId: key.slice(prefix.length), base: null },
+          item: { entityId: key.slice(prefix.length) },
         });
       }
     }

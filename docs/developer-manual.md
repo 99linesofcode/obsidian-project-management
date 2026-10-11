@@ -937,7 +937,7 @@ lane can no longer revert a completion.
   value is a no-op; a lifecycle or task side that already matches is advanced
   without a remote write.
 - **The `coreBaselines` and `coreWatches` keys are siblings of `syncState`.**
-  The core's memory is separate from the registry's per-mirror bases, so a write
+  The core's memory is separate from the registry's, so a write
   on one cannot clobber the other.
 
 ---

@@ -83,7 +83,7 @@ mirrors the plugin keeps honest. A serialized sync pass reads the vault,
 reconciles it against each mirror through one pure N-way merge, and writes the
 winner back to whichever side is behind. The registry in `data.json` is the
 memory that makes the merge possible: it holds each entity's identity and each
-mirror's last-synced baseline (the registry's per-mirror base and the core's
+mirror's last-synced baseline (the core's
 `coreBaselines`).
 
 ```
@@ -368,7 +368,7 @@ canonical DTOs and the pure core.
 - **`data.json`** — the plugin's data file. It holds three containers:
   - **`syncState`** (schema version 3) — the per-mirror registry: `projects.<name>.entities`
     (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`
-    (each mirror's last-synced base, a `TaskData`), the port bookkeeping
+    (each mirror handle's entity id), the port bookkeeping
     (`provider`, `project`, `lastPoll`, `lanes`), per-connection identities
     (`projects.<name>.identities.<connectionSlug>`), watch state, the
     per-project `fullScanPending` marker, and the per-surface `projectCursors`.
@@ -536,9 +536,9 @@ Date of Last Update: 2026-10-09
   call.
 - **Canonical field** — one of the six neutral field names (`title`, `body`,
   `subtasks`, `completion`, `Status`, `label`) the merge operates on.
-- **Baseline** — the last-synced snapshot of a side, stored in the registry;
-  the third input to a side's delta. The registry stores one per mirror base; the
-  core stores one per entity, field and side under `coreBaselines`.
+- **Baseline** — the last-synced snapshot of a side; the third input to a
+  side's delta. The core stores one per entity, field and side under
+  `coreBaselines`.
 - **Delta** — one side's change against its own baseline: a value, or a delete
   proven by a verified-complete fetch.
 - **Decision ladder** — the ordered rules `mergeField` applies to a

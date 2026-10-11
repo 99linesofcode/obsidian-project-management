@@ -1,6 +1,5 @@
 import { TaskDataTransferObject } from '../../src/core/application/data/TaskDataTransferObject.js';
 import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
-import type { MirrorItem } from '../../src/core/application/data/MirrorItem.js';
 import type { PortState } from '../../src/core/application/data/PortState.js';
 
 export function taskData(
@@ -30,13 +29,6 @@ export function entityRecord(
     notePath:
       overrides.notePath ?? 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
   };
-}
-
-export function mirrorItem(
-  entityId: string,
-  base: TaskDataTransferObject | null = null,
-): MirrorItem {
-  return { entityId, base };
 }
 
 export function portState(overrides: Partial<PortState> = {}): PortState {

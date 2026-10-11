@@ -55,7 +55,6 @@ export class RegistryMirrorHandleAdapter implements MirrorHandlePort {
     }
     await this.registry.setMirrorItem(project, connection, handle, {
       entityId,
-      base: null,
     });
   }
 }

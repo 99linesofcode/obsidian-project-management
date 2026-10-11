@@ -3,7 +3,6 @@ import type { EntityRecord } from '../../src/core/application/data/EntityRecord.
 import type { ConnectionStatePort } from '../../src/core/port/ConnectionStatePort.js';
 import type { IdentityStorePort } from '../../src/core/port/IdentityStorePort.js';
 import type { TrackedEntityPort } from '../../src/core/port/TrackedEntityPort.js';
-import { taskData } from './records.js';
 
 export interface SyncStateConformanceHarness {
   create(): IdentityStorePort & TrackedEntityPort & ConnectionStatePort;
@@ -75,10 +74,7 @@ export function runSyncStateConformance(
       it('evicts the previous owner and its items when a path is claimed', async () => {
         const port = harness.create();
         await port.setEntity(entity('e1', PATH_A));
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: taskData({ id: 'e1', notePath: PATH_A }),
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e1' });
         await port.setEntity(entity('e2', PATH_A));
         expect(await port.getEntity('e1')).toBeNull();
         expect((await port.findByNotePath(PATH_A))?.id).toBe('e2');
@@ -91,39 +87,14 @@ export function runSyncStateConformance(
         const port = harness.create();
         await port.setEntity(entity('e1', PATH_A));
         await port.setEntity(entity('e2', PATH_A2));
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: null,
-        });
-        await port.setMirrorItem(PROJECT_A, 'todoist', TD, {
-          entityId: 'e1',
-          base: null,
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e1' });
+        await port.setMirrorItem(PROJECT_A, 'todoist', TD, { entityId: 'e1' });
 
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e2',
-          base: null,
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e2' });
 
         expect(await port.getEntity('e1')).not.toBeNull();
         expect((await port.findMirrorItem('github', GH))?.entityId).toBe('e2');
         expect((await port.findMirrorItem('todoist', TD))?.entityId).toBe('e1');
-      });
-
-      it('overwrites the base when the same entity re-claims its handle', async () => {
-        const port = harness.create();
-        await port.setEntity(entity('e1', PATH_A));
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: taskData({ title: 'old' }),
-        });
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: taskData({ title: 'new' }),
-        });
-        expect((await port.findMirrorItem('github', GH))?.base?.title).toBe(
-          'new',
-        );
       });
     });
 
@@ -133,16 +104,12 @@ export function runSyncStateConformance(
         await port.setEntity(entity('e1', PATH_A));
         await port.setMirrorItem(PROJECT_A, 'github', PENDING, {
           entityId: 'e1',
-          base: null,
         });
-        await port.setMirrorItem(PROJECT_A, 'github', GH2, {
-          entityId: 'e1',
-          base: taskData({ id: 'e1', notePath: PATH_A }),
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH2, { entityId: 'e1' });
 
         expect(await port.findMirrorItemByEntity('github', 'e1')).toEqual({
           handle: PENDING,
-          item: { entityId: 'e1', base: null },
+          item: { entityId: 'e1' },
         });
         expect(
           (await port.listMirrorItems(PROJECT_A, 'github')).map(
@@ -156,12 +123,8 @@ export function runSyncStateConformance(
         await port.setEntity(entity('e1', PATH_A));
         await port.setMirrorItem(PROJECT_A, 'github', PENDING, {
           entityId: 'e1',
-          base: null,
         });
-        await port.setMirrorItem(PROJECT_A, 'github', GH2, {
-          entityId: 'e1',
-          base: null,
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH2, { entityId: 'e1' });
 
         await port.removeMirrorItem(PROJECT_A, 'github', PENDING);
 
@@ -176,16 +139,13 @@ export function runSyncStateConformance(
       it('relocates an entity and its items when its project changes', async () => {
         const port = harness.create();
         await port.setEntity(entity('e1', PATH_A));
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: null,
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e1' });
 
         await port.setEntity(entity('e1', PATH_B));
 
         expect(await port.listMirrorItems(PROJECT_A, 'github')).toEqual([]);
         expect(await port.listMirrorItems(PROJECT_B, 'github')).toEqual([
-          { handle: GH, item: { entityId: 'e1', base: null } },
+          { handle: GH, item: { entityId: 'e1' } },
         ]);
         expect((await port.findMirrorItem('github', GH))?.entityId).toBe('e1');
         expect(await port.listEntities(PROJECT_A)).toEqual([]);
@@ -199,14 +159,8 @@ export function runSyncStateConformance(
       it('removes the record, its path and every mirror item', async () => {
         const port = harness.create();
         await port.setEntity(entity('e1', PATH_A));
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: null,
-        });
-        await port.setMirrorItem(PROJECT_A, 'todoist', TD, {
-          entityId: 'e1',
-          base: null,
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e1' });
+        await port.setMirrorItem(PROJECT_A, 'todoist', TD, { entityId: 'e1' });
 
         await port.removeEntity('e1');
 
@@ -220,14 +174,8 @@ export function runSyncStateConformance(
         const port = harness.create();
         await port.setEntity(entity('e1', PATH_A));
         await port.setEntity(entity('e2', PATH_A2));
-        await port.setMirrorItem(PROJECT_A, 'github', GH, {
-          entityId: 'e1',
-          base: null,
-        });
-        await port.setMirrorItem(PROJECT_A, 'todoist', TD, {
-          entityId: 'e2',
-          base: null,
-        });
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e1' });
+        await port.setMirrorItem(PROJECT_A, 'todoist', TD, { entityId: 'e2' });
 
         await port.removeEntity('e1');
 

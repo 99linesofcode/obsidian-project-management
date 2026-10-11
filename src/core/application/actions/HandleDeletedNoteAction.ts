@@ -16,7 +16,6 @@ export class HandleDeletedNoteAction {
   constructor(
     private readonly syncState: TrackedEntityPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
-    private readonly doneOptionName: string,
   ) {}
 
   async execute(input: HandleDeletedNoteInput): Promise<void> {
@@ -55,15 +54,12 @@ export class HandleDeletedNoteAction {
     }
 
     await adapter.tasks.deleteTask(found.handle);
-    const lane = found.item.base?.status ?? '';
-    if (lane !== this.doneOptionName) {
-      await adapter.tasks.applyField(
-        new CanonicalFieldWrite({
-          handle: found.handle,
-          field: 'completion',
-          value: 'true',
-        }),
-      );
-    }
+    await adapter.tasks.applyField(
+      new CanonicalFieldWrite({
+        handle: found.handle,
+        field: 'completion',
+        value: 'true',
+      }),
+    );
   }
 }
