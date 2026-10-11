@@ -19,7 +19,7 @@ vi.mock('obsidian', () => ({ TFile }));
 type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App, EventRef } from 'obsidian';
-import { VaultAdapter } from '../../../src/infrastructure/vault/VaultAdapter.js';
+import { vaultAdapter } from '../../helpers/vaultAdapter.js';
 
 class FakeVault {
   private readonly handlers = new Map<
@@ -45,11 +45,7 @@ function setup() {
   const vault = new FakeVault();
   const app = { vault } as unknown as App;
   const registered: EventRef[] = [];
-  const adapter = new VaultAdapter(
-    app,
-    (ref) => registered.push(ref),
-    new Set(),
-  );
+  const adapter = vaultAdapter(app, { registerEvent: (ref) => registered.push(ref) });
   const changed: string[] = [];
   const renamed: Array<{ oldPath: string; newPath: string }> = [];
   adapter.onNoteChanged((path) => changed.push(path));
@@ -147,24 +143,36 @@ describe('VaultAdapter.onNoteRenamed', () => {
   });
 });
 
-describe('VaultAdapter.modifiedTime', () => {
-  it('returns the file mtime as ISO 8601 and null for an unknown path', async () => {
-    const file = new TFile(
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      'md',
-      { mtime: 1758196800000 },
-    );
+describe('VaultAdapter.observeProject', () => {
+  it('reads the home note mtime as the field time and reports an absent project as no value', async () => {
+    const homePath = 'Projecten/Acme Widgets/_Acme Widgets.md';
+    const mtime = 1758196800000;
     const vault = {
+      getMarkdownFiles: () => [new TFile(homePath, 'md', { mtime })],
       getAbstractFileByPath: (path: string) =>
-        path === file.path ? file : null,
+        path === homePath ? new TFile(path, 'md', { mtime }) : null,
+      metadataCache: {
+        getFileCache: () => ({
+          frontmatter: {
+            connections: { a: { tool: 'conformance', project: 'board' } },
+          },
+        }),
+      },
     };
-    const app = { vault } as unknown as App;
-    const adapter = new VaultAdapter(app, () => {}, new Set());
+    const app = {
+      vault,
+      metadataCache: vault.metadataCache,
+    } as unknown as App;
+    const adapter = vaultAdapter(app, {
+      registeredApplications: new Set(['conformance']),
+    });
 
-    const iso = await adapter.modifiedTime(file.path);
+    const observed = await adapter.observeProject('Acme Widgets');
+    const missing = await adapter.observeProject('Missing');
 
-    expect(iso).toBe(new Date(1758196800000).toISOString());
-    expect(await adapter.modifiedTime('Projecten/missing.md')).toBeNull();
+    expect(observed.fieldTime).toBe(new Date(mtime).toISOString());
+    expect(observed.current).toBe('false');
+    expect(missing.fieldTime).toBeNull();
   });
 });
 
@@ -206,11 +214,11 @@ class MoveVault {
 function moveSetup(paths: string[]) {
   const vault = new MoveVault(paths);
   const app = { vault, fileManager: vault.fileManager } as unknown as App;
-  const adapter = new VaultAdapter(app, () => {}, new Set());
+  const adapter = vaultAdapter(app);
   return { vault, adapter };
 }
 
-describe('VaultAdapter.moveFolder', () => {
+describe('VaultAdapter.applyProjectArchived', () => {
   it('moves every file under the prefix, any extension, preserving relative paths', async () => {
     const { vault, adapter } = moveSetup([
       'Projecten/Acme Widgets/_home.md',
@@ -221,7 +229,7 @@ describe('VaultAdapter.moveFolder', () => {
       'Projecten/Other/_home.md',
     ]);
 
-    await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
+    await adapter.applyProjectArchived('Acme Widgets', true);
 
     expect(vault.files.map((file) => file.path).sort()).toEqual([
       'Archief/Acme Widgets/_home.md',
@@ -238,7 +246,7 @@ describe('VaultAdapter.moveFolder', () => {
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     ]);
 
-    await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
+    await adapter.applyProjectArchived('Acme Widgets', true);
 
     expect(vault.folders.has('Archief')).toBe(true);
     expect(vault.folders.has('Archief/Acme Widgets')).toBe(true);
@@ -248,7 +256,7 @@ describe('VaultAdapter.moveFolder', () => {
   it('is a no-op when no file lives under the prefix', async () => {
     const { vault, adapter } = moveSetup(['Projecten/Other/_home.md']);
 
-    await adapter.moveFolder('Projecten/Acme Widgets', 'Archief/Acme Widgets');
+    await adapter.applyProjectArchived('Acme Widgets', true);
 
     expect(vault.renames).toEqual([]);
   });
@@ -274,7 +282,7 @@ class CreateVault {
 function createSetup() {
   const vault = new CreateVault();
   const app = { vault } as unknown as App;
-  const adapter = new VaultAdapter(app, () => {}, new Set());
+  const adapter = vaultAdapter(app);
   return { vault, adapter };
 }
 
@@ -324,7 +332,7 @@ describe('VaultAdapter.trashNote', () => {
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     ]);
     const app = { vault, fileManager: vault.fileManager } as unknown as App;
-    const adapter = new VaultAdapter(app, () => {}, new Set());
+    const adapter = vaultAdapter(app);
 
     await adapter.trashNote('Projecten/Acme Widgets/taken/42-fix-the-bug.md');
 
@@ -336,7 +344,7 @@ describe('VaultAdapter.trashNote', () => {
   it('is a no-op for an unknown path', async () => {
     const vault = new TrashVault([]);
     const app = { vault, fileManager: vault.fileManager } as unknown as App;
-    const adapter = new VaultAdapter(app, () => {}, new Set());
+    const adapter = vaultAdapter(app);
 
     await adapter.trashNote('Projecten/missing.md');
 

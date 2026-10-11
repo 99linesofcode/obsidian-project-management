@@ -2,16 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import { splitFrontmatter } from '../../../../src/core/domain/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
 // mirror's single decision (flip the checkbox or not) is observable.
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -20,40 +15,40 @@ class FakeVault
   notes = new Map<string, string>();
   written: Array<{ path: string; content: string }> = [];
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
 
-  async createNote(): Promise<never> {
+  override async createNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async writeNote(path: string, content: string): Promise<void> {
+  override async writeNote(path: string, content: string): Promise<void> {
     this.notes.set(path, content);
     this.written.push({ path, content });
   }
 
   async moveFolder(): Promise<void> {}
-  async renameNote(): Promise<never> {
+  override async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async listNotesInFolder(): Promise<never> {
+  override async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async trashNote(): Promise<never> {
+  override async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async findProjectNotes(): Promise<never> {
+  override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 const projectName = 'Acme Widgets';

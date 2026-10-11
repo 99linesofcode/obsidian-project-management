@@ -1,8 +1,6 @@
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from '../data/ProjectNoteDataTransferObject.js';
-import type { NoteEnumeratorPort } from '../../port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../port/NoteWriterPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectSetupFactoryPort } from '../../port/ProjectSetupFactoryPort.js';
 import type { CoreReconcilers } from '../services/CoreReconcilers.js';
 import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
@@ -15,7 +13,7 @@ import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.js';
 
 export interface SyncProjectDependencies {
-  vault: NoteReaderPort & NoteWriterPort & NoteEnumeratorPort;
+  vault: VaultPort;
   setupFactory: ProjectSetupFactoryPort;
   reconcilers: CoreReconcilers;
   migrateHomeNote: MigrateProjectHomeNoteAction;

@@ -9,8 +9,6 @@ import type {
   BaselineStorePort,
 } from '../../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { ProjectLifecycleOriginPort } from '../../../../src/core/port/ProjectLifecycleOriginPort.js';
-import type { ProjectSourcePort } from '../../../../src/core/port/ProjectSourcePort.js';
 import type {
   ProjectWatchPort,
   ProjectWatchState,
@@ -20,30 +18,30 @@ import { registerAdapters } from '../../../../src/core/application/services/regi
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const PROJECT = 'Acme';
 const TARGET = 'board-a';
 
-class FakeProjectSource implements ProjectSourcePort {
+class FakeVault extends FakeVaultBase {
   connections: ConnectionDataTransferObject[] = [];
+  readonly moves: Array<{ project: string; archived: boolean }> = [];
 
-  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
+  override async readConnections(): Promise<
+    readonly ConnectionDataTransferObject[]
+  > {
     return this.connections;
   }
 
-  async listEntities(): Promise<readonly string[]> {
+  override async listEntities(): Promise<readonly string[]> {
     return [];
   }
-}
 
-class FakeOrigin implements ProjectLifecycleOriginPort {
-  readonly moves: Array<{ project: string; archived: boolean }> = [];
-
-  async observeProject(): Promise<OriginObservation> {
+  override async observeProject(): Promise<OriginObservation> {
     throw new Error('not used in this test');
   }
 
-  async applyProjectArchived(
+  override async applyProjectArchived(
     project: string,
     archived: boolean,
   ): Promise<void> {
@@ -108,9 +106,8 @@ function connection(
 }
 
 function setup() {
-  const projectSource = new FakeProjectSource();
-  projectSource.connections = [connection('a')];
-  const origin = new FakeOrigin();
+  const vault = new FakeVault();
+  vault.connections = [connection('a')];
   const baselines = new FakeBaselines();
   const watches = new FakeWatches();
   const mirror = new ConformanceMirrorAdapter();
@@ -119,13 +116,12 @@ function setup() {
   ]).adapters.get('conformance')!;
   const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
   const action = new ReactivateFrozenProjectAction(
-    projectSource,
-    origin,
+    vault,
     baselines,
     mirrorAdapters,
     watches,
   );
-  return { action, origin, baselines, watches, mirror, projectSource };
+  return { action, vault, baselines, watches, mirror };
 }
 
 function activity(
@@ -138,7 +134,7 @@ function activity(
 
 describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen project (F02 NWM-30)', () => {
   it('unfreezes the origin and clears the watch when a newer item appears', async () => {
-    const { action, origin, baselines, watches, mirror } = setup();
+    const { action, vault, baselines, watches, mirror } = setup();
     baselines.seed(PROJECT, 'origin', 'true');
     watches.seed(PROJECT, 'a', {
       etag: 'etag-1',
@@ -152,7 +148,7 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
     const reactivated = await action.invoke(PROJECT);
 
     expect(reactivated).toBe(true);
-    expect(origin.moves).toEqual([{ project: PROJECT, archived: false }]);
+    expect(vault.moves).toEqual([{ project: PROJECT, archived: false }]);
     expect(await watches.read(PROJECT, 'a')).toEqual({
       etag: null,
       cursor: null,
@@ -160,7 +156,7 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('adopts the newest item as the cursor on the first watch', async () => {
-    const { action, origin, baselines, watches, mirror } = setup();
+    const { action, vault, baselines, watches, mirror } = setup();
     baselines.seed(PROJECT, 'origin', 'true');
     mirror.seedActivity(
       TARGET,
@@ -170,7 +166,7 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
     const reactivated = await action.invoke(PROJECT);
 
     expect(reactivated).toBe(false);
-    expect(origin.moves).toEqual([]);
+    expect(vault.moves).toEqual([]);
     expect(await watches.read(PROJECT, 'a')).toEqual({
       etag: 'etag-2',
       cursor: '2026-09-25T10:00:00Z',
@@ -178,7 +174,7 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('refreshes only the etag when the newest item is not newer', async () => {
-    const { action, origin, baselines, watches, mirror } = setup();
+    const { action, vault, baselines, watches, mirror } = setup();
     baselines.seed(PROJECT, 'origin', 'true');
     watches.seed(PROJECT, 'a', {
       etag: 'etag-1',
@@ -191,7 +187,7 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
 
     await action.invoke(PROJECT);
 
-    expect(origin.moves).toEqual([]);
+    expect(vault.moves).toEqual([]);
     expect(await watches.read(PROJECT, 'a')).toEqual({
       etag: 'etag-2',
       cursor: '2026-09-20T10:00:00Z',
@@ -199,18 +195,18 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('does nothing when the activity read is unchanged', async () => {
-    const { action, origin, baselines, watches, mirror } = setup();
+    const { action, vault, baselines, watches, mirror } = setup();
     baselines.seed(PROJECT, 'origin', 'true');
     mirror.seedActivity(TARGET, activity(false, null, null));
 
     await action.invoke(PROJECT);
 
-    expect(origin.moves).toEqual([]);
+    expect(vault.moves).toEqual([]);
     expect(watches.writes).toEqual([]);
   });
 
   it('does nothing when the project was not already frozen', async () => {
-    const { action, origin, baselines, mirror } = setup();
+    const { action, vault, baselines, mirror } = setup();
     baselines.seed(PROJECT, 'origin', 'false');
     mirror.seedActivity(
       TARGET,
@@ -220,13 +216,12 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
     const reactivated = await action.invoke(PROJECT);
 
     expect(reactivated).toBe(false);
-    expect(origin.moves).toEqual([]);
+    expect(vault.moves).toEqual([]);
   });
 
   it('refreshes every connection watch when one reactivates (NWM-30)', async () => {
-    const { action, origin, baselines, watches, mirror, projectSource } =
-      setup();
-    projectSource.connections = [
+    const { action, vault, baselines, watches, mirror } = setup();
+    vault.connections = [
       connection('a', 'board-a'),
       connection('b', 'board-b'),
     ];
@@ -251,7 +246,7 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
     const reactivated = await action.invoke(PROJECT);
 
     expect(reactivated).toBe(true);
-    expect(origin.moves).toEqual([{ project: PROJECT, archived: false }]);
+    expect(vault.moves).toEqual([{ project: PROJECT, archived: false }]);
     expect(await watches.read(PROJECT, 'a')).toEqual({
       etag: null,
       cursor: null,

@@ -16,19 +16,14 @@ import type { ConnectionDataTransferObject } from '../../../../src/core/applicat
 import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
 import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
 import type { EntityRecord } from '../../../../src/core/application/data/EntityRecord.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { CoreReconcilers } from '../../../../src/core/application/services/CoreReconcilers.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -39,26 +34,26 @@ class FakeVault
   folders = new Map<string, string[]>();
   renames: Array<{ from: string; to: string }> = [];
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
-  async createNote(): Promise<void> {}
-  async writeNote(): Promise<void> {}
-  async renameNote(from: string, to: string): Promise<void> {
+  override async createNote(): Promise<void> {}
+  override async writeNote(): Promise<void> {}
+  override async renameNote(from: string, to: string): Promise<void> {
     this.renames.push({ from, to });
   }
   async moveFolder(): Promise<void> {}
-  async listNotesInFolder(folder: string): Promise<string[]> {
+  override async listNotesInFolder(folder: string): Promise<string[]> {
     return this.folders.get(folder) ?? [];
   }
-  async trashNote(): Promise<void> {}
-  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
+  override async trashNote(): Promise<void> {}
+  override async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.projectNotes;
   }
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 function reconcileRecorder(events: string[]): TaskFieldReconciler {

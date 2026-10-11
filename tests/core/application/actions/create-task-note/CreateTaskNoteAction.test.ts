@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import { splitFrontmatter } from '../../../../../src/core/domain/splitFrontmatter.js';
-import type { NoteEnumeratorPort } from '../../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../../helpers/records.js';
 import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -19,35 +14,35 @@ class FakeVault
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
 
-  async createNote(path: string, content: string): Promise<void> {
+  override async createNote(path: string, content: string): Promise<void> {
     this.notes.set(path, content);
     this.created.push({ path, content });
   }
 
-  async writeNote(): Promise<never> {
+  override async writeNote(): Promise<never> {
     throw new Error('not used in this test');
   }
   async moveFolder(): Promise<void> {}
-  async renameNote(): Promise<never> {
+  override async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async findProjectNotes(): Promise<never> {
+  override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async listNotesInFolder(): Promise<never> {
+  override async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async trashNote(): Promise<never> {
+  override async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 const url = 'https://github.com/acme/widgets/issues/42';

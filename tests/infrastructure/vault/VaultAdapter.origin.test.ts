@@ -30,7 +30,8 @@ import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSy
 import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../src/infrastructure/fake/conformanceDescriptor.js';
-import { VaultOriginAdapter } from '../../../src/infrastructure/vault/VaultOriginAdapter.js';
+import { VaultAdapter } from '../../../src/infrastructure/vault/VaultAdapter.js';
+import { vaultAdapter } from '../../helpers/vaultAdapter.js';
 import { originSideObservation } from '../../../src/core/domain/originSideObservation.js';
 
 const NOTE_PATH = 'Projecten/Acme/taken/fix-the-bug.md';
@@ -66,6 +67,12 @@ class FakeVault {
     }
     return new TFile(path, 'md', { mtime: note.mtime });
   }
+
+  getFolderByPath(): object | null {
+    return {};
+  }
+
+  async createFolder(): Promise<void> {}
 
   async read(file: TFileInstance): Promise<string> {
     return this.notes.get(file.path)!.content;
@@ -118,15 +125,15 @@ class FakeFileManager {
 function setup(): {
   vault: FakeVault;
   fileManager: FakeFileManager;
-  adapter: VaultOriginAdapter;
+  adapter: VaultAdapter;
 } {
   const vault = new FakeVault();
   const fileManager = new FakeFileManager(vault);
   const app = { vault, fileManager } as unknown as App;
-  return { vault, fileManager, adapter: new VaultOriginAdapter(app) };
+  return { vault, fileManager, adapter: vaultAdapter(app) };
 }
 
-describe('VaultOriginAdapter — the origin read (F02 NWM-28)', () => {
+describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
   it('reads each canonical field and the note mtime as the field time', async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
@@ -200,7 +207,7 @@ describe('VaultOriginAdapter — the origin read (F02 NWM-28)', () => {
   });
 });
 
-describe('VaultOriginAdapter — the origin write (F02 NWM-3)', () => {
+describe('VaultAdapter origin — the origin write (F02 NWM-3)', () => {
   it('writes a canonical field back into the note, preserving the body', async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
@@ -247,7 +254,7 @@ describe('VaultOriginAdapter — the origin write (F02 NWM-3)', () => {
   });
 });
 
-describe('VaultOriginAdapter — the origin rename (F02 NWM-3)', () => {
+describe('VaultAdapter origin — the origin rename (F02 NWM-3)', () => {
   it('renames a nested note within its folder', async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
@@ -296,19 +303,19 @@ describe('VaultOriginAdapter — the origin rename (F02 NWM-3)', () => {
   });
 });
 
-describe('VaultOriginAdapter — the origin delete (F02 NWM-25)', () => {
+describe('VaultAdapter origin — the origin delete (F02 NWM-25)', () => {
   it('trashes the note rather than destroying it', async () => {
     const { vault, fileManager, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
 
-    await adapter.trash(NOTE_PATH);
+    await adapter.trashNote(NOTE_PATH);
 
     expect(fileManager.trashed).toEqual([NOTE_PATH]);
     expect(vault.has(NOTE_PATH)).toBe(false);
   });
 });
 
-describe('VaultOriginAdapter — the origin round-trip (F02 NWM-3, NWM-17)', () => {
+describe('VaultAdapter origin — the origin round-trip (F02 NWM-3, NWM-17)', () => {
   it('updates the note through the action and advances the origin baseline', async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
@@ -360,7 +367,7 @@ describe('VaultOriginAdapter — the origin round-trip (F02 NWM-3, NWM-17)', () 
   });
 });
 
-describe('VaultOriginAdapter — the origin timestamp reaches the merge (F02 NWM-6, NWM-28)', () => {
+describe('VaultAdapter origin — the origin timestamp reaches the merge (F02 NWM-6, NWM-28)', () => {
   it("wins the decisive-timestamp rung with the note's mtime", async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);

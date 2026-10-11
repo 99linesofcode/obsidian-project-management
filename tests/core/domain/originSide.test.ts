@@ -14,18 +14,20 @@ import { originSideObservation } from '../../../src/core/domain/originSideObserv
 import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
-class FakeOrigin {
+class FakeOrigin extends FakeVaultBase {
   note: string | null;
   failWrites = false;
   readonly applied: CanonicalFieldWrite[] = [];
   readonly trashed: string[] = [];
 
   constructor(note: string | null) {
+    super();
     this.note = note;
   }
 
-  async observe(
+  override async observe(
     _handle: string,
     _field: CanonicalField,
   ): Promise<{
@@ -42,11 +44,11 @@ class FakeOrigin {
     };
   }
 
-  async readTask(): Promise<CanonicalTask | null> {
+  override async readTask(): Promise<CanonicalTask | null> {
     return null;
   }
 
-  async applyField(write: CanonicalFieldWrite): Promise<void> {
+  override async applyField(write: CanonicalFieldWrite): Promise<void> {
     if (this.failWrites) {
       throw new Error('origin write failed');
     }
@@ -54,7 +56,7 @@ class FakeOrigin {
     this.note = `status: ${write.value}`;
   }
 
-  async trash(handle: string): Promise<void> {
+  override async trashNote(handle: string): Promise<void> {
     this.trashed.push(handle);
     this.note = null;
   }

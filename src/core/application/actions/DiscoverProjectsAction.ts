@@ -1,7 +1,7 @@
 import type { AttachProjectAction } from './AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from '../../port/ProjectSetupFactoryPort.js';
 import type { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
-import type { NoteEnumeratorPort } from '../../port/NoteEnumeratorPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface DiscoveredProject {
   projectName: string;
@@ -16,7 +16,7 @@ export interface DiscoveryResult {
 
 export class DiscoverProjectsAction {
   constructor(
-    private readonly vault: NoteEnumeratorPort,
+    private readonly vault: VaultPort,
     private readonly setupFactory: ProjectSetupFactoryPort,
     private readonly attachProject: AttachProjectAction,
   ) {}

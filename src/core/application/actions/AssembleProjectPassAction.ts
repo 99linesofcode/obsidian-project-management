@@ -12,8 +12,7 @@ import { originSideObservation } from '../../domain/originSideObservation.js';
 import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../port/MirrorHandlePort.js';
-import type { OriginPort } from '../../port/OriginPort.js';
-import type { ProjectSourcePort } from '../../port/ProjectSourcePort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 const ORIGIN_SIDE = 'origin';
 
@@ -43,16 +42,15 @@ interface ScopedMirror {
 
 export class AssembleProjectPassAction {
   constructor(
-    private readonly projectSource: ProjectSourcePort,
-    private readonly origin: OriginPort,
+    private readonly vault: VaultPort,
     private readonly baselines: BaselineStorePort,
     private readonly handles: MirrorHandlePort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
   ) {}
 
   async invoke(project: string): Promise<PassRecord[]> {
-    const connections = await this.projectSource.readConnections(project);
-    const notePaths = await this.projectSource.listEntities(project);
+    const connections = await this.vault.readConnections(project);
+    const notePaths = await this.vault.listEntities(project);
     const scoped = this.scopeMirrors(connections, project);
 
     const records: PassRecord[] = [];
@@ -144,7 +142,7 @@ export class AssembleProjectPassAction {
     project: string,
     pending: string | null,
   ): Promise<string | null> {
-    const task = await this.origin.readTask(notePath);
+    const task = await this.vault.readTask(notePath);
     if (task === null) {
       return null;
     }
@@ -202,7 +200,7 @@ export class AssembleProjectPassAction {
     const origin = originSideObservation(
       ORIGIN_SIDE,
       await this.baselines.read(notePath, field, ORIGIN_SIDE),
-      await this.origin.observe(notePath, field),
+      await this.vault.observe(notePath, field),
     );
     const baselines = await this.readMirrorBaselines(notePath, field, mirrors);
     const pass = new MirrorSyncPass({
@@ -213,7 +211,7 @@ export class AssembleProjectPassAction {
       baselines,
     });
 
-    const record = await new MirrorSyncAction(this.origin).invoke(pass);
+    const record = await new MirrorSyncAction(this.vault).invoke(pass);
     await this.persistAdvanced(notePath, field, record);
     return record;
   }

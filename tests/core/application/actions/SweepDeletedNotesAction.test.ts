@@ -3,7 +3,7 @@ import { SweepDeletedNotesAction } from '../../../../src/core/application/action
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { entityRecord } from '../../../helpers/records.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const githubConnection = {
   slug: 'github',
@@ -11,10 +11,10 @@ const githubConnection = {
   target: 'https://github.com/acme/widgets',
 };
 
-class FakeVault implements NoteReaderPort {
+class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }

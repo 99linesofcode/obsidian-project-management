@@ -1,5 +1,4 @@
-import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../port/NoteWriterPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectManagementSettings } from '../data/ProjectManagementSettings.js';
 import {
   SEED_ARTIFACTS,
@@ -9,7 +8,7 @@ import {
 
 export class SeedVaultArtifactsAction {
   constructor(
-    private readonly vault: NoteReaderPort & NoteWriterPort,
+    private readonly vault: VaultPort,
     private readonly settings: ProjectManagementSettings,
   ) {}
 

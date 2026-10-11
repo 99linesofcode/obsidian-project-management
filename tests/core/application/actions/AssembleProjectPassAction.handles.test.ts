@@ -9,9 +9,8 @@ import type { RegisteredAdapter } from '../../../../src/core/application/data/Re
 import type { BaselineStorePort } from '../../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
-import type { OriginPort } from '../../../../src/core/port/OriginPort.js';
-import type { ProjectSourcePort } from '../../../../src/core/port/ProjectSourcePort.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 
@@ -38,23 +37,25 @@ class MemoryBaselines implements BaselineStorePort {
   }
 }
 
-class FixedProjectSource implements ProjectSourcePort {
+class FakeVault extends FakeVaultBase {
   connections: ConnectionDataTransferObject[] = [];
   entities: readonly string[] = [ENTITY];
+  readonly values = new Map<string, string | null>();
 
-  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
+  override async readConnections(): Promise<
+    readonly ConnectionDataTransferObject[]
+  > {
     return this.connections;
   }
 
-  async listEntities(): Promise<readonly string[]> {
+  override async listEntities(): Promise<readonly string[]> {
     return this.entities;
   }
-}
 
-class FieldOrigin implements OriginPort {
-  readonly values = new Map<string, string | null>();
-
-  async observe(_handle: string, field: string): Promise<OriginObservation> {
+  override async observe(
+    _handle: string,
+    field: string,
+  ): Promise<OriginObservation> {
     return new OriginObservation({
       current: this.values.get(field) ?? null,
       currentCompleted: false,
@@ -63,22 +64,24 @@ class FieldOrigin implements OriginPort {
     });
   }
 
-  async readTask(): Promise<CanonicalTask | null> {
+  override async readTask(): Promise<CanonicalTask | null> {
     return null;
   }
 
-  async applyField(): Promise<void> {}
-  async trash(): Promise<void> {}
+  override async applyField(): Promise<void> {}
+  override async trashNote(): Promise<void> {}
 }
 
-function mirrorLikeOrigin(status: string): FieldOrigin {
-  const origin = new FieldOrigin();
-  origin.values.set('title', 'Task');
-  origin.values.set('body', '');
-  origin.values.set('completion', 'false');
-  origin.values.set('Status', status);
-  origin.values.set('label', '');
-  return origin;
+function mirrorLikeOrigin(
+  status: string,
+  vault: FakeVault = new FakeVault(),
+): FakeVault {
+  vault.values.set('title', 'Task');
+  vault.values.set('body', '');
+  vault.values.set('completion', 'false');
+  vault.values.set('Status', status);
+  vault.values.set('label', '');
+  return vault;
 }
 
 class RecordingFactory implements MirrorAdapterFactoryPort {
@@ -159,12 +162,12 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     first.adapter.seed(seededTask('handle-a', 'Building'));
     second.adapter.seed(seededTask('handle-b', 'Building'));
 
-    const projectSource = new FixedProjectSource();
-    projectSource.connections = [
+    const vault = new FakeVault();
+    vault.connections = [
       connection('gh-main', 'target-a'),
       connection('gh-second', 'target-b'),
     ];
-    const origin = mirrorLikeOrigin('Done');
+    mirrorLikeOrigin('Done', vault);
     const factory = new RecordingFactory(
       new Map([
         ['target-a', first.registered],
@@ -178,8 +181,7 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
       ]),
     );
     const action = new AssembleProjectPassAction(
-      projectSource,
-      origin,
+      vault,
       new MemoryBaselines(),
       handles,
       factory,
@@ -204,15 +206,13 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     const first = registeredMirror('mirror-a');
     first.adapter.seed(seededTask('handle-a', 'Building'));
 
-    const projectSource = new FixedProjectSource();
-    projectSource.connections = [connection('gh-main', 'target-a')];
-    const origin = new FieldOrigin();
+    const vault = new FakeVault();
+    vault.connections = [connection('gh-main', 'target-a')];
     const factory = new RecordingFactory(
       new Map([['target-a', first.registered]]),
     );
     const action = new AssembleProjectPassAction(
-      projectSource,
-      origin,
+      vault,
       new MemoryBaselines(),
       new FixedHandles(new Map()),
       factory,

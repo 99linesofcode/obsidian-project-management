@@ -4,7 +4,8 @@ import type { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';
 import { ProjectLifecycleRecord } from '../data/ProjectLifecycleRecord.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
-import type { ProjectLifecycleOriginPort } from '../../port/ProjectLifecycleOriginPort.js';
+import type { TrackedEntityPort } from '../../port/TrackedEntityPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 interface ObservedMirror {
   mirror: MirrorSide;
@@ -12,7 +13,10 @@ interface ObservedMirror {
 }
 
 export class ProjectLifecycleSyncAction {
-  constructor(private readonly origin: ProjectLifecycleOriginPort) {}
+  constructor(
+    private readonly origin: VaultPort,
+    private readonly registry: TrackedEntityPort,
+  ) {}
 
   async invoke(pass: ProjectLifecyclePass): Promise<ProjectLifecycleRecord> {
     const observed = await this.observeMirrors(pass);
@@ -21,7 +25,7 @@ export class ProjectLifecycleSyncAction {
       observed.map((entry) => entry.observation),
     );
     const mirrors = await fanOut(observed, result);
-    const originResult = await applyToOrigin(this.origin, pass, result);
+    const originResult = await this.applyToOrigin(pass, result);
 
     const advanced = [...mirrors.advanced];
     const failed = [...mirrors.failed];
@@ -42,6 +46,27 @@ export class ProjectLifecycleSyncAction {
     });
   }
 
+  private async applyToOrigin(
+    pass: ProjectLifecyclePass,
+    result: MergeResult,
+  ): Promise<{ advanced: boolean; failed: boolean }> {
+    if (result.outcome === 'unchanged') {
+      return { advanced: false, failed: false };
+    }
+    if (pass.origin.current === result.value) {
+      return { advanced: true, failed: false };
+    }
+
+    const archived = result.value === 'true';
+    try {
+      await this.origin.applyProjectArchived(pass.project, archived);
+      await relocateEntities(this.registry, pass.project, archived);
+      return { advanced: true, failed: false };
+    } catch {
+      return { advanced: false, failed: true };
+    }
+  }
+
   private async observeMirrors(
     pass: ProjectLifecyclePass,
   ): Promise<ObservedMirror[]> {
@@ -56,6 +81,26 @@ export class ProjectLifecycleSyncAction {
       }
     }
     return observed;
+  }
+}
+
+async function relocateEntities(
+  registry: TrackedEntityPort,
+  project: string,
+  archived: boolean,
+): Promise<void> {
+  const from = archived ? 'Projecten' : 'Archief';
+  const to = archived ? 'Archief' : 'Projecten';
+  const fromPrefix = `${from}/${project}/`;
+  const toPrefix = `${to}/${project}/`;
+
+  for (const record of await registry.listEntities(project)) {
+    if (record.notePath.startsWith(fromPrefix)) {
+      await registry.setEntity({
+        ...record,
+        notePath: `${toPrefix}${record.notePath.slice(fromPrefix.length)}`,
+      });
+    }
   }
 }
 
@@ -112,24 +157,4 @@ async function fanOut(
   }
 
   return { written, advanced, failed };
-}
-
-async function applyToOrigin(
-  origin: ProjectLifecycleOriginPort,
-  pass: ProjectLifecyclePass,
-  result: MergeResult,
-): Promise<{ advanced: boolean; failed: boolean }> {
-  if (result.outcome === 'unchanged') {
-    return { advanced: false, failed: false };
-  }
-  if (pass.origin.current === result.value) {
-    return { advanced: true, failed: false };
-  }
-
-  try {
-    await origin.applyProjectArchived(pass.project, result.value === 'true');
-    return { advanced: true, failed: false };
-  } catch {
-    return { advanced: false, failed: true };
-  }
 }

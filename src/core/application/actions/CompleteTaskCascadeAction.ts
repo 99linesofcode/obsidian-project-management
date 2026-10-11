@@ -5,8 +5,7 @@ import { stemOf } from '../../domain/stemOf.js';
 import { taskLinkFromAffiliation } from '../../domain/taskLinkFromAffiliation.js';
 import { ToDoNoteParser, withToDoStatus } from '../../domain/ToDoNoteParser.js';
 import { withBody } from '../../domain/withBody.js';
-import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../port/NoteWriterPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface CompleteTaskCascadeInput {
   notePath: string;
@@ -32,7 +31,7 @@ export interface CompleteTaskCascadeInput {
 // are no-ops, so the cascade settles and the double-sync invariance holds.
 export class CompleteTaskCascadeAction {
   constructor(
-    private readonly vault: NoteReaderPort & NoteWriterPort,
+    private readonly vault: VaultPort,
     private readonly doneOptionName: string,
   ) {}
 

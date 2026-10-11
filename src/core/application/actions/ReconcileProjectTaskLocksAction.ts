@@ -1,8 +1,7 @@
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../port/MirrorHandlePort.js';
-import type { OriginPort } from '../../port/OriginPort.js';
-import type { ProjectSourcePort } from '../../port/ProjectSourcePort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 import type { TaskLockPort } from '../../port/TaskLockPort.js';
 
 export interface ReconcileProjectTaskLocksInput {
@@ -13,8 +12,7 @@ export interface ReconcileProjectTaskLocksInput {
 
 export class ReconcileProjectTaskLocksAction {
   constructor(
-    private readonly projectSource: ProjectSourcePort,
-    private readonly origin: OriginPort,
+    private readonly vault: VaultPort,
     private readonly handles: MirrorHandlePort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly doneOptionName: string,
@@ -24,7 +22,7 @@ export class ReconcileProjectTaskLocksAction {
     if (input.frozen === input.wasFrozen) {
       return;
     }
-    const connections = await this.projectSource.readConnections(input.project);
+    const connections = await this.vault.readConnections(input.project);
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
         connection.application,
@@ -74,7 +72,7 @@ export class ReconcileProjectTaskLocksAction {
   }
 
   private async isDone(notePath: string): Promise<boolean> {
-    const task = await this.origin.readTask(notePath);
+    const task = await this.vault.readTask(notePath);
     return task !== null && task.status === this.doneOptionName;
   }
 }

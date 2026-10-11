@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -17,23 +12,23 @@ class FakeVault
   }
   folders = new Map<string, string[]>();
 
-  async getNoteByPath(): Promise<{ content: string } | null> {
+  override async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
   }
-  async createNote(): Promise<void> {}
-  async writeNote(): Promise<void> {}
-  async renameNote(): Promise<void> {}
+  override async createNote(): Promise<void> {}
+  override async writeNote(): Promise<void> {}
+  override async renameNote(): Promise<void> {}
   async moveFolder(): Promise<void> {}
-  async listNotesInFolder(folder: string): Promise<string[]> {
+  override async listNotesInFolder(folder: string): Promise<string[]> {
     return this.folders.get(folder) ?? [];
   }
-  async trashNote(): Promise<void> {}
-  async findProjectNotes(): Promise<never> {
+  override async trashNote(): Promise<void> {}
+  override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 function harness() {

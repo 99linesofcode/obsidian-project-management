@@ -8,9 +8,9 @@ import type {
   MirrorAdapterFactoryPort,
 } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { ProjectCaptureCursorPort } from '../../../../src/core/port/ProjectCaptureCursorPort.js';
-import type { ProjectCaptureVaultPort } from '../../../../src/core/port/ProjectCaptureVaultPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
-class FakeVault implements ProjectCaptureVaultPort {
+class FakeVault extends FakeVaultBase {
   readonly adopted: AdoptedProject[] = [];
   readonly adoptCalls: Array<{
     name: string;
@@ -18,11 +18,11 @@ class FakeVault implements ProjectCaptureVaultPort {
     slug: string;
   }> = [];
 
-  async listAdopted(): Promise<readonly AdoptedProject[]> {
+  override async listAdoptedProjects(): Promise<readonly AdoptedProject[]> {
     return this.adopted;
   }
 
-  async adopt(
+  override async adoptProject(
     project: CapturedProject,
     application: string,
     slug: string,

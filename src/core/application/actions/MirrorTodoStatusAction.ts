@@ -4,8 +4,7 @@ import { splitFrontmatter } from '../../domain/splitFrontmatter.js';
 import { taskLinkFromAffiliation } from '../../domain/taskLinkFromAffiliation.js';
 import { ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
 import { withBody } from '../../domain/withBody.js';
-import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../port/NoteWriterPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface MirrorTodoStatusInput {
   todoPath: string;
@@ -18,7 +17,7 @@ export interface MirrorTodoStatusInput {
 // both sides agree there is nothing to write, so the two directions converge
 // instead of ping-ponging.
 export class MirrorTodoStatusAction {
-  constructor(private readonly vault: NoteReaderPort & NoteWriterPort) {}
+  constructor(private readonly vault: VaultPort) {}
 
   async execute(input: MirrorTodoStatusInput): Promise<void> {
     const todo = await this.vault.getNoteByPath(input.todoPath);

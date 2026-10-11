@@ -9,11 +9,10 @@ import type { RegisteredAdapter } from '../../../../src/core/application/data/Re
 import type { BaselineStorePort } from '../../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
-import type { OriginPort } from '../../../../src/core/port/OriginPort.js';
-import type { ProjectSourcePort } from '../../../../src/core/port/ProjectSourcePort.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const PROJECT = 'Acme';
 const ENTITY = 'Projecten/Acme/taken/fix-the-bug.md';
@@ -41,24 +40,28 @@ class MemoryBaselines implements BaselineStorePort {
   }
 }
 
-class FixedProjectSource implements ProjectSourcePort {
+class FakeVault extends FakeVaultBase {
   constructor(
     private readonly connections: readonly ConnectionDataTransferObject[],
-  ) {}
+    private readonly task: CanonicalTask | null,
+  ) {
+    super();
+  }
 
-  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
+  override async readConnections(): Promise<
+    readonly ConnectionDataTransferObject[]
+  > {
     return this.connections;
   }
 
-  async listEntities(): Promise<readonly string[]> {
+  override async listEntities(): Promise<readonly string[]> {
     return [ENTITY];
   }
-}
 
-class TaskOrigin implements OriginPort {
-  constructor(private readonly task: CanonicalTask | null) {}
-
-  async observe(_handle: string, field: string): Promise<OriginObservation> {
+  override async observe(
+    _handle: string,
+    field: string,
+  ): Promise<OriginObservation> {
     return new OriginObservation({
       current: this.value(field),
       currentCompleted: this.task?.completed ?? false,
@@ -67,13 +70,13 @@ class TaskOrigin implements OriginPort {
     });
   }
 
-  async readTask(): Promise<CanonicalTask | null> {
+  override async readTask(): Promise<CanonicalTask | null> {
     return this.task;
   }
 
-  async applyField(): Promise<void> {}
+  override async applyField(): Promise<void> {}
 
-  async trash(): Promise<void> {}
+  override async trashNote(): Promise<void> {}
 
   private value(field: string): string | null {
     if (this.task === null) {
@@ -191,8 +194,7 @@ function setup(
   };
   const handles = new RecordingHandles();
   const action = new AssembleProjectPassAction(
-    new FixedProjectSource(connections),
-    new TaskOrigin(originTask()),
+    new FakeVault(connections, originTask()),
     new MemoryBaselines(),
     handles,
     mirrorAdapters,
@@ -285,11 +287,13 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
     bad.seedThrowingTask('board-bad');
     const handles = new RecordingHandles();
     const action = new AssembleProjectPassAction(
-      new FixedProjectSource([
-        connection('gh-bad', 'conformance-bad', 'board-bad'),
-        connection('gh-good', 'conformance', 'board-good'),
-      ]),
-      new TaskOrigin(originTask()),
+      new FakeVault(
+        [
+          connection('gh-bad', 'conformance-bad', 'board-bad'),
+          connection('gh-good', 'conformance', 'board-good'),
+        ],
+        originTask(),
+      ),
       new MemoryBaselines(),
       handles,
       {

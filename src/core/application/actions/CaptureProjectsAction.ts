@@ -4,7 +4,7 @@ import type {
   MirrorAdapterFactoryPort,
 } from '../../port/MirrorAdapterFactoryPort.js';
 import type { ProjectCaptureCursorPort } from '../../port/ProjectCaptureCursorPort.js';
-import type { ProjectCaptureVaultPort } from '../../port/ProjectCaptureVaultPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface CaptureProjectsResult {
   captured: string[];
@@ -14,7 +14,7 @@ export interface CaptureProjectsResult {
 export class CaptureProjectsAction {
   constructor(
     private readonly factory: MirrorAdapterFactoryPort,
-    private readonly vault: ProjectCaptureVaultPort,
+    private readonly vault: VaultPort,
     private readonly cursor: ProjectCaptureCursorPort,
   ) {}
 
@@ -34,7 +34,7 @@ export class CaptureProjectsAction {
     syncedAt: string,
   ): Promise<CaptureProjectsResult> {
     const projects = sortedByCreatedAt(await source.capture.captureProjects());
-    const adopted = await this.vault.listAdopted();
+    const adopted = await this.vault.listAdoptedProjects();
     const names = new Set(adopted.map((project) => project.projectName));
     const targets = new Set(
       adopted
@@ -76,7 +76,11 @@ export class CaptureProjectsAction {
         continue;
       }
       try {
-        await this.vault.adopt(project, source.application, source.application);
+        await this.vault.adoptProject(
+          project,
+          source.application,
+          source.application,
+        );
       } catch (error) {
         errors.push(error);
         break;
