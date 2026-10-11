@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Baseline } from '../../../src/core/application/data/Baseline.js';
+import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import type { SideRole } from '../../../src/core/domain/SideObservation.js';
 import { mergeField } from '../../../src/core/domain/mergeField.js';

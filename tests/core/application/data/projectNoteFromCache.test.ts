@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ConnectionValidationService } from '../../../src/core/domain/ConnectionValidationService.js';
-import { projectNoteFromCache } from '../../../src/core/domain/projectNoteFromCache.js';
+import { ConnectionValidationService } from '../../../../src/core/application/services/ConnectionValidationService.js';
+import { projectNoteFromCache } from '../../../../src/core/application/data/projectNoteFromCache.js';
 
 const github = { tool: 'github', project: 'https://github.com/acme/widgets' };
 

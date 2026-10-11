@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AssembleProjectLifecyclePassAction } from '../../../../src/core/application/actions/AssembleProjectLifecyclePassAction.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import { Baseline } from '../../../../src/core/application/data/Baseline.js';
+import { Baseline } from '../../../../src/core/domain/Baseline.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
@@ -10,7 +10,7 @@ import type { ProjectSourcePort } from '../../../../src/core/port/ProjectSourceP
 import type { TrackedEntityPort } from '../../../../src/core/port/TrackedEntityPort.js';
 import type { EntityRecord } from '../../../../src/core/application/data/EntityRecord.js';
 import type { MirrorItem } from '../../../../src/core/application/data/MirrorItem.js';
-import { registerAdapters } from '../../../../src/core/domain/registerAdapters.js';
+import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';

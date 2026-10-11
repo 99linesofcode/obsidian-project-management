@@ -1,5 +1,5 @@
-import type { Baseline } from '../application/data/Baseline.js';
-import type { OriginObservation } from '../application/data/OriginObservation.js';
+import type { Baseline } from './Baseline.js';
+import type { OriginObservation } from './OriginObservation.js';
 import { SideObservation } from './SideObservation.js';
 
 export function originSideObservation(

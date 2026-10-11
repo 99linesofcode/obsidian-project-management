@@ -1,5 +1,5 @@
 import type { CanonicalField } from '../domain/canonicalField.js';
-import type { Baseline } from '../application/data/Baseline.js';
+import type { Baseline } from '../domain/Baseline.js';
 
 export type BaselineField = CanonicalField | 'lifecycle';
 

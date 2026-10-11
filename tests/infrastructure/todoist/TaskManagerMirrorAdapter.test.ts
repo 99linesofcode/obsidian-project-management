@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
-import { Baseline } from '../../../src/core/application/data/Baseline.js';
+import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
-import { registerAdapters } from '../../../src/core/domain/registerAdapters.js';
+import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
 import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
 import { todoistDescriptor } from '../../../src/infrastructure/todoist/todoistDescriptor.js';

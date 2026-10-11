@@ -1,5 +1,5 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
-import type { Baseline } from './Baseline.js';
+import type { Baseline } from '../../domain/Baseline.js';
 import type { MirrorSide } from './MirrorSide.js';
 import type { SideObservation } from '../../domain/SideObservation.js';
 

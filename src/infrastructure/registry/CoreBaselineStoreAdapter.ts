@@ -1,4 +1,4 @@
-import { Baseline } from '../../core/application/data/Baseline.js';
+import { Baseline } from '../../core/domain/Baseline.js';
 import type {
   BaselineField,
   BaselineStorePort,

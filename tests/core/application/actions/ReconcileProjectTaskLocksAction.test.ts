@@ -5,14 +5,14 @@ import { ReconcileProjectTaskLocksAction } from '../../../../src/core/applicatio
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
-import type { OriginObservation } from '../../../../src/core/application/data/OriginObservation.js';
+import type { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { CanonicalFieldWrite } from '../../../../src/core/application/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
 import type { OriginPort } from '../../../../src/core/port/OriginPort.js';
 import type { ProjectSourcePort } from '../../../../src/core/port/ProjectSourcePort.js';
-import { registerAdapters } from '../../../../src/core/domain/registerAdapters.js';
+import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 

@@ -3,7 +3,7 @@ import type { IdentityStorePort } from '../../port/IdentityStorePort.js';
 import type { ProjectAddressing } from '../data/ProjectAddressing.js';
 import type { ProjectSummary } from '../data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
-import { deriveBoardChoice } from '../../domain/deriveBoardChoice.js';
+import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { nameFromTarget } from '../../domain/nameFromTarget.js';
 
 export interface EnsureProjectBoardInput {
