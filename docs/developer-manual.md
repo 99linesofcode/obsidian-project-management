@@ -976,8 +976,10 @@ layers, and each layer owns one surface of the system.
   `src/core/application/actions/CaptureProjectsAction.ts`,
   `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`,
   `ReactivateFrozenProjectAction.ts`.
-- The neutral note arithmetic: `src/core/domain/` (`checklist`,
-  `splitFrontmatter`, `withBody`, `ToDoNoteParser`, the affiliation helpers).
+- The neutral note arithmetic and the merge vocabulary: `src/core/domain/`
+  (`checklist`, `splitFrontmatter`, `withBody`, `ToDoNoteParser`, the
+  affiliation helpers, and `mergeField` with its `Delta`/`MergeResult`/
+  `SideObservation`/`Baseline`/`OriginObservation` shapes).
 - The driven adapters: `src/infrastructure/` (`vault/`, `github/`, `todoist/`,
   `registry/`, `fake/`). Only `infrastructure/vault/VaultAdapter.ts` touches the
   Obsidian API; the neutral note arithmetic is in the domain.
