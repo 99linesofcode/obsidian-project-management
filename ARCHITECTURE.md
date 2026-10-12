@@ -584,7 +584,7 @@ Enforced by `eslint-plugin-boundaries` (elements = the layer folders) and the
 - **File naming**: PascalCase classes with role suffixes (`*Action`,
   `*Adapter`, `*Port`, `*Mapper`, `*Parser`, `*DataTransferObject`);
   camelCase pure modules grouped by subject (`note.ts`, `paths.ts`,
-  `affiliation.ts`, `mergeField.ts`), not one file per helper.
+  `affiliation.ts`), not one file per helper.
   Tests mirror the tree: `tests/<module>/…`.
 - **Entry point**: `src/main.ts` — above the layers, never inside one; the
   composition root.
