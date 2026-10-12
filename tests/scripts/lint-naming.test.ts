@@ -72,7 +72,7 @@ describe('the role-folder suffix gate', () => {
 
   it('passes a lowercase pure module in the actions folder', () => {
     const root = fixtureRoot({
-      'src/core/application/actions/seedArtifacts.ts': 'export const x = 1;\n',
+      'src/core/application/actions/templates.ts': 'export const x = 1;\n',
     });
 
     expect(gateExitCode(root)).toBe(0);
