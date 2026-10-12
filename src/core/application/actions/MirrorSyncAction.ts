@@ -6,6 +6,7 @@ import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDat
 import type { MergeResult } from '../../domain/MergeResult.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
+import { labelSequence } from '../../domain/note.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
@@ -421,6 +422,6 @@ function canonicalValue(
     case 'subtasks':
       return task.parent;
     case 'label':
-      return task.labels.join(',');
+      return labelSequence(task.labels);
   }
 }

@@ -144,6 +144,15 @@ describe('TaskManagerMirrorAdapter — the canonical read (F01 ACM-5)', () => {
 
     expect(task!.status).toBe('');
   });
+
+  it('returns null for a single task without a type label (LBL-4)', async () => {
+    const { adapter } = adapterWith([
+      { status: 200, json: taskNode({ labels: ['bug'] }) },
+      { status: 200, json: [sectionNode()] },
+    ]);
+
+    expect(await adapter.readTask('T1')).toBeNull();
+  });
 });
 
 describe('TaskManagerMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
@@ -281,7 +290,7 @@ describe('TaskManagerMirrorAdapter — the canonical writes (F01 ACM-5)', () => 
       new CanonicalFieldWrite({
         handle: 'T1',
         field: 'label',
-        value: 'type: task,bug',
+        value: '["type: task","bug"]',
       }),
     );
 
@@ -304,7 +313,7 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
     });
   });
 
-  it('reads the tracked (typed) tasks for the project', async () => {
+  it('reads only type-labelled tasks for the project (LBL-4)', async () => {
     const { adapter } = adapterWith([
       { status: 200, json: [sectionNode()] },
       {
@@ -318,7 +327,7 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
     expect(tasks.map((task) => task.handle)).toEqual(['T1']);
   });
 
-  it('captures the untyped tasks as remote-born tasks, active and completed', async () => {
+  it('captures every task, typed and untyped, active and completed (LBL-7)', async () => {
     const fixedNow = () => new Date('2026-10-08T12:00:00Z');
     const { adapter, transport } = adapterWith(
       [
@@ -347,7 +356,7 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
 
     const tasks = await adapter.capture(target());
 
-    expect(tasks.map((task) => task.handle)).toEqual(['T2', 'T3']);
+    expect(tasks.map((task) => task.handle)).toEqual(['T1', 'T2', 'T3']);
     expect(transport.calls.map((call) => call.path)).toEqual([
       '/sections?project_id=P1',
       '/tasks?project_id=P1',
@@ -511,7 +520,7 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
     vault.values.set('body', 'The bug happens on resize.');
     vault.values.set('completion', 'false');
     vault.values.set('Status', 'Done');
-    vault.values.set('label', 'type: task');
+    vault.values.set('label', '["type: task"]');
     const registry = new SyncStateAdapter(memoryStorage());
     await registry.setEntity({ id: ENTITY, notePath: ENTITY });
     await registry.setMirrorItem('Acme', 'todoist', 'T1', { entityId: ENTITY });

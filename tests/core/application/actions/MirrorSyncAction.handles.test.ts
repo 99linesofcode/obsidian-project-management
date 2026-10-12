@@ -66,7 +66,7 @@ function mirrorLikeOrigin(
   vault.values.set('body', '');
   vault.values.set('completion', 'false');
   vault.values.set('Status', status);
-  vault.values.set('label', '');
+  vault.values.set('label', '[]');
   return vault;
 }
 

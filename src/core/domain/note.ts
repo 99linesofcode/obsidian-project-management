@@ -155,13 +155,49 @@ export function normalizedStem(path: string): string {
   return stemOf(path).replace(/^\d+-/, '').toLowerCase();
 }
 
-// The vault-owned content type carried by a `type:*` label, or '' when the
-// label set carries none. The prefix is stripped and the remainder trimmed, so
-// both the spaced (`type: task`) and legacy (`type:task`) conventions resolve.
-// This is the ONE type-from-labels rule: every surface that reads a type off
-// labels routes here, so a non-type label (e.g. `priority:high`) is never
-// mistaken for the type.
-export function typeFromLabels(labels: string[]): string {
-  const label = labels.find((candidate) => candidate.startsWith('type:'));
-  return label === undefined ? '' : label.slice('type:'.length).trim();
+const WORK_ITEM_KINDS = new Set(['slice', 'pitch', 'task', 'chore', 'bug', 'todo']);
+
+export function typeFromLabels(labels: readonly string[]): string {
+  for (const label of labels) {
+    if (!label.startsWith('type:')) {
+      continue;
+    }
+    const kind = label.slice('type:'.length).trim();
+    if (WORK_ITEM_KINDS.has(kind)) {
+      return kind;
+    }
+  }
+  return '';
+}
+
+export function labelSequence(labels: readonly string[]): string {
+  return JSON.stringify([...labels]);
+}
+
+export function labelsFromSequence(value: string | null): string[] {
+  if (value === null) {
+    return [];
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return [];
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string');
+    }
+  } catch {
+    // The legacy unquoted form is not JSON — fall through to the comma split.
+  }
+  return commaSplit(trimmed);
+}
+
+function commaSplit(value: string): string[] {
+  return value
+    .replace(/^\[/, '')
+    .replace(/\]$/, '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
 }

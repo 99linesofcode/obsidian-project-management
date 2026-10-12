@@ -43,13 +43,31 @@ const HOME = [
 const NOTE = [
   '---',
   'categories: [taken]',
-  'type: task',
   'status: Building',
   'affiliation: ["[[_Acme]]", "[[Slice]]"]',
   'created: 2026-01-01',
   'synced: 2026-01-02',
   'completed: 2026-01-03',
-  'labels: alpha, beta',
+  'labels: [type:task, alpha, beta]',
+  '---',
+  'Body text',
+].join('\n');
+const UNTYPED_NOTE = [
+  '---',
+  'categories: [taken]',
+  'status: Building',
+  'affiliation: ["[[_Acme]]", "[[Slice]]"]',
+  'labels: [alpha, beta]',
+  '---',
+  'Body text',
+].join('\n');
+const BLOCK_LABELS_NOTE = [
+  '---',
+  'status: Building',
+  'affiliation: ["[[_Acme]]"]',
+  'labels:',
+  '  - type:task',
+  '  - priority:high',
   '---',
   'Body text',
 ].join('\n');
@@ -231,7 +249,7 @@ describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
     expect(completion.current).toBe('true');
     expect(completion.currentCompleted).toBe(true);
     expect(parent.current).toBe('Slice');
-    expect(label.current).toBe('alpha,beta');
+    expect(label.current).toBe('["type:task","alpha","beta"]');
 
     expect(status.fieldTime).toBe(new Date(MTIME).toISOString());
     expect(status.trustworthy).toBe(true);
@@ -249,6 +267,15 @@ describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
     expect(observed.fieldTime).toBeNull();
   });
 
+  it('reports no value for a note that carries no type label (LBL-4)', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, UNTYPED_NOTE, MTIME);
+
+    const status = await adapter.observe(NOTE_PATH, 'Status');
+
+    expect(status.current).toBeNull();
+  });
+
   it('reads the whole note as the canonical task for materialization', async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
@@ -263,19 +290,15 @@ describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
         body: 'Body text',
         status: 'Building',
         completed: true,
-        parent: null,
-        labels: ['alpha', 'beta'],
+        parent: 'Slice',
+        labels: ['type:task', 'alpha', 'beta'],
       }),
     );
   });
 
-  it('reports a note without a type as no task', async () => {
+  it('reports a note without a type label as no task (LBL-4)', async () => {
     const { vault, adapter } = setup();
-    vault.seed(
-      NOTE_PATH,
-      ['---', 'status: Building', '---', 'Body text'].join('\n'),
-      MTIME,
-    );
+    vault.seed(NOTE_PATH, UNTYPED_NOTE, MTIME);
 
     expect(await adapter.readTask(NOTE_PATH)).toBeNull();
   });
@@ -284,6 +307,155 @@ describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
     const { adapter } = setup();
 
     expect(await adapter.readTask('Projecten/Acme/taken/gone.md')).toBeNull();
+  });
+});
+
+describe('LBL-5 — labels are a YAML sequence', () => {
+  it('reads a flow sequence as the ordered label set', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, NOTE, MTIME);
+
+    const task = await adapter.readTask(NOTE_PATH);
+
+    expect(task?.labels).toEqual(['type:task', 'alpha', 'beta']);
+  });
+
+  it('reads a block sequence as the ordered label set', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, BLOCK_LABELS_NOTE, MTIME);
+
+    const task = await adapter.readTask(NOTE_PATH);
+
+    expect(task?.labels).toEqual(['type:task', 'priority:high']);
+  });
+
+  it('keeps a comma inside a label as one label, not a delimiter', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(
+      NOTE_PATH,
+      [
+        '---',
+        'status: Building',
+        'affiliation: ["[[_Acme]]"]',
+        'labels: ["type:task", "needs, review"]',
+        '---',
+        'Body text',
+      ].join('\n'),
+      MTIME,
+    );
+
+    const task = await adapter.readTask(NOTE_PATH);
+
+    expect(task?.labels).toEqual(['type:task', 'needs, review']);
+  });
+
+  it('writes the label set as a flow sequence, comma inside a label kept', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(NOTE_PATH, NOTE, MTIME);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: NOTE_PATH,
+        field: 'label',
+        value: '["type:task","needs, review"]',
+      }),
+    );
+
+    expect(vault.content(NOTE_PATH)).toMatch(/^labels: \[/m);
+    expect(vault.content(NOTE_PATH)).toContain('needs, review');
+    expect((await adapter.readTask(NOTE_PATH))?.labels).toEqual([
+      'type:task',
+      'needs, review',
+    ]);
+  });
+});
+
+describe('SUB-2 — task nesting is general', () => {
+  it("reads a task's parent when it is another task", async () => {
+    const { vault, adapter } = setup();
+    vault.seed(
+      NOTE_PATH,
+      [
+        '---',
+        'status: Building',
+        'affiliation: ["[[_Acme]]", "[[parent-task]]"]',
+        'labels: [type:task]',
+        '---',
+        '',
+      ].join('\n'),
+      MTIME,
+    );
+
+    const task = await adapter.readTask(NOTE_PATH);
+
+    expect(task?.parent).toBe('parent-task');
+  });
+
+  it('links each child to its immediate parent three levels deep', async () => {
+    const { vault, adapter } = setup();
+    const grandparent = 'Projecten/Acme/taken/grandparent.md';
+    const parent = 'Projecten/Acme/taken/parent.md';
+    const child = 'Projecten/Acme/taken/child.md';
+    vault.seed(
+      grandparent,
+      [
+        '---',
+        'status: Building',
+        'affiliation: ["[[_Acme]]"]',
+        'labels: [type:task]',
+        '---',
+        '',
+      ].join('\n'),
+      MTIME,
+    );
+    vault.seed(
+      parent,
+      [
+        '---',
+        'status: Building',
+        'affiliation: ["[[_Acme]]", "[[grandparent]]"]',
+        'labels: [type:task]',
+        '---',
+        '',
+      ].join('\n'),
+      MTIME,
+    );
+    vault.seed(
+      child,
+      [
+        '---',
+        'status: Building',
+        'affiliation: ["[[_Acme]]", "[[parent]]"]',
+        'labels: [type:task]',
+        '---',
+        '',
+      ].join('\n'),
+      MTIME,
+    );
+
+    expect((await adapter.readTask(grandparent))?.parent).toBeNull();
+    expect((await adapter.readTask(parent))?.parent).toBe('grandparent');
+    expect((await adapter.readTask(child))?.parent).toBe('parent');
+  });
+
+  it('reads the immediate parent of a ToDo nested under another ToDo', async () => {
+    const { vault, adapter } = setup();
+    vault.seed(
+      NOTE_PATH,
+      [
+        '---',
+        'status: open',
+        'affiliation: ["[[_Acme]]", "[[parent-task]]", "[[parent-todo]]"]',
+        'labels: [type:todo]',
+        '---',
+        '',
+      ].join('\n'),
+      MTIME,
+    );
+
+    const task = await adapter.readTask(NOTE_PATH);
+
+    expect(task?.parent).toBe('parent-todo');
   });
 });
 

@@ -259,6 +259,17 @@ describe('CodeHostMirrorAdapter — the canonical read (F01 ACM-5)', () => {
 
     expect(task!.status).toBe('');
   });
+
+  it('returns null for a single issue without a type label (LBL-4)', async () => {
+    const { adapter } = adapterWith([
+      boardResponse(
+        [issueNode({ labels: { nodes: [{ name: 'bug' }] } })],
+        [cardNode()],
+      ),
+    ]);
+
+    expect(await adapter.readTask(ISSUE_URL)).toBeNull();
+  });
 });
 
 describe('CodeHostMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
@@ -354,7 +365,7 @@ describe('CodeHostMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
       new CanonicalFieldWrite({
         handle: ISSUE_URL,
         field: 'label',
-        value: 'type: task,bug',
+        value: '["type: task","bug"]',
       }),
     );
 
@@ -495,7 +506,7 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(status).toBe('2026-09-18T12:00:00Z');
   });
 
-  it('reads the tracked (typed) issues for the board', async () => {
+  it('reads only type-labelled issues for the board (LBL-4)', async () => {
     const { adapter } = adapterWith([
       boardResponse(
         [
@@ -516,7 +527,7 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(tasks.map((task) => task.handle)).toEqual([ISSUE_URL]);
   });
 
-  it('captures the typed issues as tracked tasks', async () => {
+  it('captures only type-labelled issues (LBL-6)', async () => {
     const { adapter } = adapterWith([
       boardResponse(
         [
@@ -834,7 +845,7 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
     vault.values.set('body', '');
     vault.values.set('completion', 'false');
     vault.values.set('Status', 'Done');
-    vault.values.set('label', '');
+    vault.values.set('label', '[]');
     const entityPath = 'Projecten/Acme/taken/fix-the-bug.md';
     let data: Record<string, unknown> = {};
     const registry = new SyncStateAdapter({
@@ -953,7 +964,7 @@ describe('MirrorSyncAction drives the code host through a resolved handle (F02 N
     vault.values.set('body', 'The bug happens on resize.');
     vault.values.set('completion', 'false');
     vault.values.set('Status', 'Todo');
-    vault.values.set('label', 'type: task');
+    vault.values.set('label', '["type: task"]');
     vault.values.set('subtasks', PARENT_URL);
     let data: Record<string, unknown> = {};
     const registry = new SyncStateAdapter({

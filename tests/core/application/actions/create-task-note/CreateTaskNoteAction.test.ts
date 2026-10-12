@@ -52,7 +52,7 @@ const template = [
   '---',
   'affiliation: []',
   'id:',
-  'type:',
+  'labels:',
   'status:',
   'synced:',
   'created: {{date}}',
@@ -75,8 +75,8 @@ function input() {
   };
 }
 
-describe('MAT-5 — a note filename is a human-readable slug', () => {
-  it('creates a slug-named note carrying id, type and status, no url', async () => {
+describe('LBL-1 — a note filename is a human-readable slug', () => {
+  it('creates a slug-named note carrying the kind label and status, no url', async () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
@@ -88,7 +88,8 @@ describe('MAT-5 — a note filename is a human-readable slug', () => {
     expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
     const fields = splitFrontmatter(content)?.fields;
     expect(fields?.get('id')).toBeUndefined();
-    expect(fields?.get('type')).toBe('task');
+    expect(fields?.get('type')).toBeUndefined();
+    expect(fields?.get('labels')).toContain('type:task');
     expect(fields?.get('status')).toBe('Building');
     expect(content).not.toContain('url:');
     expect(syncState.setCalls).toHaveLength(1);
@@ -108,7 +109,8 @@ describe('MAT-5 — a note filename is a human-readable slug', () => {
 
     expect(vault.created).toHaveLength(1);
     const content = vault.created[0]!.content;
-    expect(content).toContain('type: task');
+    expect(content).toContain('labels: [type:task]');
+    expect(content).not.toMatch(/^type:/m);
     expect(content).toContain('status: Building');
     expect(content).toContain('created: 2026-09-18');
     expect(content).toContain('  - "[[Tasks.base|Tasks]]"');

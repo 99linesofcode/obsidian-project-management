@@ -1,4 +1,5 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
+import { labelsFromSequence, typeFromLabels } from '../../core/domain/note.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
@@ -105,6 +106,9 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
       return null;
     }
     const task = parseTask(requireRecord(response, 'read task'));
+    if (!hasTypeLabel(task.labels)) {
+      return null;
+    }
     const sections = await this.sections(task.projectId);
     return toCanonicalTask(task, sectionName(sections, task.sectionId));
   }
@@ -175,7 +179,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
       case 'label':
         await this.postOk(
           `/tasks/${write.handle}`,
-          { labels: labelsFrom(write.value) },
+          { labels: labelsFromSequence(write.value) },
           'write labels',
         );
         return;
@@ -197,11 +201,9 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
       ...(await this.listTasks(connection.projectId)),
       ...(await this.listCompletedTasks(connection.projectId)),
     ]);
-    return tasks
-      .filter((task) => !hasTypeLabel(task.labels))
-      .map((task) =>
-        toCanonicalTask(task, sectionName(sections, task.sectionId)),
-      );
+    return tasks.map((task) =>
+      toCanonicalTask(task, sectionName(sections, task.sectionId)),
+    );
   }
 
   async captureProjects(): Promise<CapturedProject[]> {
@@ -406,17 +408,7 @@ function sectionName(
 }
 
 function hasTypeLabel(labels: readonly string[]): boolean {
-  return labels.some((label) => label.startsWith('type:'));
-}
-
-function labelsFrom(value: string | null): readonly string[] {
-  if (value === null || value === '') {
-    return [];
-  }
-  return value
-    .split(',')
-    .map((label) => label.trim())
-    .filter((label) => label !== '');
+  return typeFromLabels(labels) !== '';
 }
 
 function extractList(json: unknown): Record<string, unknown>[] {

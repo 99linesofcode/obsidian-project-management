@@ -1,4 +1,5 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
+import { labelsFromSequence } from '../../core/domain/note.js';
 import { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
@@ -204,7 +205,7 @@ function applyToTask(
     case 'subtasks':
       return withTask(task, { parent: write.value });
     case 'label':
-      return withTask(task, { labels: labelsFrom(write.value) });
+      return withTask(task, { labels: labelsFromSequence(write.value) });
   }
 }
 
@@ -229,11 +230,4 @@ function withTask(
     parent: overrides.parent !== undefined ? overrides.parent : task.parent,
     labels: overrides.labels ?? task.labels,
   });
-}
-
-function labelsFrom(value: string | null): readonly string[] {
-  if (value === null || value === '') {
-    return [];
-  }
-  return value.split(',');
 }

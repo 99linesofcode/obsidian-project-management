@@ -278,9 +278,9 @@ canonical DTOs and the pure core.
   side is keyed `mirror:<slug>` — disjoint from the origin side's `origin` key —
   while the origin keeps the note path as its handle. A connection whose entity
   has no resolved handle is materialized: the origin task is read through
-  `VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
-  placeholder handle is recorded through `RegistryPort` before the item is
-  created through `MirrorPort.createTask`, the real handle replaces the
+  `VaultPort.readTask` (a note without a type label is not a task and is
+  skipped), a placeholder handle is recorded through `RegistryPort` before the
+  item is created through `MirrorPort.createTask`, the real handle replaces the
   placeholder, and the created mirror is reconciled in the same pass. A
   placeholder left by an interrupted pass is adopted by matching the mirror's
   task title rather than re-created. It names no provider.
@@ -312,14 +312,14 @@ canonical DTOs and the pure core.
   run adopts the whole back-catalogue. A project that links zero or several
   targets collects an error and is left for the next pass.
 - **The task-capture surface** (`MirrorPort.capture` + `CaptureTasksAction`). For
-  each declared connection, the core action reads
-  the tracked tasks the adapter can see (those carrying a `type:` label) and
-  adopts every task the vault does not already hold as a task note. The whole
-  listing is scanned each pass and the adopted mirror items are skipped, so the
-  pass is idempotent without a cursor. The action routes by the connection's
-  application — a code-host issue through `CreateTaskNoteAction`, a task-manager
-  task rendered by `CapturedTaskNoteMapper` and written through `VaultPort` +
-  `RegistryPort`.
+  each declared connection, the core action reads the tasks the adapter's capture
+  gate exposes — a code host exposes only type-labelled issues, a task manager
+  exposes every task — and adopts every task the vault does not already hold as a
+  task note. The whole listing is scanned each pass and the adopted mirror items
+  are skipped, so the pass is idempotent without a cursor. The action routes by
+  the connection's application — a code-host issue through
+  `CreateTaskNoteAction`, a task-manager task rendered by
+  `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, connection re-keying, board-ensure, rename recovery,
   vault consistency and the deletion sweep) and the core actions directly

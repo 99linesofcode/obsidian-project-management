@@ -1,8 +1,18 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
+import {
+  parseAffiliation,
+  parentStemFromAffiliation,
+  taskLinkFromAffiliation,
+} from '../../core/domain/affiliation.js';
+import {
+  labelSequence,
+  labelsFromSequence,
+  typeFromLabels,
+} from '../../core/domain/note.js';
+import { projectFromNotePath } from '../../core/domain/paths.js';
 
 export interface TaskNote {
-  type: string;
   title: string;
   status: string;
   body: string;
@@ -13,14 +23,14 @@ export interface TaskNote {
 
 export function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
+  const labels = labelsFrom(content);
   return {
-    type: fields.get('type') ?? '',
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
     body: bodyOf(content),
     completed: (fields.get('completed') ?? '') !== '',
-    parent: parentFromAffiliation(fields.get('affiliation')),
-    labels: labelsFrom(fields.get('labels')),
+    parent: parentFromAffiliation(fields.get('affiliation'), handle, labels),
+    labels,
   };
 }
 
@@ -37,7 +47,7 @@ export function fieldValue(note: TaskNote, field: CanonicalField): string | null
     case 'subtasks':
       return note.parent;
     case 'label':
-      return note.labels.join(',');
+      return labelSequence(note.labels);
   }
 }
 
@@ -57,7 +67,7 @@ export function writeIntoNote(
         write.value === 'true' ? 'true' : null,
       );
     case 'label':
-      return withFrontmatter(content, 'labels', write.value);
+      return withLabels(content, write.value);
     case 'subtasks':
       return withParent(content, write.value);
     case 'title':
@@ -104,31 +114,52 @@ function titleFromPath(handle: string): string {
   return stem.replace(/-/g, ' ');
 }
 
-function parentFromAffiliation(raw: string | undefined): string | null {
-  if (raw === undefined) {
-    return null;
+function parentFromAffiliation(
+  raw: string | undefined,
+  handle: string,
+  labels: readonly string[],
+): string | null {
+  const affiliation = parseAffiliation(raw);
+  const project = projectFromNotePath(handle);
+  if (typeFromLabels(labels) === 'todo') {
+    return (
+      parentStemFromAffiliation(affiliation, project) ??
+      taskLinkFromAffiliation(affiliation, project)
+    );
   }
-  const links = quotedLinks(raw);
-  const parent = links[1];
-  return parent === undefined ? null : stripLink(parent);
+  return taskLinkFromAffiliation(affiliation, project);
 }
 
-function labelsFrom(raw: string | undefined): readonly string[] {
-  if (raw === undefined || raw === '') {
-    return [];
+function labelsFrom(content: string): readonly string[] {
+  const lines = content.split('\n');
+  const closing = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  const end = closing === -1 ? lines.length : closing;
+  for (let i = 1; i < end; i++) {
+    if (!lines[i]!.startsWith('labels:')) {
+      continue;
+    }
+    const inline = lines[i]!.slice('labels:'.length).trim();
+    return inline === '' ? blockLabels(lines, i + 1, end) : labelsFromSequence(inline);
   }
-  return raw
-    .split(',')
-    .map((label) => label.trim())
-    .filter((label) => label !== '');
+  return [];
 }
 
-function quotedLinks(raw: string): string[] {
-  return [...raw.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
+function blockLabels(lines: string[], from: number, end: number): string[] {
+  const items: string[] = [];
+  for (let i = from; i < end; i++) {
+    const match = /^\s*-\s*(.*)$/.exec(lines[i]!);
+    if (match === null) {
+      break;
+    }
+    items.push(unquote(match[1]!.trim()));
+  }
+  return items;
 }
 
-function stripLink(link: string): string {
-  return link.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]!.trim();
+function unquote(value: string): string {
+  return value.startsWith('"') && value.endsWith('"')
+    ? value.slice(1, -1)
+    : value;
 }
 
 function withBody(content: string, body: string): string {
@@ -165,13 +196,36 @@ function withFrontmatter(
   return lines.join('\n');
 }
 
+function withLabels(content: string, value: string | null): string {
+  const lines = content.split('\n');
+  const closing = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  if (closing === -1) {
+    return content;
+  }
+  const index = lines.findIndex(
+    (line, i) => i > 0 && i < closing && line.startsWith('labels:'),
+  );
+  if (index === -1) {
+    lines.splice(closing, 0, renderLine('labels', value));
+    return lines.join('\n');
+  }
+  let removed = 1;
+  while (
+    index + removed < closing &&
+    /^\s*-\s/.test(lines[index + removed]!)
+  ) {
+    removed++;
+  }
+  lines.splice(index, removed, renderLine('labels', value));
+  return lines.join('\n');
+}
+
 function withParent(content: string, parent: string | null): string {
   const raw = frontmatterFields(content).get('affiliation');
   if (raw === undefined) {
     return content;
   }
-  const links = quotedLinks(raw);
-  const project = links[0];
+  const project = parseAffiliation(raw)[0];
   if (project === undefined) {
     return content;
   }

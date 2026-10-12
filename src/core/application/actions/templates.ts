@@ -76,8 +76,10 @@ const TASKS_BASE = `filters:
     - file.ext == "md"
     - list(categories).contains(link("Tasks.base"))
     - '!file.inFolder("Templates")'
+formulas:
+  kind: note.labels.filter(value.startsWith("type:")).map(value.replace("type:", "")).join(", ")
 properties:
-  note.type:
+  formula.kind:
     displayName: Type
   file.name:
     displayName: Taak
