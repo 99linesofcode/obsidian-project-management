@@ -8,11 +8,14 @@ import type { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import { ConnectionDataTransferObject } from '../../core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { VaultPort } from '../../core/port/VaultPort.js';
-import { chooseHomeNotePath, projectHomePath } from '../../core/domain/projectHomePath.js';
+import {
+  chooseHomeNotePath,
+  folderChainForPath,
+  projectHomePath,
+} from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
-import { folderChainForPath } from '../../core/domain/folderChainForPath.js';
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
-import { slugify } from '../../core/domain/slugify.js';
+import { slugify } from '../../core/domain/note.js';
 import { connectionsOf } from './connectionsOf.js';
 import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 import { fieldValue, folderOf, parseTaskNote, writeIntoNote } from './taskNoteCodec.js';

@@ -490,10 +490,11 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     const connection = CodeHostTarget.parse(target);
     const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
-    const projectId =
-      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
-    await this.linkBoard(projectId, repositoryId);
-    const status = await this.ensureStatusField(projectId, this.statusOptions);
+    const { projectId, status } = await this.provisionBoard(
+      name,
+      repositoryId,
+      this.statusOptions,
+    );
     this.boards.set(
       connection.target,
       Promise.resolve({
@@ -605,15 +606,30 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     const connection = CodeHostTarget.parse(target);
     const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
-    const projectId =
-      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
-    await this.linkBoard(projectId, repositoryId);
-    const status = await this.ensureStatusField(projectId, statusOptions);
+    const { projectId, status } = await this.provisionBoard(
+      name,
+      repositoryId,
+      statusOptions,
+    );
     return new ProjectAddressing({
       projectHandle: projectId,
       statusFieldHandle: status.id,
       statusOptions: status.options,
     });
+  }
+
+  // Find-or-create the board titled with the repo name, link it to the repo,
+  // and ensure its Status field — the one board-provisioning ladder.
+  private async provisionBoard(
+    name: string,
+    repositoryId: string,
+    statusOptions: readonly string[],
+  ): Promise<{ projectId: string; status: StatusField }> {
+    const projectId =
+      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
+    await this.linkBoard(projectId, repositoryId);
+    const status = await this.ensureStatusField(projectId, statusOptions);
+    return { projectId, status };
   }
 
   async adoptProject(

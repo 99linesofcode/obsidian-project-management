@@ -26,6 +26,7 @@ import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTa
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
 import { DiscoverProjectsAction } from './core/application/actions/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
+import { ResolveProjectBoardAction } from './core/application/actions/ResolveProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './core/application/actions/MirrorTodoStatusAction.js';
 import { RekeyRenamedConnectionsAction } from './core/application/actions/RekeyRenamedConnectionsAction.js';
@@ -255,10 +256,11 @@ function composePlugin(
     vault,
     plugin.settings.doneOptionName,
   );
+  const resolveProjectBoard = new ResolveProjectBoardAction();
   const discoverProjects = new DiscoverProjectsAction(
     vault,
     setupFactory,
-    new AttachProjectAction(),
+    new AttachProjectAction(resolveProjectBoard),
   );
 
   const syncChecklist = new SyncChecklistAction(
@@ -270,6 +272,7 @@ function composePlugin(
   const ensureProjectBoard = new EnsureProjectBoardAction(
     syncState,
     plugin.settings.statusOptions,
+    resolveProjectBoard,
   );
 
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);

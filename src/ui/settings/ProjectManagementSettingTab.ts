@@ -11,7 +11,7 @@ import { DEFAULT_SETTINGS } from './settings.js';
 import {
   SEED_ARTIFACTS,
   type SeedArtifact,
-} from '../../core/application/actions/seedArtifacts.js';
+} from '../../core/application/actions/templates.js';
 
 function setPasswordInput(input: unknown): void {
   if (isRecord(input)) {

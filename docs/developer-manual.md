@@ -140,7 +140,8 @@ namespace per application.**
 - **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
   `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,
   `RekeyRenamedConnectionsAction`, `DiscoverProjectsAction`,
-  `AttachProjectAction`, `EnsureProjectBoardAction`,
+  `AttachProjectAction`, `ResolveProjectBoardAction`,
+  `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
   and `CreateTaskNoteAction`.
 
@@ -724,9 +725,9 @@ sequenceDiagram
 
 At `onLayoutReady`, `DiscoverProjectsAction` enumerates the vault's project
 notes and attaches each setup-capable connection through `AttachProjectAction`,
-which
-uses `MirrorPort.discoverProjects` to resolve the repository and its
-boards, `deriveBoardChoice` to pick one, and `readProjectAddressing` to resolve
+which consults `ResolveProjectBoardAction` — the one home for the
+create/adopt/ambiguous decision — to resolve the repository and its boards and
+pick one (or none), then uses `readProjectAddressing` to resolve
 the Status field and its options. A board that does not exist yet yields an
 identity with an empty `projectHandle`, which `EnsureProjectBoardAction`
 resolves later on the chain: it adopts a linked board, prefers the one titled
@@ -740,14 +741,16 @@ sequenceDiagram
   participant P as ProjectManagementPlugin
   participant D as DiscoverProjectsAction
   participant A as AttachProjectAction
+  participant R as ResolveProjectBoardAction
   participant Setup as ProjectSetupSurface
   participant Ens as EnsureProjectBoardAction
   participant SS as RegistryPort
 
   P->>D: execute()
   D->>A: execute({ target })
-  A->>Setup: discoverProjects(target)
-  A->>A: deriveBoardChoice(repoName, boards)
+  A->>R: execute({ target, setup })
+  R->>Setup: discoverProjects(target)
+  R->>R: deriveBoardChoice(repoName, boards)
   alt a board exists
     A->>Setup: readProjectAddressing(board)
   else no board
@@ -756,7 +759,8 @@ sequenceDiagram
   A-->>D: ProjectIdentityData
   D->>SS: setIdentity(projectName, connectionSlug, identity)
   Note over Ens: chain, active github connection
-  Ens->>Setup: discoverProjects(target), listProjects()
+  Ens->>R: execute({ target, setup })
+  Ens->>Setup: listProjects()
   Ens->>Setup: createProjectWithStatus or adoptProject
   Ens->>SS: setIdentity(merged)
 ```
@@ -887,9 +891,10 @@ layers, and each layer owns one surface of the system.
   `src/core/application/actions/CaptureProjectsAction.ts`,
   `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`.
 - The neutral note arithmetic and the merge vocabulary: `src/core/domain/`
-  (`checklist`, `splitFrontmatter`, `withBody`, `ToDoNoteParser`, the
-  affiliation helpers, and `mergeField` with its `Delta`/`MergeResult`/
-  `SideObservation`/`Baseline`/`OriginObservation` shapes).
+  (the note transforms `note`, the project-path arithmetic `paths`, the
+  affiliation helpers `affiliation`, `checklist`, `ToDoNoteParser`, and
+  `mergeField` with its `Delta`/`MergeResult`/`SideObservation`/`Baseline`/
+  `OriginObservation` shapes).
 - The driven adapters: `src/infrastructure/` (`vault/`, `github/`, `todoist/`,
   `registry/`, `fake/`). Only `infrastructure/vault/VaultAdapter.ts` touches the
   Obsidian API; the neutral note arithmetic is in the domain.

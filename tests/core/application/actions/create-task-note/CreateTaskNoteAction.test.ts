@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
-import { splitFrontmatter } from '../../../../../src/core/domain/splitFrontmatter.js';
+import { splitFrontmatter } from '../../../../../src/core/domain/note.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../../helpers/records.js';
 import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';

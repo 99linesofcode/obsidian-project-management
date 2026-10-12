@@ -1,5 +1,19 @@
-import { projectHomeStem } from './projectHomePath.js';
-import { stripLink } from './stripLink.js';
+import { projectHomeStem } from './paths.js';
+
+// A wikilink's target: the `[[...]]` delimiters and any `|display` alias are
+// stripped, and the result trimmed. Shared by every affiliation reader.
+export function stripLink(link: string): string {
+  return link.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]!.trim();
+}
+
+// The affiliation is a quoted wikilink list; we keep each link verbatim. Shared
+// by the task-note and to-do-note parsers, which both carry an affiliation.
+export function parseAffiliation(raw: string | undefined): string[] {
+  if (raw === undefined) {
+    return [];
+  }
+  return [...raw.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
+}
 
 // The project entry's wikilink in an affiliation: `[[_<project>]]`, the link
 // that resolves to the home note under the rename convention. Renderers emit
@@ -41,4 +55,21 @@ export function parentStemFromAffiliation(
   projectName: string,
 ): string | null {
   return affiliationTargets(affiliation, projectName)[1] ?? null;
+}
+
+// The first affiliation link that is not the project — a task's slice, or a
+// to-do's parent task. Returns null when the affiliation carries only the
+// project. Both the pre- and post-rename project forms count as the project
+// entry (see isProjectAffiliationEntry).
+export function taskLinkFromAffiliation(
+  affiliation: string[],
+  projectName: string,
+): string | null {
+  for (const link of affiliation) {
+    const target = stripLink(link);
+    if (!isProjectAffiliationEntry(target, projectName)) {
+      return target;
+    }
+  }
+  return null;
 }

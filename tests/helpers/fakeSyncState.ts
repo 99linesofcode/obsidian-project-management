@@ -1,5 +1,5 @@
 import type { ProjectIdentityDataTransferObject } from '../../src/core/port/data/ProjectIdentityDataTransferObject.js';
-import { projectFromNotePath } from '../../src/core/domain/projectFromNotePath.js';
+import { projectFromNotePath } from '../../src/core/domain/paths.js';
 import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';

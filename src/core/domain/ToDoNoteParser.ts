@@ -1,6 +1,5 @@
-import { parseAffiliation } from './parseAffiliation.js';
-import { splitFrontmatter } from './splitFrontmatter.js';
-import { rewriteFrontmatterFields } from './rewriteFrontmatterFields.js';
+import { parseAffiliation } from './affiliation.js';
+import { rewriteFrontmatterFields, splitFrontmatter } from './note.js';
 
 export interface ParsedToDoNote {
   status: string;

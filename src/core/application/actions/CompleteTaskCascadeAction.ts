@@ -1,10 +1,7 @@
-import { parseAffiliation } from '../../domain/parseAffiliation.js';
+import { parseAffiliation, taskLinkFromAffiliation } from '../../domain/affiliation.js';
 import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
-import { splitFrontmatter } from '../../domain/splitFrontmatter.js';
-import { stemOf } from '../../domain/stemOf.js';
-import { taskLinkFromAffiliation } from '../../domain/taskLinkFromAffiliation.js';
+import { splitFrontmatter, stemOf, withBody } from '../../domain/note.js';
 import { ToDoNoteParser, withToDoStatus } from '../../domain/ToDoNoteParser.js';
-import { withBody } from '../../domain/withBody.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface CompleteTaskCascadeInput {

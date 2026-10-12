@@ -1,4 +1,4 @@
-import { projectHomePath } from '../../domain/projectHomePath.js';
+import { projectHomePath } from '../../domain/paths.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface MigrateProjectHomeNoteInput {

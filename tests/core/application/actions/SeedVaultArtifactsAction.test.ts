@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SeedVaultArtifactsAction } from '../../../../src/core/application/actions/SeedVaultArtifactsAction.js';
-import { SEED_ARTIFACTS } from '../../../../src/core/application/actions/seedArtifacts.js';
+import { SEED_ARTIFACTS } from '../../../../src/core/application/actions/templates.js';
 import { DEFAULT_SETTINGS } from '../../../../src/ui/settings/settings.js';
 import type { ProjectManagementSettings } from '../../../../src/core/application/data/ProjectManagementSettings.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';

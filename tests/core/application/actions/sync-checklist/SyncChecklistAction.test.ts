@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SyncChecklistAction } from '../../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
-import { splitFrontmatter } from '../../../../../src/core/domain/splitFrontmatter.js';
+import { splitFrontmatter } from '../../../../../src/core/domain/note.js';
 import { ToDoNoteMapper } from '../../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../../../../../src/core/domain/ToDoNoteParser.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';

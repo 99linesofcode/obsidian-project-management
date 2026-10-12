@@ -52,8 +52,9 @@ obsidian-project-management/
 **Where the logic lives.** A use case is an action: a class with one
 meaningful responsibility, named `*Action`. Adapters map raw provider payloads
 onto canonical DTOs at the boundary; the core never sees a provider shape.
-Pure calculations live in one-function files (`mergeField`, `mirrorSideKey`,
-`originSideObservation`). Delivery mechanics — the scheduler, the queue,
+Pure calculations live in cohesive lowercase modules, grouped by subject
+(`note`, `paths`, `affiliation`; the merge's `mergeField` and `sides`).
+Delivery mechanics — the scheduler, the queue,
 timers — belong to `ui/` and make no business decisions. Persistence is owned
 by the registry adapter; nothing else touches `data.json`.
 
@@ -552,7 +553,8 @@ Enforced by `eslint-plugin-boundaries` (elements = the layer folders) and the
   action's exclusive collaborators.
 - **File naming**: PascalCase classes with role suffixes (`*Action`,
   `*Adapter`, `*Port`, `*Mapper`, `*Parser`, `*DataTransferObject`);
-  camelCase pure functions, one per file (`mergeField.ts`, `mirrorSideKey.ts`).
+  camelCase pure modules grouped by subject (`note.ts`, `paths.ts`,
+  `affiliation.ts`, `mergeField.ts`), not one file per helper.
   Tests mirror the tree: `tests/<module>/…`.
 - **Entry point**: `src/main.ts` — above the layers, never inside one; the
   composition root.
@@ -573,9 +575,11 @@ Enforced by `eslint-plugin-boundaries` (elements = the layer folders) and the
   actions, adapters, a value object that enforces an invariant; a DTO is a
   `readonly` field holder, not a behaviour object; a pure
   codec (a mapper or parser of the same note text) is a function or a plain
-  namespace object, never a stateful service. Everything pure is a lowercase
-  single-function file (`mergeField.ts`, `slugify.ts`, `checklist.ts`), one
-  concern per file; an interface consumed elsewhere gets its own file.
+  namespace object, never a stateful service. Pure transforms are grouped by
+  subject into a lowercase module (`note.ts`, `paths.ts`, `affiliation.ts`,
+  `checklist.ts`) — a value object where the behaviour belongs to a concept and
+  enforces an invariant, a plain module where the transforms own nothing — not
+  one file per helper; an interface consumed elsewhere gets its own file.
 - **Canonical DTOs**: one canonical shape per domain concept, owned by the
   core; diff/merge logic operates on canonical fields only. A DTO mimicking a
   provider's structure is a provider shape, whatever its file name.

@@ -3,8 +3,7 @@ import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { ProjectAddressing } from '../../port/data/ProjectAddressing.js';
 import type { ProjectSummary } from '../../port/data/ProjectSummary.js';
 import type { ProjectSetupSurface } from '../../port/MirrorPort.js';
-import { deriveBoardChoice } from './deriveBoardChoice.js';
-import { nameFromTarget } from '../../domain/nameFromTarget.js';
+import type { ResolveProjectBoardAction } from './ResolveProjectBoardAction.js';
 
 export interface EnsureProjectBoardInput {
   projectName: string;
@@ -16,6 +15,7 @@ export class EnsureProjectBoardAction {
   constructor(
     private readonly syncState: RegistryPort,
     private readonly statusOptions: string[],
+    private readonly resolveBoard: ResolveProjectBoardAction,
   ) {}
 
   async execute(input: EnsureProjectBoardInput): Promise<void> {
@@ -33,23 +33,15 @@ export class EnsureProjectBoardAction {
       return;
     }
 
-    const targetName = nameFromTarget(target);
-    const discovery = await setup.discoverProjects(target);
-    const choice = deriveBoardChoice(targetName, discovery.projects);
-    if (choice.kind === 'ambiguous') {
-      throw new Error(
-        `EnsureProjectBoardAction: target ${target} has several boards and none is titled "${targetName}"; not creating or adopting one`,
-      );
-    }
-
+    const resolved = await this.resolveBoard.execute({ target, setup });
     const addressing =
-      choice.kind === 'create'
-        ? await this.createOrAdoptOrphan(setup, target, targetName)
-        : await setup.adoptProject(target, choice.board, this.statusOptions);
+      resolved.kind === 'create'
+        ? await this.createOrAdoptOrphan(setup, target, resolved.boardTitle)
+        : await setup.adoptProject(target, resolved.board, this.statusOptions);
 
     const merged = new ProjectIdentityDataTransferObject({
       target,
-      targetHandle: discovery.targetHandle,
+      targetHandle: resolved.discovery.targetHandle,
       projectHandle: addressing.projectHandle,
       statusFieldHandle: addressing.statusFieldHandle,
       statusOptions: [...addressing.statusOptions],

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
-import { splitFrontmatter } from '../../../../src/core/domain/splitFrontmatter.js';
+import { splitFrontmatter } from '../../../../src/core/domain/note.js';
 import { ToDoNoteMapper } from '../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 

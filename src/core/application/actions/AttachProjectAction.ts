@@ -1,8 +1,7 @@
 import { ProjectIdentityDataTransferObject } from '../../port/data/ProjectIdentityDataTransferObject.js';
 import { DomainError } from '../../domain/errors/DomainError.js';
 import type { ProjectSetupSurface } from '../../port/MirrorPort.js';
-import { deriveBoardChoice } from './deriveBoardChoice.js';
-import { nameFromTarget } from '../../domain/nameFromTarget.js';
+import type { ResolveProjectBoardAction } from './ResolveProjectBoardAction.js';
 
 export interface AttachProjectInput {
   target: string;
@@ -10,6 +9,8 @@ export interface AttachProjectInput {
 }
 
 export class AttachProjectAction {
+  constructor(private readonly resolveBoard: ResolveProjectBoardAction) {}
+
   async execute(
     data: AttachProjectInput,
   ): Promise<ProjectIdentityDataTransferObject> {
@@ -17,33 +18,29 @@ export class AttachProjectAction {
       throw new DomainError('AttachProjectAction: target is required');
     }
 
-    const targetName = nameFromTarget(data.target);
-    const discovery = await data.setup.discoverProjects(data.target);
-    const choice = deriveBoardChoice(targetName, discovery.projects);
-    if (choice.kind === 'ambiguous') {
-      throw new DomainError(
-        `AttachProjectAction: target ${data.target} has several boards and none is titled "${targetName}"`,
-      );
-    }
-    if (choice.kind === 'create') {
+    const resolved = await this.resolveBoard.execute({
+      target: data.target,
+      setup: data.setup,
+    });
+    if (resolved.kind === 'create') {
       return new ProjectIdentityDataTransferObject({
         target: data.target,
-        targetHandle: discovery.targetHandle,
+        targetHandle: resolved.discovery.targetHandle,
         projectHandle: '',
         statusFieldHandle: '',
         statusOptions: [],
       });
     }
 
-    const addressing = await data.setup.readProjectAddressing(choice.board);
+    const addressing = await data.setup.readProjectAddressing(resolved.board);
     if (addressing === null) {
       throw new DomainError(
-        `AttachProjectAction: board ${choice.board.name} could not be resolved`,
+        `AttachProjectAction: board ${resolved.board.name} could not be resolved`,
       );
     }
     return new ProjectIdentityDataTransferObject({
       target: data.target,
-      targetHandle: discovery.targetHandle,
+      targetHandle: resolved.discovery.targetHandle,
       projectHandle: addressing.projectHandle,
       statusFieldHandle: addressing.statusFieldHandle,
       statusOptions: [...addressing.statusOptions],
