@@ -4,7 +4,7 @@ import { CapturedTaskNoteMapper } from '../../../../../src/core/application/acti
 const projectName = 'Acme Widgets';
 const syncedAt = '2026-09-24T12:00:00Z';
 
-describe('MAT-4 — a captured task renders as a note', () => {
+describe('LBL-7 — an untyped captured task renders as an unlabelled draft note', () => {
   it('maps a top-level capture to a draft task note without a url', () => {
     const note = CapturedTaskNoteMapper.map(
       { title: 'Buy Milk!', projectName, sliceLink: null },
@@ -13,6 +13,8 @@ describe('MAT-4 — a captured task renders as a note', () => {
 
     expect(note.path).toBe('Projecten/Acme Widgets/taken/buy-milk.md');
     expect(note.content).toContain('categories: [taken]');
+    expect(note.content).toContain('labels: []');
+    expect(note.content).not.toMatch(/^type:/m);
     expect(note.content).toContain('status: Unshaped');
     expect(note.content).toContain('affiliation: ["[[_Acme Widgets]]"]');
     expect(note.content).toContain(`synced: ${syncedAt}`);

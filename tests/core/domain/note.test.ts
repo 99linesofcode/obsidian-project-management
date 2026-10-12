@@ -82,20 +82,57 @@ describe('REN-1 — a note stem survives a rename', () => {
   });
 });
 
-describe('MAT-3 — the type gate reads the type label', () => {
-  it('reads the type from a spaced type label', () => {
+describe('LBL-2 — the kind resolves from the closed vocabulary', () => {
+  it('reads the kind from a spaced type label, trimming the remainder', () => {
     expect(typeFromLabels(['type: task', 'bug'])).toBe('task');
   });
 
-  it('reads the type from a legacy no-space type label', () => {
+  it('reads the kind from a legacy no-space type label', () => {
     expect(typeFromLabels(['type:bug'])).toBe('bug');
+  });
+
+  it('takes the first type label when several are present', () => {
+    expect(typeFromLabels(['type:task', 'type:bug'])).toBe('task');
   });
 
   it('returns empty when no type label is present', () => {
     expect(typeFromLabels(['bug', 'chore'])).toBe('');
   });
 
-  it('never mistakes an arbitrary non-type label for the type', () => {
+  it('never mistakes an arbitrary non-type label for the kind', () => {
     expect(typeFromLabels(['priority:high'])).toBe('');
+  });
+
+  it.each(['type:unknown', 'type:sliceish', 'type:pitchfork'])(
+    'rejects the unknown kind %s',
+    (label) => {
+      expect(typeFromLabels([label])).toBe('');
+    },
+  );
+
+  it.each(['Type:task', 'TYPE:bug'])(
+    'rejects the differently-cased prefix %s',
+    (label) => {
+      expect(typeFromLabels([label])).toBe('');
+    },
+  );
+
+  it('rejects a type label with an empty remainder', () => {
+    expect(typeFromLabels(['type:'])).toBe('');
+    expect(typeFromLabels(['type:   '])).toBe('');
+  });
+});
+
+describe('LBL-9 — a ToDo is type:todo, never a todo: label', () => {
+  it('resolves the todo kind from its type label', () => {
+    expect(typeFromLabels(['type:todo'])).toBe('todo');
+  });
+
+  it('does not treat a bare todo as a type label', () => {
+    expect(typeFromLabels(['todo'])).toBe('');
+  });
+
+  it('does not treat a todo: label as a type label', () => {
+    expect(typeFromLabels(['todo:true'])).toBe('');
   });
 });

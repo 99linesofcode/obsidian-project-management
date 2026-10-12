@@ -15,7 +15,7 @@ const context = {
   statusName: 'Building',
 };
 
-describe('MAT-5 — a task renders as a note', () => {
+describe('LBL-1 — a task renders as a note carrying labels', () => {
   it('maps a task to a slug-named note under the project taken folder', () => {
     expect(TaskNoteMapper.map(task, context).path).toBe(
       'Projecten/Acme Widgets/taken/fix-the-bug.md',
@@ -26,14 +26,14 @@ describe('MAT-5 — a task renders as a note', () => {
     ).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
   });
 
-  it('writes the sync frontmatter and no machine id or url', () => {
+  it('writes the kind as a labels sequence and no type scalar', () => {
     const { content } = TaskNoteMapper.map(task, context);
 
     expect(content).toBe(
       [
         '---',
         'categories: [taken]',
-        'type: task',
+        'labels: [type:task]',
         'status: Building',
         'affiliation: ["[[_Acme Widgets]]"]',
         'created: 2026-09-18',
@@ -42,6 +42,7 @@ describe('MAT-5 — a task renders as a note', () => {
         'The bug happens when the widget is resized.',
       ].join('\n'),
     );
+    expect(content).not.toMatch(/^type:/m);
     expect(content).not.toContain('url:');
     expect(content).not.toContain('id:');
   });
@@ -67,7 +68,7 @@ describe('TaskNoteMapper.render', () => {
   const template = [
     '---',
     'affiliation: []',
-    'type:',
+    'labels:',
     'status:',
     'synced:',
     'created: {{date}}',
@@ -84,7 +85,7 @@ describe('TaskNoteMapper.render', () => {
       [
         '---',
         'affiliation: ["[[_Acme Widgets]]"]',
-        'type: task',
+        'labels: [type:task]',
         'status: Building',
         'synced: 2026-09-18T12:00:00Z',
         'created: 2026-09-18',
@@ -95,6 +96,7 @@ describe('TaskNoteMapper.render', () => {
         'The bug happens when the widget is resized.',
       ].join('\n'),
     );
+    expect(content).not.toMatch(/^type:/m);
   });
 
   it('replaces {{time}} with the sync time', () => {
@@ -115,7 +117,7 @@ describe('TaskNoteMapper.render', () => {
         '---',
         'status: Building',
         'created: 2026-09-18',
-        'type: task',
+        'labels: [type:task]',
         'affiliation: ["[[_Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',
         '---',

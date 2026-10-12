@@ -27,7 +27,7 @@ const MIRROR_BASELINES: Readonly<Record<string, string>> = {
   title: '',
   body: '',
   completion: 'false',
-  label: '',
+  label: '[]',
 };
 
 function connection(): ConnectionDataTransferObject {

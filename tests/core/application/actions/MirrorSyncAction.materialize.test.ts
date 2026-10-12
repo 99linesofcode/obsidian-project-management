@@ -67,7 +67,7 @@ class FakeVault extends FakeVaultBase {
       case 'subtasks':
         return this.task.parent;
       case 'label':
-        return this.task.labels.join(',');
+        return JSON.stringify(this.task.labels);
       default:
         return null;
     }

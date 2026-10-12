@@ -59,6 +59,23 @@ function task(handle: string): CanonicalTask {
   });
 }
 
+function labelledTask(
+  handle: string,
+  title: string,
+  labels: readonly string[],
+): CanonicalTask {
+  return new CanonicalTask({
+    handle,
+    entityId: handle,
+    title,
+    body: '',
+    status: '',
+    completed: false,
+    parent: null,
+    labels,
+  });
+}
+
 function connection(
   application: string,
   target: string,
@@ -249,5 +266,42 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     expect(vault.created.map((note) => note.path)).toEqual([
       'Projecten/Acme/taken/b.md',
     ]);
+  });
+
+  it('adopts the note shape the adapter gate dictates (LBL-8)', async () => {
+    const vault = new FakeVault([
+      connection('github', 'R1', 'gh'),
+      connection('todoist', 'P1', 'td'),
+    ]);
+    const syncState = new FakeSyncState();
+    const factory: MirrorAdapterFactoryPort = {
+      create: (application) =>
+        registered({
+          capture: async () =>
+            application === 'github'
+              ? [labelledTask('gh-1', 'Issue task', ['type:task'])]
+              : [labelledTask('td-1', 'Remote task', [])],
+        }),
+    };
+    const action = new CaptureTasksAction(
+      vault,
+      factory,
+      syncState,
+      new CreateTaskNoteAction(vault, syncState, ''),
+      (application) => application === 'github',
+    );
+
+    await action.invoke('Acme', SYNCED_AT);
+
+    const issueNote = vault.created.find((note) =>
+      note.path.endsWith('/issue-task.md'),
+    )!;
+    const remoteNote = vault.created.find((note) =>
+      note.path.endsWith('/remote-task.md'),
+    )!;
+    expect(issueNote.content).toContain('labels: [type:task]');
+    expect(issueNote.content).not.toMatch(/^type:/m);
+    expect(remoteNote.content).toContain('labels: []');
+    expect(remoteNote.content).not.toMatch(/^type:/m);
   });
 });
