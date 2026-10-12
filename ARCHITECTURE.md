@@ -117,6 +117,36 @@ across the origin and each connection's mirror adapter through the core's ports,
 and the composition root supplies the concrete provider adapters. A provider's
 name never appears in the core.
 
+The per-project pass runs the same sequence every tick; the developer manual
+carries a sequence diagram per path. The central flow:
+
+```mermaid
+sequenceDiagram
+  participant Sched as SyncScheduler
+  participant Q as SyncQueue
+  participant SP as SyncProjectAction
+  participant V as VaultPort
+  participant Life as ProjectLifecycleSyncAction
+  participant Lock as ReconcileProjectTaskLocksAction
+  participant TF as MirrorSyncAction
+  participant M as MirrorPort
+
+  Sched->>Q: enqueue(project) per project note
+  Q->>SP: execute(project)
+  SP->>V: findProjectNotes (no-op when missing)
+  SP->>SP: migrate home note, rekey, ensure board
+  SP->>Life: invoke(project)
+  Life->>M: resolve mirror project, merge archived, fan out
+  SP->>Lock: invoke({ project, frozen, wasFrozen })
+  SP->>SP: renames, cascade, checklist, mirror to-do
+  alt not frozen
+    SP->>SP: task capture
+    SP->>TF: invoke(project)
+    TF->>M: merge each canonical field, fan out
+  end
+  SP->>SP: deletion sweep
+```
+
 ## 3. Core Components
 
 | Component             | Responsibility                                                                                                                                                                                                                                | Technology                   | Target         |
@@ -361,8 +391,8 @@ canonical DTOs and the pure core.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
     `archived`), per-side `Baseline` (`value`, `completed`). A sibling of
     `syncState`, so a registry write cannot clobber it.
-  - The settings keys (poll interval, done option, debounce, paths, status
-    options, type labels) live at the root beside the containers.
+  - The settings keys (poll interval, done option, debounce, the six artifact
+    paths and the status options) live at the root beside the containers.
 - **`main.js`** — the built bundle; never authored.
 
 No other persistent store. The mirrors hold copies, never authority.

@@ -101,8 +101,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 namespace per application.**
 
 - **Vault.** `VaultAdapter` (the `VaultPort`), with the pure note codecs
-  (`connectionsOf`, `parseConnectionsBlock`, `CapturedTaskNoteMapper`) beside
-  it.
+  (`connectionsOf`, `parseConnectionsBlock`, `renderConnectionsBlock`,
+  `taskNoteCodec`) beside it.
 - **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the setup
   and locking surfaces), `CodeHostTarget` and `CodeHostTransport`.
 - **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, without the setup
@@ -451,24 +451,23 @@ listing or adoption fails is collected and never stops the later connections.
 ```mermaid
 sequenceDiagram
   participant C as CaptureTasksAction
-  participant PS as VaultPort
+  participant V as VaultPort
   participant F as MirrorAdapterFactoryPort
   participant R as MirrorPort
-  participant V as VaultPort
+  participant H as RegistryPort
   participant CT as CreateTaskNoteAction
 
-  C->>PS: readConnections(project)
-  loop each connection
+  C->>V: readConnections(project)
+  loop each connection with capture
     C->>F: create(application, target, slug, project)
-    C->>R: capture.capture(target)
-    C->>V: listAdopted(project, slug)
+    C->>R: capture(target)
+    C->>H: listMirrorItems(project, slug)
     loop each task not already adopted
       alt code host
-        C->>V: adopt(input)
-        V->>CT: execute(url, title, body, type, ...)
+        C->>CT: execute(url, title, body, type, ...)
       else task manager
-        C->>V: adopt(input)
-        Note over V: CapturedTaskNoteMapper + freePath
+        C->>V: createNote(mapper + freePath)
+        C->>H: setEntity, setMirrorItem
       end
     end
   end
@@ -860,8 +859,8 @@ lane can no longer revert a completion.
 
 ## 5. Code-vs-brief discrepancies
 
-These are places where the code and the design brief (ADR 001) disagree. The
-code is documented above; the brief's version is recorded here.
+These are places where the code settled something the original design brief left
+open. The code is documented above; the brief's version is recorded here.
 
 1. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
    invokes an optional `captureProjects` callback and enqueues its returned
