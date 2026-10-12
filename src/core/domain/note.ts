@@ -178,37 +178,26 @@ export function labelsFromSequence(value: string | null): string[] {
   if (value === null) {
     return [];
   }
-  const inner = value.trim().replace(/^\[/, '').replace(/\]$/, '');
-  return splitFlowItems(inner);
-}
-
-function splitFlowItems(inner: string): string[] {
-  if (inner.trim() === '') {
+  const trimmed = value.trim();
+  if (trimmed === '') {
     return [];
   }
-  const items: string[] = [];
-  let current = '';
-  let quote: string | null = null;
-  for (const character of inner) {
-    if (quote !== null) {
-      if (character === quote) {
-        quote = null;
-      } else {
-        current += character;
-      }
-      continue;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string');
     }
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-    if (character === ',') {
-      items.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += character;
+  } catch {
+    // The legacy unquoted form is not JSON — fall through to the comma split.
   }
-  items.push(current.trim());
-  return items.filter((item) => item !== '');
+  return commaSplit(trimmed);
+}
+
+function commaSplit(value: string): string[] {
+  return value
+    .replace(/^\[/, '')
+    .replace(/\]$/, '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
 }
