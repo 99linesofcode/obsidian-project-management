@@ -165,14 +165,16 @@ its own module; the composition root wires it.
 - **The mirror port.** **`MirrorPort`** — the external tool as one collaborator,
   implemented by `CodeHostMirrorAdapter` and `TaskManagerMirrorAdapter`. The
   required surface is the project (read/create/rename, set and read archived
-  state) and the task (`title`, `body`, `subtasks`, `completion`, `Status`,
+  state), the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field
   to the adapter's own representation; the completion fact is separate from the
-  `Status` representation; `deleteTask` removes the mirror item). The
+  `Status` representation; `deleteTask` removes the mirror item) and project
+  origination (`resolveOrCreateProject`, which every adapter carries, so no
+  declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
   remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
-  `fetchComplete?` (verified-complete fetch), `lockTask?`/`unlockTask?` (task
-  locking) and the project-origination surface (`resolveOrCreateProject?`).
+  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?` (task
+  locking).
   A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
   port slot; an adapter without a surface simply omits the method. The project,
@@ -191,11 +193,10 @@ its own module; the composition root wires it.
   — the task-capture adoption orchestration (choosing the renderer, writing the
   note, recording the mirror item) lives in `CaptureTasksAction`, never in the
   adapter.
-- **The supporting ports.** `MirrorAdapterFactoryPort` (build a mirror adapter
-  for an application + target) and
-  `ProjectSetupFactoryPort` (reach a tool's project-origination surface, null for
-  a tool without one). These are the provider table's seams, not facets of a
-  mirror adapter.
+- **The supporting port.** `MirrorAdapterFactoryPort` (build a mirror adapter
+  for an application + target). It is the provider table's seam, not a facet of
+  a mirror adapter; the chain reaches a connection's origination surface through
+  the adapter the factory builds.
 
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
@@ -254,7 +255,7 @@ canonical DTOs and the pure core.
 - **The provider table.** The composition root holds one plain `providers`
   table — a value mapping an application id to its mirror factory,
   project-origination surface and token setting. It derives the
-  mirror-adapter factory, the setup factory, the registered-application set and
+  mirror-adapter factory, the registered-application set and
   the token-settings list from that table, so adding an application is one entry
   and there is no validation framework, capability vocabulary or registration
   result. The provider's name is a value in its own module and in the
@@ -304,12 +305,15 @@ canonical DTOs and the pure core.
   `MirrorPort.resolveOrCreateProject`). A project is set up by declaring its
   connections on the home note; on every pass, each declared connection
   resolves-or-creates its remote project and records the addressing the core
-  writes through. A connection's target may be empty — the remote project is then
-  identified by the vault project's name (ORG-2); a non-empty target overrides.
+  writes through. The action always resolves — it never trusts a recorded
+  addressing — and the adapter decides: a remote project that still exists is
+  adopted, a remote project that is gone is re-created. A connection's target may
+  be empty — the remote project is then identified by the vault project's name
+  (ORG-2); a non-empty target overrides.
   The one uniform method replaces the code-host-only setup surface, so a task
   manager originates its project the same way the code host originates its board.
-  No declared connection means nothing fans out (ORG-4), and a recorded
-  addressing is left alone on later passes (I14).
+  No declared connection means nothing fans out (ORG-4), and an existing remote
+  project is adopted without creating anything (I14).
 - **The task-capture surface** (`MirrorPort.capture` + `CaptureTasksAction`). For
   each declared connection, the core action reads the tasks the adapter's capture
   gate exposes — a code host exposes only type-labelled issues, a task manager

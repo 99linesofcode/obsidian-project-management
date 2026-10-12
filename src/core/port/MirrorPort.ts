@@ -5,11 +5,12 @@ import type { CanonicalTask } from './data/CanonicalTask.js';
 import type { ProjectAddressing } from './data/ProjectAddressing.js';
 
 // The external tool as the core's mirror — one collaborator, one surface. The
-// project and task surfaces are what every adapter carries; the capture,
-// timestamp, locking and project-origination surfaces are genuinely optional and
-// are optional methods, so a caller checks presence rather than a capability
-// string or a null-gated port slot. Designed for the core, never the provider's
-// API.
+// project and task surfaces are what every adapter carries, and so is project
+// origination: every adapter resolves-or-creates the remote project a declared
+// connection names. The capture, timestamp and locking surfaces are genuinely
+// optional and are optional methods, so a caller checks presence rather than a
+// capability string or a null-gated port slot. Designed for the core, never the
+// provider's API.
 export interface MirrorPort {
   readProject(target: string): Promise<CanonicalProject | null>;
   createProject(target: string, name: string): Promise<CanonicalProject>;
@@ -22,6 +23,17 @@ export interface MirrorPort {
   createTask(target: string, task: CanonicalTask): Promise<CanonicalTask>;
   applyField(write: CanonicalFieldWrite): Promise<void>;
   deleteTask(handle: string): Promise<void>;
+
+  // The core's need: before a connection can mirror, its remote project must
+  // exist and be addressable. Resolve the project named `name` under `target`
+  // (by name alone when `target` is empty), creating it when absent, and return
+  // the addressing the core records and writes through. Every adapter carries
+  // it, so no declared connection is left unoriginated.
+  resolveOrCreateProject(
+    target: string,
+    name: string,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing>;
 
   // The core's need: adopt remote-born tasks the vault does not hold yet. A tool
   // without a capture surface omits this method.
@@ -42,22 +54,8 @@ export interface MirrorPort {
   // these methods.
   lockTask?(handle: string): Promise<void>;
   unlockTask?(handle: string): Promise<void>;
-
-  // The core's need: before a connection can mirror, its remote project must
-  // exist and be addressable. Resolve the project named `name` under `target`
-  // (by name alone when `target` is empty), creating it when absent, and return
-  // the addressing the core records and writes through. A tool without a project
-  // surface omits this method.
-  resolveOrCreateProject?(
-    target: string,
-    name: string,
-    statusOptions: readonly string[],
-  ): Promise<ProjectAddressing>;
 }
 
-// The uniform project-origination surface every adapter exposes: resolve the
-// remote project a declared connection names, creating it when absent. A tool
-// without it is reached as null through ProjectSetupFactoryPort.
-export type ProjectSetupSurface = Required<
-  Pick<MirrorPort, 'resolveOrCreateProject'>
->;
+// The project-origination surface `EnsureProjectBoardAction` consumes: the
+// uniform resolve-or-create every adapter carries.
+export type ProjectSetupSurface = Pick<MirrorPort, 'resolveOrCreateProject'>;

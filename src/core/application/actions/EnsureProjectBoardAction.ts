@@ -10,8 +10,9 @@ export interface EnsureProjectBoardInput {
 }
 
 // A declared connection resolves-or-creates its remote project by name (or the
-// connection's explicit target) and records its addressing, once. A connection
-// that already carries an addressing is left alone.
+// connection's explicit target) and records its addressing. The action always
+// resolves: the adapter decides whether the remote project still exists (adopt
+// it) or is gone (re-create it), so a removed remote is rebuilt.
 export class EnsureProjectBoardAction {
   constructor(
     private readonly syncState: RegistryPort,
@@ -19,14 +20,6 @@ export class EnsureProjectBoardAction {
   ) {}
 
   async execute(input: EnsureProjectBoardInput): Promise<void> {
-    const identity = await this.syncState.getIdentity(
-      input.projectName,
-      input.connectionSlug,
-    );
-    if (identity?.projectHandle) {
-      return;
-    }
-
     const addressing = await input.setup.resolveOrCreateProject(
       input.target,
       input.projectName,

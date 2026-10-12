@@ -13,8 +13,6 @@ import { ProjectManagementSettingTab } from './ui/settings/ProjectManagementSett
 import { SeedVaultArtifactsAction } from './core/application/actions/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './ui/sync/SyncScheduler.js';
 import { SyncQueue } from './ui/sync/SyncQueue.js';
-import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
-import type { ProjectSetupSurface } from './core/port/MirrorPort.js';
 import type { RegistryPort } from './core/port/RegistryPort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import { CaptureTasksAction } from './core/application/actions/capture-tasks/CaptureTasksAction.js';
@@ -114,7 +112,6 @@ interface ProviderEntry {
     target: string,
     boardIdentity: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) => MirrorPort;
-  readonly setup: () => ProjectSetupSurface | null;
   readonly token: TokenSettingRow;
 }
 
@@ -173,8 +170,6 @@ function composePlugin(
     taskManagerToken.key,
     createTodoistTransport,
   );
-  const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
-  const taskManagerSetup = new TaskManagerMirrorAdapter(taskManagerTransport);
   const providers: ProviderTable = {
     github: {
       mirror: (target, boardIdentity) =>
@@ -184,13 +179,11 @@ function composePlugin(
           boardIdentity,
           plugin.settings.statusOptions,
         ),
-      setup: () => codeHostSetup,
       token: codeHostToken,
     },
     todoist: {
       mirror: (target) =>
         new TaskManagerMirrorAdapter(taskManagerTransport, target),
-      setup: () => taskManagerSetup,
       token: taskManagerToken,
     },
   };
@@ -204,10 +197,6 @@ function composePlugin(
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
-  const setupFactory: ProjectSetupFactoryPort = {
-    setupFor: (application) =>
-      providerFor(providers, application)?.setup() ?? null,
-  };
   const mirrorAdapters = mirrorAdapterFactory(syncState, providers);
   const createTaskNote: CreateTaskNoteAction = new CreateTaskNoteAction(
     vault,
@@ -250,7 +239,7 @@ function composePlugin(
   );
   const syncProject = new SyncProjectAction({
     vault,
-    setupFactory,
+    mirrorAdapters,
     lifecycle: core.lifecycle,
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,

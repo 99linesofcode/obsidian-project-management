@@ -565,6 +565,9 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     statusOptions: readonly string[],
   ): Promise<ProjectAddressing> {
     const connection = CodeHostTarget.parse(target);
+    if (connection.target === '') {
+      return this.resolveOrCreateBoardByName(name, statusOptions);
+    }
     const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
     const existing = await this.findBoardByName(connection.target, name);
@@ -587,6 +590,32 @@ export class CodeHostMirrorAdapter implements MirrorPort {
       statusFieldHandle: status.id,
       statusOptions: status.options,
     });
+  }
+
+  // An empty connection target names the remote project by the vault project's
+  // name alone (ORG-2): resolve-or-create a viewer-owned board titled `name`.
+  private async resolveOrCreateBoardByName(
+    name: string,
+    statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    const projectId =
+      (await this.findViewerBoardByName(name)) ?? (await this.createBoard(name));
+    const status = await this.ensureStatusField(projectId, statusOptions);
+    return new ProjectAddressing({
+      projectHandle: projectId,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+    });
+  }
+
+  private async findViewerBoardByName(name: string): Promise<string | null> {
+    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
+    for (const node of nodesOf(data.viewer, 'projectsV2')) {
+      if (isRecord(node) && node.title === name && typeof node.id === 'string') {
+        return node.id;
+      }
+    }
+    return null;
   }
 
   private async findBoardByName(

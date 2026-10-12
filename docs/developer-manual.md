@@ -52,12 +52,13 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
-  `renameProject`, `setArchived`, `archivedTime`) and the task (`readTasks`,
-  `readTask`, `createTask`, `applyField`, `deleteTask`). The genuinely optional
+  `renameProject`, `setArchived`, `archivedTime`), the task (`readTasks`,
+  `readTask`, `createTask`, `applyField`, `deleteTask`) and project origination
+  (`resolveOrCreateProject` — every adapter carries it, so no declared connection
+  is left unoriginated). The genuinely optional
   surfaces are optional
-  methods: `capture?`, `fieldTime?`, `fetchComplete?`,
-  `lockTask?`/`unlockTask?`
-  and the project-origination surface (`resolveOrCreateProject?`). A caller
+  methods: `capture?`, `fieldTime?`, `fetchComplete?` and
+  `lockTask?`/`unlockTask?`. A caller
   checks presence (`adapter.lockTask !== undefined`);
   an adapter without a surface omits the method.
 - **The vault port.** `VaultPort` — the vault as one collaborator: read/write/
@@ -67,8 +68,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   collaborator, so they are one port.
   The port is raw vault I/O: the task-capture adoption orchestration lives in
   `CaptureTasksAction`.
-- **The supporting ports.** `MirrorAdapterFactoryPort` (the mirror factory) and
-  `ProjectSetupFactoryPort` (reach a tool's project-origination surface).
+- **The supporting port.** `MirrorAdapterFactoryPort` (the mirror factory). The
+  chain reaches a connection's origination surface through the adapter it builds.
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
   identity and port state, and the side baselines. The vault is one `VaultPort`
@@ -87,9 +88,9 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
 - **The provider table.** The composition root holds one plain `providers`
-  table mapping an application id to its mirror factory,
-  project-origination surface and token setting; it derives the mirror-adapter
-  factory, the setup factory, the registered-application set and the
+  table mapping an application id to its mirror factory and token setting; it
+  derives the mirror-adapter
+  factory, the registered-application set and the
   token-settings list from it. No validation framework, capability vocabulary or
   registration result.
 - **The actions.** `MirrorSyncAction` (the whole-project task pass),
@@ -127,7 +128,7 @@ namespace per application.**
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`) in
   order, wrapping every step so one failure logs and skips that step.
 - **`main.ts`** — the composition root. `composePlugin` builds the provider
-  table, the vault adapter, the mirror-adapter factory, the setup factory and
+  table, the vault adapter, the mirror-adapter factory and
   the maintenance actions; `composeCoreActions` eagerly builds the core actions
   and their infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
@@ -143,11 +144,11 @@ namespace per application.**
 ### The provider table
 
 The composition root holds one plain `providers` table — a value mapping an
-application id to its mirror factory, project-origination surface and token
+application id to its mirror factory and token
 setting. No descriptor, no validation, no registration result: the
 provider's name is a value in its own module and in the composition root only.
 
-`main.ts` derives the mirror-adapter factory, the setup factory, the
+`main.ts` derives the mirror-adapter factory, the
 registered-application set (`new Set(Object.keys(providers))`, the set a
 connection's tool must name to validate) and the token-settings list
 (`Object.values(providers).map((provider) => provider.token)`, which the
@@ -395,30 +396,31 @@ and records the addressing the core writes through. `EnsureProjectBoardAction`
 calls the one uniform
 `MirrorPort.resolveOrCreateProject(target, name, statusOptions)` — the code host
 resolves-or-creates a board named for the vault project under the connection's
-repository, the task manager resolves-or-creates a project named for the vault
-project — and writes the returned `ProjectAddressing` to the registry identity.
+repository (by the vault project's name alone when the target is empty), the
+task manager resolves-or-creates a project named for the vault project — and
+writes the returned `ProjectAddressing` to the registry identity.
 An empty connection target is resolved by the vault project's name (ORG-2); a
-non-empty target overrides. A connection that already has a recorded addressing
-is left alone, so a second pass creates nothing (I14). No declared connection
-means nothing fans out (ORG-4).
+non-empty target overrides. The action always resolves: it never trusts a
+recorded addressing, so a remote project that still exists is adopted (a second
+pass creates nothing, I14) and a remote project that is gone is re-created
+(ORG-3). No declared connection means nothing fans out (ORG-4).
 
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
   participant Ens as EnsureProjectBoardAction
-  participant Setup as ProjectSetupSurface
   participant R as MirrorPort
   participant SS as RegistryPort
 
   SP->>Ens: execute({ projectName, connectionSlug, target, setup })
-  Ens->>SS: getIdentity(projectName, connectionSlug)
-  alt recorded addressing
-    Note over Ens: leave it alone
-  else no addressing
-    Ens->>R: resolveOrCreateProject(target, projectName, statusOptions)
-    R-->>Ens: ProjectAddressing
-    Ens->>SS: setIdentity(merged)
+  Ens->>R: resolveOrCreateProject(target, projectName, statusOptions)
+  alt the remote project exists
+    Note over R: adopt it
+  else the remote project is gone
+    Note over R: re-create it
   end
+  R-->>Ens: ProjectAddressing
+  Ens->>SS: setIdentity(merged)
 ```
 
 ### 2.7 Task capture (`CaptureTasksAction`)
@@ -557,9 +559,9 @@ sequenceDiagram
 
 The composition root holds one plain `providers` table and derives its seams
 from it. `mirrorAdapterFactory.create` looks the application id up in the table
-and builds the mirror through that entry's factory; the setup factory resolves
-`setupFor(application)` the same
-way. No validation, no registration result.
+and builds the mirror through that entry's factory; the chain reaches the
+adapter's origination surface through that same adapter. No validation, no
+registration result.
 
 ```mermaid
 sequenceDiagram
@@ -716,9 +718,12 @@ The project-side "initial setup" machinery is gone. The load-time discovery pass
 repo→board resolution and its create/adopt/ambiguous/orphan heuristics
 (`ResolveProjectBoardAction`), the code-host-only setup surface
 (`discoverProjects`, `readProjectAddressing`, `createProjectWithStatus`,
-`adoptProject`, `listProjects`) and remote-born project capture
-(`CaptureProjectsAction` + `MirrorPort.captureProjects`) are deleted. A declared
-connection resolves-or-creates its remote project by name
+`adoptProject`, `listProjects`), the `ProjectSetupFactoryPort` indirection and
+remote-born project capture
+(`CaptureProjectsAction` + `MirrorPort.captureProjects`) are deleted. The
+origination method is no longer optional — every adapter carries
+`resolveOrCreateProject`, so no declared connection is left unoriginated. A
+declared connection resolves-or-creates its remote project by name
 ([§2.6](#26-origination-ensureprojectboardaction)); a project is declared, never
 captured.
 
