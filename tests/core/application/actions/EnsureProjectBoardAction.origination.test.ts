@@ -6,14 +6,19 @@ import type { ProjectIdentityDataTransferObject } from '../../../../src/core/por
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeSetup implements ProjectSetupSurface {
-  existing = new Map<string, ProjectAddressing>();
-  createCalls: Array<{
+  readonly remote = new Map<string, ProjectAddressing>();
+  readonly createCalls: Array<{
     target: string;
     name: string;
+    identifier: string;
     statusOptions: string[];
   }> = [];
-  adoptCalls: Array<{ target: string; name: string }> = [];
-  created = new ProjectAddressing({
+  readonly adoptCalls: Array<{
+    target: string;
+    name: string;
+    identifier: string;
+  }> = [];
+  readonly created = new ProjectAddressing({
     projectHandle: 'PVT_created',
     statusFieldHandle: 'PVTF_created',
     statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
@@ -24,12 +29,17 @@ class FakeSetup implements ProjectSetupSurface {
     name: string,
     statusOptions: readonly string[],
   ): Promise<ProjectAddressing> {
-    const found = this.existing.get(name);
-    if (found !== undefined) {
-      this.adoptCalls.push({ target, name });
-      return found;
+    const identifier = target === '' ? name : target;
+    const call = { target, name, identifier };
+
+    const existing = this.remote.get(identifier);
+    if (existing !== undefined) {
+      this.adoptCalls.push(call);
+      return existing;
     }
-    this.createCalls.push({ target, name, statusOptions: [...statusOptions] });
+
+    this.createCalls.push({ ...call, statusOptions: [...statusOptions] });
+    this.remote.set(identifier, this.created);
     return this.created;
   }
 }
@@ -51,6 +61,17 @@ function identity(
   };
 }
 
+function addressing(
+  projectHandle: string,
+  statusFieldHandle = `${projectHandle}_status`,
+): ProjectAddressing {
+  return new ProjectAddressing({
+    projectHandle,
+    statusFieldHandle,
+    statusOptions: [],
+  });
+}
+
 function harness(
   projectName: string,
   stored: ProjectIdentityDataTransferObject,
@@ -66,11 +87,86 @@ function harness(
   return { action, setup, syncState };
 }
 
+describe('ORG-2 — an empty target resolves by the vault project name; a non-empty target overrides', () => {
+  it('resolves the remote project by the vault project name when the target is empty', async () => {
+    const h = harness('Acme Widgets', identity());
+    h.setup.remote.set('Acme Widgets', addressing('PVT_by_name'));
+
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: SLUG,
+      target: '',
+      setup: h.setup,
+    });
+
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls[0]?.identifier).toBe('Acme Widgets');
+    const recorded = await h.syncState.getIdentity('Acme Widgets', SLUG);
+    expect(recorded?.projectHandle).toBe('PVT_by_name');
+  });
+
+  it('resolves by the non-empty target, overriding the vault project name', async () => {
+    const h = harness('Acme Widgets', identity());
+    h.setup.remote.set(repoUrl, addressing('PVT_by_target'));
+
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: SLUG,
+      target: repoUrl,
+      setup: h.setup,
+    });
+
+    expect(h.setup.createCalls).toEqual([]);
+    expect(h.setup.adoptCalls[0]?.identifier).toBe(repoUrl);
+    const recorded = await h.syncState.getIdentity('Acme Widgets', SLUG);
+    expect(recorded?.projectHandle).toBe('PVT_by_target');
+  });
+});
+
 describe('ORG-3 — a declared connection resolves-or-creates its remote project', () => {
-  it('creates the project and records its addressing when the target carries none', async () => {
+  it('creates the remote project when it is absent and records its addressing', async () => {
+    const h = harness('Acme Widgets', identity());
+
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: SLUG,
+      target: repoUrl,
+      setup: h.setup,
+    });
+
+    expect(h.setup.createCalls).toHaveLength(1);
+    const recorded = await h.syncState.getIdentity('Acme Widgets', SLUG);
+    expect(recorded?.projectHandle).toBe('PVT_created');
+    expect(recorded?.statusFieldHandle).toBe('PVTF_created');
+  });
+
+  it('creates nothing on a second run once the addressing is recorded', async () => {
+    const h = harness('Acme Widgets', identity());
+
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: SLUG,
+      target: repoUrl,
+      setup: h.setup,
+    });
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connectionSlug: SLUG,
+      target: repoUrl,
+      setup: h.setup,
+    });
+
+    expect(h.setup.createCalls).toHaveLength(1);
+  });
+
+  it('re-creates the remote project when it is gone, though an addressing is recorded', async () => {
     const h = harness(
       'Acme Widgets',
-      identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }),
+      identity({
+        target: repoUrl,
+        projectHandle: 'PVT_gone',
+        statusFieldHandle: 'PVTF_gone',
+      }),
     );
 
     await h.action.execute({
@@ -82,69 +178,22 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
 
     expect(h.setup.createCalls).toHaveLength(1);
     const recorded = await h.syncState.getIdentity('Acme Widgets', SLUG);
-    expect(recorded?.projectHandle).not.toBe('');
-    expect(recorded?.statusFieldHandle).not.toBe('');
-  });
-
-  it('records the addressing of the project named for the vault project', async () => {
-    const h = harness(
-      'widgets',
-      identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }),
-    );
-    h.setup.existing.set(
-      'widgets',
-      new ProjectAddressing({
-        projectHandle: 'PVT_widgets',
-        statusFieldHandle: 'PVTF_live',
-        statusOptions: [{ id: 'PVTSSF_live', name: 'Shipped' }],
-      }),
-    );
-
-    await h.action.execute({
-      projectName: 'widgets',
-      connectionSlug: SLUG,
-      target: repoUrl,
-      setup: h.setup,
-    });
-
-    expect(h.setup.createCalls).toEqual([]);
-    expect(h.setup.adoptCalls).toHaveLength(1);
-    const recorded = await h.syncState.getIdentity('widgets', SLUG);
-    expect(recorded?.projectHandle).toBe('PVT_widgets');
-    expect(recorded?.statusFieldHandle).toBe('PVTF_live');
-  });
-
-  it('creates nothing on a second run once the addressing is recorded', async () => {
-    const h = harness(
-      'Acme Widgets',
-      identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }),
-    );
-
-    await h.action.execute({
-      projectName: 'Acme Widgets',
-      connectionSlug: SLUG,
-      target: repoUrl,
-      setup: h.setup,
-    });
-    await h.action.execute({
-      projectName: 'Acme Widgets',
-      connectionSlug: SLUG,
-      target: repoUrl,
-      setup: h.setup,
-    });
-
-    expect(h.setup.createCalls).toHaveLength(1);
+    expect(recorded?.projectHandle).toBe('PVT_created');
   });
 });
 
-describe('I14 — a project that already has an addressing is left alone', () => {
-  it('leaves a recorded addressing untouched', async () => {
+describe('I14 — a project whose remote project still exists is left alone', () => {
+  it('adopts the recorded addressing without creating anything', async () => {
     const existing = identity({
       target: repoUrl,
       projectHandle: 'PVT_existing',
       statusFieldHandle: 'PVTF_existing',
     });
     const h = harness('Acme Widgets', existing);
+    h.setup.remote.set(
+      repoUrl,
+      addressing('PVT_existing', 'PVTF_existing'),
+    );
 
     await h.action.execute({
       projectName: 'Acme Widgets',
@@ -154,7 +203,6 @@ describe('I14 — a project that already has an addressing is left alone', () =>
     });
 
     expect(h.setup.createCalls).toEqual([]);
-    expect(h.setup.adoptCalls).toEqual([]);
     expect(await h.syncState.getIdentity('Acme Widgets', SLUG)).toEqual(
       existing,
     );

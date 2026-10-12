@@ -444,3 +444,15 @@ describe('SHELL-2 — the chain runs its origination step before reconciliation'
     ]);
   });
 });
+
+describe('ORG-4 — no declared connection, no fan-out', () => {
+  it('fans out nothing when the project declares no connections', async () => {
+    const h = harness({ connections: [], ensureBoard: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events.filter((event) => event.startsWith('ensureBoard'))).toEqual(
+      [],
+    );
+  });
+});
