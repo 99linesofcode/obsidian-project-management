@@ -7,10 +7,8 @@ import type { RegisteredAdapter } from '../data/RegisteredAdapter.js';
 import { mirrorSideKey } from '../../domain/mirrorSideKey.js';
 import { originSideObservation } from '../../domain/originSideObservation.js';
 import { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
-import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
-import type { MirrorProjectPort } from '../../port/MirrorProjectPort.js';
-import type { TrackedEntityPort } from '../../port/TrackedEntityPort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 const ORIGIN_SIDE = 'origin';
@@ -19,10 +17,8 @@ const LIFECYCLE_FIELD = 'lifecycle';
 export class AssembleProjectLifecyclePassAction {
   constructor(
     private readonly vault: VaultPort,
-    private readonly registry: TrackedEntityPort,
-    private readonly baselines: BaselineStorePort,
+    private readonly registry: RegistryPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
-    private readonly mirrorProjects: MirrorProjectPort,
   ) {}
 
   async invoke(project: string): Promise<ProjectLifecycleRecord> {
@@ -30,7 +26,7 @@ export class AssembleProjectLifecyclePassAction {
     const mirrors = await this.scopeMirrors(connections, project);
     const origin = originSideObservation(
       ORIGIN_SIDE,
-      await this.baselines.read(project, LIFECYCLE_FIELD, ORIGIN_SIDE),
+      await this.registry.readBaseline(project, LIFECYCLE_FIELD, ORIGIN_SIDE),
       await this.vault.observeProject(project),
     );
     const baselines = await this.readMirrorBaselines(project, mirrors);
@@ -86,7 +82,7 @@ export class AssembleProjectLifecyclePassAction {
     adapter: RegisteredAdapter,
     project: string,
   ): Promise<string> {
-    const recorded = await this.mirrorProjects.resolve(
+    const recorded = await this.registry.resolveMirrorProject(
       project,
       connection.slug,
     );
@@ -126,7 +122,7 @@ export class AssembleProjectLifecyclePassAction {
     project: string,
     handle: string,
   ): Promise<void> {
-    await this.mirrorProjects.record(
+    await this.registry.recordMirrorProject(
       project,
       connection.slug,
       connection.application,
@@ -140,7 +136,7 @@ export class AssembleProjectLifecyclePassAction {
   ): Promise<Map<string, Baseline>> {
     const baselines = new Map<string, Baseline>();
     for (const mirror of mirrors) {
-      const baseline = await this.baselines.read(
+      const baseline = await this.registry.readBaseline(
         project,
         LIFECYCLE_FIELD,
         mirror.side,
@@ -157,7 +153,7 @@ export class AssembleProjectLifecyclePassAction {
     record: ProjectLifecycleRecord,
   ): Promise<void> {
     for (const side of record.advanced) {
-      await this.baselines.write(
+      await this.registry.writeBaseline(
         project,
         LIFECYCLE_FIELD,
         side,

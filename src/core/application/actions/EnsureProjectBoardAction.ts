@@ -1,5 +1,5 @@
 import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
-import type { IdentityStorePort } from '../../port/IdentityStorePort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { ProjectAddressing } from '../data/ProjectAddressing.js';
 import type { ProjectSummary } from '../data/ProjectSummary.js';
 import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
@@ -14,7 +14,7 @@ export interface EnsureProjectBoardInput {
 
 export class EnsureProjectBoardAction {
   constructor(
-    private readonly syncState: IdentityStorePort,
+    private readonly syncState: RegistryPort,
     private readonly statusOptions: string[],
   ) {}
 

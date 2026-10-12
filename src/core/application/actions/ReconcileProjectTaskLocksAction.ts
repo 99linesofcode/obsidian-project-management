@@ -1,6 +1,6 @@
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../port/MirrorHandlePort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { TaskLockPort } from '../../port/TaskLockPort.js';
 
@@ -13,7 +13,7 @@ export interface ReconcileProjectTaskLocksInput {
 export class ReconcileProjectTaskLocksAction {
   constructor(
     private readonly vault: VaultPort,
-    private readonly handles: MirrorHandlePort,
+    private readonly registry: RegistryPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly doneOptionName: string,
   ) {}
@@ -42,7 +42,10 @@ export class ReconcileProjectTaskLocksAction {
     taskLock: TaskLockPort,
     input: ReconcileProjectTaskLocksInput,
   ): Promise<void> {
-    const tracked = await this.handles.list(input.project, connection.slug);
+    const tracked = await this.registry.listMirrorHandles(
+      input.project,
+      connection.slug,
+    );
     for (const { handle, notePath } of tracked) {
       await this.applyToTask(taskLock, handle, notePath, input.frozen);
     }

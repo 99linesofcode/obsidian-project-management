@@ -67,13 +67,12 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 - **The setup port.** `ProjectSetupPort` (discover a target's projects, resolve
   addressing, create/adopt a project, list viewer projects) is the
   code-host adapter's surface for discovery, attach and board-ensure.
-- **The supporting ports.** `BaselineStorePort`, `MirrorHandlePort`,
-  `MirrorProjectPort`, `MirrorAdapterFactoryPort`, `ProjectCaptureCursorPort`
-  and `ProjectWatchPort`.
-- **The registry's seams.** The chain reaches the registry through
-  `IdentityStorePort`, `TrackedEntityPort` and `ConnectionStatePort`. The vault
-  is one `VaultPort`; the registry's facets stay narrow because each serves a
-  different consumer.
+- **The supporting ports.** `MirrorAdapterFactoryPort`,
+  `ProjectCaptureCursorPort` and `ProjectWatchPort`.
+- **The registry port.** `RegistryPort` — the tracked entities and their mirror
+  items, the note-path↔handle and mirror-project mappings, the per-connection
+  identity and port state, and the side baselines. The vault is one `VaultPort`
+  and the registry is one `RegistryPort`: one collaborator, one port.
 - **The vocabulary.** `capabilities.ts` holds the thirteen capability names;
   `canonicalField.ts` holds the six canonical fields (`title`, `body`,
   `subtasks`, `completion`, `Status`, `label`).
@@ -108,11 +107,11 @@ namespace per application.**
 - **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorAdapter`),
   `todoistDescriptor`, `TaskManagerTarget`, `TaskManagerTransport` and
   `TodoistTransport`.
-- **Registry.** `CoreBaselineStoreAdapter` (`BaselineStorePort`),
-  `RegistryMirrorHandleAdapter` (`MirrorHandlePort`),
-  `RegistryMirrorProjectAdapter` (`MirrorProjectPort`),
-  `RegistryProjectCursorAdapter` (`ProjectCaptureCursorPort`) and
-  `CoreProjectWatchAdapter` (`ProjectWatchPort`).
+- **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
+  and the `coreBaselines` store), `RegistryProjectCursorAdapter`
+  (`ProjectCaptureCursorPort`) and `CoreProjectWatchAdapter`
+  (`ProjectWatchPort`), with the pure codecs (`coreStorageRecord`,
+  `syncStateSchema`, `loadDataSafely`) beside them.
 - **Conformance.** `ConformanceMirrorAdapter` + `conformanceDescriptor` — an
   in-memory adapter, inert unless a project names its application id.
 
@@ -346,12 +345,12 @@ nothing.
 `AssembleProjectPassAction.invoke` reads the project's declared connections and
 its task-note paths, builds one mirror adapter per connection through
 `MirrorAdapterFactoryPort`, resolves each note to that connection's own handle
-through `MirrorHandlePort`, and runs `MirrorSyncAction` once per
+through `RegistryPort`, and runs `MirrorSyncAction` once per
 (note, canonical field) over the six merged fields — `title`, `body`,
 `subtasks`, `completion`, `Status`, `label`. A connection whose entity has no
 resolved handle is **materialized**: the origin task is read through
 `VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
-placeholder handle is recorded through the mirror-handle port before the item is
+placeholder handle is recorded through `RegistryPort` before the item is
 created through `TaskSurfacePort.createTask`, the real handle replaces the
 placeholder, and the created mirror is reconciled in the same pass. A
 placeholder left by an interrupted pass is **adopted** by matching the mirror's
@@ -362,7 +361,7 @@ sequenceDiagram
   participant A as AssembleProjectPassAction
   participant PS as VaultPort
   participant F as MirrorAdapterFactoryPort
-  participant H as MirrorHandlePort
+  participant H as RegistryPort
   participant O as VaultPort
   participant R as RegisteredAdapter
   participant MS as MirrorSyncAction
@@ -371,16 +370,16 @@ sequenceDiagram
   A->>PS: listEntities(project)
   A->>F: create(application, target, slug, project) per connection
   loop each note path
-    A->>H: resolve(slug, notePath)
+    A->>H: resolveMirrorHandle(slug, notePath)
     alt no handle or a pendingCreation placeholder
       A->>O: readTask(notePath)
       alt pending placeholder and a title match exists
         A->>R: tasks.readTasks(target), adopt by title
-        A->>H: record(real handle)
+        A->>H: recordMirrorHandle(real handle)
       else
-        A->>H: record(pendingCreation:<notePath>)
+        A->>H: recordMirrorHandle(pendingCreation:<notePath>)
         A->>R: tasks.createTask(target, task)
-        A->>H: record(created.handle)
+        A->>H: recordMirrorHandle(created.handle)
       end
     end
     loop each merged field
@@ -393,13 +392,13 @@ sequenceDiagram
 The side key is `mirror:<slug>` (`mirrorSideKey`), disjoint from the origin's
 `origin` key, so a connection slug of `origin` cannot collide. Two connections
 to the same application stay distinct sides. The pass persists each advanced
-side's `Baseline` (value plus the completion flag) through `BaselineStorePort`.
+side's `Baseline` (value plus the completion flag) through `RegistryPort`.
 
 ### 2.5 The project lifecycle pass
 
 `AssembleProjectLifecyclePassAction` is the project-level peer of the task pass.
 It scopes the mirrors, resolves each connection's mirror project through
-`MirrorProjectPort` — onboarding a missing one by `ProjectPort.createProject`
+`RegistryPort` — onboarding a missing one by `ProjectPort.createProject`
 and recording the returned handle, so a newly-connected project is onboarded in
 the same pass — renames a mirror project whose name drifted from the vault
 project through `ProjectPort.renameProject`, reads the origin's archived state
@@ -413,7 +412,7 @@ per-side baselines live under the `lifecycle` field in the same baseline store.
 sequenceDiagram
   participant A as AssembleProjectLifecyclePassAction
   participant PS as VaultPort
-  participant MP as MirrorProjectPort
+  participant MP as RegistryPort
   participant R as RegisteredAdapter
   participant O as VaultPort
   participant LS as ProjectLifecycleSyncAction
@@ -421,14 +420,14 @@ sequenceDiagram
 
   A->>PS: readConnections(project)
   loop each connection
-    A->>MP: resolve(project, slug)
+    A->>MP: resolveMirrorProject(project, slug)
     alt recorded
       A->>R: renameProject when the name drifted
     else readProject returns a project
-      A->>MP: record(target)
+      A->>MP: recordMirrorProject(target)
     else
       A->>R: createProject(target, project)
-      A->>MP: record(created.handle)
+      A->>MP: recordMirrorProject(created.handle)
     end
   end
   A->>O: observeProject(project)
@@ -493,7 +492,7 @@ as a task note. The whole listing is scanned each pass and the adopted mirror
 items are skipped, so the pass is idempotent without a cursor. The action
 routes by the connection's application: a code-host issue through
 `CreateTaskNoteAction`, a task-manager task rendered by `CapturedTaskNoteMapper`
-and written through `VaultPort` + `TrackedEntityPort`. A connection whose
+and written through `VaultPort` + `RegistryPort`. A connection whose
 listing or adoption fails is collected and never stops the later connections.
 
 ```mermaid
@@ -527,7 +526,7 @@ sequenceDiagram
 `ReconcileProjectTaskLocksAction` runs only on a freeze/unfreeze transition
 (`frozen !== wasFrozen`). For each connection whose adapter declares
 `task-locking`, it enumerates the project's tracked mirror items through
-`MirrorHandlePort`, skips the tasks whose vault status is the done lane, and
+`RegistryPort`, skips the tasks whose vault status is the done lane, and
 locks the rest — or unlocks every tracked task on the unfreeze.
 
 `ReactivateFrozenProjectAction` runs before the lifecycle pass. When the origin
@@ -540,15 +539,15 @@ adopts the newest item as the cursor; a quiet conditional read writes nothing.
 sequenceDiagram
   participant SP as SyncProjectAction
   participant React as ReactivateFrozenProjectAction
-  participant B as BaselineStorePort
+  participant B as RegistryPort
   participant R as RegisteredAdapter
   participant W as ProjectWatchPort
   participant O as VaultPort
   participant Lock as ReconcileProjectTaskLocksAction
-  participant H as MirrorHandlePort
+  participant H as RegistryPort
 
   SP->>React: reactivate(project)
-  React->>B: read(project, lifecycle, origin)
+  React->>B: readBaseline(project, lifecycle, origin)
   alt origin baseline frozen
     loop each connection with project-activity
       React->>W: read(project, slug)
@@ -565,7 +564,7 @@ sequenceDiagram
   end
   SP->>Lock: reconcile({ project, frozen, wasFrozen })
   loop each connection with task-locking
-    Lock->>H: list(project, slug)
+    Lock->>H: listMirrorHandles(project, slug)
     Lock->>R: lockTask or unlockTask per handle
   end
 ```
@@ -591,11 +590,12 @@ is loaded read-only: reads serve it, but every mutating port method throws
 The settings save shares this one chain through `mutateRoot`.
 
 The core's own memory lives in two sibling top-level keys, written through the
-same storage but not through `SyncStateAdapter`:
+same storage. The baselines are folded into `SyncStateAdapter`; the reactivation
+watch is its own adapter:
 
-- **`coreBaselines`** (`CoreBaselineStoreAdapter`) — per entity, per
-  `BaselineField` (a canonical field or `lifecycle`), per side, a `Baseline`
-  (`value`, `completed`).
+- **`coreBaselines`** (`SyncStateAdapter`) — per entity, per `BaselineField` (a
+  canonical field or `lifecycle`), per side, a `Baseline` (`value`,
+  `completed`).
 - **`coreWatches`** (`CoreProjectWatchAdapter`) — per project, per connection,
   the reactivation watch (`etag`, `cursor`).
 
@@ -738,7 +738,7 @@ sequenceDiagram
 A deleted note is swept by `SweepDeletedNotesAction`, which enumerates the
 project's entities and, for each whose note is gone, calls
 `HandleDeletedNoteAction`. That action finds the registry record by note path,
-resolves the connection's mirror item through `TrackedEntityPort`, builds the
+resolves the connection's mirror item through `RegistryPort`, builds the
 connection's adapter through `MirrorAdapterFactoryPort`, and calls
 `TaskSurfacePort.deleteTask` (the GitHub adapter deletes the board card). When
 the stored base lane is not the done lane it then applies
@@ -751,7 +751,7 @@ sequenceDiagram
   participant SP as SyncProjectAction
   participant Sweep as SweepDeletedNotesAction
   participant HD as HandleDeletedNoteAction
-  participant SS as TrackedEntityPort
+  participant SS as RegistryPort
   participant F as MirrorAdapterFactoryPort
   participant R as RegisteredAdapter
 
@@ -789,7 +789,7 @@ sequenceDiagram
   participant SP as SyncProjectAction
   participant Ren as DetectNoteRenamesAction
   participant V as VaultPort
-  participant SS as TrackedEntityPort
+  participant SS as RegistryPort
 
   alt live rename
     V-->>Sched: onNoteRenamed(old, new)
@@ -829,7 +829,7 @@ sequenceDiagram
   participant A as AttachProjectAction
   participant Setup as ProjectSetupPort
   participant Ens as EnsureProjectBoardAction
-  participant SS as IdentityStorePort
+  participant SS as RegistryPort
 
   P->>D: execute()
   D->>A: execute({ target })

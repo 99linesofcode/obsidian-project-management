@@ -4,7 +4,7 @@ import type { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';
 import { ProjectLifecycleRecord } from '../data/ProjectLifecycleRecord.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
-import type { TrackedEntityPort } from '../../port/TrackedEntityPort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 interface ObservedMirror {
@@ -15,7 +15,7 @@ interface ObservedMirror {
 export class ProjectLifecycleSyncAction {
   constructor(
     private readonly origin: VaultPort,
-    private readonly registry: TrackedEntityPort,
+    private readonly registry: RegistryPort,
   ) {}
 
   async invoke(pass: ProjectLifecyclePass): Promise<ProjectLifecycleRecord> {
@@ -85,7 +85,7 @@ export class ProjectLifecycleSyncAction {
 }
 
 async function relocateEntities(
-  registry: TrackedEntityPort,
+  registry: RegistryPort,
   project: string,
   archived: boolean,
 ): Promise<void> {

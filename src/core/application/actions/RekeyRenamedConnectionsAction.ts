@@ -1,5 +1,5 @@
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
-import type { ConnectionStatePort } from '../../port/ConnectionStatePort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 
 export interface RekeyRenamedConnectionsInput {
   projectName: string;
@@ -7,7 +7,7 @@ export interface RekeyRenamedConnectionsInput {
 }
 
 export class RekeyRenamedConnectionsAction {
-  constructor(private readonly syncState: ConnectionStatePort) {}
+  constructor(private readonly syncState: RegistryPort) {}
 
   async execute(input: RekeyRenamedConnectionsInput): Promise<unknown[]> {
     const ports = await this.syncState.listPortStates(input.projectName);

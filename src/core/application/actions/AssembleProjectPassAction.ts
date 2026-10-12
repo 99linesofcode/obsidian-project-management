@@ -9,9 +9,8 @@ import type { RegisteredAdapter } from '../data/RegisteredAdapter.js';
 import { mirrorSideKey } from '../../domain/mirrorSideKey.js';
 import { MirrorSyncAction } from './MirrorSyncAction.js';
 import { originSideObservation } from '../../domain/originSideObservation.js';
-import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../port/MirrorHandlePort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 const ORIGIN_SIDE = 'origin';
@@ -43,8 +42,7 @@ interface ScopedMirror {
 export class AssembleProjectPassAction {
   constructor(
     private readonly vault: VaultPort,
-    private readonly baselines: BaselineStorePort,
-    private readonly handles: MirrorHandlePort,
+    private readonly registry: RegistryPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
   ) {}
 
@@ -114,7 +112,10 @@ export class AssembleProjectPassAction {
     notePath: string,
     project: string,
   ): Promise<string | null> {
-    const handle = await this.handles.resolve(connection.slug, notePath);
+    const handle = await this.registry.resolveMirrorHandle(
+      connection.slug,
+      notePath,
+    );
     if (handle !== null && !isPendingCreationHandle(handle)) {
       return handle;
     }
@@ -158,14 +159,14 @@ export class AssembleProjectPassAction {
         return adopted;
       }
     }
-    await this.handles.record(
+    await this.registry.recordMirrorHandle(
       project,
       connection.slug,
       notePath,
       pendingCreationHandle(notePath),
     );
     const created = await adapter.tasks.createTask(connection.target, task);
-    await this.handles.record(
+    await this.registry.recordMirrorHandle(
       project,
       connection.slug,
       notePath,
@@ -188,7 +189,12 @@ export class AssembleProjectPassAction {
     if (match === undefined) {
       return null;
     }
-    await this.handles.record(project, connection.slug, notePath, match.handle);
+    await this.registry.recordMirrorHandle(
+      project,
+      connection.slug,
+      notePath,
+      match.handle,
+    );
     return match.handle;
   }
 
@@ -199,7 +205,7 @@ export class AssembleProjectPassAction {
   ): Promise<PassRecord> {
     const origin = originSideObservation(
       ORIGIN_SIDE,
-      await this.baselines.read(notePath, field, ORIGIN_SIDE),
+      await this.registry.readBaseline(notePath, field, ORIGIN_SIDE),
       await this.vault.observe(notePath, field),
     );
     const baselines = await this.readMirrorBaselines(notePath, field, mirrors);
@@ -223,7 +229,11 @@ export class AssembleProjectPassAction {
   ): Promise<Map<string, Baseline>> {
     const baselines = new Map<string, Baseline>();
     for (const mirror of mirrors) {
-      const baseline = await this.baselines.read(notePath, field, mirror.side);
+      const baseline = await this.registry.readBaseline(
+        notePath,
+        field,
+        mirror.side,
+      );
       if (baseline !== null) {
         baselines.set(mirror.side, baseline);
       }
@@ -237,7 +247,7 @@ export class AssembleProjectPassAction {
     record: PassRecord,
   ): Promise<void> {
     for (const side of record.advanced) {
-      await this.baselines.write(
+      await this.registry.writeBaseline(
         notePath,
         field,
         side,

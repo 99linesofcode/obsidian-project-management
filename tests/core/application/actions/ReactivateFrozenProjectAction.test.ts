@@ -4,11 +4,8 @@ import { ConnectionDataTransferObject } from '../../../../src/core/application/d
 import { ProjectActivityObservation } from '../../../../src/core/application/data/ProjectActivityObservation.js';
 import type { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
-import type {
-  BaselineField,
-  BaselineStorePort,
-} from '../../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
+import type { RegistryPort } from '../../../../src/core/port/RegistryPort.js';
 import type {
   ProjectWatchPort,
   ProjectWatchState,
@@ -18,6 +15,7 @@ import { registerAdapters } from '../../../../src/core/application/services/regi
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const PROJECT = 'Acme';
@@ -49,22 +47,16 @@ class FakeVault extends FakeVaultBase {
   }
 }
 
-class FakeBaselines implements BaselineStorePort {
-  private readonly values = new Map<string, Baseline>();
-
-  seed(project: string, side: string, value: string): void {
-    this.values.set(`${project}\u0000${side}`, new Baseline(value, false));
-  }
-
-  async read(
-    entityId: string,
-    _field: BaselineField,
-    side: string,
-  ): Promise<Baseline | null> {
-    return this.values.get(`${entityId}\u0000${side}`) ?? null;
-  }
-
-  async write(): Promise<void> {}
+function memoryStorage() {
+  let data: Record<string, unknown> = {};
+  return {
+    async load() {
+      return data;
+    },
+    async save(next: unknown) {
+      data = next as Record<string, unknown>;
+    },
+  };
 }
 
 class FakeWatches implements ProjectWatchPort {
@@ -108,7 +100,7 @@ function connection(
 function setup() {
   const vault = new FakeVault();
   vault.connections = [connection('a')];
-  const baselines = new FakeBaselines();
+  const registry = new SyncStateAdapter(memoryStorage());
   const watches = new FakeWatches();
   const mirror = new ConformanceMirrorAdapter();
   const registered: RegisteredAdapter = registerAdapters([
@@ -117,11 +109,23 @@ function setup() {
   const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
   const action = new ReactivateFrozenProjectAction(
     vault,
-    baselines,
+    registry,
     mirrorAdapters,
     watches,
   );
-  return { action, vault, baselines, watches, mirror };
+  return { action, vault, registry, watches, mirror };
+}
+
+async function seedBaseline(
+  registry: RegistryPort,
+  frozen: boolean,
+): Promise<void> {
+  await registry.writeBaseline(
+    PROJECT,
+    'lifecycle',
+    'origin',
+    new Baseline(frozen ? 'true' : 'false', false),
+  );
 }
 
 function activity(
@@ -134,8 +138,8 @@ function activity(
 
 describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen project (F02 NWM-30)', () => {
   it('unfreezes the origin and clears the watch when a newer item appears', async () => {
-    const { action, vault, baselines, watches, mirror } = setup();
-    baselines.seed(PROJECT, 'origin', 'true');
+    const { action, vault, registry, watches, mirror } = setup();
+    await seedBaseline(registry, true);
     watches.seed(PROJECT, 'a', {
       etag: 'etag-1',
       cursor: '2026-09-20T10:00:00Z',
@@ -156,8 +160,8 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('adopts the newest item as the cursor on the first watch', async () => {
-    const { action, vault, baselines, watches, mirror } = setup();
-    baselines.seed(PROJECT, 'origin', 'true');
+    const { action, vault, registry, watches, mirror } = setup();
+    await seedBaseline(registry, true);
     mirror.seedActivity(
       TARGET,
       activity(true, '2026-09-25T10:00:00Z', 'etag-2'),
@@ -174,8 +178,8 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('refreshes only the etag when the newest item is not newer', async () => {
-    const { action, vault, baselines, watches, mirror } = setup();
-    baselines.seed(PROJECT, 'origin', 'true');
+    const { action, vault, registry, watches, mirror } = setup();
+    await seedBaseline(registry, true);
     watches.seed(PROJECT, 'a', {
       etag: 'etag-1',
       cursor: '2026-09-20T10:00:00Z',
@@ -195,8 +199,8 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('does nothing when the activity read is unchanged', async () => {
-    const { action, vault, baselines, watches, mirror } = setup();
-    baselines.seed(PROJECT, 'origin', 'true');
+    const { action, vault, registry, watches, mirror } = setup();
+    await seedBaseline(registry, true);
     mirror.seedActivity(TARGET, activity(false, null, null));
 
     await action.invoke(PROJECT);
@@ -206,8 +210,8 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('does nothing when the project was not already frozen', async () => {
-    const { action, vault, baselines, mirror } = setup();
-    baselines.seed(PROJECT, 'origin', 'false');
+    const { action, vault, registry, mirror } = setup();
+    await seedBaseline(registry, false);
     mirror.seedActivity(
       TARGET,
       activity(true, '2026-09-25T10:00:00Z', 'etag-2'),
@@ -220,12 +224,12 @@ describe('ReactivateFrozenProjectAction — a newer mirror item reopens a frozen
   });
 
   it('refreshes every connection watch when one reactivates (NWM-30)', async () => {
-    const { action, vault, baselines, watches, mirror } = setup();
+    const { action, vault, registry, watches, mirror } = setup();
     vault.connections = [
       connection('a', 'board-a'),
       connection('b', 'board-b'),
     ];
-    baselines.seed(PROJECT, 'origin', 'true');
+    await seedBaseline(registry, true);
     watches.seed(PROJECT, 'a', {
       etag: 'etag-a1',
       cursor: '2026-09-20T10:00:00Z',

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Baseline } from '../../../src/core/domain/Baseline.js';
 import {
   SYNC_STATE_KEY,
   SyncStateAdapter,
@@ -504,6 +505,318 @@ describe('F7 — settings and registry writes share one chain', () => {
     };
     expect(synced.projects['Acme Widgets']!.entities['e1']).toBeDefined();
     expect(synced.projects['Acme Widgets']!.entities['e2']).toBeDefined();
+  });
+});
+
+describe('SyncStateAdapter — the core baseline store', () => {
+  it('round-trips a side baseline for an entity and field', async () => {
+    const { storage, snapshot } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.writeBaseline(
+      notePath,
+      'Status',
+      'conformance',
+      new Baseline('Done', false),
+    );
+    const read = await adapter.readBaseline(notePath, 'Status', 'conformance');
+
+    expect(read?.value).toBe('Done');
+    expect(read?.completed).toBe(false);
+    expect(snapshot()['coreBaselines']).toEqual({
+      [notePath]: {
+        Status: { conformance: { value: 'Done', completed: false } },
+      },
+    });
+  });
+
+  it('round-trips the completion fact of a completion baseline', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.writeBaseline(
+      'note.md',
+      'completion',
+      'origin',
+      new Baseline('true', true),
+    );
+    const read = await adapter.readBaseline('note.md', 'completion', 'origin');
+
+    expect(read?.value).toBe('true');
+    expect(read?.completed).toBe(true);
+  });
+
+  it('returns null for an unknown baseline', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    expect(
+      await adapter.readBaseline('note.md', 'Status', 'conformance'),
+    ).toBeNull();
+  });
+
+  it('leaves the existing chain bases untouched', async () => {
+    const existing = {
+      syncState: {
+        version: 3,
+        projects: {
+          Acme: {
+            ports: {
+              conformance: {
+                items: {
+                  'board-1': { entityId: 'e1', base: { title: 'old' } },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const { storage, snapshot } = fakeStorage(existing);
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.writeBaseline(
+      'note.md',
+      'Status',
+      'conformance',
+      new Baseline('Done', false),
+    );
+
+    const syncState = snapshot()['syncState'] as Record<string, unknown>;
+    expect(syncState['projects']).toEqual(existing.syncState.projects);
+  });
+
+  it('keeps the core baselines when the registry writes the sync state', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.writeBaseline(
+      'note.md',
+      'Status',
+      'conformance',
+      new Baseline('Done', false),
+    );
+    await adapter.setEntity({
+      id: 'entity-1',
+      notePath: 'Projecten/Acme/taken/note.md',
+    });
+
+    const read = await adapter.readBaseline('note.md', 'Status', 'conformance');
+    expect(read?.value).toBe('Done');
+  });
+
+  it('refuses a prototype-polluting entity id', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await expect(
+      adapter.writeBaseline(
+        '__proto__',
+        'Status',
+        'conformance',
+        new Baseline('Done', false),
+      ),
+    ).rejects.toThrow(/forbidden storage key/);
+
+    expect(Object.prototype.hasOwnProperty('Status')).toBe(false);
+  });
+});
+
+const HANDLE_PROJECT = 'Acme';
+const HANDLE_PATH = 'Projecten/Acme/taken/fix.md';
+const HANDLE_PATH_2 = 'Projecten/Acme/taken/ship.md';
+
+describe('SyncStateAdapter — entity to per-connection handle (F02 NWM-2)', () => {
+  it('resolves the note path to its entity id and then to that connection handle', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({ id: 'uuid-1', notePath: HANDLE_PATH }),
+    );
+    await adapter.setMirrorItem(HANDLE_PROJECT, 'gh-main', 'issue-42', {
+      entityId: 'uuid-1',
+    });
+    await adapter.setMirrorItem(HANDLE_PROJECT, 'td-work', 'task-9', {
+      entityId: 'uuid-1',
+    });
+
+    expect(await adapter.resolveMirrorHandle('gh-main', HANDLE_PATH)).toBe(
+      'issue-42',
+    );
+    expect(await adapter.resolveMirrorHandle('td-work', HANDLE_PATH)).toBe(
+      'task-9',
+    );
+  });
+
+  it('returns null when the note path maps to no entity', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    expect(
+      await adapter.resolveMirrorHandle('gh-main', HANDLE_PATH),
+    ).toBeNull();
+  });
+
+  it('returns null when the connection holds no item for the entity', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({ id: 'uuid-1', notePath: HANDLE_PATH }),
+    );
+
+    expect(
+      await adapter.resolveMirrorHandle('gh-main', HANDLE_PATH),
+    ).toBeNull();
+  });
+
+  it('records a new entity and its mirror item for a note path', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.recordMirrorHandle(
+      HANDLE_PROJECT,
+      'gh-main',
+      HANDLE_PATH,
+      'issue-1',
+    );
+
+    expect((await adapter.findByNotePath(HANDLE_PATH))?.notePath).toBe(
+      HANDLE_PATH,
+    );
+    expect(await adapter.resolveMirrorHandle('gh-main', HANDLE_PATH)).toBe(
+      'issue-1',
+    );
+  });
+
+  it('records a mirror item against an existing entity', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({ id: 'uuid-1', notePath: HANDLE_PATH }),
+    );
+
+    await adapter.recordMirrorHandle(
+      HANDLE_PROJECT,
+      'gh-main',
+      HANDLE_PATH,
+      'issue-1',
+    );
+
+    expect((await adapter.findByNotePath(HANDLE_PATH))?.id).toBe('uuid-1');
+    expect(await adapter.resolveMirrorHandle('gh-main', HANDLE_PATH)).toBe(
+      'issue-1',
+    );
+  });
+
+  it('replaces a placeholder handle with the real one', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({ id: 'uuid-1', notePath: HANDLE_PATH }),
+    );
+
+    await adapter.recordMirrorHandle(
+      HANDLE_PROJECT,
+      'gh-main',
+      HANDLE_PATH,
+      `pendingCreation:${HANDLE_PATH}`,
+    );
+    await adapter.recordMirrorHandle(
+      HANDLE_PROJECT,
+      'gh-main',
+      HANDLE_PATH,
+      'issue-1',
+    );
+
+    expect(
+      await adapter.findMirrorItem('gh-main', `pendingCreation:${HANDLE_PATH}`),
+    ).toBeNull();
+    expect(await adapter.resolveMirrorHandle('gh-main', HANDLE_PATH)).toBe(
+      'issue-1',
+    );
+  });
+
+  it('lists the handles a connection holds with their note paths', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({ id: 'uuid-1', notePath: HANDLE_PATH }),
+    );
+    await adapter.setEntity(
+      entityRecord({ id: 'uuid-2', notePath: HANDLE_PATH_2 }),
+    );
+    await adapter.setMirrorItem(HANDLE_PROJECT, 'gh-main', 'issue-1', {
+      entityId: 'uuid-1',
+    });
+    await adapter.setMirrorItem(HANDLE_PROJECT, 'gh-main', 'issue-2', {
+      entityId: 'uuid-2',
+    });
+    await adapter.setMirrorItem(HANDLE_PROJECT, 'td-work', 'task-9', {
+      entityId: 'uuid-1',
+    });
+
+    expect(await adapter.listMirrorHandles(HANDLE_PROJECT, 'gh-main')).toEqual([
+      { handle: 'issue-1', notePath: HANDLE_PATH },
+      { handle: 'issue-2', notePath: HANDLE_PATH_2 },
+    ]);
+  });
+});
+
+describe('SyncStateAdapter — the mirror project handle (F02 NWM-2)', () => {
+  it('returns null when the connection holds no mirror project', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    expect(await adapter.resolveMirrorProject('Acme', 'gh-main')).toBeNull();
+  });
+
+  it('treats an empty recorded project as no mirror project', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setPortState('Acme', 'gh-main', {
+      provider: 'github',
+      project: '',
+      lastPoll: null,
+      lanes: {},
+    });
+
+    expect(await adapter.resolveMirrorProject('Acme', 'gh-main')).toBeNull();
+  });
+
+  it('records the mirror project handle and resolves it back', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.recordMirrorProject(
+      'Acme',
+      'gh-main',
+      'github',
+      'https://github.com/acme/widgets',
+    );
+
+    expect(await adapter.resolveMirrorProject('Acme', 'gh-main')).toBe(
+      'https://github.com/acme/widgets',
+    );
+  });
+
+  it('preserves the existing port bookkeeping when recording', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setPortState('Acme', 'gh-main', {
+      provider: 'github',
+      project: '',
+      lastPoll: '2026-01-01T00:00:00Z',
+      lanes: { a: 'x' },
+    });
+
+    await adapter.recordMirrorProject('Acme', 'gh-main', 'github', 'board-1');
+
+    expect(await adapter.getPortState('Acme', 'gh-main')).toEqual({
+      provider: 'github',
+      project: 'board-1',
+      lastPoll: '2026-01-01T00:00:00Z',
+      lanes: { a: 'x' },
+    });
   });
 });
 

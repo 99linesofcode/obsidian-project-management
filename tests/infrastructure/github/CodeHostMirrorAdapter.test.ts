@@ -8,10 +8,9 @@ import { ConnectionDataTransferObject } from '../../../src/core/application/data
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../../src/core/domain/OriginObservation.js';
+import type { CanonicalField } from '../../../src/core/domain/canonicalField.js';
 import type { RegisteredAdapter } from '../../../src/core/application/data/RegisteredAdapter.js';
-import type { BaselineStorePort } from '../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../../src/core/port/MirrorHandlePort.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
@@ -19,6 +18,7 @@ import { registerAdapters } from '../../../src/core/application/services/registe
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
 import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
+import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
 const PARENT_URL = 'https://github.com/acme/widgets/issues/40';
@@ -985,27 +985,6 @@ class FieldOrigin extends FakeVaultBase {
   }
 }
 
-class MemoryBaselines implements BaselineStorePort {
-  private readonly baselines = new Map<string, Baseline>();
-
-  async read(
-    entityId: string,
-    field: string,
-    side: string,
-  ): Promise<Baseline | null> {
-    return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
-  }
-
-  async write(
-    entityId: string,
-    field: string,
-    side: string,
-    baseline: Baseline,
-  ): Promise<void> {
-    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
-  }
-}
-
 describe('AssembleProjectPassAction drives the code host through a resolved handle (F02 NWM-2, NWM-3)', () => {
   it('reads the issue by its resolved handle and reconciles its Status', async () => {
     const entityId = 'Projecten/Acme/taken/fix-the-bug.md';
@@ -1026,29 +1005,32 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
     vault.values.set('Status', 'Todo');
     vault.values.set('label', 'type: task');
     vault.values.set('subtasks', PARENT_URL);
-    const baselines = new MemoryBaselines();
+    let data: Record<string, unknown> = {};
+    const registry = new SyncStateAdapter({
+      async load() {
+        return data;
+      },
+      async save(next: unknown) {
+        data = next as Record<string, unknown>;
+      },
+    });
     for (const [field, value] of vault.values) {
-      await baselines.write(
+      await registry.writeBaseline(
         entityId,
-        field,
+        field as CanonicalField,
         'origin',
         new Baseline(value, false),
       );
     }
+    await registry.setEntity({ id: entityId, notePath: entityId });
+    await registry.setMirrorItem('Acme', 'gh', ISSUE_URL, { entityId });
     const mirrorAdapters: MirrorAdapterFactoryPort = {
       create: (application): RegisteredAdapter | null =>
         application === 'github' ? registered : null,
     };
-    const handles: MirrorHandlePort = {
-      resolve: async (connection, entity) =>
-        connection === 'gh' && entity === entityId ? ISSUE_URL : null,
-      list: async () => [],
-      record: async () => {},
-    };
     const action = new AssembleProjectPassAction(
       vault,
-      baselines,
-      handles,
+      registry,
       mirrorAdapters,
     );
 

@@ -9,10 +9,10 @@ import type { OriginObservation } from '../../../../src/core/domain/OriginObserv
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { CanonicalFieldWrite } from '../../../../src/core/application/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const PROJECT = 'Acme';
@@ -54,31 +54,30 @@ class FakeVault extends FakeVaultBase {
   }
 }
 
-class FakeHandles implements MirrorHandlePort {
-  private readonly listed = new Map<
-    string,
-    Array<{ handle: string; notePath: string }>
-  >();
+function memoryStorage() {
+  let data: Record<string, unknown> = {};
+  return {
+    async load() {
+      return data;
+    },
+    async save(next: unknown) {
+      data = next as Record<string, unknown>;
+    },
+  };
+}
 
-  seed(
-    connection: string,
-    entries: Array<{ handle: string; notePath: string }>,
-  ): void {
-    this.listed.set(connection, entries);
+async function seedHandles(
+  registry: SyncStateAdapter,
+  project: string,
+  connection: string,
+  entries: Array<{ handle: string; notePath: string }>,
+): Promise<void> {
+  for (const { handle, notePath } of entries) {
+    await registry.setEntity({ id: notePath, notePath });
+    await registry.setMirrorItem(project, connection, handle, {
+      entityId: notePath,
+    });
   }
-
-  async resolve(): Promise<string | null> {
-    return null;
-  }
-
-  async list(
-    _project: string,
-    connection: string,
-  ): Promise<readonly { handle: string; notePath: string }[]> {
-    return this.listed.get(connection) ?? [];
-  }
-
-  async record(): Promise<void> {}
 }
 
 function task(notePath: string, status: string): CanonicalTask {
@@ -94,7 +93,7 @@ function task(notePath: string, status: string): CanonicalTask {
   });
 }
 
-function setup() {
+async function setup() {
   const vault = new FakeVault();
   vault.connections = [
     new ConnectionDataTransferObject({
@@ -108,23 +107,23 @@ function setup() {
     new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
   ]).adapters.get('conformance')!;
   const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
-  const handles = new FakeHandles();
-  handles.seed('a', [
+  const registry = new SyncStateAdapter(memoryStorage());
+  await seedHandles(registry, PROJECT, 'a', [
     { handle: 'issue-1', notePath: FIX },
     { handle: 'issue-2', notePath: SHIP },
   ]);
   const action = new ReconcileProjectTaskLocksAction(
     vault,
-    handles,
+    registry,
     mirrorAdapters,
     DONE,
   );
-  return { action, mirror, vault };
+  return { action, mirror, vault, registry };
 }
 
 describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conversations (F02 NWM-29)", () => {
   it('locks the tracked tasks that are not done when the project freezes', async () => {
-    const { action, mirror, vault } = setup();
+    const { action, mirror, vault } = await setup();
     vault.tasks.set(FIX, task(FIX, 'Building'));
     vault.tasks.set(SHIP, task(SHIP, DONE));
 
@@ -134,7 +133,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
   });
 
   it('unlocks every tracked task on unfreeze, including the done lane', async () => {
-    const { action, mirror, vault } = setup();
+    const { action, mirror, vault } = await setup();
     vault.tasks.set(FIX, task(FIX, 'Building'));
     vault.tasks.set(SHIP, task(SHIP, DONE));
     await mirror.lockTask('issue-1');
@@ -146,7 +145,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
   });
 
   it('keeps unlocking the rest when one task fails to unlock', async () => {
-    const { action, mirror, vault } = setup();
+    const { action, mirror, vault } = await setup();
     vault.tasks.set(FIX, task(FIX, 'Building'));
     await mirror.lockTask('issue-1');
     await mirror.lockTask('issue-2');
@@ -158,7 +157,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
   });
 
   it('does nothing when the frozen state has not changed', async () => {
-    const { action, mirror, vault } = setup();
+    const { action, mirror, vault } = await setup();
     vault.tasks.set(FIX, task(FIX, 'Building'));
 
     await action.invoke({ project: PROJECT, frozen: true, wasFrozen: true });
@@ -190,11 +189,13 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
       new AdapterRegistration(descriptor, mirror),
     ]).adapters.get('plain')!;
     vault.tasks.set(FIX, task(FIX, 'Building'));
-    const handles = new FakeHandles();
-    handles.seed('a', [{ handle: 'issue-1', notePath: FIX }]);
+    const registry = new SyncStateAdapter(memoryStorage());
+    await seedHandles(registry, PROJECT, 'a', [
+      { handle: 'issue-1', notePath: FIX },
+    ]);
     const action = new ReconcileProjectTaskLocksAction(
       vault,
-      handles,
+      registry,
       { create: () => registered },
       DONE,
     );
