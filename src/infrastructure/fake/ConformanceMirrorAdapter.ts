@@ -3,7 +3,6 @@ import { labelsFromSequence } from '../../core/domain/note.js';
 import { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 
 export class ConformanceMirrorAdapter implements MirrorPort {
@@ -170,10 +169,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
   }
 
   async capture(): Promise<CanonicalTask[]> {
-    return [];
-  }
-
-  async captureProjects(): Promise<CapturedProject[]> {
     return [];
   }
 

@@ -3,7 +3,6 @@ import { labelsFromSequence, typeFromLabels } from '../../core/domain/note.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
@@ -253,18 +252,6 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     ]);
     return tasks.map((task) =>
       toCanonicalTask(task, sectionName(sections, task.sectionId)),
-    );
-  }
-
-  async captureProjects(): Promise<CapturedProject[]> {
-    const raw = await this.getList('/projects');
-    return raw.map(
-      (project) =>
-        new CapturedProject({
-          name: stringOrEmpty(project.name),
-          targets: [stringOrEmpty(project.id)],
-          createdAt: nullableString(project.created_at),
-        }),
     );
   }
 

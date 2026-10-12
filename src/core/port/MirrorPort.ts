@@ -2,7 +2,6 @@ import type { CanonicalField } from '../domain/canonicalField.js';
 import type { CanonicalFieldWrite } from './data/CanonicalFieldWrite.js';
 import type { CanonicalProject } from './data/CanonicalProject.js';
 import type { CanonicalTask } from './data/CanonicalTask.js';
-import type { CapturedProject } from './data/CapturedProject.js';
 import type { ProjectAddressing } from './data/ProjectAddressing.js';
 
 // The external tool as the core's mirror — one collaborator, one surface. The
@@ -24,10 +23,9 @@ export interface MirrorPort {
   applyField(write: CanonicalFieldWrite): Promise<void>;
   deleteTask(handle: string): Promise<void>;
 
-  // The core's need: adopt remote-born work the vault does not hold yet. A tool
-  // without a capture surface omits these methods.
+  // The core's need: adopt remote-born tasks the vault does not hold yet. A tool
+  // without a capture surface omits this method.
   capture?(target: string): Promise<CanonicalTask[]>;
-  captureProjects?(): Promise<readonly CapturedProject[]>;
 
   // The core's need: read a mirror field's decisive time. Providing this method
   // asserts the times it returns are trustworthy; an adapter whose per-field

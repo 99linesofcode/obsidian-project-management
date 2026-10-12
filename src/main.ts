@@ -17,10 +17,7 @@ import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPor
 import type { ProjectSetupSurface } from './core/port/MirrorPort.js';
 import type { RegistryPort } from './core/port/RegistryPort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
-import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
-import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/application/actions/capture-tasks/CaptureTasksAction.js';
-import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
@@ -82,7 +79,6 @@ interface CoreComposition {
   lifecycle: ProjectLifecycleSyncAction;
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
-  projectCapture: () => Promise<CaptureProjectsResult>;
 }
 
 function composeCoreActions(
@@ -93,7 +89,6 @@ function composeCoreActions(
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
   const isCodeHost = (application: string): boolean => application === 'github';
-  const capture = new CaptureProjectsAction(mirrorAdapters, vault, isCodeHost);
 
   return {
     taskFields: new MirrorSyncAction(vault, syncState, mirrorAdapters),
@@ -111,7 +106,6 @@ function composeCoreActions(
       createTaskNote,
       isCodeHost,
     ),
-    projectCapture: () => capture.invoke(),
   };
 }
 
@@ -120,7 +114,6 @@ interface ProviderEntry {
     target: string,
     boardIdentity: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) => MirrorPort;
-  readonly capture: () => MirrorPort;
   readonly setup: () => ProjectSetupSurface | null;
   readonly token: TokenSettingRow;
 }
@@ -131,7 +124,6 @@ function mirrorAdapterFactory(
   syncState: RegistryPort,
   providers: ProviderTable,
 ): MirrorAdapterFactoryPort {
-  const captureSources = buildCaptureSources(providers);
   return {
     create: (application, target, connectionSlug, projectName) => {
       const provider = providerFor(providers, application);
@@ -142,28 +134,7 @@ function mirrorAdapterFactory(
         syncState.getIdentity(projectName, connectionSlug),
       );
     },
-    captureSources: () => captureSources,
   };
-}
-
-function buildCaptureSources(
-  providers: ProviderTable,
-): readonly CaptureSource[] {
-  const sources: CaptureSource[] = [];
-  for (const [application, provider] of Object.entries(providers)) {
-    const adapter = provider.capture();
-    if (!hasProjectCapture(adapter)) {
-      continue;
-    }
-    sources.push({ application, capture: adapter });
-  }
-  return sources;
-}
-
-function hasProjectCapture(
-  adapter: MirrorPort,
-): adapter is MirrorPort & Required<Pick<MirrorPort, 'captureProjects'>> {
-  return adapter.captureProjects !== undefined;
 }
 
 function providerFor(
@@ -213,14 +184,12 @@ function composePlugin(
           boardIdentity,
           plugin.settings.statusOptions,
         ),
-      capture: () => new CodeHostMirrorAdapter(codeHostTransport),
       setup: () => codeHostSetup,
       token: codeHostToken,
     },
     todoist: {
       mirror: (target) =>
         new TaskManagerMirrorAdapter(taskManagerTransport, target),
-      capture: () => new TaskManagerMirrorAdapter(taskManagerTransport),
       setup: () => taskManagerSetup,
       token: taskManagerToken,
     },
@@ -305,13 +274,6 @@ function composePlugin(
     queue,
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
-    () =>
-      core.projectCapture().then((result) => {
-        if (result.errors.length > 0) {
-          console.error('Project capture collected errors', result.errors);
-        }
-        return result.captured;
-      }),
   );
 
   return {

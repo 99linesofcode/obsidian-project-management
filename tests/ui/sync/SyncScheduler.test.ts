@@ -93,14 +93,12 @@ function schedulerWith(
   vault: FakeVault,
   queue: FakeQueue,
   debounceMs = 0,
-  capture?: () => Promise<string[]>,
 ): SyncScheduler {
   return new SyncScheduler(
     vault,
     queue as unknown as SyncQueue,
     60_000,
     debounceMs,
-    capture,
   );
 }
 
@@ -218,25 +216,5 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(queue.enqueued).toEqual(['Acme Widgets']);
-  });
-
-  it('runs the capture hook before enumerating, and survives its failure', async () => {
-    const captured = new FakeVault();
-    captured.projectNotes = [projectNote('Acme Widgets', null)];
-    const capturedQueue = new FakeQueue();
-    schedulerWith(captured, capturedQueue, 0, async () => [
-      'New Project',
-    ]).load();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(capturedQueue.enqueued).toEqual(['Acme Widgets', 'New Project']);
-
-    const failed = new FakeVault();
-    failed.projectNotes = [projectNote('Acme Widgets', null)];
-    const failedQueue = new FakeQueue();
-    schedulerWith(failed, failedQueue, 0, async () => {
-      throw new Error('capture failed');
-    }).load();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(failedQueue.enqueued).toEqual(['Acme Widgets']);
   });
 });

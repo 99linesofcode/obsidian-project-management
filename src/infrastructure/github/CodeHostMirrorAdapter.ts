@@ -3,11 +3,9 @@ import { labelsFromSequence, typeFromLabels } from '../../core/domain/note.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
-import type { MirrorPort } from '../../core/port/MirrorPort.js';
-import type {
+import type { MirrorPort } from '../../core/port/MirrorPort.js';import type {
   CodeHostResponse,
   CodeHostTransport,
 } from './CodeHostTransport.js';
@@ -712,21 +710,6 @@ export class CodeHostMirrorAdapter implements MirrorPort {
       );
   }
 
-  async captureProjects(): Promise<CapturedProject[]> {
-    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
-    return nodesOf(data.viewer, 'projectsV2')
-      .filter(isRecord)
-      .map(
-        (node) =>
-          new CapturedProject({
-            name: typeof node.title === 'string' ? node.title : '',
-            targets: repoUrlsOf(node),
-            createdAt:
-              typeof node.createdAt === 'string' ? node.createdAt : null,
-          }),
-      );
-  }
-
   fetchComplete(): boolean {
     return true;
   }
@@ -1041,16 +1024,6 @@ function nodesOf(container: unknown, key: string): unknown[] {
     return [];
   }
   return inner.nodes;
-}
-
-function repoUrlsOf(node: Record<string, unknown>): readonly string[] {
-  return nodesOf(node, 'repositories')
-    .filter(isRecord)
-    .flatMap((repository) =>
-      typeof repository.url === 'string' && repository.url !== ''
-        ? [repository.url]
-        : [],
-    );
 }
 
 function parseRepoBoard(node: Record<string, unknown>): RepoBoard[] {
