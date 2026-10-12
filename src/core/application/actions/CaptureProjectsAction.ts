@@ -1,4 +1,4 @@
-import type { CapturedProject } from '../data/CapturedProject.js';
+import type { CapturedProject } from '../../port/data/CapturedProject.js';
 import type {
   CaptureSource,
   MirrorAdapterFactoryPort,

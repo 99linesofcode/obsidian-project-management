@@ -19,17 +19,14 @@ vi.mock('obsidian', () => ({ TFile }));
 type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App } from 'obsidian';
-import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
-import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
+import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
-import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { VaultAdapter } from '../../../src/infrastructure/vault/VaultAdapter.js';
 import { vaultAdapter } from '../../helpers/vaultAdapter.js';
 import { originSideObservation } from '../../../src/core/domain/originSideObservation.js';
@@ -332,9 +329,6 @@ describe('VaultAdapter origin — the origin round-trip (F02 NWM-3, NWM-17)', ()
         labels: [],
       }),
     );
-    const registered = registerAdapters([
-      new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-    ]).adapters.get('conformance')!;
 
     const pass = new MirrorSyncPass({
       entityId: NOTE_PATH,
@@ -353,7 +347,7 @@ describe('VaultAdapter origin — the origin round-trip (F02 NWM-3, NWM-17)', ()
         new MirrorSide({
           side: 'conformance',
           handle: NOTE_PATH,
-          adapter: registered,
+          adapter: mirror,
         }),
       ],
       baselines: new Map([['conformance', new Baseline('Building', false)]]),
@@ -385,9 +379,6 @@ describe('VaultAdapter origin — the origin timestamp reaches the merge (F02 NW
       }),
     );
     mirror.setFieldTime(NOTE_PATH, 'Status', '2026-10-08T09:00:00Z');
-    const registered = registerAdapters([
-      new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-    ]).adapters.get('conformance')!;
 
     const observed = await adapter.observe(NOTE_PATH, 'Status');
     const pass = new MirrorSyncPass({
@@ -402,7 +393,7 @@ describe('VaultAdapter origin — the origin timestamp reaches the merge (F02 NW
         new MirrorSide({
           side: 'conformance',
           handle: NOTE_PATH,
-          adapter: registered,
+          adapter: mirror,
         }),
       ],
       baselines: new Map([['conformance', new Baseline('Todo', false)]]),

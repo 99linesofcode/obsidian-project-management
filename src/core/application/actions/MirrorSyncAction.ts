@@ -1,6 +1,6 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
-import { CanonicalFieldWrite } from '../data/CanonicalFieldWrite.js';
-import type { CanonicalTask } from '../data/CanonicalTask.js';
+import { CanonicalFieldWrite } from '../../port/data/CanonicalFieldWrite.js';
+import type { CanonicalTask } from '../../port/data/CanonicalTask.js';
 import type { MergeResult } from '../../domain/MergeResult.js';
 import type { MirrorSide } from '../data/MirrorSide.js';
 import type { MirrorSyncPass } from '../data/MirrorSyncPass.js';
@@ -45,9 +45,9 @@ async function observeMirror(
   mirror: MirrorSide,
   pass: MirrorSyncPass,
 ): Promise<SideObservation> {
-  const task = await mirror.adapter.tasks.readTask(mirror.handle);
-  const fieldTime = mirror.adapter.timestamps
-    ? await mirror.adapter.timestamps.fieldTime(mirror.handle, pass.field)
+  const task = await mirror.adapter.readTask(mirror.handle);
+  const fieldTime = mirror.adapter.fieldTime
+    ? await mirror.adapter.fieldTime(mirror.handle, pass.field)
     : null;
 
   return new SideObservation({
@@ -56,12 +56,8 @@ async function observeMirror(
     current: task === null ? null : canonicalValue(task, pass.field),
     baseline: pass.baselines.get(mirror.side) ?? null,
     fieldTime,
-    timestampTrustworthy: mirror.adapter.descriptor.capabilities.includes(
-      'trustworthy per-field timestamps',
-    ),
-    completeFetch: mirror.adapter.completeFetch
-      ? mirror.adapter.completeFetch.fetchComplete()
-      : false,
+    timestampTrustworthy: mirror.adapter.fieldTime !== undefined,
+    completeFetch: mirror.adapter.fetchComplete?.() ?? false,
     currentCompleted: task === null ? false : task.completed,
   });
 }
@@ -77,13 +73,13 @@ async function fanOut(
 
   if (result.outcome === 'value') {
     for (const mirror of mirrors) {
-      const task = await mirror.adapter.tasks.readTask(mirror.handle);
+      const task = await mirror.adapter.readTask(mirror.handle);
       if (task !== null && canonicalValue(task, pass.field) === result.value) {
         advanced.push(mirror.side);
         continue;
       }
       try {
-        await mirror.adapter.tasks.applyField(
+        await mirror.adapter.applyField(
           new CanonicalFieldWrite({
             handle: mirror.handle,
             field: pass.field,
@@ -98,13 +94,13 @@ async function fanOut(
     }
   } else if (result.outcome === 'delete') {
     for (const mirror of mirrors) {
-      const task = await mirror.adapter.tasks.readTask(mirror.handle);
+      const task = await mirror.adapter.readTask(mirror.handle);
       if (task === null) {
         advanced.push(mirror.side);
         continue;
       }
       try {
-        await mirror.adapter.tasks.deleteTask(mirror.handle);
+        await mirror.adapter.deleteTask(mirror.handle);
         written.push(mirror.side);
         advanced.push(mirror.side);
       } catch {

@@ -1,5 +1,5 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
+import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 
 export interface TaskNote {
   type: string;

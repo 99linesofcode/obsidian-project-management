@@ -1,7 +1,7 @@
-import type { CanonicalTask } from '../../data/CanonicalTask.js';
-import type { ConnectionDataTransferObject } from '../../data/ConnectionDataTransferObject.js';
-import type { CapturePort } from '../../../port/CapturePort.js';
+import type { CanonicalTask } from '../../../port/data/CanonicalTask.js';
+import type { ConnectionDataTransferObject } from '../../../port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../../port/MirrorAdapterFactoryPort.js';
+import type { MirrorPort } from '../../../port/MirrorPort.js';
 import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/freePath.js';
@@ -46,15 +46,14 @@ export class CaptureTasksAction {
         connection.slug,
         project,
       );
-      const capture = adapter?.capture;
-      if (capture === undefined) {
+      if (adapter === null) {
         continue;
       }
       try {
         const result = await this.captureConnection(
           project,
           connection,
-          capture,
+          adapter,
           syncedAt,
         );
         captured.push(...result.captured);
@@ -69,10 +68,10 @@ export class CaptureTasksAction {
   private async captureConnection(
     project: string,
     connection: ConnectionDataTransferObject,
-    capture: CapturePort,
+    adapter: MirrorPort,
     syncedAt: string,
   ): Promise<CaptureTasksResult> {
-    const tasks = await capture.capture(connection.target);
+    const tasks = await adapter.capture(connection.target);
     const adopted = new Set(
       (await this.registry.listMirrorItems(project, connection.slug)).map(
         ({ handle }) => handle,

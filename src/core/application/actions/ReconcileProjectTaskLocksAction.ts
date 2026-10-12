@@ -1,8 +1,8 @@
-import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
+import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
-import type { TaskLockPort } from '../../port/TaskLockPort.js';
 
 export interface ReconcileProjectTaskLocksInput {
   project: string;
@@ -30,16 +30,20 @@ export class ReconcileProjectTaskLocksAction {
         connection.slug,
         input.project,
       );
-      if (adapter === null || adapter.taskLock === undefined) {
+      if (
+        adapter === null ||
+        adapter.lockTask === undefined ||
+        adapter.unlockTask === undefined
+      ) {
         continue;
       }
-      await this.applyToConnection(connection, adapter.taskLock, input);
+      await this.applyToConnection(connection, adapter, input);
     }
   }
 
   private async applyToConnection(
     connection: ConnectionDataTransferObject,
-    taskLock: TaskLockPort,
+    adapter: MirrorPort,
     input: ReconcileProjectTaskLocksInput,
   ): Promise<void> {
     const tracked = await this.registry.listMirrorHandles(
@@ -47,24 +51,27 @@ export class ReconcileProjectTaskLocksAction {
       connection.slug,
     );
     for (const { handle, notePath } of tracked) {
-      await this.applyToTask(taskLock, handle, notePath, input.frozen);
+      await this.applyToTask(adapter, handle, notePath, input.frozen);
     }
   }
 
   private async applyToTask(
-    taskLock: TaskLockPort,
+    adapter: MirrorPort,
     handle: string,
     notePath: string,
     frozen: boolean,
   ): Promise<void> {
+    if (adapter.lockTask === undefined || adapter.unlockTask === undefined) {
+      return;
+    }
     try {
       if (frozen) {
         if (await this.isDone(notePath)) {
           return;
         }
-        await taskLock.lockTask(handle);
+        await adapter.lockTask(handle);
       } else {
-        await taskLock.unlockTask(handle);
+        await adapter.unlockTask(handle);
       }
     } catch (error) {
       console.error(

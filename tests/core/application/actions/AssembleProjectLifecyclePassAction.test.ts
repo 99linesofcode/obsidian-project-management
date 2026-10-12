@@ -20,13 +20,9 @@ type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App } from 'obsidian';
 import { AssembleProjectLifecyclePassAction } from '../../../../src/core/application/actions/AssembleProjectLifecyclePassAction.js';
-import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
 import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
@@ -179,10 +175,7 @@ async function setup(options: SetupOptions) {
   const mirror = new ConformanceMirrorAdapter();
   mirror.seedProject('board-a', options.mirrorA);
   mirror.seedProject('board-b', options.mirrorB);
-  const registered: RegisteredAdapter = registerAdapters([
-    new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-  ]).adapters.get('conformance')!;
-  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
+  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => mirror };
 
   const action = new AssembleProjectLifecyclePassAction(
     vault,
@@ -412,11 +405,8 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     });
     const mirror = new ConformanceMirrorAdapter();
     mirror.seedAbsentProject('board-new');
-    const registered: RegisteredAdapter = registerAdapters([
-      new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-    ]).adapters.get('conformance')!;
     const mirrorAdapters: MirrorAdapterFactoryPort = {
-      create: () => registered,
+      create: () => mirror,
     };
     const action = new AssembleProjectLifecyclePassAction(
       vault,

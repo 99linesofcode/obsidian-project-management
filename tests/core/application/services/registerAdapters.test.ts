@@ -70,31 +70,15 @@ describe('registerAdapters — the one contract gate (ACM-9)', () => {
     );
   });
 
-  it('exposes the optional ports only when the adapter declares the capability (ACM-8)', () => {
-    const capable = registerAdapters([
-      new AdapterRegistration(
-        conformanceDescriptor('capable'),
-        new ConformanceMirrorAdapter(),
-      ),
+  it('exposes the mirror surface the adapter carries, not a descriptor gate (ACM-8)', () => {
+    const mirror = new ConformanceMirrorAdapter();
+    const registered = registerAdapters([
+      new AdapterRegistration(conformanceDescriptor('capable'), mirror),
     ]).adapters.get('capable')!;
-    const base = conformanceDescriptor('plain');
-    const withoutOptional = new AdapterDescriptor({
-      applicationId: base.applicationId,
-      capabilities: base.capabilities.filter(
-        (capability) =>
-          capability !== 'task-locking' && capability !== 'project-activity',
-      ),
-      secretKeys: base.secretKeys,
-      settingsRows: base.settingsRows,
-    });
-    const plain = registerAdapters([
-      new AdapterRegistration(withoutOptional, new ConformanceMirrorAdapter()),
-    ]).adapters.get('plain')!;
 
-    expect(capable.taskLock).toBeDefined();
-    expect(capable.activity).toBeDefined();
-    expect(plain.taskLock).toBeUndefined();
-    expect(plain.activity).toBeUndefined();
+    expect(registered.adapter).toBe(mirror);
+    expect(registered.adapter.lockTask).toBeDefined();
+    expect(registered.adapter.latestActivity).toBeDefined();
   });
 
   it('rejects an adapter that cannot represent the mandatory surface (ACM-8, ACM-9)', () => {

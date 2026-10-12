@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
-import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
+import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -103,24 +99,14 @@ function connection(
   });
 }
 
-function registeredMirror(
-  application: string,
-  mirror: ConformanceMirrorAdapter,
-): RegisteredAdapter {
-  return registerAdapters([
-    new AdapterRegistration(conformanceDescriptor(application), mirror),
-  ]).adapters.get(application)!;
-}
-
 function setup(
   connections: readonly ConnectionDataTransferObject[] = [
     connection('gh-main', 'conformance', TARGET),
   ],
 ) {
   const mirror = new ConformanceMirrorAdapter();
-  const registered = registeredMirror('conformance', mirror);
   const mirrorAdapters: MirrorAdapterFactoryPort = {
-    create: () => registered,
+    create: () => mirror,
   };
   const registry = new FakeSyncState();
   const action = new AssembleProjectPassAction(
@@ -228,10 +214,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
       ),
       registry,
       {
-        create: (application) =>
-          application === 'conformance'
-            ? registeredMirror('conformance', good)
-            : registeredMirror('conformance-bad', bad),
+        create: (application) => (application === 'conformance' ? good : bad),
       },
     );
 

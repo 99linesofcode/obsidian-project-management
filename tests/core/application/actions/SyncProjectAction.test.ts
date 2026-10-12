@@ -11,11 +11,11 @@ import type { ProjectTaskLocksReconciler } from '../../../../src/core/applicatio
 import type { ProjectReactivationReconciler } from '../../../../src/core/application/services/ProjectReactivationReconciler.js';
 import type { TaskCaptureReconciler } from '../../../../src/core/application/services/TaskCaptureReconciler.js';
 import type { TaskFieldReconciler } from '../../../../src/core/application/services/TaskFieldReconciler.js';
-import type { ProjectNoteDataTransferObject } from '../../../../src/core/application/data/ProjectNoteDataTransferObject.js';
-import type { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
-import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
+import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
+import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
 import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
-import type { EntityRecord } from '../../../../src/core/application/data/EntityRecord.js';
+import type { EntityRecord } from '../../../../src/core/port/data/EntityRecord.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
@@ -202,7 +202,7 @@ function harness(options: HarnessOptions = {}) {
   const setupApplications = options.setupApplications ?? ['github'];
   const setupFactory: ProjectSetupFactoryPort = {
     setupFor: (application) =>
-      setupApplications.includes(application) ? ({} as ProjectSetupPort) : null,
+      setupApplications.includes(application) ? ({} as ProjectSetupSurface) : null,
   };
 
   const frozen =

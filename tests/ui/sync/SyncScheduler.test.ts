@@ -15,7 +15,7 @@ vi.mock('obsidian', () => {
 
 import { SyncScheduler } from '../../../src/ui/sync/SyncScheduler.js';
 import type { SyncQueue } from '../../../src/ui/sync/SyncQueue.js';
-import type { ProjectNoteDataTransferObject } from '../../../src/core/application/data/ProjectNoteDataTransferObject.js';
+import type { ProjectNoteDataTransferObject } from '../../../src/core/port/data/ProjectNoteDataTransferObject.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
 class FakeVault extends FakeVaultBase {

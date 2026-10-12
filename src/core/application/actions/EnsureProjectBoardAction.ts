@@ -1,15 +1,15 @@
-import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
+import { ProjectIdentityDataTransferObject } from '../../port/data/ProjectIdentityDataTransferObject.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
-import type { ProjectAddressing } from '../data/ProjectAddressing.js';
-import type { ProjectSummary } from '../data/ProjectSummary.js';
-import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
+import type { ProjectAddressing } from '../../port/data/ProjectAddressing.js';
+import type { ProjectSummary } from '../../port/data/ProjectSummary.js';
+import type { ProjectSetupSurface } from '../../port/MirrorPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { nameFromTarget } from '../../domain/nameFromTarget.js';
 
 export interface EnsureProjectBoardInput {
   projectName: string;
   connectionSlug: string;
-  setup: ProjectSetupPort;
+  setup: ProjectSetupSurface;
 }
 
 export class EnsureProjectBoardAction {
@@ -62,7 +62,7 @@ export class EnsureProjectBoardAction {
   }
 
   private async createOrAdoptOrphan(
-    setup: ProjectSetupPort,
+    setup: ProjectSetupSurface,
     target: string,
     targetName: string,
   ): Promise<ProjectAddressing> {
@@ -78,7 +78,7 @@ export class EnsureProjectBoardAction {
   }
 
   private async findOrphanProject(
-    setup: ProjectSetupPort,
+    setup: ProjectSetupSurface,
     targetName: string,
   ): Promise<ProjectSummary | null> {
     const candidates = await setup.listProjects();

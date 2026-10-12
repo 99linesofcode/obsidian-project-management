@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { AttachProjectAction } from '../../../../src/core/application/actions/AttachProjectAction.js';
-import { ProjectAddressing } from '../../../../src/core/application/data/ProjectAddressing.js';
-import { ProjectDiscovery } from '../../../../src/core/application/data/ProjectDiscovery.js';
-import { ProjectSummary } from '../../../../src/core/application/data/ProjectSummary.js';
-import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
-import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
+import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
+import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
+import { ProjectSummary } from '../../../../src/core/port/data/ProjectSummary.js';
+import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
+import type { ProjectIdentityDataTransferObject } from '../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 
-class FakeSetup implements ProjectSetupPort {
+class FakeSetup implements ProjectSetupSurface {
   discovery: ProjectDiscovery = new ProjectDiscovery({
     targetHandle: 'R_kgDOAAAA',
     projects: [],

@@ -1,12 +1,12 @@
-import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
+import { ProjectIdentityDataTransferObject } from '../../port/data/ProjectIdentityDataTransferObject.js';
 import { DomainError } from '../../domain/errors/DomainError.js';
-import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
+import type { ProjectSetupSurface } from '../../port/MirrorPort.js';
 import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { nameFromTarget } from '../../domain/nameFromTarget.js';
 
 export interface AttachProjectInput {
   target: string;
-  setup: ProjectSetupPort;
+  setup: ProjectSetupSurface;
 }
 
 export class AttachProjectAction {

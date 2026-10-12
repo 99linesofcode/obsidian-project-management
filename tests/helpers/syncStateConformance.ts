@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
+import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { RegistryPort } from '../../src/core/port/RegistryPort.js';
 
 export interface SyncStateConformanceHarness {

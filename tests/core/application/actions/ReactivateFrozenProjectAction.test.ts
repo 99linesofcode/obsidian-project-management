@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
-import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
-import { ProjectActivityObservation } from '../../../../src/core/application/data/ProjectActivityObservation.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
+import { ProjectActivityObservation } from '../../../../src/core/port/data/ProjectActivityObservation.js';
 import type { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { RegistryPort } from '../../../../src/core/port/RegistryPort.js';
 import type {
@@ -11,10 +10,7 @@ import type {
   ProjectWatchState,
 } from '../../../../src/core/port/ProjectWatchPort.js';
 import { ReactivateFrozenProjectAction } from '../../../../src/core/application/actions/ReactivateFrozenProjectAction.js';
-import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
-import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -103,10 +99,7 @@ function setup() {
   const registry = new SyncStateAdapter(memoryStorage());
   const watches = new FakeWatches();
   const mirror = new ConformanceMirrorAdapter();
-  const registered: RegisteredAdapter = registerAdapters([
-    new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-  ]).adapters.get('conformance')!;
-  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
+  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => mirror };
   const action = new ReactivateFrozenProjectAction(
     vault,
     registry,

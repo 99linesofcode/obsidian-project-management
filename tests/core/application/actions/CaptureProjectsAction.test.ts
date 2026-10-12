@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CaptureProjectsAction } from '../../../../src/core/application/actions/CaptureProjectsAction.js';
-import { AdoptedProject } from '../../../../src/core/application/data/AdoptedProject.js';
-import { CapturedProject } from '../../../../src/core/application/data/CapturedProject.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
+import { AdoptedProject } from '../../../../src/core/port/data/AdoptedProject.js';
+import { CapturedProject } from '../../../../src/core/port/data/CapturedProject.js';
+import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import type {
   CaptureSource,
   MirrorAdapterFactoryPort,
@@ -72,7 +72,7 @@ function harness(projects: CapturedProject[]): {
     capture: { captureProjects: async () => projects },
   };
   const factory: MirrorAdapterFactoryPort = {
-    create: (): RegisteredAdapter | null => null,
+    create: (): MirrorPort | null => null,
     captureSources: () => [source],
   };
   return {

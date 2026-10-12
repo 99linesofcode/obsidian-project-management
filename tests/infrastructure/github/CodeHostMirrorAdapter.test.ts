@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { AssembleProjectPassAction } from '../../../src/core/application/actions/AssembleProjectPassAction.js';
 import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
-import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionDataTransferObject } from '../../../src/core/application/data/ConnectionDataTransferObject.js';
+import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
+import { ConnectionDataTransferObject } from '../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../../src/core/domain/OriginObservation.js';
 import type { CanonicalField } from '../../../src/core/domain/canonicalField.js';
-import type { RegisteredAdapter } from '../../../src/core/application/data/RegisteredAdapter.js';
+import type { MirrorPort } from '../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
@@ -906,9 +906,6 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
       { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } },
     ]);
     const adapter = new CodeHostMirrorAdapter(transport, target());
-    const registered = registerAdapters([
-      new AdapterRegistration(githubDescriptor(), adapter),
-    ]).adapters.get('github')!;
 
     const pass = new MirrorSyncPass({
       entityId: ISSUE_URL,
@@ -927,7 +924,7 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
         new MirrorSide({
           side: 'github',
           handle: ISSUE_URL,
-          adapter: registered,
+          adapter,
         }),
       ],
       baselines: new Map([['github', new Baseline('Building', false)]]),
@@ -994,9 +991,6 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
       ),
     );
     const adapter = new CodeHostMirrorAdapter(transport, target());
-    const registered = registerAdapters([
-      new AdapterRegistration(githubDescriptor(), adapter),
-    ]).adapters.get('github')!;
 
     const vault = new FieldOrigin();
     vault.values.set('title', 'Fix the bug');
@@ -1025,8 +1019,8 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
     await registry.setEntity({ id: entityId, notePath: entityId });
     await registry.setMirrorItem('Acme', 'gh', ISSUE_URL, { entityId });
     const mirrorAdapters: MirrorAdapterFactoryPort = {
-      create: (application): RegisteredAdapter | null =>
-        application === 'github' ? registered : null,
+      create: (application): MirrorPort | null =>
+        application === 'github' ? adapter : null,
     };
     const action = new AssembleProjectPassAction(
       vault,

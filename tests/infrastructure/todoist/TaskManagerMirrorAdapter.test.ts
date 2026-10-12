@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
-import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
+import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
@@ -456,9 +456,6 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
       { status: 200, json: {} },
     ]);
     const adapter = new TaskManagerMirrorAdapter(transport, target());
-    const registered = registerAdapters([
-      new AdapterRegistration(todoistDescriptor(), adapter),
-    ]).adapters.get('todoist')!;
 
     const pass = new MirrorSyncPass({
       entityId: 'T1',
@@ -473,9 +470,7 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
         completeFetch: true,
         currentCompleted: false,
       }),
-      mirrors: [
-        new MirrorSide({ side: 'todoist', handle: 'T1', adapter: registered }),
-      ],
+      mirrors: [new MirrorSide({ side: 'todoist', handle: 'T1', adapter })],
       baselines: new Map([['todoist', new Baseline('Building', false)]]),
     });
 

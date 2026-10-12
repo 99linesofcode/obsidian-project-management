@@ -1,9 +1,9 @@
 import { Baseline } from '../../domain/Baseline.js';
-import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../data/MirrorSide.js';
 import { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';
 import type { ProjectLifecycleRecord } from '../data/ProjectLifecycleRecord.js';
-import type { RegisteredAdapter } from '../data/RegisteredAdapter.js';
+import type { MirrorPort } from '../../port/MirrorPort.js';
 import { mirrorSideKey } from '../../domain/mirrorSideKey.js';
 import { originSideObservation } from '../../domain/originSideObservation.js';
 import { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
@@ -79,7 +79,7 @@ export class AssembleProjectLifecyclePassAction {
 
   private async resolveProject(
     connection: ConnectionDataTransferObject,
-    adapter: RegisteredAdapter,
+    adapter: MirrorPort,
     project: string,
   ): Promise<string> {
     const recorded = await this.registry.resolveMirrorProject(
@@ -91,29 +91,26 @@ export class AssembleProjectLifecyclePassAction {
       return recorded;
     }
 
-    const existing = await adapter.project.readProject(connection.target);
+    const existing = await adapter.readProject(connection.target);
     if (existing !== null) {
       await this.renameIfDrifted(adapter, connection.target, project);
       await this.record(connection, project, connection.target);
       return connection.target;
     }
 
-    const created = await adapter.project.createProject(
-      connection.target,
-      project,
-    );
+    const created = await adapter.createProject(connection.target, project);
     await this.record(connection, project, created.handle);
     return created.handle;
   }
 
   private async renameIfDrifted(
-    adapter: RegisteredAdapter,
+    adapter: MirrorPort,
     handle: string,
     project: string,
   ): Promise<void> {
-    const mirror = await adapter.project.readProject(handle);
+    const mirror = await adapter.readProject(handle);
     if (mirror !== null && mirror.name !== project) {
-      await adapter.project.renameProject(handle, project);
+      await adapter.renameProject(handle, project);
     }
   }
 

@@ -1,11 +1,11 @@
 import { App, EventRef, TFile } from 'obsidian';
-import type { ProjectNoteDataTransferObject } from '../../core/application/data/ProjectNoteDataTransferObject.js';
+import type { ProjectNoteDataTransferObject } from '../../core/port/data/ProjectNoteDataTransferObject.js';
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
-import { AdoptedProject } from '../../core/application/data/AdoptedProject.js';
-import type { CapturedProject } from '../../core/application/data/CapturedProject.js';
-import { ConnectionDataTransferObject } from '../../core/application/data/ConnectionDataTransferObject.js';
+import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
+import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
+import { AdoptedProject } from '../../core/port/data/AdoptedProject.js';
+import type { CapturedProject } from '../../core/port/data/CapturedProject.js';
+import { ConnectionDataTransferObject } from '../../core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { VaultPort } from '../../core/port/VaultPort.js';
 import { chooseHomeNotePath, projectHomePath } from '../../core/domain/projectHomePath.js';

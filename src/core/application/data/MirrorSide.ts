@@ -1,15 +1,11 @@
-import type { RegisteredAdapter } from './RegisteredAdapter.js';
+import type { MirrorPort } from '../../port/MirrorPort.js';
 
 export class MirrorSide {
   readonly side: string;
   readonly handle: string;
-  readonly adapter: RegisteredAdapter;
+  readonly adapter: MirrorPort;
 
-  constructor(init: {
-    side: string;
-    handle: string;
-    adapter: RegisteredAdapter;
-  }) {
+  constructor(init: { side: string; handle: string; adapter: MirrorPort }) {
     this.side = init.side;
     this.handle = init.handle;
     this.adapter = init.adapter;

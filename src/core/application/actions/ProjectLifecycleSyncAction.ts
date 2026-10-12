@@ -72,9 +72,6 @@ export class ProjectLifecycleSyncAction {
   ): Promise<ObservedMirror[]> {
     const observed: ObservedMirror[] = [];
     for (const mirror of pass.mirrors) {
-      if (!mirror.adapter.descriptor.capabilities.includes('lifecycle')) {
-        continue;
-      }
       const observation = await observeMirror(mirror, pass);
       if (observation !== null) {
         observed.push({ mirror, observation });
@@ -108,7 +105,7 @@ async function observeMirror(
   mirror: MirrorSide,
   pass: ProjectLifecyclePass,
 ): Promise<SideObservation | null> {
-  const project = await mirror.adapter.project.readProject(mirror.handle);
+  const project = await mirror.adapter.readProject(mirror.handle);
   if (project === null) {
     return null;
   }
@@ -118,13 +115,9 @@ async function observeMirror(
     role: 'mirror',
     current: project.archived ? 'true' : 'false',
     baseline: pass.baselines.get(mirror.side) ?? null,
-    fieldTime: await mirror.adapter.project.archivedTime(mirror.handle),
-    timestampTrustworthy: mirror.adapter.descriptor.capabilities.includes(
-      'trustworthy per-field timestamps',
-    ),
-    completeFetch: mirror.adapter.completeFetch
-      ? mirror.adapter.completeFetch.fetchComplete()
-      : false,
+    fieldTime: await mirror.adapter.archivedTime(mirror.handle),
+    timestampTrustworthy: mirror.adapter.fieldTime !== undefined,
+    completeFetch: mirror.adapter.fetchComplete?.() ?? false,
     currentCompleted: false,
   });
 }
@@ -148,7 +141,7 @@ async function fanOut(
       continue;
     }
     try {
-      await mirror.adapter.project.setArchived(mirror.handle, archived);
+      await mirror.adapter.setArchived(mirror.handle, archived);
       written.push(mirror.side);
       advanced.push(mirror.side);
     } catch {

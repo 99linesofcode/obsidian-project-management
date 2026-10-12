@@ -57,7 +57,7 @@ describe('the intra-core dependency seam', () => {
   it('rejects a domain file importing an application file', () => {
     const result = lint(
       'src/core/domain/probe.ts',
-      "import type { CanonicalTask } from '../application/data/CanonicalTask.js';\n",
+      "import type { AdapterDescriptor } from '../application/data/AdapterDescriptor.js';\n",
     );
 
     expect(result.status).not.toBe(0);
@@ -68,6 +68,16 @@ describe('the intra-core dependency seam', () => {
     const result = lint(
       'src/core/domain/probe.ts',
       "import type { VaultPort } from '../port/VaultPort.js';\n",
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('boundaries/dependencies');
+  });
+
+  it('rejects a port file importing an application file', () => {
+    const result = lint(
+      'src/core/port/probe.ts',
+      "import type { AdapterDescriptor } from '../application/data/AdapterDescriptor.js';\n",
     );
 
     expect(result.status).not.toBe(0);

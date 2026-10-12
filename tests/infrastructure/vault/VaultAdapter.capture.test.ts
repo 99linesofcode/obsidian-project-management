@@ -19,8 +19,8 @@ vi.mock('obsidian', () => ({ TFile }));
 type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App } from 'obsidian';
-import { AdoptedProject } from '../../../src/core/application/data/AdoptedProject.js';
-import { CapturedProject } from '../../../src/core/application/data/CapturedProject.js';
+import { AdoptedProject } from '../../../src/core/port/data/AdoptedProject.js';
+import { CapturedProject } from '../../../src/core/port/data/CapturedProject.js';
 import type { VaultAdapter } from '../../../src/infrastructure/vault/VaultAdapter.js';
 import { connectionsOf } from '../../../src/infrastructure/vault/connectionsOf.js';
 import { vaultAdapter } from '../../helpers/vaultAdapter.js';

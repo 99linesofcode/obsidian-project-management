@@ -1,11 +1,11 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
 import { Baseline } from '../../domain/Baseline.js';
-import type { CanonicalTask } from '../data/CanonicalTask.js';
-import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import type { CanonicalTask } from '../../port/data/CanonicalTask.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../data/MirrorSide.js';
 import { MirrorSyncPass } from '../data/MirrorSyncPass.js';
 import type { PassRecord } from '../data/PassRecord.js';
-import type { RegisteredAdapter } from '../data/RegisteredAdapter.js';
+import type { MirrorPort } from '../../port/MirrorPort.js';
 import { mirrorSideKey } from '../../domain/mirrorSideKey.js';
 import { MirrorSyncAction } from './MirrorSyncAction.js';
 import { originSideObservation } from '../../domain/originSideObservation.js';
@@ -36,7 +36,7 @@ const MERGED_FIELDS: readonly CanonicalField[] = [
 
 interface ScopedMirror {
   connection: ConnectionDataTransferObject;
-  adapter: RegisteredAdapter;
+  adapter: MirrorPort;
 }
 
 export class AssembleProjectPassAction {
@@ -108,7 +108,7 @@ export class AssembleProjectPassAction {
 
   private async resolveHandle(
     connection: ConnectionDataTransferObject,
-    adapter: RegisteredAdapter,
+    adapter: MirrorPort,
     notePath: string,
     project: string,
   ): Promise<string | null> {
@@ -138,7 +138,7 @@ export class AssembleProjectPassAction {
 
   private async materialize(
     connection: ConnectionDataTransferObject,
-    adapter: RegisteredAdapter,
+    adapter: MirrorPort,
     notePath: string,
     project: string,
     pending: string | null,
@@ -165,7 +165,7 @@ export class AssembleProjectPassAction {
       notePath,
       pendingCreationHandle(notePath),
     );
-    const created = await adapter.tasks.createTask(connection.target, task);
+    const created = await adapter.createTask(connection.target, task);
     await this.registry.recordMirrorHandle(
       project,
       connection.slug,
@@ -177,12 +177,12 @@ export class AssembleProjectPassAction {
 
   private async adopt(
     connection: ConnectionDataTransferObject,
-    adapter: RegisteredAdapter,
+    adapter: MirrorPort,
     notePath: string,
     project: string,
     task: CanonicalTask,
   ): Promise<string | null> {
-    const candidates = await adapter.tasks.readTasks(connection.target);
+    const candidates = await adapter.readTasks(connection.target);
     const match = candidates.find(
       (candidate) => candidate.title === task.title,
     );

@@ -15,7 +15,7 @@ import { SyncScheduler } from './ui/sync/SyncScheduler.js';
 import { SyncQueue } from './ui/sync/SyncQueue.js';
 import { AttachProjectAction } from './core/application/actions/AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
-import type { ProjectSetupPort } from './core/port/ProjectSetupPort.js';
+import type { ProjectSetupSurface } from './core/port/MirrorPort.js';
 import type { RegistryPort } from './core/port/RegistryPort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
@@ -44,11 +44,10 @@ import { conformanceDescriptor } from './infrastructure/fake/conformanceDescript
 import { AssembleProjectPassAction } from './core/application/actions/AssembleProjectPassAction.js';
 import { AssembleProjectLifecyclePassAction } from './core/application/actions/AssembleProjectLifecyclePassAction.js';
 import type { AdapterDescriptor } from './core/application/data/AdapterDescriptor.js';
-import type { RegisteredAdapter } from './core/application/data/RegisteredAdapter.js';
 import type { MirrorPort } from './core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
 import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
-import type { ProjectIdentityDataTransferObject } from './core/application/data/ProjectIdentityDataTransferObject.js';
+import type { ProjectIdentityDataTransferObject } from './core/port/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
 import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
@@ -198,7 +197,7 @@ interface Provider {
     boardIdentity: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) => MirrorPort;
   capture: () => MirrorPort;
-  setup: () => ProjectSetupPort | null;
+  setup: () => ProjectSetupSurface | null;
 }
 
 function mirrorAdapterFactory(
@@ -228,9 +227,8 @@ function buildCaptureSources(
 ): readonly CaptureSource[] {
   const sources: CaptureSource[] = [];
   for (const provider of providers) {
-    const registered = gateMirror(provider.descriptor, provider.capture());
-    const capture = registered?.projectCapture;
-    if (capture !== undefined) {
+    const capture = gateMirror(provider.descriptor, provider.capture());
+    if (capture !== null) {
       sources.push({ application: provider.applicationId, capture });
     }
   }
@@ -268,11 +266,11 @@ function registeredApplicationIds(
 function gateMirror(
   descriptor: AdapterDescriptor,
   adapter: MirrorPort,
-): RegisteredAdapter | null {
+): MirrorPort | null {
   return (
     registerAdapters([
       new AdapterRegistration(descriptor, adapter),
-    ]).adapters.get(descriptor.applicationId) ?? null
+    ]).adapters.get(descriptor.applicationId)?.adapter ?? null
   );
 }
 

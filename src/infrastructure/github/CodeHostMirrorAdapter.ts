@@ -1,16 +1,15 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
-import { CanonicalProject } from '../../core/application/data/CanonicalProject.js';
-import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/application/data/CapturedProject.js';
-import { ProjectActivityObservation } from '../../core/application/data/ProjectActivityObservation.js';
-import { ProjectAddressing } from '../../core/application/data/ProjectAddressing.js';
-import { ProjectCandidate } from '../../core/application/data/ProjectCandidate.js';
-import { ProjectDiscovery } from '../../core/application/data/ProjectDiscovery.js';
-import type { ProjectIdentityDataTransferObject } from '../../core/application/data/ProjectIdentityDataTransferObject.js';
-import { ProjectSummary } from '../../core/application/data/ProjectSummary.js';
+import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
+import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
+import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/port/data/CapturedProject.js';
+import { ProjectActivityObservation } from '../../core/port/data/ProjectActivityObservation.js';
+import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
+import { ProjectCandidate } from '../../core/port/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../core/port/data/ProjectDiscovery.js';
+import type { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
+import { ProjectSummary } from '../../core/port/data/ProjectSummary.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
-import type { ProjectSetupPort } from '../../core/port/ProjectSetupPort.js';
 import type {
   CodeHostResponse,
   CodeHostTransport,
@@ -326,7 +325,7 @@ interface BoardSnapshot {
   cards: Map<string, RawCard>;
 }
 
-export class CodeHostMirrorAdapter implements MirrorPort, ProjectSetupPort {
+export class CodeHostMirrorAdapter implements MirrorPort {
   private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 

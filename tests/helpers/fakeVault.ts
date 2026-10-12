@@ -1,12 +1,12 @@
 import type { VaultPort } from '../../src/core/port/VaultPort.js';
-import type { AdoptedProject } from '../../src/core/application/data/AdoptedProject.js';
+import type { AdoptedProject } from '../../src/core/port/data/AdoptedProject.js';
 import type { CanonicalField } from '../../src/core/domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../src/core/application/data/CanonicalFieldWrite.js';
-import type { CanonicalTask } from '../../src/core/application/data/CanonicalTask.js';
-import type { CapturedProject } from '../../src/core/application/data/CapturedProject.js';
-import type { ConnectionDataTransferObject } from '../../src/core/application/data/ConnectionDataTransferObject.js';
+import type { CanonicalFieldWrite } from '../../src/core/port/data/CanonicalFieldWrite.js';
+import type { CanonicalTask } from '../../src/core/port/data/CanonicalTask.js';
+import type { CapturedProject } from '../../src/core/port/data/CapturedProject.js';
+import type { ConnectionDataTransferObject } from '../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { OriginObservation } from '../../src/core/domain/OriginObservation.js';
-import type { ProjectNoteDataTransferObject } from '../../src/core/application/data/ProjectNoteDataTransferObject.js';
+import type { ProjectNoteDataTransferObject } from '../../src/core/port/data/ProjectNoteDataTransferObject.js';
 
 // The vault port's test double: every method throws until a test overrides the
 // one it exercises, so a test states only the behaviour it needs and a missed

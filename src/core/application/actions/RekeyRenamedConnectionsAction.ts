@@ -1,4 +1,4 @@
-import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
 export interface RekeyRenamedConnectionsInput {

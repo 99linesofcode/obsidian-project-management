@@ -1,9 +1,9 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
-import { CanonicalProject } from '../../core/application/data/CanonicalProject.js';
-import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/application/data/CapturedProject.js';
-import { ProjectActivityObservation } from '../../core/application/data/ProjectActivityObservation.js';
+import { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
+import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
+import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/port/data/CapturedProject.js';
+import { ProjectActivityObservation } from '../../core/port/data/ProjectActivityObservation.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 
 export class ConformanceMirrorAdapter implements MirrorPort {

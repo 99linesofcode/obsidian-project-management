@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
-import { ProjectAddressing } from '../../../../src/core/application/data/ProjectAddressing.js';
-import { ProjectCandidate } from '../../../../src/core/application/data/ProjectCandidate.js';
-import { ProjectDiscovery } from '../../../../src/core/application/data/ProjectDiscovery.js';
-import { ProjectSummary } from '../../../../src/core/application/data/ProjectSummary.js';
-import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
-import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
+import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
+import { ProjectCandidate } from '../../../../src/core/port/data/ProjectCandidate.js';
+import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
+import { ProjectSummary } from '../../../../src/core/port/data/ProjectSummary.js';
+import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
+import type { ProjectIdentityDataTransferObject } from '../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
-class FakeSetup implements ProjectSetupPort {
+class FakeSetup implements ProjectSetupSurface {
   discovery: ProjectDiscovery = new ProjectDiscovery({
     targetHandle: 'R_kgDOAAAA',
     projects: [],
