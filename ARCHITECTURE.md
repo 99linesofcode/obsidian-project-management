@@ -30,8 +30,7 @@ obsidian-project-management/
 │   ├── ui/              # driving adapters: settings/ (tab, schema,
 │   │                    # secret-storage), sync/ (scheduler, queue)
 │   ├── core/            # the module's hexagon
-│   │   ├── application/ # use cases (actions/), DTOs (data/), the reconciler
-│   │   │                # interfaces (services/)
+│   │   ├── application/ # use cases (actions/), DTOs (data/)
 │   │   ├── domain/      # the neutral note arithmetic and the domain error
 │   │   │                # (errors/)
 │   │   └── port/        # the collaborator and factory ports
@@ -59,8 +58,8 @@ timers — belong to `ui/` and make no business decisions. Persistence is owned
 by the registry adapter; nothing else touches `data.json`.
 
 **The core.** `core/` is the module's hexagon. `application/` holds the use
-cases (`actions/`), the application shapes (`data/`) and the reconciler
-interfaces (`services/`); `domain/` holds the neutral note arithmetic, the merge
+cases (`actions/`), the application shapes (`data/`) and the connection-validation
+service (`services/`); `domain/` holds the neutral note arithmetic, the merge
 vocabulary (`mergeField` and its shapes — `Delta`, `MergeResult`,
 `SideObservation`, `Baseline`, `OriginObservation`) and the domain error
 (`errors/`); `port/` holds the ports and the canonical DTOs they carry
@@ -123,7 +122,7 @@ name never appears in the core.
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                             | host plugin API              | the vault      |
 | `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                 | host plugin API, `Component` | the vault      |
-| `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), the pass assemblers, the reconciler interfaces, and the neutral note arithmetic                                          | TypeScript                   | in-process     |
+| `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), and the neutral note arithmetic                                                                                          | TypeScript                   | in-process     |
 | `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter`, plus the baseline/cursor/watch stores), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
@@ -231,42 +230,37 @@ canonical DTOs and the pure core.
   and there is no validation framework, capability vocabulary or registration
   result. The provider's name is a value in its own module and in the
   composition root only.
-- **The generic mirror-sync action** (`MirrorSyncAction`). It names no provider:
-  it collects each capable mirror's observation against its own baseline, calls
-  the single `mergeField`, and fans the reconciled value out through the one
-  generic write entry. It also writes the reconciled value back to the origin
-  (or trashes the note on a delete), and advances the baseline of every side
-  written or already matching — a skipped write advances too; a failed write
-  advances nothing. A mirror write that throws is recorded on the pass record's
-  failed sides and fan-out continues to the remaining mirrors, so one failing
-  connection never abandons the rest.
-- **The pass assembler** (`AssembleProjectPassAction`). Given a project, it
-  reads each declared connection with its slug, builds the connection's mirror
-  adapter through the factory (scoped by the connection's target), resolves the
-  entity to that connection's own handle through `RegistryPort`,
-  assembles the origin side through `VaultPort` and each mirror's baseline
-  through `RegistryPort`, and runs `MirrorSyncAction` once per (entity,
-  canonical value field) against a per-connection `MirrorSide`. The project
-  source enumerates note paths, so a mirror side is keyed `mirror:<slug>` —
-  disjoint from the origin side's `origin` key — while the origin keeps the note
-  path as its handle. A connection whose entity has no resolved handle is
-  materialized: the origin task is read through `VaultPort.readTask` (a note
-  without a `type` is not a task and is skipped), a placeholder handle is
-  recorded through `RegistryPort` before the item is created through
-  `MirrorPort.createTask`, the real handle replaces the placeholder, and
-  the created mirror is reconciled in the same pass. A placeholder left by an
-  interrupted pass is adopted by matching the mirror's task title rather than
-  re-created.
-- **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction` +
-  `AssembleProjectLifecyclePassAction`). The project-level peer of the
-  mirror-sync action: it resolves each connection's mirror project through
-  `RegistryPort`, onboarding a missing one via `MirrorPort.createProject`,
-  then reads the origin's archived state through `VaultPort`
-  and each mirror's through `MirrorPort`, runs the same pure `mergeField`
-  ladder over the archived fact, and fans the reconciled freeze out to the
-  origin and every capable mirror. Any side can start the freeze or the
-  unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates
-  the task-field pass. A mirror project whose name drifted is renamed through
+- **The mirror-sync action** (`MirrorSyncAction`). Given a project, it reads each
+  declared connection with its slug, builds the connection's mirror adapter
+  through the factory (scoped by the connection's target), resolves the entity to
+  that connection's own handle through `RegistryPort`, and runs the pure
+  `mergeField` once per (entity, canonical value field). For each field it
+  collects the origin side through `VaultPort` and each mirror's observation
+  against its own baseline, fans the reconciled value out through the one generic
+  write entry, writes the reconciled value back to the origin (or trashes the
+  note on a delete), and advances the baseline of every side written or already
+  matching — a skipped write advances too; a failed write advances nothing. A
+  mirror write that throws is recorded among the pass's failed sides and fan-out
+  continues to the remaining mirrors, so one failing connection never abandons the
+  rest. The project source enumerates note paths, so a mirror side is keyed
+  `mirror:<slug>` — disjoint from the origin side's `origin` key — while the
+  origin keeps the note path as its handle. A connection whose entity has no
+  resolved handle is materialized: the origin task is read through
+  `VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
+  placeholder handle is recorded through `RegistryPort` before the item is
+  created through `MirrorPort.createTask`, the real handle replaces the
+  placeholder, and the created mirror is reconciled in the same pass. A
+  placeholder left by an interrupted pass is adopted by matching the mirror's
+  task title rather than re-created. It names no provider.
+- **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction`). The
+  project-level peer of the mirror-sync action: given a project it resolves each
+  connection's mirror project through `RegistryPort`, onboarding a missing one
+  via `MirrorPort.createProject`, then reads the origin's archived state through
+  `VaultPort` and each mirror's through `MirrorPort`, runs the same pure
+  `mergeField` ladder over the archived fact, and fans the reconciled freeze out
+  to the origin and every capable mirror. Any side can start the freeze or the
+  unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
+  task-field pass. A mirror project whose name drifted is renamed through
   `MirrorPort.renameProject`. Its per-side baselines live in the same
   `coreBaselines` store under the `lifecycle` field.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
@@ -305,16 +299,15 @@ canonical DTOs and the pure core.
   `RegistryPort`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, connection re-keying, board-ensure, rename recovery,
-  vault consistency and the deletion sweep) and the `CoreReconcilers` bundle
-  (the five reconcilers — `TaskFieldReconciler`, `TaskCaptureReconciler`,
-  `ProjectLifecycleReconciler`, `ProjectTaskLocksReconciler`,
-  `ProjectReactivationReconciler`) directly, every step wrapped so one failure
-  logs and skips that step. It runs the reactivation action before the assembled
-  lifecycle pass (unfreezing the origin when newer mirror work appears), the
-  assembled lifecycle pass for the freeze verdict, the task-lock action on the
-  freeze/unfreeze transition, the assembled task capture for tracked tasks, and
-  the assembled pass for task-field reconciliation. The sweep enumerates the
-  project's code-host connections directly, and the capture pre-tick runs the
+  vault consistency and the deletion sweep) and the core actions directly
+  (`ReactivateFrozenProjectAction`, `ProjectLifecycleSyncAction`,
+  `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
+  every step wrapped so one failure logs and skips that step. It runs the
+  reactivation action before the lifecycle pass (unfreezing the origin when newer
+  mirror work appears), the lifecycle pass for the freeze verdict, the task-lock
+  action on the freeze/unfreeze transition, the task capture for tracked tasks,
+  and the mirror-sync pass for task-field reconciliation. The sweep enumerates
+  the project's code-host connections directly, and the capture pre-tick runs the
   assembled core capture.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
@@ -503,13 +496,13 @@ pre-tick capture).
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
 GitHub and Todoist mirror adapters implement `MirrorPort`, the vault
-origin adapters complete the origin round-trip, the pass assembler and the core
-baseline store assemble a whole project pass and persist its baselines, the
+origin adapters complete the origin round-trip, the mirror-sync action and the
+core baseline store reconcile a whole project and persist its baselines, the
 lifecycle pass reconciles the archived fact, the capture surfaces adopt
 remote-born projects and tracked tasks, and the task-lock and reactivation
-reconcilers handle a frozen project. The runtime cutover is unconditional: the
+actions handle a frozen project. The runtime cutover is unconditional: the
 chain builds the origin and the per-connection mirror adapters from the
-project's connections and the stored secrets and drives the core reconcilers
+project's connections and the stored secrets and drives the core actions
 every pass.
 
 ## 10. Project Identification
@@ -549,17 +542,14 @@ Date of Last Update: 2026-10-12
   its edit time is trusted by default, and its absence is a delete.
 - **Lane** — a board column / task-manager section.
 - **Outward materialization** — creating a mirror for a vault-born task,
-  placeholder-first: the pass assembler records a placeholder handle before it
-  creates the missing item through the adapter, stamps the real handle over the
-  placeholder, and reconciles it in the same pass; an interrupted pass adopts
-  the created item instead of duplicating it.
+  placeholder-first: the mirror-sync action records a placeholder handle before
+  it creates the missing item through the adapter, stamps the real handle over
+  the placeholder, and reconciles it in the same pass; an interrupted pass
+  adopts the created item instead of duplicating it.
 - **Capture** — adopting a remote-born project or tracked task into the vault. A
   project capture is guarded by a per-surface creation watermark; a task capture
   scans the whole application listing for the tracked tasks (those carrying a
   type label) and skips the mirror items already stamped, so it needs no cursor.
-- **Reconciler** — the `src/core/` interface through which `SyncProjectAction`
-  drives one assembled core action (task fields, lifecycle, task locks,
-  reactivation, capture).
 
 ## 12. Conventions & Boundaries
 

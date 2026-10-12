@@ -13,10 +13,9 @@ record; the applications are mirrors the plugin keeps honest.
 
 Module-first (ADR 004): the repo is the module, its interior is the layers.
 
-- `src/core/` — the module's hexagon: `application/` (the sync actions, the
-  canonical DTOs, the reconciler interfaces), `domain/` (the neutral note
-  arithmetic and the domain error), and `port/` (the capability and
-  collaborator ports). It names no provider.
+- `src/core/` — the module's hexagon: `application/` (the sync actions and the
+  canonical DTOs), `domain/` (the neutral note arithmetic and the domain error),
+  and `port/` (the collaborator and factory ports). It names no provider.
 - `src/infrastructure/<vendor>/` — the driven adapters (GitHub, Todoist, the
   vault origin, the registry), one namespace per application.
 - `src/ui/` — the driving side: the settings tab, the scheduler, the queue.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
+import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
@@ -135,7 +135,7 @@ function memoryStorage() {
   };
 }
 
-describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', () => {
+describe('MirrorSyncAction — the real adapter wiring (F02 NWM-2)', () => {
   it('bridges a note path to its entity id and then to the connection handle', async () => {
     const notes = new FakeNotes();
     notes.seed(HOME_PATH, HOME);
@@ -164,11 +164,7 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
       create: () => mirror,
     };
 
-    const action = new AssembleProjectPassAction(
-      notes,
-      syncState,
-      mirrorAdapters,
-    );
+    const action = new MirrorSyncAction(notes, syncState, mirrorAdapters);
 
     await action.invoke(PROJECT);
 

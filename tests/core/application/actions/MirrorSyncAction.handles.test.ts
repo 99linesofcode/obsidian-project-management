@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
+import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
@@ -109,7 +109,7 @@ function connection(
   });
 }
 
-describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM-2)', () => {
+describe('MirrorSyncAction — entity to per-connection handle (F02 NWM-2)', () => {
   it('resolves each connection its own handle and scopes the adapter by target', async () => {
     const first = registeredMirror();
     const second = registeredMirror();
@@ -136,7 +136,7 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     await registry.setMirrorItem('Acme', 'gh-second', 'handle-b', {
       entityId: ENTITY,
     });
-    const action = new AssembleProjectPassAction(vault, registry, factory);
+    const action = new MirrorSyncAction(vault, registry, factory);
 
     const records = await action.invoke('Acme');
     const status = records.find((record) => record.field === 'Status')!;
@@ -160,7 +160,7 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     const vault = new FakeVault();
     vault.connections = [connection('gh-main', 'target-a')];
     const factory = new RecordingFactory(new Map([['target-a', first]]));
-    const action = new AssembleProjectPassAction(
+    const action = new MirrorSyncAction(
       vault,
       new SyncStateAdapter(memoryStorage()),
       factory,

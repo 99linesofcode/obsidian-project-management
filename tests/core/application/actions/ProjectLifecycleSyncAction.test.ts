@@ -19,7 +19,7 @@ vi.mock('obsidian', () => ({ TFile }));
 type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App } from 'obsidian';
-import { AssembleProjectLifecyclePassAction } from '../../../../src/core/application/actions/AssembleProjectLifecyclePassAction.js';
+import { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
@@ -177,7 +177,7 @@ async function setup(options: SetupOptions) {
   mirror.seedProject('board-b', options.mirrorB);
   const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => mirror };
 
-  const action = new AssembleProjectLifecyclePassAction(
+  const action = new ProjectLifecycleSyncAction(
     vault,
     registry,
     mirrorAdapters,
@@ -208,7 +208,7 @@ async function seedBaselines(
   }
 }
 
-describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', () => {
+describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
   it('freezes the vault and the other mirrors when a mirror starts the archive', async () => {
     const { vault, registry, mirror, action } = await setup({
       vaultArchived: false,
@@ -408,7 +408,7 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     const mirrorAdapters: MirrorAdapterFactoryPort = {
       create: () => mirror,
     };
-    const action = new AssembleProjectLifecyclePassAction(
+    const action = new ProjectLifecycleSyncAction(
       vault,
       registry,
       mirrorAdapters,

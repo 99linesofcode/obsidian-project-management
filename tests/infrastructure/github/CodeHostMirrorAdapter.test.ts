@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { AssembleProjectPassAction } from '../../../src/core/application/actions/AssembleProjectPassAction.js';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../src/core/port/data/ConnectionDataTransferObject.js';
-import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
-import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { OriginObservation } from '../../../src/core/domain/OriginObservation.js';
 import type { CanonicalField } from '../../../src/core/domain/canonicalField.js';
 import type { MirrorPort } from '../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
-import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
@@ -863,44 +859,78 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
 
 describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', () => {
   it('reconciles a vault Status change onto the board lane', async () => {
-    const transport = new FakeTransport([
-      boardResponse([issueNode()], [cardNode()]),
-      boardResponse([issueNode()], [cardNode()]),
-      boardResponse([issueNode()], [cardNode()]),
-      boardResponse([issueNode()], [cardNode()]),
-      { status: 200, json: { data: { projectV2Item: { id: 'PVTI_1' } } } },
-    ]);
+    const emptyIssue = () =>
+      issueNode({ title: '', body: '', labels: { nodes: [] }, parent: null });
+    const transport = new FakeTransport(
+      Array.from({ length: 40 }, () =>
+        boardResponse([emptyIssue()], [cardNode()]),
+      ),
+    );
     const adapter = new CodeHostMirrorAdapter(transport, target());
 
-    const pass = new MirrorSyncPass({
-      entityId: ISSUE_URL,
-      field: 'Status',
-      origin: new SideObservation({
-        side: 'vault',
-        role: 'origin',
-        current: 'Done',
-        baseline: new Baseline('Building', false),
-        fieldTime: null,
-        timestampTrustworthy: true,
-        completeFetch: true,
-        currentCompleted: false,
-      }),
-      mirrors: [
-        new MirrorSide({
-          side: 'github',
-          handle: ISSUE_URL,
-          adapter,
-        }),
-      ],
-      baselines: new Map([['github', new Baseline('Building', false)]]),
+    const vault = new FieldOrigin();
+    vault.values.set('title', '');
+    vault.values.set('body', '');
+    vault.values.set('completion', 'false');
+    vault.values.set('Status', 'Done');
+    vault.values.set('label', '');
+    const entityPath = 'Projecten/Acme/taken/fix-the-bug.md';
+    let data: Record<string, unknown> = {};
+    const registry = new SyncStateAdapter({
+      async load() {
+        return data;
+      },
+      async save(next: unknown) {
+        data = next as Record<string, unknown>;
+      },
+    });
+    await registry.setEntity({ id: entityPath, notePath: entityPath });
+    await registry.setMirrorItem('Acme', 'gh', ISSUE_URL, {
+      entityId: entityPath,
+    });
+    for (const field of ['title', 'body', 'completion', 'label'] as const) {
+      const value = vault.values.get(field)!;
+      await registry.writeBaseline(
+        entityPath,
+        field,
+        'origin',
+        new Baseline(value, false),
+      );
+      await registry.writeBaseline(
+        entityPath,
+        field,
+        'mirror:gh',
+        new Baseline(value, false),
+      );
+    }
+    await registry.writeBaseline(
+      entityPath,
+      'Status',
+      'origin',
+      new Baseline('Building', false),
+    );
+    await registry.writeBaseline(
+      entityPath,
+      'Status',
+      'mirror:gh',
+      new Baseline('Building', false),
+    );
+    const action = new MirrorSyncAction(vault, registry, {
+      create: () => adapter,
     });
 
-    const record = await new MirrorSyncAction().invoke(pass);
+    const records = await action.invoke('Acme');
+    const status = records.find((record) => record.field === 'Status')!;
 
-    expect(record.result.value).toBe('Done');
-    expect(record.written).toEqual(['github']);
-    expect(transport.bodies[4]).toContain('SetBoardStatus');
-    expect(transport.bodies[4]).toContain('"optionId":"PVTSSF_2"');
+    expect(status.result.value).toBe('Done');
+    expect(status.written).toEqual(['mirror:gh']);
+    expect(
+      transport.bodies.some(
+        (body) =>
+          body.includes('SetBoardStatus') &&
+          body.includes('"optionId":"PVTSSF_2"'),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -947,7 +977,7 @@ class FieldOrigin extends FakeVaultBase {
   }
 }
 
-describe('AssembleProjectPassAction drives the code host through a resolved handle (F02 NWM-2, NWM-3)', () => {
+describe('MirrorSyncAction drives the code host through a resolved handle (F02 NWM-2, NWM-3)', () => {
   it('reads the issue by its resolved handle and reconciles its Status', async () => {
     const entityId = 'Projecten/Acme/taken/fix-the-bug.md';
     const transport = new FakeTransport(
@@ -987,11 +1017,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
       create: (application): MirrorPort | null =>
         application === 'github' ? adapter : null,
     };
-    const action = new AssembleProjectPassAction(
-      vault,
-      registry,
-      mirrorAdapters,
-    );
+    const action = new MirrorSyncAction(vault, registry, mirrorAdapters);
 
     const records = await action.invoke('Acme');
     const status = records.find((record) => record.field === 'Status')!;
