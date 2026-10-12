@@ -52,7 +52,7 @@ const TASK = [
   '---',
   'categories: [taken]',
   'status: Done',
-  'labels: [alpha, beta]',
+  'labels: [type:task, alpha, beta]',
   '---',
   'Body text',
 ].join('\n');
@@ -203,7 +203,7 @@ describe('MirrorSyncAction — a project pass end to end (F02 NWM-1, NWM-3)', ()
     expect(mergedValue('subtasks')).toBeNull();
     expect(mergedValue('completion')).toBe('false');
     expect(mergedValue('Status')).toBe('Done');
-    expect(mergedValue('label')).toBe('["alpha","beta"]');
+    expect(mergedValue('label')).toBe('["type:task","alpha","beta"]');
 
     expect(mirror.currentTask(TASK_PATH)?.status).toBe('Done');
     expect(vault.content(TASK_PATH)).toContain('Mirror body');
