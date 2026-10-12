@@ -78,13 +78,13 @@ archives the project; moving it back restores it.
 
 ### Create a task
 
-A task note is any note whose frontmatter carries `type`, `status` and an
-`affiliation` linking it to its project — for example
-`Projecten/My Project/taken/Write the README.md`:
+A task note is any note whose frontmatter carries a `labels` sequence with a
+`type:<kind>` label, `status` and an `affiliation` linking it to its project —
+for example `Projecten/My Project/taken/Write the README.md`:
 
 ```yaml
 categories: [taken]
-type: task
+labels: [type:task]
 status: Backlog
 affiliation: '[[My Project]]'
 created: 2026-10-06
@@ -93,8 +93,8 @@ synced: 2026-10-06T09:30:00
 
 Everything this task needs to say. This body becomes the issue body.
 
-- `type` is the content kind: `task`, `slice` (a sub-task nested under another
-  note) or `bug`.
+- the kind is the `type:<kind>` label in `labels`: `type:task`, `type:slice`
+  (a sub-task nested under another note) or `type:bug`.
 - `status` is your project's status option name, verbatim — change it here and
   the issue and board card follow.
 - `affiliation` is a quoted wikilink list: the project first, then the parent
@@ -127,7 +127,7 @@ renders new notes through them:
 
 - the template's frontmatter is kept — your own fields (`categories`, `tags`,
   whatever you use) survive;
-- fields the plugin manages (`type`, `status`, `affiliation`, `synced`, …) are
+- fields the plugin manages (`labels`, `status`, `affiliation`, `synced`, …) are
   filled in from the sync data;
 - `{{date}}` and `{{time}}` resolve to the sync stamp;
 - the template's body becomes the note body.
