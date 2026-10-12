@@ -1,4 +1,4 @@
-import { OriginObservation } from '../../core/application/data/OriginObservation.js';
+import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { ProjectLifecycleOriginPort } from '../../core/port/ProjectLifecycleOriginPort.js';
 import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
 

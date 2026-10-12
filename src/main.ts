@@ -40,7 +40,7 @@ import { loadDataSafely } from './infrastructure/registry/loadDataSafely.js';
 import { createTodoistTransport } from './infrastructure/todoist/createTodoistTransport.js';
 import { AdapterRegistration } from './core/application/data/AdapterRegistration.js';
 import type { RegistrationResult } from './core/application/data/RegistrationResult.js';
-import { registerAdapters } from './core/domain/registerAdapters.js';
+import { registerAdapters } from './core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
 import { AssembleProjectPassAction } from './core/application/actions/AssembleProjectPassAction.js';

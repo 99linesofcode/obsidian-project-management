@@ -1,9 +1,12 @@
-import type { AdapterDescriptor } from '../application/data/AdapterDescriptor.js';
-import { isCapability, REQUIRED_CAPABILITIES } from './capabilities.js';
-import type { AdapterRegistration } from '../application/data/AdapterRegistration.js';
-import { RegisteredAdapter } from '../application/data/RegisteredAdapter.js';
-import { RegistrationError } from '../application/data/RegistrationError.js';
-import { RegistrationResult } from '../application/data/RegistrationResult.js';
+import type { AdapterDescriptor } from '../data/AdapterDescriptor.js';
+import {
+  isCapability,
+  REQUIRED_CAPABILITIES,
+} from '../../domain/capabilities.js';
+import type { AdapterRegistration } from '../data/AdapterRegistration.js';
+import { RegisteredAdapter } from '../data/RegisteredAdapter.js';
+import { RegistrationError } from '../data/RegistrationError.js';
+import { RegistrationResult } from '../data/RegistrationResult.js';
 
 const APPLICATION_ID = /^[a-z0-9-]+$/;
 const SETTINGS_ROW_KINDS = ['text', 'toggle', 'number', 'list'] as const;

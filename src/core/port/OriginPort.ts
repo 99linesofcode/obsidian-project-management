@@ -1,7 +1,7 @@
 import type { CanonicalField } from '../domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../application/data/CanonicalFieldWrite.js';
 import type { CanonicalTask } from '../application/data/CanonicalTask.js';
-import type { OriginObservation } from '../application/data/OriginObservation.js';
+import type { OriginObservation } from '../domain/OriginObservation.js';
 
 export interface OriginPort {
   observe(handle: string, field: CanonicalField): Promise<OriginObservation>;

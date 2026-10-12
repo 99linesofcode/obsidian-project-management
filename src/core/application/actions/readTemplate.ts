@@ -1,4 +1,4 @@
-import type { NoteReaderPort } from '../port/NoteReaderPort.js';
+import type { NoteReaderPort } from '../../port/NoteReaderPort.js';
 
 // The template note's content, or null when it does not exist — render falls
 // back to the built-in frontmatter.

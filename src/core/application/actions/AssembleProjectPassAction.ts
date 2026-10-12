@@ -1,5 +1,5 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
-import { Baseline } from '../data/Baseline.js';
+import { Baseline } from '../../domain/Baseline.js';
 import type { CanonicalTask } from '../data/CanonicalTask.js';
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../data/MirrorSide.js';

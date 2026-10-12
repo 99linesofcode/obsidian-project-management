@@ -20,14 +20,14 @@ type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App } from 'obsidian';
 import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
-import { Baseline } from '../../../src/core/application/data/Baseline.js';
+import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/application/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/application/data/CanonicalTask.js';
 import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
 import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
-import { registerAdapters } from '../../../src/core/domain/registerAdapters.js';
+import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { VaultOriginAdapter } from '../../../src/infrastructure/vault/VaultOriginAdapter.js';

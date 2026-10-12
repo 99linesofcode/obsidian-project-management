@@ -25,7 +25,7 @@ import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTa
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
-import { registerAdapters } from '../../../../src/core/domain/registerAdapters.js';
+import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';

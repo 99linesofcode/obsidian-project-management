@@ -1,4 +1,4 @@
-import type { OriginObservation } from '../application/data/OriginObservation.js';
+import type { OriginObservation } from '../domain/OriginObservation.js';
 
 export interface ProjectLifecycleOriginPort {
   observeProject(project: string): Promise<OriginObservation>;

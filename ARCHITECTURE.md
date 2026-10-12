@@ -60,14 +60,19 @@ by the registry adapter; nothing else touches `data.json`.
 
 **The core.** `core/` is the module's hexagon. `application/` holds the use
 cases (`actions/`), the canonical DTOs (`data/`) and the reconciler interfaces
-(`services/`); `domain/` holds the neutral note arithmetic and the domain
-error (`errors/`); `port/` holds the capability and collaborator ports. It
-names no provider. `infrastructure/` holds the driven adapters that implement
-those ports, one namespace per vendor. The composition root wires them. The
-old provider halves, the pairwise verdict and the legacy writers are deleted;
-the chain drives the vault-maintenance steps (board-ensure, rename recovery,
-vault consistency, deletion sweep) directly, documented in the developer
-manual.
+(`services/`); `domain/` holds the neutral note arithmetic, the merge
+vocabulary (`mergeField` and its shapes — `Delta`, `MergeResult`,
+`SideObservation`, `Baseline`, `OriginObservation`) and the domain error
+(`errors/`); `port/` holds the capability and collaborator ports. It names no
+provider. The three layers are gated separately — `domain/` imports neither
+`application/` nor `port/`, `application/` may use both, and `port/` may
+reference `domain/` and the canonical DTOs in `application/data/` — so a
+domain file that reaches outward fails the lint. `infrastructure/` holds the
+driven adapters that implement those ports, one namespace per vendor. The
+composition root wires them. The old provider halves, the pairwise verdict and
+the legacy writers are deleted; the chain drives the vault-maintenance steps
+(board-ensure, rename recovery, vault consistency, deletion sweep) directly,
+documented in the developer manual.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
 or concept exists. A consumer folder appears when an action has exclusive
@@ -210,14 +215,17 @@ canonical DTOs and the pure core.
   names; `canonicalField.ts` holds the six canonical fields. `TaskSurfacePort`
   carries one generic write entry, `applyField`, and the completion fact is a
   separate canonical field from the `Status` representation.
-- **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
-  `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`, `MirrorSide`,
+- **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `MirrorSide`,
   `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
   `ProjectLifecycleRecord`, `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
   `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `ProjectState`
   and `ProjectActivityObservation` — one canonical shape per concept, owned by
   the core. The merge diffs canonical fields only.
+- **The merge vocabulary** lives in `domain/` beside `mergeField`: `Delta`,
+  `MergeResult`, `SideObservation`, `Baseline`, `OriginObservation`. A value
+  the domain reads is a domain value; the ports and the application depend
+  inward on it.
 - **The pure N-way merge** (`mergeField`). Sides plus exactly one origin role;
   a delta per side against its own baseline; the ladder (decisive timestamp →
   completion over a stale open → origin tie-break); delete proof (a
@@ -444,16 +452,21 @@ over HTTPS.
   config with prettier (`pnpm run lint`), prettier (`pnpm run format:check`).
 - **Mechanical gates** (and what each makes impossible):
   - **`eslint-plugin-boundaries`** — the module dependency matrix. Elements
-    are the `src/` layer folders — `core`, `ui`, and `infrastructure` (with
-    the two provider namespaces, `infrastructure/github/` and
+    are the `src/` layer folders — the three core layers (`core/domain`,
+    `core/application`, `core/port`), `ui`, and `infrastructure` (with the two
+    provider namespaces, `infrastructure/github/` and
     `infrastructure/todoist/`, as their own elements) — plus the src root (the
-    composition root); `core/` is the hexagon and imports no module;
-    `infrastructure/` may import `core/` only; the provider namespaces never
+    composition root); inside the hexagon `core/domain` imports nothing,
+    `core/application` may import the domain and the ports, and `core/port`
+    may reference the domain and the canonical DTOs in `core/application`;
+    `infrastructure/` may import the core only; the provider namespaces never
     import each other; `ui/` reaches the core through the ports and
     infrastructure only for the storage key it shares with the registry
     adapter; the composition root wires everything. An unlisted import edge
-    fails the lint, so the dependency graph stays acyclic and the hexagon
-    stays neutral.
+    fails the lint, so the hexagon stays neutral and a domain file that
+    imports outward cannot land. The seam is bite-tested
+    (`tests/scripts/boundary-isolation.test.ts`): a domain→application and a
+    domain→port import each exit non-zero while application→domain exits zero.
   - **`boundaries/no-unknown-files`** and **`no-unknown-dependencies`** —
     every source file must belong to an element and every local import must
     resolve to one, so a new top-level module (including `core/` and

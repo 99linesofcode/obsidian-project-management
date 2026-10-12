@@ -13,17 +13,22 @@ import boundaries from 'eslint-plugin-boundaries';
 // root at src/main.ts is classified by the file descriptor in the settings
 // block below, not by an element pattern.
 //
-// Module-first (ADR 004): `core` is the module's hexagon (application +
-// domain + port), `infrastructure` the driven adapters, `ui` the driving side.
-// The two provider namespaces stay their own elements so they can be isolated
-// from each other.
+// Module-first (ADR 004): `core` is the module's hexagon, split into its three
+// layers so the intra-core dependency rule is mechanical — `domain/`,
+// `application/` and `port/` are separate elements. `infrastructure` is the
+// driven adapters, `ui` the driving side. The two provider namespaces stay
+// their own elements so they can be isolated from each other.
 //
 // Order matters: the plugin matches the first pattern that fits, so the two
 // provider patterns must precede the broad `infrastructure/**` pattern — or
 // the providers collapse into one element and stop being isolated from each
 // other (see tests/scripts/boundary-isolation.test.ts).
+const CORE_LAYERS = ['core/domain', 'core/application', 'core/port'];
+
 const ELEMENT_PATTERNS = [
-  { type: 'core', pattern: 'src/core/**' },
+  { type: 'core/domain', pattern: 'src/core/domain/**' },
+  { type: 'core/application', pattern: 'src/core/application/**' },
+  { type: 'core/port', pattern: 'src/core/port/**' },
   { type: 'github', pattern: 'src/infrastructure/github/**' },
   { type: 'todoist', pattern: 'src/infrastructure/todoist/**' },
   { type: 'infrastructure', pattern: 'src/infrastructure/**' },
@@ -38,25 +43,31 @@ const ALL_ELEMENT_TYPES = [
 // the element types its module may import; every other edge is a violation.
 //
 // WHY these edges and no others:
-// - core is the module's hexagon: the ports, canonical DTOs, the pure merge
-//   and every use case import nothing, so no outer block can leak in (the
-//   dependency rule).
-// - infrastructure is the block of driven adapters; it may import core only,
-//   never the driving side or a sibling block.
+// - core/domain is the innermost layer: it imports nothing — no application,
+//   no port, no outer block. A value the domain needs is a domain value; a
+//   file that is not domain moves out rather than inverting this edge.
+// - core/application may depend on the domain and the ports (use cases use
+//   both).
+// - core/port is the interface layer the core owns; its shapes are the
+//   canonical DTOs in application/data, so it may reference domain and
+//   application.
+// - infrastructure is the block of driven adapters; it may import the core
+//   only, never the driving side or a sibling block.
 // - github/todoist never import each other. A mirror's module may not depend
-//   on a sibling mirror; the mirrors meet only through core.
+//   on a sibling mirror; the mirrors meet only through the core.
 // - ui is the driving side: it reaches the core through the ports, and
 //   infrastructure only for the storage key it shares with the registry
 //   adapter.
-// Everything else is forbidden, which makes the matrix acyclic by construction
-// (no circular module dependencies).
+// Everything else is forbidden: an edge not listed here is a violation.
 /** @type {Record<string, string[]>} */
 const MATRIX = {
-  ui: ['ui', 'core', 'infrastructure'],
-  core: [],
-  github: ['core'],
-  todoist: ['core'],
-  infrastructure: ['core'],
+  ui: ['ui', ...CORE_LAYERS, 'infrastructure'],
+  'core/domain': [],
+  'core/port': ['core/domain', 'core/application'],
+  'core/application': ['core/domain', 'core/port'],
+  github: [...CORE_LAYERS],
+  todoist: [...CORE_LAYERS],
+  infrastructure: [...CORE_LAYERS],
 };
 
 const matrixPolicies = Object.entries(MATRIX).map(([type, allowed]) => ({
@@ -86,7 +97,13 @@ const compositionRootPolicies = [
       to: {
         element: {
           types: {
-            anyOf: ['ui', 'core', 'github', 'todoist', 'infrastructure'],
+            anyOf: [
+              'ui',
+              ...CORE_LAYERS,
+              'github',
+              'todoist',
+              'infrastructure',
+            ],
           },
         },
       },

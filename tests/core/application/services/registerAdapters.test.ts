@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AdapterDescriptor } from '../../../src/core/application/data/AdapterDescriptor.js';
-import type { Capability } from '../../../src/core/domain/capabilities.js';
-import { REQUIRED_CAPABILITIES } from '../../../src/core/domain/capabilities.js';
-import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
-import { registerAdapters } from '../../../src/core/domain/registerAdapters.js';
-import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { AdapterDescriptor } from '../../../../src/core/application/data/AdapterDescriptor.js';
+import type { Capability } from '../../../../src/core/domain/capabilities.js';
+import { REQUIRED_CAPABILITIES } from '../../../../src/core/domain/capabilities.js';
+import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
+import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
+import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
+import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 
 describe('registerAdapters — the one contract gate (ACM-9)', () => {
   it('accepts a conforming descriptor into the map', () => {

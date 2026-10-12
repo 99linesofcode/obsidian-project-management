@@ -1,7 +1,7 @@
-import { isRecord } from './isRecord.js';
-import type { ConnectionValidationService } from './ConnectionValidationService.js';
-import type { ProjectNoteDataTransferObject } from '../application/data/ProjectNoteDataTransferObject.js';
-import { projectNameFromPath } from './projectNameFromPath.js';
+import { isRecord } from '../../domain/isRecord.js';
+import type { ConnectionValidationService } from '../services/ConnectionValidationService.js';
+import type { ProjectNoteDataTransferObject } from './ProjectNoteDataTransferObject.js';
+import { projectNameFromPath } from '../../domain/projectNameFromPath.js';
 
 export function projectNoteFromCache(
   path: string,

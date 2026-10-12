@@ -1,7 +1,7 @@
 import { ProjectIdentityDataTransferObject } from '../data/ProjectIdentityDataTransferObject.js';
 import { DomainError } from '../../domain/errors/DomainError.js';
 import type { ProjectSetupPort } from '../../port/ProjectSetupPort.js';
-import { deriveBoardChoice } from '../../domain/deriveBoardChoice.js';
+import { deriveBoardChoice } from './deriveBoardChoice.js';
 import { nameFromTarget } from '../../domain/nameFromTarget.js';
 
 export interface AttachProjectInput {

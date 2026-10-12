@@ -11,7 +11,7 @@ import {
   withToDoStatus,
 } from '../../../domain/ToDoNoteParser.js';
 import { withBody } from '../../../domain/withBody.js';
-import { readTemplate } from '../../../domain/readTemplate.js';
+import { readTemplate } from '../readTemplate.js';
 import type { NoteEnumeratorPort } from '../../../port/NoteEnumeratorPort.js';
 import type { NoteReaderPort } from '../../../port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../port/NoteWriterPort.js';

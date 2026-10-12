@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Baseline } from '../../../../src/core/application/data/Baseline.js';
+import { Baseline } from '../../../../src/core/domain/Baseline.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { ProjectActivityObservation } from '../../../../src/core/application/data/ProjectActivityObservation.js';
-import type { OriginObservation } from '../../../../src/core/application/data/OriginObservation.js';
+import type { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type {
   BaselineField,
@@ -16,7 +16,7 @@ import type {
   ProjectWatchState,
 } from '../../../../src/core/port/ProjectWatchPort.js';
 import { ReactivateFrozenProjectAction } from '../../../../src/core/application/actions/ReactivateFrozenProjectAction.js';
-import { registerAdapters } from '../../../../src/core/domain/registerAdapters.js';
+import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';

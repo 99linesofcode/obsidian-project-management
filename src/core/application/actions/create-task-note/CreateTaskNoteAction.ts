@@ -3,7 +3,7 @@ import { TaskNoteMapper } from './TaskNoteMapper.js';
 import type { NoteReaderPort } from '../../../port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../../port/NoteWriterPort.js';
 import type { TrackedEntityPort } from '../../../port/TrackedEntityPort.js';
-import { readTemplate } from '../../../domain/readTemplate.js';
+import { readTemplate } from '../readTemplate.js';
 
 export interface CreateTaskNoteInput {
   url: string;

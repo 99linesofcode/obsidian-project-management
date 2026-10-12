@@ -3,7 +3,7 @@ import type { App } from 'obsidian';
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
-import { OriginObservation } from '../../core/application/data/OriginObservation.js';
+import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { OriginPort } from '../../core/port/OriginPort.js';
 import { slugify } from '../../core/domain/slugify.js';
 

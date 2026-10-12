@@ -1,4 +1,4 @@
-import { Baseline } from '../data/Baseline.js';
+import { Baseline } from '../../domain/Baseline.js';
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
 import { MirrorSide } from '../data/MirrorSide.js';
 import { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';

@@ -5,9 +5,9 @@ import type { NoteReaderPort } from '../../core/port/NoteReaderPort.js';
 import type { NoteWriterPort } from '../../core/port/NoteWriterPort.js';
 import type { VaultEventPort } from '../../core/port/VaultEventPort.js';
 import { chooseHomeNotePath } from '../../core/domain/projectHomePath.js';
-import { ConnectionValidationService } from '../../core/domain/ConnectionValidationService.js';
+import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
 import { folderChainForPath } from '../../core/domain/folderChainForPath.js';
-import { projectNoteFromCache } from '../../core/domain/projectNoteFromCache.js';
+import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
 
 export type EventRegistrar = (eventRef: EventRef) => void;
 
