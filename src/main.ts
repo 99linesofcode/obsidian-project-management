@@ -46,11 +46,6 @@ import type { CodeHostTransport } from './infrastructure/github/CodeHostTranspor
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
-import { ReactivateFrozenProjectAction } from './core/application/actions/ReactivateFrozenProjectAction.js';
-import {
-  CoreProjectWatchAdapter,
-  type CoreWatchStorage,
-} from './infrastructure/registry/CoreProjectWatchAdapter.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
 
@@ -79,24 +74,6 @@ function createCodeHostTransport(token: string): CodeHostTransport {
   return {
     post: (body) => request(token, 'POST', '/graphql', body),
     get: (path) => request(token, 'GET', path),
-    async getConditional(path, etag) {
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-      };
-      if (etag) {
-        headers['If-None-Match'] = etag;
-      }
-      const response = await requestUrl({
-        url: `https://api.github.com${path}`,
-        method: 'GET',
-        headers,
-        throw: false,
-      });
-      const responseEtag = response.headers['etag'];
-      return responseEtag === undefined
-        ? { status: response.status, json: response.json }
-        : { status: response.status, json: response.json, etag: responseEtag };
-    },
     patch: (path, body) => request(token, 'PATCH', path, body),
     postPath: (path, body) => request(token, 'POST', path, body),
     putPath: (path, body) => request(token, 'PUT', path, body),
@@ -107,7 +84,6 @@ interface CoreComposition {
   taskFields: MirrorSyncAction;
   lifecycle: ProjectLifecycleSyncAction;
   taskLocks: ReconcileProjectTaskLocksAction;
-  reactivation: ReactivateFrozenProjectAction;
   taskCapture: CaptureTasksAction;
   projectCapture: () => Promise<CaptureProjectsResult>;
 }
@@ -116,7 +92,6 @@ function composeCoreActions(
   plugin: ProjectManagementPlugin,
   vault: VaultAdapter,
   syncState: SyncStateAdapter,
-  baselineStorage: CoreWatchStorage,
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
@@ -134,12 +109,6 @@ function composeCoreActions(
       syncState,
       mirrorAdapters,
       plugin.settings.doneOptionName,
-    ),
-    reactivation: new ReactivateFrozenProjectAction(
-      vault,
-      syncState,
-      mirrorAdapters,
-      new CoreProjectWatchAdapter(baselineStorage),
     ),
     taskCapture: new CaptureTasksAction(
       vault,
@@ -214,7 +183,6 @@ function composePlugin(
   plugin: ProjectManagementPlugin,
   syncState: SyncStateAdapter,
   secrets: SecretStore,
-  baselineStorage: CoreWatchStorage,
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
@@ -314,7 +282,6 @@ function composePlugin(
     plugin,
     vault,
     syncState,
-    baselineStorage,
     createTaskNote,
     mirrorAdapters,
   );
@@ -327,7 +294,6 @@ function composePlugin(
   const syncProject = new SyncProjectAction({
     vault,
     setupFactory,
-    reactivation: core.reactivation,
     lifecycle: core.lifecycle,
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,
@@ -399,23 +365,13 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const baselineStorage: CoreWatchStorage = {
-      load: () =>
-        loadDataSafely(
-          () => this.loadData(),
-          () => this.quarantineDataFile(),
-          () => this.dataFileExists(),
-        ),
-      save: (data) => this.saveData(data),
-    };
-
     const {
       scheduler,
       discoverProjects,
       projectCapture,
       seedArtifacts,
       tokenSettings,
-    } = composePlugin(this, syncState, this.secrets, baselineStorage);
+    } = composePlugin(this, syncState, this.secrets);
     this.seedArtifacts = seedArtifacts;
     this.tokenSettings = tokenSettings;
     await seedArtifacts.execute();

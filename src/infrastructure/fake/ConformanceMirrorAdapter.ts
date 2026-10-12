@@ -3,14 +3,12 @@ import { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { CapturedProject } from '../../core/port/data/CapturedProject.js';
-import { ProjectActivityObservation } from '../../core/port/data/ProjectActivityObservation.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 
 export class ConformanceMirrorAdapter implements MirrorPort {
   private readonly tasks = new Map<string, CanonicalTask>();
   private readonly archived = new Map<string, boolean>();
   private readonly names = new Map<string, string>();
-  private readonly activities = new Map<string, ProjectActivityObservation>();
   private readonly projectTimes = new Map<string, string>();
   private readonly missingProjects = new Set<string>();
   private readonly absentProjects = new Set<string>();
@@ -35,10 +33,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
 
   seedProjectName(target: string, name: string): void {
     this.names.set(target, name);
-  }
-
-  seedActivity(target: string, observation: ProjectActivityObservation): void {
-    this.activities.set(target, observation);
   }
 
   seedMissingProject(target: string): void {
@@ -118,17 +112,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
 
   async archivedTime(target: string): Promise<string | null> {
     return this.projectTimes.get(target) ?? null;
-  }
-
-  async latestActivity(target: string): Promise<ProjectActivityObservation> {
-    return (
-      this.activities.get(target) ??
-      new ProjectActivityObservation({
-        changed: false,
-        newestCreatedAt: null,
-        etag: null,
-      })
-    );
   }
 
   private readProjectSync(target: string): CanonicalProject {

@@ -3,7 +3,6 @@ import type { CanonicalFieldWrite } from './data/CanonicalFieldWrite.js';
 import type { CanonicalProject } from './data/CanonicalProject.js';
 import type { CanonicalTask } from './data/CanonicalTask.js';
 import type { CapturedProject } from './data/CapturedProject.js';
-import type { ProjectActivityObservation } from './data/ProjectActivityObservation.js';
 import type { ProjectAddressing } from './data/ProjectAddressing.js';
 import type { ProjectCandidate } from './data/ProjectCandidate.js';
 import type { ProjectDiscovery } from './data/ProjectDiscovery.js';
@@ -11,10 +10,9 @@ import type { ProjectSummary } from './data/ProjectSummary.js';
 
 // The external tool as the core's mirror — one collaborator, one surface. The
 // project and task surfaces are what every adapter carries; the capture,
-// timestamp, locking, activity and setup surfaces are genuinely optional and
-// are optional methods, so a caller checks presence rather than a capability
-// string or a null-gated port slot. Designed for the core, never the provider's
-// API.
+// timestamp, locking and setup surfaces are genuinely optional and are optional
+// methods, so a caller checks presence rather than a capability string or a
+// null-gated port slot. Designed for the core, never the provider's API.
 export interface MirrorPort {
   readProject(target: string): Promise<CanonicalProject | null>;
   createProject(target: string, name: string): Promise<CanonicalProject>;
@@ -48,13 +46,6 @@ export interface MirrorPort {
   // these methods.
   lockTask?(handle: string): Promise<void>;
   unlockTask?(handle: string): Promise<void>;
-
-  // The core's need: notice that new work appeared on a frozen project's
-  // mirror. An adapter without the surface omits this method.
-  latestActivity?(
-    target: string,
-    etag?: string,
-  ): Promise<ProjectActivityObservation>;
 
   // The core's need: before a connection can mirror, its project must be
   // resolved — the projects the target carries, one created or adopted with the
