@@ -59,6 +59,19 @@ function task(handle: string): CanonicalTask {
   });
 }
 
+function subtask(handle: string, parent: string): CanonicalTask {
+  return new CanonicalTask({
+    handle,
+    entityId: handle,
+    title: handle,
+    body: '',
+    status: '',
+    completed: false,
+    parent,
+    labels: [],
+  });
+}
+
 function labelledTask(
   handle: string,
   title: string,
@@ -122,8 +135,15 @@ function harness(
   };
 }
 
-describe('CaptureTasksAction — adopting tracked tasks', () => {
-  it('adopts a mirror-born task exactly once', async () => {
+function noteAt(
+  vault: FakeVault,
+  slug: string,
+): { path: string; content: string } {
+  return vault.created.find((note) => note.path.endsWith(`/${slug}.md`))!;
+}
+
+describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
+  it('adopts a mirror-born task exactly once (CAP-2)', async () => {
     const h = harness([task('A')]);
 
     const first = await h.action.invoke('Acme', SYNCED_AT);
@@ -136,7 +156,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     ]);
   });
 
-  it('adopts a task ordered before a previously adopted one', async () => {
+  it('adopts a task ordered before a previously adopted one (CAP-2)', async () => {
     const h = harness([task('A')]);
     await h.action.invoke('Acme', SYNCED_AT);
     h.listing.tasks = [task('N'), task('A')];
@@ -150,7 +170,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     ]);
   });
 
-  it('skips a task the vault already declares', async () => {
+  it('skips a task the vault already declares (CAP-2)', async () => {
     const h = harness([task('A')]);
     h.syncState.seed(
       entityRecord({
@@ -166,7 +186,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     expect(h.vault.created).toEqual([]);
   });
 
-  it('does not lose the remaining tasks when one adoption fails', async () => {
+  it('does not lose the remaining tasks when one adoption fails (CAP-2)', async () => {
     const h = harness([task('A'), task('B'), task('C')]);
     h.vault.failOn = 'b';
 
@@ -184,7 +204,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     ]);
   });
 
-  it('skips a connection whose adapter declares no capture', async () => {
+  it('skips a connection whose adapter declares no capture (CAP-2)', async () => {
     const vault = new FakeVault([connection('acme', 'T1', 'acme')]);
     const syncState = new FakeSyncState();
     const factory: MirrorAdapterFactoryPort = {
@@ -205,7 +225,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     expect(vault.created).toEqual([]);
   });
 
-  it('captures each connection independently', async () => {
+  it('captures each connection independently (CAP-2)', async () => {
     const vault = new FakeVault([
       connection('acme', 'T1', 'acme'),
       connection('other', 'T2', 'other'),
@@ -234,7 +254,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     ]);
   });
 
-  it('isolates a connection whose listing fails and captures the rest', async () => {
+  it('isolates a connection whose listing fails and captures the rest (CAP-2)', async () => {
     const vault = new FakeVault([
       connection('acme', 'T1', 'acme'),
       connection('other', 'T2', 'other'),
@@ -268,7 +288,34 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     ]);
   });
 
-  it('adopts the note shape the adapter gate dictates (LBL-8)', async () => {
+  it('captures an unlabelled root task-manager task as a type:slice note (CAP-2, LBL-7)', async () => {
+    const h = harness([task('A')], [connection('todoist', 'T1', 'td')]);
+
+    await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(noteAt(h.vault, 'a').content).toContain('labels: [type:slice]');
+  });
+
+  it('captures an unlabelled subtask as a type:task note (CAP-2, LBL-7)', async () => {
+    const h = harness([subtask('B', 'A')], [connection('todoist', 'T1', 'td')]);
+
+    await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(noteAt(h.vault, 'b').content).toContain('labels: [type:task]');
+  });
+
+  it('keeps an explicit type label on a captured task-manager task (CAP-2, LBL-7)', async () => {
+    const h = harness(
+      [labelledTask('C', 'C', ['type:bug'])],
+      [connection('todoist', 'T1', 'td')],
+    );
+
+    await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(noteAt(h.vault, 'c').content).toContain('labels: [type:bug]');
+  });
+
+  it('writes the note shape each capture gate dictates: the code host by label, the task manager typed by position (LBL-8)', async () => {
     const vault = new FakeVault([
       connection('github', 'R1', 'gh'),
       connection('todoist', 'P1', 'td'),
@@ -293,15 +340,11 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
 
     await action.invoke('Acme', SYNCED_AT);
 
-    const issueNote = vault.created.find((note) =>
-      note.path.endsWith('/issue-task.md'),
-    )!;
-    const remoteNote = vault.created.find((note) =>
-      note.path.endsWith('/remote-task.md'),
-    )!;
+    const issueNote = noteAt(vault, 'issue-task');
+    const remoteNote = noteAt(vault, 'remote-task');
     expect(issueNote.content).toContain('labels: [type:task]');
     expect(issueNote.content).not.toMatch(/^type:/m);
-    expect(remoteNote.content).toContain('labels: []');
+    expect(remoteNote.content).toContain('labels: [type:slice]');
     expect(remoteNote.content).not.toMatch(/^type:/m);
   });
 });
