@@ -44,6 +44,12 @@ function note(fields: readonly string[]): string {
   return ['---', ...fields, '---', 'Body line.'].join('\n');
 }
 
+function frontmatterLines(content: string): string[] {
+  const lines = content.split('\n');
+  const closing = lines.indexOf('---', 1);
+  return lines.slice(1, closing === -1 ? lines.length : closing);
+}
+
 describe('MIG-1 — the legacy type scalar becomes a type label', () => {
   it('gains type:X in labels and loses the type scalar when the note has no labels', async () => {
     const h = harness({ [home]: note(['type: task']) });
@@ -65,6 +71,21 @@ describe('MIG-1 — the legacy type scalar becomes a type label', () => {
       'priority:high',
       'type:bug',
     ]);
+  });
+
+  it('migrates a block-form labels sequence without leaving a dangling item', async () => {
+    const h = harness({
+      [home]: note(['type: bug', 'labels:', '  - priority:high']),
+    });
+
+    await h.action.execute({ projectName: 'Acme Widgets' });
+
+    const migrated = h.vault.notes.get(home) ?? '';
+    expect(labelsFromNote(migrated)).toEqual(['priority:high', 'type:bug']);
+    expect(splitFrontmatter(migrated)?.fields.has('type')).toBe(false);
+    expect(
+      frontmatterLines(migrated).some((line) => /^\s*-\s/.test(line)),
+    ).toBe(false);
   });
 
   it('keeps an existing type label without duplicating it and drops the scalar', async () => {
