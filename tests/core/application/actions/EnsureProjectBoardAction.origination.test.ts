@@ -111,6 +111,7 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -142,6 +143,7 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
     await h.action.execute({
       projectName: 'widgets',
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -161,11 +163,13 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -185,6 +189,7 @@ describe('I14 — a project that already has an addressing is left alone', () =>
     await h.action.execute({
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 

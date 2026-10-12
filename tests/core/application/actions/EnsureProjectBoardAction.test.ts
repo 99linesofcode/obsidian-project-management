@@ -108,6 +108,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     await h.action.execute({
       projectName,
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -143,6 +144,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     await h.action.execute({
       projectName,
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -176,6 +178,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     await h.action.execute({
       projectName,
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -202,6 +205,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     await h.action.execute({
       projectName,
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -220,7 +224,12 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     });
 
     await expect(
-      h.action.execute({ projectName, connectionSlug: SLUG, setup: h.setup }),
+      h.action.execute({
+        projectName,
+        connectionSlug: SLUG,
+        target: repoUrl,
+        setup: h.setup,
+      }),
     ).rejects.toThrow(/several boards/);
 
     expect(h.setup.createCalls).toEqual([]);
@@ -238,6 +247,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     await h.action.execute({
       projectName,
       connectionSlug: SLUG,
+      target: repoUrl,
       setup: h.setup,
     });
 
@@ -254,6 +264,7 @@ describe('PRJ-1 — the board is derived from the repository', () => {
     await h.action.execute({
       projectName,
       connectionSlug: SLUG,
+      target: '',
       setup: h.setup,
     });
 

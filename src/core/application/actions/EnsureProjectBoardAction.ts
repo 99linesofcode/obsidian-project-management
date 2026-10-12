@@ -8,6 +8,7 @@ import type { ResolveProjectBoardAction } from './ResolveProjectBoardAction.js';
 export interface EnsureProjectBoardInput {
   projectName: string;
   connectionSlug: string;
+  target: string;
   setup: ProjectSetupSurface;
 }
 
@@ -19,7 +20,7 @@ export class EnsureProjectBoardAction {
   ) {}
 
   async execute(input: EnsureProjectBoardInput): Promise<void> {
-    const { setup } = input;
+    const { setup, target } = input;
     const identity = await this.syncState.getIdentity(
       input.projectName,
       input.connectionSlug,
@@ -28,7 +29,6 @@ export class EnsureProjectBoardAction {
       return;
     }
 
-    const target = identity?.target ?? '';
     if (target === '') {
       return;
     }

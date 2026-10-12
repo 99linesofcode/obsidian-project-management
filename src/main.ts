@@ -13,7 +13,6 @@ import { ProjectManagementSettingTab } from './ui/settings/ProjectManagementSett
 import { SeedVaultArtifactsAction } from './core/application/actions/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './ui/sync/SyncScheduler.js';
 import { SyncQueue } from './ui/sync/SyncQueue.js';
-import { AttachProjectAction } from './core/application/actions/AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
 import type { ProjectSetupSurface } from './core/port/MirrorPort.js';
 import type { RegistryPort } from './core/port/RegistryPort.js';
@@ -24,7 +23,6 @@ import { CaptureTasksAction } from './core/application/actions/capture-tasks/Cap
 import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
-import { DiscoverProjectsAction } from './core/application/actions/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
 import { ResolveProjectBoardAction } from './core/application/actions/ResolveProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
@@ -182,8 +180,6 @@ function composePlugin(
   secrets: SecretStore,
 ): {
   scheduler: SyncScheduler;
-  discoverProjects: DiscoverProjectsAction;
-  projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
   tokenSettings: readonly TokenSettingRow[];
 } {
@@ -258,11 +254,6 @@ function composePlugin(
     plugin.settings.doneOptionName,
   );
   const resolveProjectBoard = new ResolveProjectBoardAction();
-  const discoverProjects = new DiscoverProjectsAction(
-    vault,
-    setupFactory,
-    new AttachProjectAction(resolveProjectBoard),
-  );
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -327,8 +318,6 @@ function composePlugin(
 
   return {
     scheduler,
-    discoverProjects,
-    projectCapture: core.projectCapture,
     seedArtifacts,
     tokenSettings,
   };
@@ -337,7 +326,6 @@ function composePlugin(
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
   secrets!: SecretStore;
-  projectNames: string[] = [];
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
   tokenSettings!: readonly TokenSettingRow[];
@@ -364,56 +352,17 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const {
-      scheduler,
-      discoverProjects,
-      projectCapture,
-      seedArtifacts,
-      tokenSettings,
-    } = composePlugin(this, syncState, this.secrets);
+    const { scheduler, seedArtifacts, tokenSettings } = composePlugin(
+      this,
+      syncState,
+      this.secrets,
+    );
     this.seedArtifacts = seedArtifacts;
     this.tokenSettings = tokenSettings;
     await seedArtifacts.execute();
     this.addChild(scheduler);
 
-    this.app.workspace.onLayoutReady(() => {
-      void this.discoverAndSync(discoverProjects, syncState, projectCapture);
-    });
-
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
-  }
-
-  private async discoverAndSync(
-    discoverProjects: DiscoverProjectsAction,
-    syncState: RegistryPort,
-    projectCapture: () => Promise<CaptureProjectsResult>,
-  ): Promise<void> {
-    try {
-      const { projects, errors } = await discoverProjects.execute();
-      for (const project of projects) {
-        await syncState.setIdentity(
-          project.projectName,
-          project.connectionSlug,
-          project.identity,
-        );
-      }
-      this.projectNames = projects.map((project) => project.projectName);
-      if (errors.length > 0) {
-        new Notice(
-          `Project discovery: ${errors.length} project(s) could not be attached`,
-        );
-      }
-      const capture = await projectCapture();
-      if (capture.errors.length > 0) {
-        new Notice(
-          `Project capture: ${capture.errors.length} board(s) could not be captured`,
-        );
-      }
-    } catch (error) {
-      new Notice(
-        `Project discovery failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   async saveSettings(): Promise<void> {

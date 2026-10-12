@@ -125,6 +125,7 @@ export class SyncProjectAction {
         ensureBoard.execute({
           projectName: project,
           connectionSlug: connection.slug,
+          target: connection.target,
           setup,
         }),
       );
