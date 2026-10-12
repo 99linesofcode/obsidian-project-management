@@ -1,7 +1,7 @@
 import { freePath } from '../../../domain/freePath.js';
 import { TaskNoteMapper } from './TaskNoteMapper.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
-import type { TrackedEntityPort } from '../../../port/TrackedEntityPort.js';
+import type { RegistryPort } from '../../../port/RegistryPort.js';
 import { readTemplate } from '../readTemplate.js';
 
 export interface CreateTaskNoteInput {
@@ -19,7 +19,7 @@ export interface CreateTaskNoteInput {
 export class CreateTaskNoteAction {
   constructor(
     private readonly vault: VaultPort,
-    private readonly syncState: TrackedEntityPort,
+    private readonly syncState: RegistryPort,
     private readonly taskTemplatePath: string,
   ) {}
 

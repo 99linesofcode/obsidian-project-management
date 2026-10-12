@@ -24,14 +24,10 @@ import { AdapterRegistration } from '../../../../src/core/application/data/Adapt
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { MirrorProjectPort } from '../../../../src/core/port/MirrorProjectPort.js';
-import type { TrackedEntityPort } from '../../../../src/core/port/TrackedEntityPort.js';
-import type { EntityRecord } from '../../../../src/core/application/data/EntityRecord.js';
-import type { MirrorItem } from '../../../../src/core/application/data/MirrorItem.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
-import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
+import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
 import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 
@@ -144,82 +140,16 @@ class FakeFileManager {
   }
 }
 
-class FakeRegistry implements TrackedEntityPort {
-  records: EntityRecord[] = [];
-
-  async getEntity(id: string): Promise<EntityRecord | null> {
-    return this.records.find((record) => record.id === id) ?? null;
-  }
-
-  async findByNotePath(notePath: string): Promise<EntityRecord | null> {
-    return this.records.find((record) => record.notePath === notePath) ?? null;
-  }
-
-  async setEntity(record: EntityRecord): Promise<void> {
-    this.records = this.records.map((candidate) =>
-      candidate.id === record.id ? record : candidate,
-    );
-  }
-
-  async removeEntity(id: string): Promise<void> {
-    this.records = this.records.filter((record) => record.id !== id);
-  }
-
-  async listEntities(): Promise<EntityRecord[]> {
-    return this.records;
-  }
-
-  async findMirrorItem(): Promise<MirrorItem | null> {
-    return null;
-  }
-
-  async findMirrorItemByEntity(): Promise<{
-    handle: string;
-    item: MirrorItem;
-  } | null> {
-    return null;
-  }
-
-  async setMirrorItem(): Promise<void> {}
-
-  async removeMirrorItem(): Promise<void> {}
-
-  async listMirrorItems(): Promise<
-    Array<{ handle: string; item: MirrorItem }>
-  > {
-    return [];
-  }
-}
-
 function memoryStorage() {
   let data: Record<string, unknown> = {};
   return {
-    storage: {
-      async load() {
-        return data;
-      },
-      async save(next: unknown) {
-        data = next as Record<string, unknown>;
-      },
+    async load() {
+      return data;
+    },
+    async save(next: unknown) {
+      data = next as Record<string, unknown>;
     },
   };
-}
-
-class FakeMirrorProjects implements MirrorProjectPort {
-  readonly recorded = new Map<string, string>();
-
-  async resolve(project: string, connection: string): Promise<string | null> {
-    return this.recorded.get(`${project}\u0000${connection}`) ?? null;
-  }
-
-  async record(
-    project: string,
-    connection: string,
-    _application: string,
-    handle: string,
-  ): Promise<void> {
-    this.recorded.set(`${project}\u0000${connection}`, handle);
-  }
 }
 
 interface SetupOptions {
@@ -229,13 +159,13 @@ interface SetupOptions {
   homePath?: string;
 }
 
-function setup(options: SetupOptions) {
+async function setup(options: SetupOptions) {
   const appVault = new FakeAppVault();
   const homePath =
     options.homePath ?? (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
   appVault.seed(homePath, HOME, MTIME);
-  const registry = new FakeRegistry();
-  registry.records = [{ id: 'e1', notePath: TASK_PATH }];
+  const registry = new SyncStateAdapter(memoryStorage());
+  await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
 
   const app = {
     vault: appVault,
@@ -254,26 +184,21 @@ function setup(options: SetupOptions) {
   ]).adapters.get('conformance')!;
   const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
 
-  const { storage } = memoryStorage();
-  const baselines = new CoreBaselineStoreAdapter(storage);
-  const mirrorProjects = new FakeMirrorProjects();
   const action = new AssembleProjectLifecyclePassAction(
     vault,
     registry,
-    baselines,
     mirrorAdapters,
-    mirrorProjects,
   );
 
-  return { vault: appVault, registry, mirror, baselines, mirrorProjects, action };
+  return { vault: appVault, registry, mirror, action };
 }
 
 async function seedBaseline(
-  baselines: CoreBaselineStoreAdapter,
+  registry: SyncStateAdapter,
   side: string,
   archived: boolean,
 ): Promise<void> {
-  await baselines.write(
+  await registry.writeBaseline(
     PROJECT,
     'lifecycle',
     side,
@@ -282,29 +207,29 @@ async function seedBaseline(
 }
 
 async function seedBaselines(
-  baselines: CoreBaselineStoreAdapter,
+  registry: SyncStateAdapter,
   archived: boolean,
 ): Promise<void> {
   for (const side of ['origin', 'mirror:a', 'mirror:b']) {
-    await seedBaseline(baselines, side, archived);
+    await seedBaseline(registry, side, archived);
   }
 }
 
 describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', () => {
   it('freezes the vault and the other mirrors when a mirror starts the archive', async () => {
-    const { vault, registry, mirror, baselines, action } = setup({
+    const { vault, registry, mirror, action } = await setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
     });
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     const record = await action.invoke(PROJECT);
 
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
     expect(vault.has(ACTIVE_HOME)).toBe(false);
-    expect(registry.records[0]?.notePath).toBe(
+    expect((await registry.getEntity('e1'))?.notePath).toBe(
       'Archief/Acme/taken/fix-the-bug.md',
     );
     expect(mirror.currentProject('board-a')?.archived).toBe(true);
@@ -312,12 +237,12 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('freezes the mirrors when the vault starts the archive', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: true,
       mirrorA: false,
       mirrorB: false,
     });
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     const record = await action.invoke(PROJECT);
 
@@ -328,12 +253,12 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('unfreezes the vault and the mirrors when a mirror starts the unfreeze', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: true,
       mirrorA: false,
       mirrorB: true,
     });
-    await seedBaselines(baselines, true);
+    await seedBaselines(registry, true);
 
     const record = await action.invoke(PROJECT);
 
@@ -345,28 +270,28 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('advances every side baseline after the freeze settles (NWM-17)', async () => {
-    const { baselines, action } = setup({
+    const { registry, action } = await setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
     });
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     await action.invoke(PROJECT);
 
     for (const side of ['origin', 'mirror:a', 'mirror:b']) {
-      const baseline = await baselines.read(PROJECT, 'lifecycle', side);
+      const baseline = await registry.readBaseline(PROJECT, 'lifecycle', side);
       expect(baseline?.value).toBe('true');
     }
   });
 
   it('writes nothing on a second pass once the freeze has settled (NWM-24)', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
     });
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
     await action.invoke(PROJECT);
 
     const second = await action.invoke(PROJECT);
@@ -378,13 +303,13 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('does not freeze a project whose active home note has a legacy name', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: false,
       mirrorB: false,
       homePath: 'Projecten/Acme/home.md',
     });
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     const record = await action.invoke(PROJECT);
 
@@ -395,14 +320,14 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('lets a mirror with a decisive timestamp win the archived fact (NWM-6)', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
     });
-    await seedBaseline(baselines, 'origin', false);
-    await seedBaseline(baselines, 'mirror:a', false);
-    await seedBaseline(baselines, 'mirror:b', true);
+    await seedBaseline(registry, 'origin', false);
+    await seedBaseline(registry, 'mirror:a', false);
+    await seedBaseline(registry, 'mirror:b', true);
     mirror.setProjectTime('board-a', '2026-10-08T11:00:00Z');
     mirror.setProjectTime('board-b', '2026-10-08T09:00:00Z');
 
@@ -414,33 +339,37 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('onboards a mirror whose project read returns null, then skips observing it', async () => {
-    const { mirror, mirrorProjects, baselines, action } = setup({
+    const { mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
     });
     mirror.seedMissingProject('board-b');
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     const record = await action.invoke(PROJECT);
 
     expect(mirror.createCalls).toEqual(['board-b']);
-    expect(await mirrorProjects.resolve(PROJECT, 'b')).toBe('board-b');
+    expect(await registry.resolveMirrorProject(PROJECT, 'b')).toBe('board-b');
     expect(record.frozen).toBe(true);
     expect(record.advanced).not.toContain('mirror:b');
     expect(mirror.currentProject('board-b')?.archived).toBe(false);
-    const baseline = await baselines.read(PROJECT, 'lifecycle', 'mirror:b');
+    const baseline = await registry.readBaseline(
+      PROJECT,
+      'lifecycle',
+      'mirror:b',
+    );
     expect(baseline?.value).toBe('false');
   });
 
   it('skips a connection whose project read throws and still reconciles the rest', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: true,
       mirrorA: true,
       mirrorB: false,
     });
     mirror.seedThrowingProject('board-a');
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     const record = await action.invoke(PROJECT);
 
@@ -452,14 +381,14 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('resolves two disagreeing mirrors to the vault tie-break without a decisive timestamp (NWM-12)', async () => {
-    const { vault, mirror, baselines, action } = setup({
+    const { vault, mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: true,
       mirrorB: false,
     });
-    await seedBaseline(baselines, 'origin', false);
-    await seedBaseline(baselines, 'mirror:a', false);
-    await seedBaseline(baselines, 'mirror:b', true);
+    await seedBaseline(registry, 'origin', false);
+    await seedBaseline(registry, 'mirror:a', false);
+    await seedBaseline(registry, 'mirror:b', true);
 
     const record = await action.invoke(PROJECT);
 
@@ -472,7 +401,7 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   it('onboards a connection with no mirror project and syncs it in the same pass', async () => {
     const appVault = new FakeAppVault();
     appVault.seed(ARCHIVED_HOME, ONBOARD_HOME, MTIME);
-    const registry = new FakeRegistry();
+    const registry = new SyncStateAdapter(memoryStorage());
     const app = {
       vault: appVault,
       fileManager: new FakeFileManager(appVault),
@@ -489,33 +418,29 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     const mirrorAdapters: MirrorAdapterFactoryPort = {
       create: () => registered,
     };
-    const { storage } = memoryStorage();
-    const mirrorProjects = new FakeMirrorProjects();
     const action = new AssembleProjectLifecyclePassAction(
       vault,
       registry,
-      new CoreBaselineStoreAdapter(storage),
       mirrorAdapters,
-      mirrorProjects,
     );
 
     const record = await action.invoke(PROJECT);
 
     expect(mirror.createCalls).toEqual(['board-new']);
-    expect(await mirrorProjects.resolve(PROJECT, 'a')).toBe('board-new');
+    expect(await registry.resolveMirrorProject(PROJECT, 'a')).toBe('board-new');
     expect(record.frozen).toBe(true);
     expect(mirror.currentProject('board-new')?.archived).toBe(true);
   });
 
   it('resolves a recorded mirror project without creating it again', async () => {
-    const { mirror, mirrorProjects, baselines, action } = setup({
+    const { mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: false,
       mirrorB: false,
     });
-    mirrorProjects.recorded.set(`${PROJECT}\u0000a`, 'board-a');
-    mirrorProjects.recorded.set(`${PROJECT}\u0000b`, 'board-b');
-    await seedBaselines(baselines, false);
+    await registry.recordMirrorProject(PROJECT, 'a', 'conformance', 'board-a');
+    await registry.recordMirrorProject(PROJECT, 'b', 'conformance', 'board-b');
+    await seedBaselines(registry, false);
 
     await action.invoke(PROJECT);
 
@@ -523,13 +448,13 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('renames a mirror project whose name drifted from the vault project (NWM-31)', async () => {
-    const { mirror, baselines, action } = setup({
+    const { mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: false,
       mirrorB: false,
     });
     mirror.seedProjectName('board-a', 'Old Name');
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     await action.invoke(PROJECT);
 
@@ -537,13 +462,13 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('renames a mirror project whose name drifts after adoption (NWM-31)', async () => {
-    const { mirror, baselines, action } = setup({
+    const { mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: false,
       mirrorB: false,
     });
     mirror.seedProjectName('board-a', PROJECT);
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
     await action.invoke(PROJECT);
 
     mirror.seedProjectName('board-a', 'Drifted Name');
@@ -553,13 +478,13 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('leaves a mirror project whose name already matches the vault project (NWM-31)', async () => {
-    const { mirror, baselines, action } = setup({
+    const { mirror, registry, action } = await setup({
       vaultArchived: false,
       mirrorA: false,
       mirrorB: false,
     });
     mirror.seedProjectName('board-a', PROJECT);
-    await seedBaselines(baselines, false);
+    await seedBaselines(registry, false);
 
     await action.invoke(PROJECT);
 

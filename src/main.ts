@@ -16,7 +16,7 @@ import { SyncQueue } from './ui/sync/SyncQueue.js';
 import { AttachProjectAction } from './core/application/actions/AttachProjectAction.js';
 import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
 import type { ProjectSetupPort } from './core/port/ProjectSetupPort.js';
-import type { IdentityStorePort } from './core/port/IdentityStorePort.js';
+import type { RegistryPort } from './core/port/RegistryPort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
@@ -47,12 +47,6 @@ import type { AdapterDescriptor } from './core/application/data/AdapterDescripto
 import type { RegisteredAdapter } from './core/application/data/RegisteredAdapter.js';
 import type { MirrorPort } from './core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
-import {
-  CoreBaselineStoreAdapter,
-  type CoreBaselineStorage,
-} from './infrastructure/registry/CoreBaselineStoreAdapter.js';
-import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
-import { RegistryMirrorProjectAdapter } from './infrastructure/registry/RegistryMirrorProjectAdapter.js';
 import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
 import type { ProjectIdentityDataTransferObject } from './core/application/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
@@ -61,7 +55,10 @@ import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMi
 import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { ReactivateFrozenProjectAction } from './core/application/actions/ReactivateFrozenProjectAction.js';
-import { CoreProjectWatchAdapter } from './infrastructure/registry/CoreProjectWatchAdapter.js';
+import {
+  CoreProjectWatchAdapter,
+  type CoreWatchStorage,
+} from './infrastructure/registry/CoreProjectWatchAdapter.js';
 import type { CoreReconcilers } from './core/application/services/CoreReconcilers.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
@@ -124,35 +121,29 @@ function composeCoreReconcilers(
   plugin: ProjectManagementPlugin,
   vault: VaultAdapter,
   syncState: SyncStateAdapter,
-  baselineStorage: CoreBaselineStorage,
+  baselineStorage: CoreWatchStorage,
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
-  const baselines = new CoreBaselineStoreAdapter(baselineStorage);
-
-  const handles = new RegistryMirrorHandleAdapter(syncState);
   const taskFieldPass = new AssembleProjectPassAction(
     vault,
-    baselines,
-    handles,
+    syncState,
     mirrorAdapters,
   );
   const lifecyclePass = new AssembleProjectLifecyclePassAction(
     vault,
     syncState,
-    baselines,
     mirrorAdapters,
-    new RegistryMirrorProjectAdapter(syncState),
   );
   const taskLocks = new ReconcileProjectTaskLocksAction(
     vault,
-    handles,
+    syncState,
     mirrorAdapters,
     plugin.settings.doneOptionName,
   );
   const reactivation = new ReactivateFrozenProjectAction(
     vault,
-    baselines,
+    syncState,
     mirrorAdapters,
     new CoreProjectWatchAdapter(baselineStorage),
   );
@@ -211,7 +202,7 @@ interface Provider {
 }
 
 function mirrorAdapterFactory(
-  syncState: IdentityStorePort,
+  syncState: RegistryPort,
   providers: readonly Provider[],
 ): MirrorAdapterFactoryPort {
   const captureSources = buildCaptureSources(providers);
@@ -289,7 +280,7 @@ function composePlugin(
   plugin: ProjectManagementPlugin,
   syncState: SyncStateAdapter,
   secrets: SecretStore,
-  baselineStorage: CoreBaselineStorage,
+  baselineStorage: CoreWatchStorage,
 ): {
   scheduler: SyncScheduler;
   discoverProjects: DiscoverProjectsAction;
@@ -468,7 +459,7 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const baselineStorage: CoreBaselineStorage = {
+    const baselineStorage: CoreWatchStorage = {
       load: () =>
         loadDataSafely(
           () => this.loadData(),
@@ -501,7 +492,7 @@ export default class ProjectManagementPlugin extends Plugin {
 
   private async discoverAndSync(
     discoverProjects: DiscoverProjectsAction,
-    syncState: IdentityStorePort,
+    syncState: RegistryPort,
     projectCapture: () => Promise<CaptureProjectsResult>,
   ): Promise<void> {
     try {

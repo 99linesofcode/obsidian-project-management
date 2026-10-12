@@ -1,7 +1,7 @@
 import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
-import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { ProjectActivityPort } from '../../port/ProjectActivityPort.js';
+import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectWatchPort } from '../../port/ProjectWatchPort.js';
 
@@ -11,7 +11,7 @@ const LIFECYCLE_FIELD = 'lifecycle';
 export class ReactivateFrozenProjectAction {
   constructor(
     private readonly vault: VaultPort,
-    private readonly baselines: BaselineStorePort,
+    private readonly registry: RegistryPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly watches: ProjectWatchPort,
   ) {}
@@ -42,7 +42,7 @@ export class ReactivateFrozenProjectAction {
   }
 
   private async wasFrozen(project: string): Promise<boolean> {
-    const baseline = await this.baselines.read(
+    const baseline = await this.registry.readBaseline(
       project,
       LIFECYCLE_FIELD,
       ORIGIN_SIDE,

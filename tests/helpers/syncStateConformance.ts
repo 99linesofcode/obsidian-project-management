@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
-import type { ConnectionStatePort } from '../../src/core/port/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../src/core/port/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../src/core/port/TrackedEntityPort.js';
+import type { RegistryPort } from '../../src/core/port/RegistryPort.js';
 
 export interface SyncStateConformanceHarness {
-  create(): IdentityStorePort & TrackedEntityPort & ConnectionStatePort;
+  create(): RegistryPort;
 }
 
 const PROJECT_A = 'Project A';

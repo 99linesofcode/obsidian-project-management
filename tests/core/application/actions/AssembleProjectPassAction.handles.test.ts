@@ -1,40 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import type { Baseline } from '../../../../src/core/domain/Baseline.js';
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
-import type { BaselineStorePort } from '../../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 
 const ENTITY = 'Projecten/Acme/taken/fix-the-bug.md';
 
-class MemoryBaselines implements BaselineStorePort {
-  private readonly baselines = new Map<string, Baseline>();
-
-  async read(
-    entityId: string,
-    field: string,
-    side: string,
-  ): Promise<Baseline | null> {
-    return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
-  }
-
-  async write(
-    entityId: string,
-    field: string,
-    side: string,
-    baseline: Baseline,
-  ): Promise<void> {
-    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
-  }
+function memoryStorage() {
+  let data: Record<string, unknown> = {};
+  return {
+    async load() {
+      return data;
+    },
+    async save(next: unknown) {
+      data = next as Record<string, unknown>;
+    },
+  };
 }
 
 class FakeVault extends FakeVaultBase {
@@ -97,29 +86,6 @@ class RecordingFactory implements MirrorAdapterFactoryPort {
   }
 }
 
-class FixedHandles implements MirrorHandlePort {
-  constructor(private readonly handles: ReadonlyMap<string, string>) {}
-
-  async resolve(connection: string, entityId: string): Promise<string | null> {
-    return this.handles.get(`${connection}\u0000${entityId}`) ?? null;
-  }
-
-  async list(
-    _project: string,
-    connection: string,
-  ): Promise<readonly { handle: string; notePath: string }[]> {
-    const prefix = `${connection}\u0000`;
-    return [...this.handles.entries()]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, handle]) => ({
-        handle,
-        notePath: key.slice(prefix.length),
-      }));
-  }
-
-  async record(): Promise<void> {}
-}
-
 function registeredMirror(applicationId: string): {
   adapter: ConformanceMirrorAdapter;
   registered: RegisteredAdapter;
@@ -174,18 +140,15 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
         ['target-b', second.registered],
       ]),
     );
-    const handles = new FixedHandles(
-      new Map([
-        [`gh-main\u0000${ENTITY}`, 'handle-a'],
-        [`gh-second\u0000${ENTITY}`, 'handle-b'],
-      ]),
-    );
-    const action = new AssembleProjectPassAction(
-      vault,
-      new MemoryBaselines(),
-      handles,
-      factory,
-    );
+    const registry = new SyncStateAdapter(memoryStorage());
+    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setMirrorItem('Acme', 'gh-main', 'handle-a', {
+      entityId: ENTITY,
+    });
+    await registry.setMirrorItem('Acme', 'gh-second', 'handle-b', {
+      entityId: ENTITY,
+    });
+    const action = new AssembleProjectPassAction(vault, registry, factory);
 
     const records = await action.invoke('Acme');
     const status = records.find((record) => record.field === 'Status')!;
@@ -213,8 +176,7 @@ describe('AssembleProjectPassAction — entity to per-connection handle (F02 NWM
     );
     const action = new AssembleProjectPassAction(
       vault,
-      new MemoryBaselines(),
-      new FixedHandles(new Map()),
+      new SyncStateAdapter(memoryStorage()),
       factory,
     );
 

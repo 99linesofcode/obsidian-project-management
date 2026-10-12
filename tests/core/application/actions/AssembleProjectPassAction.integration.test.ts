@@ -9,8 +9,6 @@ import { ConnectionDataTransferObject } from '../../../../src/core/application/d
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
-import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
-import { RegistryMirrorHandleAdapter } from '../../../../src/infrastructure/registry/RegistryMirrorHandleAdapter.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
@@ -90,7 +88,10 @@ class FakeNotes extends FakeVaultBase {
     return this.listNotesInFolder(`Projecten/${project}/taken`);
   }
 
-  override async observe(handle: string, field: string): Promise<OriginObservation> {
+  override async observe(
+    handle: string,
+    field: string,
+  ): Promise<OriginObservation> {
     this.observedHandles.push(handle);
     return new OriginObservation({
       current: originValue(field),
@@ -149,7 +150,6 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
     await syncState.setMirrorItem(PROJECT, 'gh-main', HANDLE, {
       entityId: ENTITY_ID,
     });
-    const handles = new RegistryMirrorHandleAdapter(syncState);
 
     const mirror = new ConformanceMirrorAdapter();
     mirror.seed(
@@ -173,8 +173,7 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
 
     const action = new AssembleProjectPassAction(
       notes,
-      new CoreBaselineStoreAdapter(memoryStorage().storage),
-      handles,
+      syncState,
       mirrorAdapters,
     );
 

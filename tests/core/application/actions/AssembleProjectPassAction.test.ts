@@ -24,11 +24,10 @@ import { AdapterRegistration } from '../../../../src/core/application/data/Adapt
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
-import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
+import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 
 const PROJECT = 'Acme';
@@ -154,7 +153,7 @@ function mirrorTask(status: string, body: string): CanonicalTask {
   });
 }
 
-function setup() {
+async function setup() {
   const vault = new FakeVault();
   vault.seed(HOME_PATH, HOME, MTIME);
   vault.seed(TASK_PATH, TASK, MTIME);
@@ -177,32 +176,29 @@ function setup() {
     new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
   ]).adapters.get('conformance')!;
 
-  const handles: MirrorHandlePort = {
-    resolve: async (connection, entityId) =>
-      connection === 'conformance' && entityId === TASK_PATH ? TASK_PATH : null,
-    list: async () => [],
-    record: async () => {},
-  };
   const mirrorAdapters: MirrorAdapterFactoryPort = {
     create: (application): RegisteredAdapter | null =>
       application === 'conformance' ? registered : null,
   };
 
   const { storage, snapshot } = fakeStorage();
-  const baselines = new CoreBaselineStoreAdapter(storage);
+  const registry = new SyncStateAdapter(storage);
+  await registry.setEntity({ id: TASK_PATH, notePath: TASK_PATH });
+  await registry.setMirrorItem(PROJECT, 'conformance', TASK_PATH, {
+    entityId: TASK_PATH,
+  });
   const action = new AssembleProjectPassAction(
     vaultPort,
-    baselines,
-    handles,
+    registry,
     mirrorAdapters,
   );
 
-  return { vault, mirror, baselines, action, snapshot };
+  return { vault, mirror, registry, action, snapshot };
 }
 
 describe('AssembleProjectPassAction — a project pass end to end (F02 NWM-1, NWM-3)', () => {
   it('reconciles every field of the entity across the origin and the mirror', async () => {
-    const { vault, mirror, action } = setup();
+    const { vault, mirror, action } = await setup();
 
     const records = await action.invoke(PROJECT);
     const mergedValue = (field: string) =>
@@ -220,12 +216,16 @@ describe('AssembleProjectPassAction — a project pass end to end (F02 NWM-1, NW
   });
 
   it('persists the advanced baselines and round-trips them', async () => {
-    const { baselines, action, snapshot } = setup();
+    const { registry, action, snapshot } = await setup();
 
     await action.invoke(PROJECT);
 
-    const originStatus = await baselines.read(TASK_PATH, 'Status', 'origin');
-    const mirrorStatus = await baselines.read(
+    const originStatus = await registry.readBaseline(
+      TASK_PATH,
+      'Status',
+      'origin',
+    );
+    const mirrorStatus = await registry.readBaseline(
       TASK_PATH,
       'Status',
       'mirror:conformance',
@@ -237,7 +237,7 @@ describe('AssembleProjectPassAction — a project pass end to end (F02 NWM-1, NW
   });
 
   it('writes nothing on a second pass when nothing changed (NWM-24)', async () => {
-    const { mirror, action } = setup();
+    const { mirror, action } = await setup();
     await action.invoke(PROJECT);
 
     const second = await action.invoke(PROJECT);

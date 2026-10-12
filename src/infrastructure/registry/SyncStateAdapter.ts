@@ -1,12 +1,15 @@
+import { Baseline } from '../../core/domain/Baseline.js';
 import { isRecord } from '../../core/domain/isRecord.js';
 import { projectFromNotePath } from '../../core/domain/projectFromNotePath.js';
 import { ProjectIdentityDataTransferObject } from '../../core/application/data/ProjectIdentityDataTransferObject.js';
 import type { EntityRecord } from '../../core/application/data/EntityRecord.js';
 import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
 import type { PortState } from '../../core/application/data/PortState.js';
-import type { ConnectionStatePort } from '../../core/port/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../core/port/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../core/port/TrackedEntityPort.js';
+import type {
+  BaselineField,
+  RegistryPort,
+} from '../../core/port/RegistryPort.js';
+import { ensureRecord, readPath, stringOrNull } from './coreStorageRecord.js';
 import {
   PROJECT_CURSORS_KEY,
   SYNC_STATE_KEY,
@@ -36,6 +39,8 @@ export interface SyncStateStorage {
 }
 
 const BACKUP_MIN_INTERVAL_MS = 60_000;
+
+const CORE_BASELINES_KEY = 'coreBaselines';
 
 export { SYNC_STATE_KEY } from './syncStateSchema.js';
 
@@ -265,9 +270,7 @@ function relocateItems(
   }
 }
 
-export class SyncStateAdapter
-  implements IdentityStorePort, TrackedEntityPort, ConnectionStatePort
-{
+export class SyncStateAdapter implements RegistryPort {
   private indexes: Indexes | null = null;
   private container: Record<string, unknown> | null = null;
   private chain: Promise<unknown> = Promise.resolve();
@@ -599,6 +602,51 @@ export class SyncStateAdapter
     });
   }
 
+  async resolveMirrorHandle(
+    connection: string,
+    notePath: string,
+  ): Promise<string | null> {
+    const entity = await this.findByNotePath(notePath);
+    if (entity === null) {
+      return null;
+    }
+    const item = await this.findMirrorItemByEntity(connection, entity.id);
+    return item?.handle ?? null;
+  }
+
+  async listMirrorHandles(
+    project: string,
+    connection: string,
+  ): Promise<readonly { handle: string; notePath: string }[]> {
+    const items = await this.listMirrorItems(project, connection);
+    const resolved: Array<{ handle: string; notePath: string }> = [];
+    for (const { handle, item } of items) {
+      const entity = await this.getEntity(item.entityId);
+      if (entity !== null) {
+        resolved.push({ handle, notePath: entity.notePath });
+      }
+    }
+    return resolved;
+  }
+
+  async recordMirrorHandle(
+    project: string,
+    connection: string,
+    notePath: string,
+    handle: string,
+  ): Promise<void> {
+    const entity = await this.findByNotePath(notePath);
+    const entityId = entity?.id ?? crypto.randomUUID();
+    if (entity === null) {
+      await this.setEntity({ id: entityId, notePath });
+    }
+    const existing = await this.findMirrorItemByEntity(connection, entityId);
+    if (existing !== null && existing.handle !== handle) {
+      await this.removeMirrorItem(project, connection, existing.handle);
+    }
+    await this.setMirrorItem(project, connection, handle, { entityId });
+  }
+
   async getPortState(
     projectName: string,
     portId: string,
@@ -704,6 +752,29 @@ export class SyncStateAdapter
     });
   }
 
+  async resolveMirrorProject(
+    project: string,
+    connection: string,
+  ): Promise<string | null> {
+    const state = await this.getPortState(project, connection);
+    return state === null || state.project === '' ? null : state.project;
+  }
+
+  async recordMirrorProject(
+    project: string,
+    connection: string,
+    application: string,
+    handle: string,
+  ): Promise<void> {
+    const state = await this.getPortState(project, connection);
+    await this.setPortState(project, connection, {
+      provider: state?.provider ?? application,
+      project: handle,
+      lastPoll: state?.lastPoll ?? null,
+      lanes: state?.lanes ?? {},
+    });
+  }
+
   async setIdentity(
     projectName: string,
     connectionSlug: string,
@@ -757,6 +828,33 @@ export class SyncStateAdapter
       cursors[portId] = iso;
       await this.persist();
     });
+  }
+
+  async readBaseline(
+    entityId: string,
+    field: BaselineField,
+    side: string,
+  ): Promise<Baseline | null> {
+    const data = await this.storage.load();
+    const entry = readPath(data, [CORE_BASELINES_KEY, entityId, field, side]);
+    if (!isRecord(entry)) {
+      return null;
+    }
+    return new Baseline(stringOrNull(entry.value), entry.completed === true);
+  }
+
+  async writeBaseline(
+    entityId: string,
+    field: BaselineField,
+    side: string,
+    baseline: Baseline,
+  ): Promise<void> {
+    const data = await this.storage.load();
+    const baselines = ensureRecord(data, CORE_BASELINES_KEY);
+    const entity = ensureRecord(baselines, entityId);
+    const fieldNode = ensureRecord(entity, field);
+    fieldNode[side] = { value: baseline.value, completed: baseline.completed };
+    await this.storage.save(data);
   }
 
   private mapIdentity(

@@ -2,7 +2,7 @@ import type { CanonicalTask } from '../../data/CanonicalTask.js';
 import type { ConnectionDataTransferObject } from '../../data/ConnectionDataTransferObject.js';
 import type { CapturePort } from '../../../port/CapturePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../port/MirrorAdapterFactoryPort.js';
-import type { TrackedEntityPort } from '../../../port/TrackedEntityPort.js';
+import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/freePath.js';
 import { typeFromLabels } from '../../../domain/typeFromLabels.js';
@@ -24,13 +24,13 @@ interface AdoptTaskInput {
 
 // The capture-adoption orchestration: for a code-host task it starts
 // `CreateTaskNoteAction`; for a task-manager task it renders the draft note
-// (the pure mapper) and writes it through `VaultPort` + `TrackedEntityPort`.
+// (the pure mapper) and writes it through `VaultPort` + `RegistryPort`.
 // The driven adapters stay raw I/O — no adapter starts a use case.
 export class CaptureTasksAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly factory: MirrorAdapterFactoryPort,
-    private readonly registry: TrackedEntityPort,
+    private readonly registry: RegistryPort,
     private readonly createTaskNote: CreateTaskNoteAction,
     private readonly isCodeHost: (application: string) => boolean,
   ) {}

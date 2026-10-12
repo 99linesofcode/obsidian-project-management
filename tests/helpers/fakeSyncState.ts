@@ -1,11 +1,13 @@
 import type { ProjectIdentityDataTransferObject } from '../../src/core/application/data/ProjectIdentityDataTransferObject.js';
 import { projectFromNotePath } from '../../src/core/domain/projectFromNotePath.js';
+import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/application/data/MirrorItem.js';
 import type { PortState } from '../../src/core/application/data/PortState.js';
-import type { ConnectionStatePort } from '../../src/core/port/ConnectionStatePort.js';
-import type { IdentityStorePort } from '../../src/core/port/IdentityStorePort.js';
-import type { TrackedEntityPort } from '../../src/core/port/TrackedEntityPort.js';
+import type {
+  BaselineField,
+  RegistryPort,
+} from '../../src/core/port/RegistryPort.js';
 
 interface SeededMirror {
   handle: string;
@@ -15,9 +17,7 @@ function portKey(projectName: string, portId: string): string {
   return `${projectName}\u0000${portId}`;
 }
 
-export class FakeSyncState
-  implements IdentityStorePort, TrackedEntityPort, ConnectionStatePort
-{
+export class FakeSyncState implements RegistryPort {
   records = new Map<string, EntityRecord>();
   items = new Map<string, Map<string, MirrorItem>>();
   portStates = new Map<string, PortState>();
@@ -33,6 +33,14 @@ export class FakeSyncState
   identitiesBySlug = new Map<string, ProjectIdentityDataTransferObject>();
   setCalls: EntityRecord[] = [];
   removed: string[] = [];
+  readonly recorded: Array<{
+    project: string;
+    connection: string;
+    notePath: string;
+    handle: string;
+  }> = [];
+  failOnRecord = 0;
+  private recordCount = 0;
   portStateSets: Array<{
     projectName: string;
     portId: string;
@@ -193,6 +201,56 @@ export class FakeSyncState
     return result;
   }
 
+  async resolveMirrorHandle(
+    connection: string,
+    notePath: string,
+  ): Promise<string | null> {
+    const entity = await this.findByNotePath(notePath);
+    if (entity === null) {
+      return null;
+    }
+    const item = await this.findMirrorItemByEntity(connection, entity.id);
+    return item?.handle ?? null;
+  }
+
+  async listMirrorHandles(
+    project: string,
+    connection: string,
+  ): Promise<readonly { handle: string; notePath: string }[]> {
+    const items = await this.listMirrorItems(project, connection);
+    const resolved: Array<{ handle: string; notePath: string }> = [];
+    for (const { handle, item } of items) {
+      const entity = await this.getEntity(item.entityId);
+      if (entity !== null) {
+        resolved.push({ handle, notePath: entity.notePath });
+      }
+    }
+    return resolved;
+  }
+
+  async recordMirrorHandle(
+    project: string,
+    connection: string,
+    notePath: string,
+    handle: string,
+  ): Promise<void> {
+    this.recordCount += 1;
+    if (this.recordCount === this.failOnRecord) {
+      throw new Error('registry write failed');
+    }
+    this.recorded.push({ project, connection, notePath, handle });
+    const entity = await this.findByNotePath(notePath);
+    const entityId = entity?.id ?? crypto.randomUUID();
+    if (entity === null) {
+      await this.setEntity({ id: entityId, notePath });
+    }
+    const existing = await this.findMirrorItemByEntity(connection, entityId);
+    if (existing !== null && existing.handle !== handle) {
+      await this.removeMirrorItem(project, connection, existing.handle);
+    }
+    await this.setMirrorItem(project, connection, handle, { entityId });
+  }
+
   async getPortState(
     projectName: string,
     portId: string,
@@ -269,6 +327,29 @@ export class FakeSyncState
     }
   }
 
+  async resolveMirrorProject(
+    project: string,
+    connection: string,
+  ): Promise<string | null> {
+    const state = await this.getPortState(project, connection);
+    return state === null || state.project === '' ? null : state.project;
+  }
+
+  async recordMirrorProject(
+    project: string,
+    connection: string,
+    application: string,
+    handle: string,
+  ): Promise<void> {
+    const state = await this.getPortState(project, connection);
+    await this.setPortState(project, connection, {
+      provider: state?.provider ?? application,
+      project: handle,
+      lastPoll: state?.lastPoll ?? null,
+      lanes: state?.lanes ?? {},
+    });
+  }
+
   async setIdentity(
     projectName: string,
     connectionSlug: string,
@@ -299,5 +380,24 @@ export class FakeSyncState
   async setProjectCursor(portId: string, iso: string): Promise<void> {
     this.projectCursors.set(portId, iso);
     this.cursorSets.push({ portId, iso });
+  }
+
+  private readonly baselines = new Map<string, Baseline>();
+
+  async readBaseline(
+    entityId: string,
+    field: BaselineField,
+    side: string,
+  ): Promise<Baseline | null> {
+    return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
+  }
+
+  async writeBaseline(
+    entityId: string,
+    field: BaselineField,
+    side: string,
+    baseline: Baseline,
+  ): Promise<void> {
+    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
   }
 }

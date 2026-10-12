@@ -1,44 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import type { Baseline } from '../../../../src/core/domain/Baseline.js';
 import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
-import type { BaselineStorePort } from '../../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { MirrorHandlePort } from '../../../../src/core/port/MirrorHandlePort.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
+import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const PROJECT = 'Acme';
 const ENTITY = 'Projecten/Acme/taken/fix-the-bug.md';
 const TARGET = 'board-1';
 const PENDING = `pendingCreation:${ENTITY}`;
-
-class MemoryBaselines implements BaselineStorePort {
-  private readonly baselines = new Map<string, Baseline>();
-
-  async read(
-    entityId: string,
-    field: string,
-    side: string,
-  ): Promise<Baseline | null> {
-    return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
-  }
-
-  async write(
-    entityId: string,
-    field: string,
-    side: string,
-    baseline: Baseline,
-  ): Promise<void> {
-    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
-  }
-}
 
 class FakeVault extends FakeVaultBase {
   constructor(
@@ -101,53 +78,6 @@ class FakeVault extends FakeVaultBase {
   }
 }
 
-class RecordingHandles implements MirrorHandlePort {
-  readonly recorded: Array<{
-    project: string;
-    connection: string;
-    notePath: string;
-    handle: string;
-  }> = [];
-  failOnRecord = 0;
-  private recordCount = 0;
-  private readonly handles = new Map<string, string>();
-
-  seed(connection: string, notePath: string, handle: string): void {
-    this.handles.set(`${connection}\u0000${notePath}`, handle);
-  }
-
-  async resolve(connection: string, notePath: string): Promise<string | null> {
-    return this.handles.get(`${connection}\u0000${notePath}`) ?? null;
-  }
-
-  async list(
-    _project: string,
-    connection: string,
-  ): Promise<readonly { handle: string; notePath: string }[]> {
-    const prefix = `${connection}\u0000`;
-    return [...this.handles.entries()]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, handle]) => ({
-        handle,
-        notePath: key.slice(prefix.length),
-      }));
-  }
-
-  async record(
-    project: string,
-    connection: string,
-    notePath: string,
-    handle: string,
-  ): Promise<void> {
-    this.recordCount++;
-    if (this.recordCount === this.failOnRecord) {
-      throw new Error('registry write failed');
-    }
-    this.recorded.push({ project, connection, notePath, handle });
-    this.handles.set(`${connection}\u0000${notePath}`, handle);
-  }
-}
-
 function originTask(): CanonicalTask {
   return new CanonicalTask({
     handle: ENTITY,
@@ -192,24 +122,23 @@ function setup(
   const mirrorAdapters: MirrorAdapterFactoryPort = {
     create: () => registered,
   };
-  const handles = new RecordingHandles();
+  const registry = new FakeSyncState();
   const action = new AssembleProjectPassAction(
     new FakeVault(connections, originTask()),
-    new MemoryBaselines(),
-    handles,
+    registry,
     mirrorAdapters,
   );
-  return { mirror, handles, action };
+  return { mirror, registry, action };
 }
 
 describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', () => {
   it('creates a vault task note once and reconciles it in the same pass', async () => {
-    const { mirror, handles, action } = setup();
+    const { mirror, registry, action } = setup();
 
     const first = await action.invoke(PROJECT);
 
     expect(mirror.createTaskCalls).toEqual([ENTITY]);
-    expect(handles.recorded).toEqual([
+    expect(registry.recorded).toEqual([
       {
         project: PROJECT,
         connection: 'gh-main',
@@ -234,7 +163,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
   });
 
   it('skips a connection whose entity already has a mirror item', async () => {
-    const { mirror, handles, action } = setup();
+    const { mirror, registry, action } = setup();
     mirror.seed(
       new CanonicalTask({
         handle: 'issue-1',
@@ -247,7 +176,10 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
         labels: ['alpha', 'beta'],
       }),
     );
-    handles.seed('gh-main', ENTITY, 'issue-1');
+    registry.seed(
+      { id: ENTITY, notePath: ENTITY },
+      { 'gh-main': { handle: 'issue-1' } },
+    );
 
     await action.invoke(PROJECT);
 
@@ -256,8 +188,8 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
   });
 
   it('does not duplicate the created item when recording the handle fails', async () => {
-    const { mirror, handles, action } = setup();
-    handles.failOnRecord = 1;
+    const { mirror, registry, action } = setup();
+    registry.failOnRecord = 1;
 
     await action.invoke(PROJECT);
     await action.invoke(PROJECT);
@@ -266,14 +198,14 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
   });
 
   it('adopts the created item when stamping its handle fails', async () => {
-    const { mirror, handles, action } = setup();
-    handles.failOnRecord = 2;
+    const { mirror, registry, action } = setup();
+    registry.failOnRecord = 2;
 
     await action.invoke(PROJECT);
     await action.invoke(PROJECT);
 
     expect(mirror.createTaskCalls).toEqual([ENTITY]);
-    expect(handles.recorded).toContainEqual({
+    expect(registry.recorded).toContainEqual({
       project: PROJECT,
       connection: 'gh-main',
       notePath: ENTITY,
@@ -285,7 +217,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
     const good = new ConformanceMirrorAdapter();
     const bad = new ConformanceMirrorAdapter();
     bad.seedThrowingTask('board-bad');
-    const handles = new RecordingHandles();
+    const registry = new FakeSyncState();
     const action = new AssembleProjectPassAction(
       new FakeVault(
         [
@@ -294,8 +226,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
         ],
         originTask(),
       ),
-      new MemoryBaselines(),
-      handles,
+      registry,
       {
         create: (application) =>
           application === 'conformance'
@@ -311,7 +242,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
   });
 
   it('materializes on two connections to the same application', async () => {
-    const { mirror, handles, action } = setup([
+    const { mirror, registry, action } = setup([
       connection('gh-one', 'conformance', 'board-1'),
       connection('gh-two', 'conformance', 'board-2'),
     ]);
@@ -319,7 +250,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
     await action.invoke(PROJECT);
 
     expect(mirror.createTaskCalls).toEqual([ENTITY, ENTITY]);
-    expect(handles.recorded).toEqual([
+    expect(registry.recorded).toEqual([
       {
         project: PROJECT,
         connection: 'gh-one',
