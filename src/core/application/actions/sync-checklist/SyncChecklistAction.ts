@@ -2,13 +2,15 @@ import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
 import type { ChecklistItem } from '../../../domain/ChecklistItem.js';
 import { freePath } from '../../../domain/paths.js';
 import {
+  labelsFromSequence,
   slugify,
   splitFrontmatter,
   stemOf,
+  typeFromLabels,
   withBody,
 } from '../../../domain/note.js';
 import { taskLinkFromAffiliation } from '../../../domain/affiliation.js';
-import { ToDoNoteMapper, type ToDoNoteContext } from './ToDoNoteMapper.js';
+import { TaskNoteMapper } from '../create-task-note/TaskNoteMapper.js';
 import {
   ToDoNoteParser,
   withToDoStatus,
@@ -25,7 +27,7 @@ export interface SyncChecklistInput {
 export class SyncChecklistAction {
   constructor(
     private readonly vault: VaultPort,
-    private readonly todoTemplatePath: string,
+    private readonly taskTemplatePath: string,
   ) {}
 
   async execute(input: SyncChecklistInput): Promise<void> {
@@ -37,7 +39,7 @@ export class SyncChecklistAction {
     const body = splitFrontmatter(note.content)?.body ?? note.content;
     const items = parseChecklist(body);
     const taskLink = stemOf(input.notePath);
-    const template = await readTemplate(this.vault, this.todoTemplatePath);
+    const template = await readTemplate(this.vault, this.taskTemplatePath);
 
     const promoted = await this.promoteUnlinked(
       input,
@@ -158,13 +160,10 @@ export class SyncChecklistAction {
     item: ChecklistItem,
     linkPath: string,
   ): Promise<string | null> {
-    if (isInTodosFolder(input.projectName, linkPath)) {
-      return null;
-    }
     const linkStem = stemOf(linkPath);
     const textSlug = slugify(item.text);
     for (const path of await this.vault.listNotesInFolder(
-      todosFolder(input.projectName),
+      takenFolder(input.projectName),
     )) {
       const stem = stemOf(path);
       if (stem === linkStem || stem === textSlug) {
@@ -181,14 +180,19 @@ export class SyncChecklistAction {
     template: string | null,
     taskLink: string,
   ): Promise<string> {
-    const base = isInTodosFolder(input.projectName, candidate)
+    const base = isInTakenFolder(input.projectName, candidate)
       ? candidate
       : todoPath(input.projectName, item.text);
     const path = await freePath(this.vault, base);
-    const note = ToDoNoteMapper.render(
+    const note = TaskNoteMapper.render(
       template,
-      { title: item.text, projectName: input.projectName, taskLink },
-      toDoContext(input.syncedAt, item.checked),
+      { type: 'todo', title: item.text, body: '', createdAt: null },
+      {
+        projectName: input.projectName,
+        syncedAt: input.syncedAt,
+        statusName: item.checked ? 'completed' : 'open',
+        parentLink: taskLink,
+      },
     );
     await this.vault.createNote(path, note.content);
     return path;
@@ -204,14 +208,15 @@ export class SyncChecklistAction {
         .map((item) => item.linkPath)
         .filter((path): path is string => path !== undefined),
     );
-    const folder = todosFolder(input.projectName);
 
-    for (const path of await this.vault.listNotesInFolder(folder)) {
+    for (const path of await this.vault.listNotesInFolder(
+      takenFolder(input.projectName),
+    )) {
       if (linked.has(path)) {
         continue;
       }
       const note = await this.vault.getNoteByPath(path);
-      if (!note) {
+      if (!note || !isToDoNote(note.content)) {
         continue;
       }
       const parsed = ToDoNoteParser.parse(note.content);
@@ -233,20 +238,21 @@ function isDrifted(slug: string, stem: string): boolean {
   return slug !== stem && slug !== stem.replace(/-\d+$/, '');
 }
 
-function todosFolder(projectName: string): string {
-  return `Projecten/${projectName}/todos`;
+function isToDoNote(content: string): boolean {
+  const labels = labelsFromSequence(
+    splitFrontmatter(content)?.fields.get('labels') ?? null,
+  );
+  return typeFromLabels(labels) === 'todo';
 }
 
-function isInTodosFolder(projectName: string, path: string): boolean {
-  return path.startsWith(`${todosFolder(projectName)}/`);
+function takenFolder(projectName: string): string {
+  return `Projecten/${projectName}/taken`;
+}
+
+function isInTakenFolder(projectName: string, path: string): boolean {
+  return path.startsWith(`${takenFolder(projectName)}/`);
 }
 
 function todoPath(projectName: string, title: string): string {
-  return `${todosFolder(projectName)}/${slugify(title)}.md`;
-}
-
-function toDoContext(syncedAt: string, checked: boolean): ToDoNoteContext {
-  return checked
-    ? { syncedAt, statusName: 'completed', completedAt: syncedAt }
-    : { syncedAt, statusName: 'open' };
+  return `${takenFolder(projectName)}/${slugify(title)}.md`;
 }

@@ -1,5 +1,5 @@
 import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
-import { projectFromTodoPath } from '../../domain/paths.js';
+import { projectFromNotePath } from '../../domain/paths.js';
 import { splitFrontmatter, withBody } from '../../domain/note.js';
 import { taskLinkFromAffiliation } from '../../domain/affiliation.js';
 import { ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
@@ -29,8 +29,8 @@ export class MirrorTodoStatusAction {
       return;
     }
 
-    const projectName = projectFromTodoPath(input.todoPath);
-    if (projectName === null) {
+    const projectName = projectFromNotePath(input.todoPath);
+    if (projectName === '') {
       return;
     }
     const taskLink = taskLinkFromAffiliation(parsed.affiliation, projectName);

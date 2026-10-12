@@ -23,16 +23,6 @@ export function projectNameFromPath(path: string): string | null {
   return segments[1] ?? null;
 }
 
-// The project a to-do path belongs to: Projecten/<project>/todos/<file>.md.
-// Returns null for any other path.
-export function projectFromTodoPath(path: string): string | null {
-  const segments = path.split('/');
-  if (segments[0] !== 'Projecten' || segments[2] !== 'todos') {
-    return null;
-  }
-  return segments[1] ?? null;
-}
-
 // The home note's stem: `_<project>`. Shared by the path and the wikilink
 // renderer so the two can never drift.
 export function projectHomeStem(projectName: string): string {

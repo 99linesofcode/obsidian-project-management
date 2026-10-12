@@ -158,7 +158,7 @@ export class SyncProjectAction {
       );
     }
 
-    for (const todoPath of await this.listNotes(project, 'todos')) {
+    for (const todoPath of await this.listNotes(project, 'taken')) {
       await this.step(`mirror ${todoPath}`, () =>
         this.deps.mirrorTodoStatus.execute({ todoPath, syncedAt }),
       );
