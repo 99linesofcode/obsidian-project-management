@@ -55,8 +55,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   `readTask`, `createTask`, `applyField`, `deleteTask`). The genuinely optional
   surfaces are optional
   methods: `capture?`/`captureProjects?`, `fieldTime?`, `fetchComplete?`,
-  `lockTask?`/`unlockTask?`,
-  `latestActivity?` and the project-setup surface (`discoverProjects?`,
+  `lockTask?`/`unlockTask?`
+  and the project-setup surface (`discoverProjects?`,
   `readProjectAddressing?`, `createProjectWithStatus?`, `adoptProject?`,
   `listProjects?`). A caller checks presence (`adapter.lockTask !== undefined`);
   an adapter without a surface omits the method.
@@ -68,20 +68,22 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   The port is raw vault I/O: the task-capture adoption orchestration lives in
   `CaptureTasksAction`.
 - **The supporting ports.** `MirrorAdapterFactoryPort` (the mirror factory),
-  `ProjectSetupFactoryPort` (reach a tool's project-setup surface),
-  `ProjectCaptureCursorPort` and `ProjectWatchPort`.
+  `ProjectSetupFactoryPort` (reach a tool's project-setup surface) and
+  `ProjectCaptureCursorPort`.
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
   identity and port state, and the side baselines. The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
-  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`).
+  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`) and `MergedField`
+  (the canonical fields plus the project-level `archived` fact), so the archive
+  reconciles through the same `mergeField` ladder as the task fields.
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`,
   `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
-  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `PortState`
-  and `ProjectActivityObservation`. The boundary payloads live with the
+  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing` and `PortState`.
+  The boundary payloads live with the
   ports (`core/port/data/`); a merge action's private working shapes stay
   co-located with the action.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
@@ -94,8 +96,7 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   registration result.
 - **The actions.** `MirrorSyncAction` (the whole-project task pass),
   `ProjectLifecycleSyncAction` (the project-level peer), `CaptureProjectsAction`,
-  `CaptureTasksAction`, `ReconcileProjectTaskLocksAction` and
-  `ReactivateFrozenProjectAction`.
+  `CaptureTasksAction` and `ReconcileProjectTaskLocksAction`.
 
 **The driven adapters (`src/infrastructure/`) implement those ports, one
 namespace per application.**
@@ -103,15 +104,14 @@ namespace per application.**
 - **Vault.** `VaultAdapter` (the `VaultPort`), with the pure note codecs
   (`connectionsOf`, `parseConnectionsBlock`, `CapturedTaskNoteMapper`) beside
   it.
-- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the setup,
-  locking and activity surfaces), `CodeHostTarget` and `CodeHostTransport`.
-- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, without the setup,
-  locking and activity methods), `TaskManagerTarget`,
+- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the setup
+  and locking surfaces), `CodeHostTarget` and `CodeHostTransport`.
+- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, without the setup
+  and locking methods), `TaskManagerTarget`,
   `TaskManagerTransport` and `TodoistTransport`.
 - **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
-  and the `coreBaselines` store), `RegistryProjectCursorAdapter`
-  (`ProjectCaptureCursorPort`) and `CoreProjectWatchAdapter`
-  (`ProjectWatchPort`), with the pure codecs (`coreStorageRecord`,
+  and the `coreBaselines` store) and `RegistryProjectCursorAdapter`
+  (`ProjectCaptureCursorPort`), with the pure codecs (`coreStorageRecord`,
   `syncStateSchema`, `loadDataSafely`) beside them.
 - **Conformance.** `ConformanceMirrorAdapter` — an in-memory `MirrorPort` test
   double, used by the core and adapter tests.
@@ -128,7 +128,7 @@ namespace per application.**
   never poisons.
 - **`SyncProjectAction`** — the chain. One work item (a project folder name) and
   one entry point; it drives the vault-maintenance steps and the core actions
-  (`ReactivateFrozenProjectAction`, `ProjectLifecycleSyncAction`,
+  (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`) in
   order, wrapping every step so one failure logs and skips that step.
 - **`main.ts`** — the composition root. `composePlugin` builds the provider
@@ -175,8 +175,8 @@ vault's project notes and enqueues each project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
 item no-ops), then drives every step in order. It migrates a legacy home note,
 re-keys a renamed connection, and ensures a code-host board for each active
-github connection; the core actions reactivate a frozen project with
-newer mirror work, reconcile the lifecycle into one freeze verdict, and
+github connection; the core actions
+reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
 task-field pass, finally sweeping deletions. Every step failure logs and skips
@@ -210,13 +210,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant React as ReactivateFrozenProjectAction
   participant Life as ProjectLifecycleSyncAction
   participant Lock as ReconcileProjectTaskLocksAction
 
   SP->>SP: resolveProject (no-op when missing)
   SP->>SP: migrate / rekey / ensureBoards
-  SP->>React: invoke(project)
   SP->>Life: invoke(project)
   Life-->>SP: { frozen, wasFrozen }
   SP->>Lock: invoke({ project, frozen, wasFrozen })
@@ -372,7 +370,7 @@ through `VaultPort`, runs the same `mergeField` ladder over the
 archived fact, and fans the reconciled freeze out to the origin and every
 capable mirror. Any side can start the freeze or the unfreeze; the reconciled
 freeze is the pass's `frozen` verdict, which gates the task-field pass. Its
-per-side baselines live under the `lifecycle` field in the same baseline store.
+per-side baselines live under the `archived` field in the same baseline store.
 
 ```mermaid
 sequenceDiagram
@@ -486,7 +484,7 @@ sequenceDiagram
   end
 ```
 
-### 2.8 Task locks and reactivation
+### 2.8 Task locks
 
 `ReconcileProjectTaskLocksAction` runs only on a freeze/unfreeze transition
 (`frozen !== wasFrozen`). For each connection whose adapter declares
@@ -494,39 +492,13 @@ sequenceDiagram
 `RegistryPort`, skips the tasks whose vault status is the done lane, and
 locks the rest — or unlocks every tracked task on the unfreeze.
 
-`ReactivateFrozenProjectAction` runs before the lifecycle pass. When the origin
-was already frozen (its `lifecycle` baseline is `true`) and a capable mirror's
-newest item provably postdates the stored watch cursor, it unfreezes the origin,
-so the lifecycle pass fans the unfreeze out to every mirror. The first watch
-adopts the newest item as the cursor; a quiet conditional read writes nothing.
-
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant React as ReactivateFrozenProjectAction
-  participant B as RegistryPort
-  participant R as MirrorPort
-  participant W as ProjectWatchPort
-  participant O as VaultPort
   participant Lock as ReconcileProjectTaskLocksAction
+  participant R as MirrorPort
   participant H as RegistryPort
 
-  SP->>React: reactivate(project)
-  React->>B: readBaseline(project, lifecycle, origin)
-  alt origin baseline frozen
-    loop each connection with project-activity
-      React->>W: read(project, slug)
-      React->>R: activity.latestActivity(target, etag)
-      alt first watch
-        React->>W: write(etag, newest)
-      else newer than the cursor
-        React->>O: applyProjectArchived(project, false)
-        React->>W: write(null, null)
-      else
-        React->>W: write(etag, cursor)
-      end
-    end
-  end
   SP->>Lock: reconcile({ project, frozen, wasFrozen })
   loop each connection with task-locking
     Lock->>H: listMirrorHandles(project, slug)
@@ -554,15 +526,12 @@ is loaded read-only: reads serve it, but every mutating port method throws
 `data.json` is quarantined by `loadDataSafely` before the adapter ever sees it.
 The settings save shares this one chain through `mutateRoot`.
 
-The core's own memory lives in two sibling top-level keys, written through the
-same storage. The baselines are folded into `SyncStateAdapter`; the reactivation
-watch is its own adapter:
+The core's own memory lives in a sibling top-level key, written through the
+same storage. The baselines are folded into `SyncStateAdapter`:
 
-- **`coreBaselines`** (`SyncStateAdapter`) — per entity, per `BaselineField` (a
-  canonical field or `lifecycle`), per side, a `Baseline` (`value`,
+- **`coreBaselines`** (`SyncStateAdapter`) — per entity, per `MergedField` (a
+  canonical field or `archived`), per side, a `Baseline` (`value`,
   `completed`).
-- **`coreWatches`** (`CoreProjectWatchAdapter`) — per project, per connection,
-  the reactivation watch (`etag`, `cursor`).
 
 ```mermaid
 sequenceDiagram
@@ -891,9 +860,9 @@ lane can no longer revert a completion.
   the settings save run on one promise chain, so a load-modify-save can never
   interleave. A container written by a newer plugin version is read-only.
 - **A quiet tick writes nothing.** Setting a project cursor to its current
-  value is a no-op; a lifecycle or task side that already matches is advanced
+  value is a no-op; a merged field or task side that already matches is advanced
   without a remote write.
-- **The `coreBaselines` and `coreWatches` keys are siblings of `syncState`.**
+- **The `coreBaselines` key is a sibling of `syncState`.**
   The core's memory is separate from the registry's, so a write
   on one cannot clobber the other.
 
@@ -930,8 +899,7 @@ layers, and each layer owns one surface of the system.
   (`CompleteTaskCascadeAction`) and the checklist/to-do actions (former `todos/`).
 - The capture and lifecycle actions:
   `src/core/application/actions/CaptureProjectsAction.ts`,
-  `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`,
-  `ReactivateFrozenProjectAction.ts`.
+  `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`.
 - The neutral note arithmetic and the merge vocabulary: `src/core/domain/`
   (`checklist`, `splitFrontmatter`, `withBody`, `ToDoNoteParser`, the
   affiliation helpers, and `mergeField` with its `Delta`/`MergeResult`/

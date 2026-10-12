@@ -9,7 +9,6 @@ import type { CompleteTaskCascadeAction } from '../../../../src/core/application
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import type { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
-import type { ReactivateFrozenProjectAction } from '../../../../src/core/application/actions/ReactivateFrozenProjectAction.js';
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
@@ -165,12 +164,6 @@ function harness(options: HarnessOptions = {}) {
   const frozen =
     options.frozen ?? (vault.projectNotes[0]?.archivedAt ?? null) !== null;
 
-  const reactivation = {
-    invoke: async (project: string) => {
-      events.push(`reactivate:${project}`);
-      return false;
-    },
-  } as unknown as ReactivateFrozenProjectAction;
   const lifecycle = {
     invoke: async () => {
       events.push('lifecycle');
@@ -196,7 +189,6 @@ function harness(options: HarnessOptions = {}) {
   const action = new SyncProjectAction({
     vault,
     setupFactory,
-    reactivation,
     lifecycle,
     taskLocks,
     taskCapture,
@@ -233,7 +225,6 @@ describe('the multi-adapter pass', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
-      'reactivate:Acme Widgets',
       'lifecycle',
       'taskLocks:false:false',
       'renames',
@@ -259,7 +250,6 @@ describe('the multi-adapter pass', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
-      'reactivate:Acme Widgets',
       'lifecycle',
       'taskLocks:false:false',
       'capture:Acme Widgets',
@@ -277,7 +267,6 @@ describe('the multi-adapter pass', () => {
       await h.action.execute('Acme Widgets');
 
       expect(h.events).toEqual([
-        'reactivate:Acme Widgets',
         'lifecycle',
         'taskLocks:true:false',
         'renames',
@@ -292,7 +281,7 @@ describe('the multi-adapter pass', () => {
 
     expect(h.events.slice(0, 2)).toEqual([
       'ensureBoard:Acme Widgets/github',
-      'reactivate:Acme Widgets',
+      'lifecycle',
     ]);
   });
 

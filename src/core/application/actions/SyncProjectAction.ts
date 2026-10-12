@@ -10,7 +10,6 @@ import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteActio
 import type { MirrorSyncAction } from './MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
-import type { ReactivateFrozenProjectAction } from './ReactivateFrozenProjectAction.js';
 import type { ReconcileProjectTaskLocksAction } from './ReconcileProjectTaskLocksAction.js';
 import type { RekeyRenamedConnectionsAction } from './RekeyRenamedConnectionsAction.js';
 import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
@@ -19,7 +18,6 @@ import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.j
 export interface SyncProjectDependencies {
   vault: VaultPort;
   setupFactory: ProjectSetupFactoryPort;
-  reactivation: ReactivateFrozenProjectAction;
   lifecycle: ProjectLifecycleSyncAction;
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
@@ -54,10 +52,6 @@ export class SyncProjectAction {
     await this.migrate(project, note);
     await this.rekey(project, note.connections);
     await this.ensureBoards(project, note);
-
-    await this.step('reactivation', () =>
-      this.deps.reactivation.invoke(project),
-    );
 
     const { frozen, wasFrozen } = await this.reconcileLifecycle(project, note);
 

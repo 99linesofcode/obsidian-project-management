@@ -12,7 +12,7 @@ import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 const ORIGIN_SIDE = 'origin';
-const LIFECYCLE_FIELD = 'lifecycle';
+const ARCHIVED_FIELD = 'archived';
 
 interface ResolvedMirror {
   side: string;
@@ -50,7 +50,7 @@ export class ProjectLifecycleSyncAction {
     const mirrors = await this.scopeMirrors(connections, project);
     const origin = originSideObservation(
       ORIGIN_SIDE,
-      await this.registry.readBaseline(project, LIFECYCLE_FIELD, ORIGIN_SIDE),
+      await this.registry.readBaseline(project, ARCHIVED_FIELD, ORIGIN_SIDE),
       await this.vault.observeProject(project),
     );
     const baselines = await this.readMirrorBaselines(project, mirrors);
@@ -208,7 +208,7 @@ export class ProjectLifecycleSyncAction {
     for (const mirror of mirrors) {
       const baseline = await this.registry.readBaseline(
         project,
-        LIFECYCLE_FIELD,
+        ARCHIVED_FIELD,
         mirror.side,
       );
       if (baseline !== null) {
@@ -226,7 +226,7 @@ export class ProjectLifecycleSyncAction {
     for (const side of advanced) {
       await this.registry.writeBaseline(
         project,
-        LIFECYCLE_FIELD,
+        ARCHIVED_FIELD,
         side,
         new Baseline(result.value, false),
       );

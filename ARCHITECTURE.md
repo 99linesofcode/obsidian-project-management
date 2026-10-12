@@ -123,7 +123,7 @@ name never appears in the core.
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                             | host plugin API              | the vault      |
 | `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                 | host plugin API, `Component` | the vault      |
 | `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), and the neutral note arithmetic                                                                                          | TypeScript                   | in-process     |
-| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter`, plus the baseline/cursor/watch stores), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
+| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter`, plus the baseline/cursor stores), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
 
@@ -141,13 +141,13 @@ its own module; the composition root wires it.
   genuinely optional surfaces are **optional methods**: `capture?`/
   `captureProjects?` (tracked tasks and the application-born projects a source
   enumerates), `fieldTime?` (trustworthy per-field timestamps), `fetchComplete?`
-  (verified-complete fetch), `lockTask?`/`unlockTask?` (task locking),
-  `latestActivity?` (project activity) and the project-setup surface
+  (verified-complete fetch), `lockTask?`/`unlockTask?` (task locking)
+  and the project-setup surface
   (`discoverProjects?`, `readProjectAddressing?`, `createProjectWithStatus?`,
   `adoptProject?`, `listProjects?`). A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
   port slot; an adapter without a surface simply omits the method. The project,
-  task, capture, timestamp, locking, activity and setup surfaces were separate
+  task, capture, timestamp, locking and setup surfaces were separate
   facet ports; the tool is one collaborator, so it is one port.
 - **The vault port.** **`VaultPort`** — the vault as one collaborator: read a
   note by path, create/write/rename/trash a note, list a folder's notes and
@@ -165,9 +165,9 @@ its own module; the composition root wires it.
 - **The supporting ports.** `MirrorAdapterFactoryPort` (build a mirror adapter
   for an application + target; expose the capture sources),
   `ProjectSetupFactoryPort` (reach a tool's project-setup surface, null for a
-  tool without setup), `ProjectCaptureCursorPort` (the per-surface creation
-  watermark) and `ProjectWatchPort` (the reactivation watch). These are the
-  provider table's seams, not facets of a mirror adapter.
+  tool without setup) and `ProjectCaptureCursorPort` (the per-surface creation
+  watermark). These are the provider table's seams, not facets of a mirror
+  adapter.
 
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
@@ -203,12 +203,15 @@ canonical DTOs and the pure core.
 - **Canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`). `MirrorPort`
   carries one generic write entry, `applyField`, and the completion fact is a
-  separate canonical field from the `Status` representation.
+  separate canonical field from the `Status` representation. `canonicalField.ts`
+  also carries `MergedField` (the canonical fields plus the project-level
+  `archived` fact), so the archive reconciles through the
+  same `mergeField` ladder as the task fields.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`,
   `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
-  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `PortState`
-  and `ProjectActivityObservation` — one canonical shape per concept, owned by
+  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing` and `PortState` —
+  one canonical shape per concept, owned by
   the core. The boundary payloads live with the ports (`core/port/data/`); a
   merge action's private working shapes stay co-located with the action. The
   merge diffs canonical fields only.
@@ -261,7 +264,7 @@ canonical DTOs and the pure core.
   unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
   task-field pass. A mirror project whose name drifted is renamed through
   `MirrorPort.renameProject`. Its per-side baselines live in the same
-  `coreBaselines` store under the `lifecycle` field.
+  `coreBaselines` store under the `archived` field.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
   conversation while its project is frozen and reopen it on unfreeze; the code
@@ -270,13 +273,6 @@ canonical DTOs and the pure core.
   `RegistryPort`, skips connections whose adapter has no `lockTask`, skips the
   tasks whose vault status is the done lane, and locks the rest — or unlocks
   every tracked task on the unfreeze.
-- **Project activity** (`MirrorPort.latestActivity?`) and
-  `ReactivateFrozenProjectAction`. The core's need to notice that new work
-  appeared on a frozen project's mirror; the code host implements the method.
-  The action runs before the lifecycle pass: when the origin
-  was already frozen and the mirror's newest item provably postdates the stored
-  watch cursor, it unfreezes the origin, so the lifecycle pass fans the unfreeze
-  out to every mirror. The first watch adopts the newest item as the cursor.
 - **The project-capture surface** (`MirrorPort.captureProjects` +
   `CaptureProjectsAction`). A capture-capable adapter enumerates the
   application-born projects it can see, each carrying its name, its candidate
@@ -299,11 +295,10 @@ canonical DTOs and the pure core.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, connection re-keying, board-ensure, rename recovery,
   vault consistency and the deletion sweep) and the core actions directly
-  (`ReactivateFrozenProjectAction`, `ProjectLifecycleSyncAction`,
+  (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
   every step wrapped so one failure logs and skips that step. It runs the
-  reactivation action before the lifecycle pass (unfreezing the origin when newer
-  mirror work appears), the lifecycle pass for the freeze verdict, the task-lock
+  lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
   and the mirror-sync pass for task-field reconciliation. The sweep enumerates
   the project's code-host connections directly, and the capture pre-tick runs the
@@ -319,19 +314,19 @@ canonical DTOs and the pure core.
   `MirrorPort` surface for the code host: title and body as the issue, Status as
   the board card's lane, completion as the issue state (kept separate from the
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
-  project, setup, capture, complete-fetch, per-field-timestamp, task-lock and
-  activity surfaces. The composition root registers it under the application id
+  project, setup, capture, complete-fetch, per-field-timestamp and task-lock
+  surfaces. The composition root registers it under the application id
   `github`.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
   completed fact, subtasks as the parent relation, label as the task labels, and
   the project, capture, complete-fetch and per-field-timestamp surfaces; it omits
-  the locking, activity and setup methods. The composition root registers it
+  the locking and setup methods. The composition root registers it
   under the application id `todoist`.
 - **The registry adapter** (`infrastructure/registry/`) persists the core's
   memory in `data.json`: `SyncStateAdapter` (the `syncState` container and the
-  `coreBaselines` store), `CoreProjectWatchAdapter` (`coreWatches`) and
+  `coreBaselines` store) and
   `RegistryProjectCursorAdapter` (the per-surface capture watermark), with the
   pure codecs (`coreStorageRecord`, `syncStateSchema`, `loadDataSafely`) beside
   them.
@@ -361,17 +356,15 @@ canonical DTOs and the pure core.
     (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`
     (each mirror handle's entity id), the port bookkeeping
     (`provider`, `project`, `lastPoll`, `lanes`), per-connection identities
-    (`projects.<name>.identities.<connectionSlug>`), watch state, the
+    (`projects.<name>.identities.<connectionSlug>`), the
     per-project `fullScanPending` marker, and the per-surface `projectCursors`.
     Ports are keyed by the note's connection slug, so a project can hold two
     connections of the same tool; a slug rename re-keys the port in lockstep.
     Written only through `SyncStateAdapter`, behind a serialization mutex it
     shares with the settings save.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
-    `lifecycle`), per-side `Baseline` (`value`, `completed`). A sibling of
+    `archived`), per-side `Baseline` (`value`, `completed`). A sibling of
     `syncState`, so a registry write cannot clobber it.
-  - **`coreWatches`** — the core's per-project, per-connection reactivation
-    watch (`etag`, `cursor`). A sibling of `syncState`.
   - The settings keys (poll interval, done option, debounce, paths, status
     options, type labels) live at the root beside the containers.
 - **`main.js`** — the built bundle; never authored.
@@ -382,9 +375,9 @@ No other persistent store. The mirrors hold copies, never authority.
 
 - **Code host** — GraphQL for the project read (issues plus board cards), issue
   creation, the board operations, locking and sub-issue relations; REST for the
-  conditional watch read (ETag / 304) and the label and state updates. The core
+  label and state updates. The core
   consumes it through `MirrorPort` (project, task, capture, and the optional
-  timestamp, complete-fetch, locking, activity and setup methods). A fine-grained
+  timestamp, complete-fetch, locking and setup methods). A fine-grained
   token, bearer.
 - **Task manager** — REST v1 for projects, sections, tasks and labels. The core
   consumes it through `MirrorPort` (project, task, capture, and the optional
@@ -498,8 +491,8 @@ GitHub and Todoist mirror adapters implement `MirrorPort`, the vault
 origin adapters complete the origin round-trip, the mirror-sync action and the
 core baseline store reconcile a whole project and persist its baselines, the
 lifecycle pass reconciles the archived fact, the capture surfaces adopt
-remote-born projects and tracked tasks, and the task-lock and reactivation
-actions handle a frozen project. The runtime cutover is unconditional: the
+remote-born projects and tracked tasks, and the task-lock action handles a
+frozen project. The runtime cutover is unconditional: the
 chain builds the origin and the per-connection mirror adapters from the
 project's connections and the stored secrets and drives the core actions
 every pass.

@@ -1,14 +1,12 @@
 import { Baseline } from '../../core/domain/Baseline.js';
 import { isRecord } from '../../core/domain/isRecord.js';
+import type { MergedField } from '../../core/domain/canonicalField.js';
 import { projectFromNotePath } from '../../core/domain/projectFromNotePath.js';
 import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
 import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
 import type { PortState } from '../../core/port/data/PortState.js';
-import type {
-  BaselineField,
-  RegistryPort,
-} from '../../core/port/RegistryPort.js';
+import type { RegistryPort } from '../../core/port/RegistryPort.js';
 import { ensureRecord, readPath, stringOrNull } from './coreStorageRecord.js';
 import {
   PROJECT_CURSORS_KEY,
@@ -832,11 +830,11 @@ export class SyncStateAdapter implements RegistryPort {
 
   async readBaseline(
     entityId: string,
-    field: BaselineField,
+    field: MergedField,
     side: string,
   ): Promise<Baseline | null> {
     const data = await this.storage.load();
-    const entry = readPath(data, [CORE_BASELINES_KEY, entityId, field, side]);
+    const entry = readBaselineEntry(data, entityId, field, side);
     if (!isRecord(entry)) {
       return null;
     }
@@ -845,7 +843,7 @@ export class SyncStateAdapter implements RegistryPort {
 
   async writeBaseline(
     entityId: string,
-    field: BaselineField,
+    field: MergedField,
     side: string,
     baseline: Baseline,
   ): Promise<void> {
@@ -882,4 +880,20 @@ export class SyncStateAdapter implements RegistryPort {
         : [],
     });
   }
+}
+
+// A registry written before the archive field was named `archived` stored its
+// project archive baselines under the old `lifecycle` key; read them as a
+// fallback so an upgrade does not reset a settled archive.
+function readBaselineEntry(
+  data: Record<string, unknown>,
+  entityId: string,
+  field: MergedField,
+  side: string,
+): unknown {
+  const entry = readPath(data, [CORE_BASELINES_KEY, entityId, field, side]);
+  if (entry !== undefined || field !== 'archived') {
+    return entry;
+  }
+  return readPath(data, [CORE_BASELINES_KEY, entityId, 'lifecycle', side]);
 }

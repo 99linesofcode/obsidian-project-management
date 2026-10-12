@@ -24,9 +24,6 @@ class FakeTransport implements CodeHostTransport {
   async get(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async getConditional(): Promise<never> {
-    throw new Error('not used in this test');
-  }
   async patch(): Promise<never> {
     throw new Error('not used in this test');
   }
