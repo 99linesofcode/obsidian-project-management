@@ -120,8 +120,9 @@ namespace per application.**
 - **`SyncScheduler`** — delivery mechanics only. A poll interval and vault
   change/delete/rename events enqueue project names; renames bypass the
   debounce. Before each tick it runs the injected project capture, so a project
-  born on a remote is captured before the per-project chain reads it. It makes
-  no business decisions.
+  born on a remote is captured before the per-project chain reads it — a
+  task-manager project only when a same-name code-host or vault project exists.
+  It makes no business decisions.
 - **`SyncQueue`** — one serialized promise chain for the whole plugin. Runs one
   project at a time, coalesces duplicates, swallows a failed run so the queue
   never poisons.
@@ -170,7 +171,8 @@ one-paragraph summary precedes each.
 ### 2.1 The pass
 
 On load, `SyncScheduler.tick` first runs the injected project capture
-(`CaptureProjectsAction`, [§2.6](#26-project-capture)), then enumerates the
+(`CaptureProjectsAction`, [§2.6](#26-project-capture)) — gated on a same-name
+code-host or vault project for a task-manager source — then enumerates the
 vault's project notes and enqueues each project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
 item no-ops), then drives every step in order. It migrates a legacy home note,
@@ -199,6 +201,7 @@ sequenceDiagram
   D->>P: projects and errors
   P->>P: syncState.setIdentity per project
   P->>Cap: projectCapture()
+  Note over Cap: task-manager project needs a same-name code-host/vault project
   Cap-->>P: { captured, errors }
   Note over Sched: next tick
   Sched->>Cap: captureProjects()
@@ -411,7 +414,10 @@ A capture-capable adapter enumerates the application-born projects it can see
 connection targets and its creation clock. The action adopts every project the
 vault does not already declare by name+connection — writing the home note with
 its connection envelope through `VaultPort` — so the first run against an
-account adopts the whole back-catalogue. There is no cursor and no stored
+account adopts the whole back-catalogue. The code host is the origin: a
+task-manager project is adopted only when a code-host project of the same name
+exists among the code-host connections' projects or the vault's adopted set, so
+a task-manager-only project is never adopted. There is no cursor and no stored
 timestamp: every run re-enumerates the remote and skips what the vault already
 declares, so the pass is idempotent. A project that links zero or several
 targets collects an error and is left for the next pass; an adoption failure on
@@ -428,6 +434,8 @@ sequenceDiagram
   loop each enumerated project
     alt already declared by name or target
       Note over C: skip
+    else task manager without a same-name code-host project
+      Note over C: skip (the code host is the origin)
     else exactly one target
       C->>V: adopt(project, application, slug)
     else zero or several targets
@@ -446,8 +454,11 @@ listing is scanned each pass and the adopted mirror
 items are skipped, so the pass is idempotent without a cursor. The action
 routes by the connection's application: a code-host issue through
 `CreateTaskNoteAction`, a task-manager task rendered by `CapturedTaskNoteMapper`
-and written through `VaultPort` + `RegistryPort`. A connection whose
-listing or adoption fails is collected and never stops the later connections.
+and written through `VaultPort` + `RegistryPort`. A captured task-manager task
+carries a kind: an explicit type label is kept, and an unlabelled one takes the
+kind its position implies — a root item a `slice`, a subtask a `task`. A
+connection whose listing or adoption fails is collected and never stops the
+later connections.
 
 ```mermaid
 sequenceDiagram
@@ -467,6 +478,7 @@ sequenceDiagram
       alt code host
         C->>CT: execute(url, title, body, type, ...)
       else task manager
+        Note over C: kind = explicit label, else root slice / subtask task
         C->>V: createNote(mapper + freePath)
         C->>H: setEntity, setMirrorItem
       end

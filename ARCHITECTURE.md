@@ -140,7 +140,7 @@ sequenceDiagram
   SP->>Lock: invoke({ project, frozen, wasFrozen })
   SP->>SP: renames, cascade, checklist, mirror to-do
   alt not frozen
-    SP->>SP: task capture
+    SP->>SP: task capture (kind by label or position)
     SP->>TF: invoke(project)
     TF->>M: merge each canonical field, fan out
   end
@@ -309,8 +309,11 @@ canonical DTOs and the pure core.
   connection targets and its creation clock. The core action adopts every
   project the vault does not already declare by name+connection — writing the
   home note with its connection envelope through `VaultAdapter` — so the first
-  run adopts the whole back-catalogue. A project that links zero or several
-  targets collects an error and is left for the next pass.
+  run adopts the whole back-catalogue. The code host is the origin, so a
+  task-manager project is gated: it is adopted only when a code-host project of
+  the same name exists among the code-host connections' projects or the vault's
+  adopted set — a task-manager-only project is never adopted. A project that
+  links zero or several targets collects an error and is left for the next pass.
 - **The task-capture surface** (`MirrorPort.capture` + `CaptureTasksAction`). For
   each declared connection, the core action reads the tasks the adapter's capture
   gate exposes — a code host exposes only type-labelled issues, a task manager
@@ -319,7 +322,10 @@ canonical DTOs and the pure core.
   are skipped, so the pass is idempotent without a cursor. The action routes by
   the connection's application — a code-host issue through
   `CreateTaskNoteAction`, a task-manager task rendered by
-  `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`.
+  `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`. A
+  captured task-manager task carries a kind: an explicit type label is kept, and
+  an unlabelled one takes the kind its position implies — a root item is a
+  `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, connection re-keying, board-ensure, rename recovery,
   vault consistency and the deletion sweep) and the core actions directly
@@ -567,7 +573,11 @@ Date of Last Update: 2026-10-12
 - **Capture** — adopting a remote-born project or tracked task into the vault.
   Both enumerate the remote's items and adopt each the vault does not already
   hold — a project by name+connection, a task by its mirror handle — so the
-  first run adopts the back-catalogue and a second pass is idempotent.
+  first run adopts the back-catalogue and a second pass is idempotent. A
+  task-manager project is adopted only when a code-host (or vault) project of
+  the same name exists; a captured task-manager task carries a kind — an
+  explicit type label kept, else `slice` for a root item and `task` for a
+  subtask.
 
 ## 12. Conventions & Boundaries
 
