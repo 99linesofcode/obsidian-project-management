@@ -1,3 +1,12 @@
+# [0.26.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.25.1...0.26.0) (2026-10-12)
+
+
+### Features
+
+* **capture:** gate project capture and type captured tasks ([e7683e2](https://github.com/99linesofcode/obsidian-project-management/commit/e7683e2c57e3afe4fcdc75a13de4c2b617e5ff4c))
+
+
+
 ## [0.25.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.25.0...0.25.1) (2026-10-12)
 
 
@@ -48,15 +57,6 @@
 ### Features
 
 * **labels:** the labels model — kind from the type label, labels sequence, per-adapter capture gate ([e8e3d5f](https://github.com/99linesofcode/obsidian-project-management/commit/e8e3d5f33c0cd5027d5eb210fb040f741cf0f961))
-
-
-
-## [0.22.3](https://github.com/99linesofcode/obsidian-project-management/compare/0.22.2...0.22.3) (2026-10-10)
-
-
-### Bug Fixes
-
-* **deps:** bump source-map-js from 1.2.1 to 1.2.2 ([#123](https://github.com/99linesofcode/obsidian-project-management/issues/123)) ([9596423](https://github.com/99linesofcode/obsidian-project-management/commit/9596423a51ac59a0fd058a2508279d6d16553614))
 
 
 
