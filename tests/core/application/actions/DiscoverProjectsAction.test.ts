@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoverProjectsAction } from '../../../../src/core/application/actions/DiscoverProjectsAction.js';
 import { AttachProjectAction } from '../../../../src/core/application/actions/AttachProjectAction.js';
+import { ResolveProjectBoardAction } from '../../../../src/core/application/actions/ResolveProjectBoardAction.js';
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
 import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../../../src/core/port/data/ProjectSummary.js';
@@ -110,7 +111,7 @@ function makeAction(
   return new DiscoverProjectsAction(
     vault,
     setupFactory,
-    new AttachProjectAction(),
+    new AttachProjectAction(new ResolveProjectBoardAction()),
   );
 }
 

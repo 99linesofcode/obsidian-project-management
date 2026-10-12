@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
+import { ResolveProjectBoardAction } from '../../../../src/core/application/actions/ResolveProjectBoardAction.js';
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
 import { ProjectCandidate } from '../../../../src/core/port/data/ProjectCandidate.js';
 import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
@@ -92,7 +93,11 @@ function setup(stored?: ProjectIdentityDataTransferObject) {
   if (stored !== undefined) {
     syncState.identities.set(projectName, stored);
   }
-  const action = new EnsureProjectBoardAction(syncState, statusOptions);
+  const action = new EnsureProjectBoardAction(
+    syncState,
+    statusOptions,
+    new ResolveProjectBoardAction(),
+  );
   return { action, setup: setupPort, syncState };
 }
 

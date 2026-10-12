@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AttachProjectAction } from '../../../../src/core/application/actions/AttachProjectAction.js';
+import { ResolveProjectBoardAction } from '../../../../src/core/application/actions/ResolveProjectBoardAction.js';
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
 import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
 import { ProjectSummary } from '../../../../src/core/port/data/ProjectSummary.js';
@@ -65,7 +66,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
       projects: [linked],
     });
     setup.addressings.set(linked.handle, addressing());
-    const action = new AttachProjectAction();
+    const action = new AttachProjectAction(new ResolveProjectBoardAction());
 
     const result = await action.execute({ target: repoUrl, setup });
 
@@ -75,7 +76,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
 
   it('resolves the repo alone when it has no board yet', async () => {
     const setup = new FakeSetup();
-    const action = new AttachProjectAction();
+    const action = new AttachProjectAction(new ResolveProjectBoardAction());
 
     const result = await action.execute({ target: repoUrl, setup });
 
@@ -97,7 +98,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
       projects: [project('Roadmap'), match],
     });
     setup.addressings.set(match.handle, addressing());
-    const action = new AttachProjectAction();
+    const action = new AttachProjectAction(new ResolveProjectBoardAction());
 
     const result = await action.execute({ target: repoUrl, setup });
 
@@ -111,7 +112,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
       targetHandle: 'R_kgDOAAAA',
       projects: [project('Roadmap'), project('Backlog')],
     });
-    const action = new AttachProjectAction();
+    const action = new AttachProjectAction(new ResolveProjectBoardAction());
 
     await expect(action.execute({ target: repoUrl, setup })).rejects.toThrow(
       /several boards/,
@@ -121,7 +122,7 @@ describe('ATT-1 — attach resolves the repo and derives the board', () => {
 
   it('throws a domain error when a connection is missing its target', async () => {
     const setup = new FakeSetup();
-    const action = new AttachProjectAction();
+    const action = new AttachProjectAction(new ResolveProjectBoardAction());
 
     await expect(action.execute({ target: '', setup })).rejects.toThrow(
       /target/,
