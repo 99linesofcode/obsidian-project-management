@@ -46,9 +46,9 @@ no machine id.
 
 ### The cast
 
-**The core (`src/core/`) names no provider.** It owns the capability
-vocabulary, the canonical DTOs, the one pure N-way merge, the descriptor and
-registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
+**The core (`src/core/`) names no provider.** It owns the canonical DTOs, the
+one pure N-way merge, the mirror-sync action, the two pass assemblers and the
+reconcilers.
 
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
@@ -75,9 +75,8 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   items, the note-path↔handle and mirror-project mappings, the per-connection
   identity and port state, and the side baselines. The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
-- **The vocabulary.** `capabilities.ts` holds the thirteen capability names;
-  `canonicalField.ts` holds the six canonical fields (`title`, `body`,
-  `subtasks`, `completion`, `Status`, `label`).
+- **The canonical fields.** `canonicalField.ts` holds the six canonical fields
+  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`).
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`, `MirrorSide`,
   `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
@@ -88,11 +87,12 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   ports (`core/port/data/`); the pass shapes stay in `application/data/`.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
-- **The descriptor and registrar.** `AdapterDescriptor` (application id,
-  capabilities, secret keys, settings rows),
-  `AdapterRegistration` and the pure `registerAdapters`, which validates and
-  returns a `RegistrationResult` of `RegisteredAdapter`s, each pairing a
-  descriptor with its one `MirrorPort`.
+- **The provider table.** The composition root holds one plain `providers`
+  table mapping an application id to its mirror factory, capture factory,
+  optional setup surface and token setting; it derives the mirror-adapter
+  factory, the setup factory, the registered-application set and the
+  token-settings list from it. No validation framework, capability vocabulary or
+  registration result.
 - **The actions.** `MirrorSyncAction` (the one capability-parameterized
   reconcile), `AssembleProjectPassAction` (one whole-project task pass),
   `ProjectLifecycleSyncAction` + `AssembleProjectLifecyclePassAction` (the
@@ -106,18 +106,17 @@ namespace per application.**
   (`connectionsOf`, `parseConnectionsBlock`, `CapturedTaskNoteMapper`) beside
   it.
 - **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the setup,
-  locking and activity surfaces), `githubDescriptor`, `CodeHostTarget` and
-  `CodeHostTransport`.
+  locking and activity surfaces), `CodeHostTarget` and `CodeHostTransport`.
 - **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, without the setup,
-  locking and activity methods), `todoistDescriptor`, `TaskManagerTarget`,
+  locking and activity methods), `TaskManagerTarget`,
   `TaskManagerTransport` and `TodoistTransport`.
 - **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
   and the `coreBaselines` store), `RegistryProjectCursorAdapter`
   (`ProjectCaptureCursorPort`) and `CoreProjectWatchAdapter`
   (`ProjectWatchPort`), with the pure codecs (`coreStorageRecord`,
   `syncStateSchema`, `loadDataSafely`) beside them.
-- **Conformance.** `ConformanceMirrorAdapter` + `conformanceDescriptor` — an
-  in-memory adapter, inert unless a project names its application id.
+- **Conformance.** `ConformanceMirrorAdapter` — an in-memory `MirrorPort` test
+  double, used by the core and adapter tests.
 
 **The driving side and the pass.**
 
@@ -134,10 +133,10 @@ namespace per application.**
   `CoreReconcilers` bundle (the five core reconcilers, in
   `src/core/application/services/`) in
   order, wrapping every step so one failure logs and skips that step.
-- **`main.ts`** — the composition root. `composePlugin` builds the vault
-  adapter, the mirror-adapter factory, the setup adapter and the maintenance
-  actions; `composeCoreReconcilers` eagerly builds the core pass assemblers and
-  their infrastructure peers.
+- **`main.ts`** — the composition root. `composePlugin` builds the provider
+  table, the vault adapter, the mirror-adapter factory, the setup adapter and
+  the maintenance actions; `composeCoreReconcilers` eagerly builds the core pass
+  assemblers and their infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
 - **`SeedVaultArtifactsAction`** — seeds the six vault-owned artifacts (three
   note templates, three Bases files) create-if-missing, on init and on demand
@@ -149,28 +148,19 @@ namespace per application.**
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
   and `CreateTaskNoteAction`.
 
-### The descriptor and the registrar
+### The provider table
 
-Each adapter module exports a typed `AdapterDescriptor`. The composition root
-assembles a plain list of `AdapterRegistration`s and passes it to the neutral,
-pure `registerAdapters`, which:
+The composition root holds one plain `providers` table — a value mapping an
+application id to its mirror factory, capture factory, optional setup surface
+and token setting. No descriptor, no validation, no registration result: the
+provider's name is a value in its own module and in the composition root only.
 
-- rejects an application id that is not lowercase alphanumerics with dashes, a
-  duplicate id, a descriptor missing a required field, an unknown capability, an
-  unknown settings-row kind, or a descriptor missing the in-scope minimum
-  surface (`REQUIRED_CAPABILITIES`); and
-- returns each accepted adapter as a `RegisteredAdapter`, pairing its
-  descriptor with its one `MirrorPort`. The capability list is descriptor
-  metadata, not a port gate: the optional surfaces are the adapter's optional
-  methods, presence-checked by the caller.
-
-`main.ts` holds one `providers` table — one entry per application, each naming
-its descriptor, its mirror factory, its capture source and its optional setup
-surface. It derives the descriptor list, the setup factory and the mirror-adapter
-factory from that table, and gates each adapter through the neutral
-`registerAdapters` (the conformance adapter in the stored registration). Adding
-an application is one table entry; the kernel is not edited. A provider name is
-a value argument, never a namespace key in the core.
+`main.ts` derives the mirror-adapter factory, the setup factory, the
+registered-application set (`new Set(Object.keys(providers))`, the set a
+connection's tool must name to validate) and the token-settings list
+(`Object.values(providers).map((provider) => provider.token)`, which the
+settings tab renders) from that table. Adding an application is one table entry;
+the kernel is not edited.
 
 ---
 
@@ -300,18 +290,18 @@ sequenceDiagram
 
 Delta derivation (see [§3](#3-the-decision-ladder) for the rules): an origin
 whose `current` is `null` with a baseline is a **delete** delta; a mirror's
-absence is a delete only when it has a baseline **and** its adapter declares
-`complete-fetch` and `fetchComplete()` returned true.
+absence is a delete only when it has a baseline **and** its adapter exposes
+`fetchComplete` and it returned true.
 
 ### 2.3 The mirror-sync action (`MirrorSyncAction`)
 
-`MirrorSyncAction` names no provider. Given a `MirrorSyncPass`, it filters the
-mirrors to those whose descriptor `represents` the field, observes each against
-its own baseline, calls `mergeField` once, fans the reconciled value out through
-the one generic write entry, and applies the same value to the origin. It
-records the sides written, skipped, advanced and failed on a `PassRecord`. A
-mirror write that throws is recorded in `failed` and fan-out continues to the
-remaining mirrors, so one failing connection never abandons the rest.
+`MirrorSyncAction` names no provider. Given a `MirrorSyncPass`, it observes
+each mirror against its own baseline, calls `mergeField` once, fans the
+reconciled value out through the one generic write entry, and applies the same
+value to the origin. It records the sides written, skipped, advanced and failed
+on a `PassRecord`. A mirror write that throws is recorded in `failed` and
+fan-out continues to the remaining mirrors, so one failing connection never
+abandons the rest.
 
 ```mermaid
 sequenceDiagram
@@ -648,35 +638,27 @@ sequenceDiagram
   A->>D: save(merged)
 ```
 
-### 2.11 Registration
+### 2.11 Provider wiring
 
-The composition root builds the descriptors and passes the registrations to the
-pure registrar. `gateMirror` reuses the same registrar to gate a single adapter
-for the factory.
+The composition root holds one plain `providers` table and derives its seams
+from it. `mirrorAdapterFactory.create` looks the application id up in the table
+and builds the mirror through that entry's factory; `buildCaptureSources`
+iterates the table and keeps the entries whose capture adapter carries
+`captureProjects`; the setup factory resolves `setupFor(application)` the same
+way. No validation, no registration result.
 
 ```mermaid
 sequenceDiagram
   participant M as main.ts
-  participant RA as registerAdapters
-  participant D as AdapterDescriptor
-  participant R as MirrorPort
+  participant T as providers table
+  participant F as MirrorAdapterFactoryPort
 
-  M->>RA: registerAdapters([AdapterRegistration(descriptor, adapter), ...])
-  loop each registration
-    RA->>D: validate id, required fields, capabilities, rows, minimum surface
-    alt rejected
-      RA->>RA: collect RegistrationError
-    else accepted
-      RA->>R: pair descriptor with the MirrorPort
-    end
-  end
-  RA-->>M: RegistrationResult { adapters, errors }
+  M->>T: build { github, todoist } (mirror, capture, setup, token)
+  M->>F: mirrorAdapterFactory(syncState, providers)
+  F->>T: providerFor(application)
+  T-->>F: the entry (or null)
+  F->>F: entry.mirror(target, boardIdentity)
 ```
-
-`mirrorAdapterFactory.create` dispatches on the application id to
-`CodeHostMirrorAdapter` or `TaskManagerMirrorAdapter` and validates the
-descriptor; `buildCaptureSources` validates the same two adapters once and
-collects their `captureProjects` surfaces.
 
 ### 2.12 Vault consistency
 
@@ -969,7 +951,7 @@ layers, and each layer owns one surface of the system.
   `composeCoreReconcilers`, `mirrorAdapterFactory`).
 - The core: `src/core/` — the pure engine (`mergeField`, `MirrorSyncAction`,
   `AssembleProjectPassAction`, `AssembleProjectLifecyclePassAction`,
-  `ProjectLifecycleSyncAction`, `registerAdapters`, `AdapterDescriptor`), the
+  `ProjectLifecycleSyncAction`), the
   ports and their payloads under `src/core/port/` (`port/data/`), the pass DTOs
   under `src/core/application/data/`, the
   reconciler interfaces under `src/core/application/services/`, and every use

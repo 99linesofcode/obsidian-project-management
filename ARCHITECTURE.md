@@ -34,13 +34,13 @@ obsidian-project-management/
 │   │   │                # interfaces (services/)
 │   │   ├── domain/      # the neutral note arithmetic and the domain error
 │   │   │                # (errors/)
-│   │   └── port/        # the capability and collaborator ports
+│   │   └── port/        # the collaborator and factory ports
 │   ├── infrastructure/  # driven adapters, one namespace per vendor:
 │   │                    # vault/ (the single VaultAdapter + note codecs),
-│   │                    # github/ (mirror adapter + descriptor +
-│   │                    # transport), todoist/ (mirror adapter + descriptor +
-│   │                    # transport), registry/ (the data.json-backed registry),
-│   │                    # fake/ (in-memory conformance adapter)
+│   │                    # github/ (mirror adapter + transport),
+│   │                    # todoist/ (mirror adapter + transport),
+│   │                    # registry/ (the data.json-backed registry),
+│   │                    # fake/ (in-memory conformance test double)
 │   └── main.ts          # the composition root — wires every adapter and action
 ├── tests/               # mirrors src/
 ├── docs/                # developer manual — flows as sequence diagrams; ADRs
@@ -119,18 +119,18 @@ name never appears in the core.
 
 ## 3. Core Components
 
-| Component             | Responsibility                                                                                                                                                                                                                                                   | Technology                   | Target         |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
-| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                                | host plugin API              | the vault      |
-| `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                    | host plugin API, `Component` | the vault      |
-| `src/core/`           | The module's hexagon: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, every use case (`actions/`), the pass assemblers, the reconciler interfaces, and the neutral note arithmetic | TypeScript                   | in-process     |
-| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter`, plus the baseline/cursor/watch stores), and the in-memory conformance adapter                    | TypeScript, GraphQL, REST v1 | external tools |
+| Component             | Responsibility                                                                                                                                                                                                                                | Technology                   | Target         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                             | host plugin API              | the vault      |
+| `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                 | host plugin API, `Component` | the vault      |
+| `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), the pass assemblers, the reconciler interfaces, and the neutral note arithmetic                                          | TypeScript                   | in-process     |
+| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter`, plus the baseline/cursor/watch stores), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
 
 **The core's ports (`src/core/port/`).** The core owns these; each states the
-core's need, never the tool's API it wraps. An adapter registers from its own
-module and exposes its one mirror surface.
+core's need, never the tool's API it wraps. An adapter implements the port from
+its own module; the composition root wires it.
 
 - **The mirror port.** **`MirrorPort`** — the external tool as one collaborator,
   implemented by `CodeHostMirrorAdapter` and `TaskManagerMirrorAdapter`. The
@@ -201,8 +201,8 @@ clears. `data.json` is secret-free.
 The `core/` block is the shape of ADR 001. It consists of the port layer, the
 canonical DTOs and the pure core.
 
-- **Capability vocabulary.** `capabilities.ts` holds the thirteen capability
-  names; `canonicalField.ts` holds the six canonical fields. `MirrorPort`
+- **Canonical fields.** `canonicalField.ts` holds the six canonical fields
+  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`). `MirrorPort`
   carries one generic write entry, `applyField`, and the completion fact is a
   separate canonical field from the `Status` representation.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `MirrorSide`,
@@ -223,21 +223,14 @@ canonical DTOs and the pure core.
   completion over a stale open → origin tie-break); delete proof (a
   verified-complete fetch plus a synced baseline); the origin's absence as a
   delete delta; the origin's edit time trusted by default. No I/O, no clocks.
-- **The descriptor and registrar.** Each adapter exports a typed
-  `AdapterDescriptor` (application id, capabilities, secret keys, settings
-  rows). The composition root assembles
-  a plain list of `AdapterRegistration`s and passes it to the pure
-  `registerAdapters`, which validates (known capabilities, all required fields,
-  the required capability floor (`REQUIRED_CAPABILITIES`), a unique lowercase
-  application id, known
-  settings-row kinds) and returns the accepted adapters as a `RegistrationResult`
-  of `RegisteredAdapter`s, each pairing a descriptor with its one `MirrorPort`.
-  The capability list is descriptor metadata, not a port gate: the optional
-  surfaces are the adapter's optional methods, presence-checked by the caller.
-  The composition root holds one `providers` table — one entry per application
-  (descriptor, mirror factory, capture source, optional setup surface) — and
-  derives the descriptor list, the setup factory and the mirror-adapter factory
-  from it, so adding an application is one entry.
+- **The provider table.** The composition root holds one plain `providers`
+  table — a value mapping an application id to its mirror factory, capture
+  factory, optional setup surface and token setting. It derives the
+  mirror-adapter factory, the setup factory, the registered-application set and
+  the token-settings list from that table, so adding an application is one entry
+  and there is no validation framework, capability vocabulary or registration
+  result. The provider's name is a value in its own module and in the
+  composition root only.
 - **The generic mirror-sync action** (`MirrorSyncAction`). It names no provider:
   it collects each capable mirror's observation against its own baseline, calls
   the single `mergeField`, and fans the reconciled value out through the one
@@ -325,25 +318,25 @@ canonical DTOs and the pure core.
   assembled core capture.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
-  carrying the provider's own vocabulary, its transport boundary, its opaque
-  target and its descriptor. The conformance adapter is the reference
-  implementation; a real mirror adapter is a new namespace beside it, with no
-  domain edit. `infrastructure/` imports `core/` only, and the provider-vocabulary
-  gate keeps each namespace the sole home for its provider's name.
+  carrying the provider's own vocabulary, its transport boundary and its opaque
+  target. A real mirror adapter is a new namespace beside the existing ones,
+  wired by one composition-root table entry. `infrastructure/` imports `core/`
+  only, and the provider-vocabulary gate keeps each namespace the sole home for
+  its provider's name.
 - **The GitHub mirror adapter** (`infrastructure/github/`) implements the
   `MirrorPort` surface for the code host: title and body as the issue, Status as
   the board card's lane, completion as the issue state (kept separate from the
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
   project, setup, capture, complete-fetch, per-field-timestamp, task-lock and
-  activity surfaces. Its descriptor registers under the application id
+  activity surfaces. The composition root registers it under the application id
   `github`.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
   completed fact, subtasks as the parent relation, label as the task labels, and
   the project, capture, complete-fetch and per-field-timestamp surfaces; it omits
-  the locking, activity and setup methods. Its descriptor registers under the
-  application id `todoist`.
+  the locking, activity and setup methods. The composition root registers it
+  under the application id `todoist`.
 - **The registry adapter** (`infrastructure/registry/`) persists the core's
   memory in `data.json`: `SyncStateAdapter` (the `syncState` container and the
   `coreBaselines` store), `CoreProjectWatchAdapter` (`coreWatches`) and
@@ -355,12 +348,12 @@ canonical DTOs and the pure core.
   `parseConnectionsBlock`, `renderConnectionsBlock`, the task-note codec) beside
   it. It is a structural peer of the application adapters, not a capability
   adapter.
-- **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
-  registered at the composition root. It is inert unless a project names its
-  application id, so the plugin behaves exactly as before.
+- **The conformance adapter** (`infrastructure/fake/`) is an in-memory
+  `MirrorPort` test double used by the core and adapter tests. It is not wired
+  into the plugin.
 - **Connection validation is open.** A connection is accepted when it names a
   registered application; the composition root supplies the registered set from
-  the adapters it registers, so the accepted set is not a hardcoded union. An
+  the provider table's keys, so the accepted set is not a hardcoded union. An
   application that is not registered is rejected with a collected error.
 
 ## 4. Data Stores
@@ -527,7 +520,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-09
+Date of Last Update: 2026-10-12
 
 ## 11. Glossary / Acronyms
 
@@ -539,10 +532,9 @@ Date of Last Update: 2026-10-09
   uuid; mirrors are its leaves.
 - **Port** — a provider-neutral interface the core owns, stating the core's
   need; an adapter implements it.
-- **Capability** — a named surface an adapter declares in its descriptor. Eight
-  are required of every adapter; the genuinely optional surfaces are optional
-  methods on `MirrorPort`, absent from an adapter that lacks them, so a caller
-  checks presence rather than gating on the capability.
+- **Optional surface** — a surface not every adapter carries; it is an optional
+  method on `MirrorPort`, absent from an adapter that lacks it, so a caller
+  checks presence rather than gating on a declared capability.
 - **Canonical field** — one of the six neutral field names (`title`, `body`,
   `subtasks`, `completion`, `Status`, `label`) the merge operates on.
 - **Baseline** — the last-synced snapshot of a side; the third input to a
@@ -554,8 +546,7 @@ Date of Last Update: 2026-10-09
   multi-sided conflict: decisive timestamp, then completion over a stale open,
   then origin authority.
 - **Origin** — the vault side, distinguished by role: it supplies the tie-break,
-  its edit time is trusted by default, and its absence is a delete. It gets no
-  descriptor.
+  its edit time is trusted by default, and its absence is a delete.
 - **Lane** — a board column / task-manager section.
 - **Outward materialization** — creating a mirror for a vault-born task,
   placeholder-first: the pass assembler records a placeholder handle before it

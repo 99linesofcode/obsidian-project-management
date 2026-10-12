@@ -1,6 +1,6 @@
 # ADR 001 — Multi-adapter core: capability ports, descriptor registration, one N-way merge
 
-- **Status:** accepted
+- **Status:** accepted; the registration decision (2A) is superseded by ADR 005
 - **Date:** 2026-10-08
 
 ## Context

@@ -16,14 +16,23 @@ import type { App } from 'obsidian';
 import type ProjectManagementPlugin from '../../../src/main.js';
 import { ProjectManagementSettingTab } from '../../../src/ui/settings/ProjectManagementSettingTab.js';
 import { DEFAULT_SETTINGS } from '../../../src/ui/settings/settings.js';
-import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
-import { todoistDescriptor } from '../../../src/infrastructure/todoist/todoistDescriptor.js';
 
 function buildTab(): ProjectManagementSettingTab {
   const plugin = {
     settings: { ...DEFAULT_SETTINGS },
     secrets: { load: () => null, save: () => {}, remove: () => {} },
-    providerDescriptors: [githubDescriptor(), todoistDescriptor()],
+    tokenSettings: [
+      {
+        key: 'github-token',
+        label: 'GitHub token',
+        description: 'Personal access token used to talk to the GitHub API.',
+      },
+      {
+        key: 'todoist-token',
+        label: 'Todoist token',
+        description: 'Personal API token used to talk to the Todoist API.',
+      },
+    ],
   } as unknown as ProjectManagementPlugin;
 
   return new ProjectManagementSettingTab({} as App, plugin);
