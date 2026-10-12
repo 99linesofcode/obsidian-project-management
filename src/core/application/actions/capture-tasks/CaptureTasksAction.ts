@@ -135,6 +135,7 @@ export class CaptureTasksAction {
         title: input.task.title,
         projectName: input.projectName,
         sliceLink: null,
+        kind: capturedKind(input.task),
       },
       { syncedAt: input.syncedAt, statusName: input.task.status },
     );
@@ -149,4 +150,15 @@ export class CaptureTasksAction {
       { entityId: id },
     );
   }
+}
+
+// The kind a task-manager capture carries: its explicit type label when it has
+// one, otherwise the kind its position implies — a root item is a slice, a
+// subtask is a task.
+function capturedKind(task: CanonicalTask): string {
+  const explicit = typeFromLabels(task.labels);
+  if (explicit !== '') {
+    return explicit;
+  }
+  return task.parent !== null ? 'task' : 'slice';
 }

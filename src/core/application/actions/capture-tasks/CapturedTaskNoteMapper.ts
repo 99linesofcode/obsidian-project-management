@@ -7,6 +7,9 @@ export interface CapturedTaskNoteInput {
   // The slice note's link target when the capture is nested under a slice;
   // null for a top-level capture.
   sliceLink: string | null;
+  // The captured item's kind: an explicit type label when it carries one,
+  // otherwise the kind its position implies.
+  kind: string;
 }
 
 export interface CapturedTaskNoteContext {
@@ -33,7 +36,7 @@ export const CapturedTaskNoteMapper = {
     const content = [
       '---',
       'categories: [taken]',
-      'labels: []',
+      `labels: [type:${input.kind}]`,
       `status: ${context.statusName}`,
       `affiliation: ${affiliationValue(input)}`,
       `synced: ${context.syncedAt}`,

@@ -95,7 +95,8 @@ function composeCoreActions(
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
-  const capture = new CaptureProjectsAction(mirrorAdapters, vault);
+  const isCodeHost = (application: string): boolean => application === 'github';
+  const capture = new CaptureProjectsAction(mirrorAdapters, vault, isCodeHost);
 
   return {
     taskFields: new MirrorSyncAction(vault, syncState, mirrorAdapters),
@@ -111,7 +112,7 @@ function composeCoreActions(
       mirrorAdapters,
       syncState,
       createTaskNote,
-      (application) => application === 'github',
+      isCodeHost,
     ),
     projectCapture: () => capture.invoke(),
   };
