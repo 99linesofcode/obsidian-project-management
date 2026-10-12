@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import { splitFrontmatter } from '../../../../src/core/domain/note.js';
-import { ToDoNoteMapper } from '../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
+import { TaskNoteMapper } from '../../../../src/core/application/actions/create-task-note/TaskNoteMapper.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
@@ -54,7 +54,7 @@ class FakeVault extends FakeVaultBase {
 const projectName = 'Acme Widgets';
 const taskPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const taskLink = '42-fix-the-bug';
-const todoPath = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
+const todoPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 const syncedAt = '2026-09-18T12:00:00Z';
 
 function taskNote(body: string): string {
@@ -74,12 +74,13 @@ function bodyOf(content: string): string {
 }
 
 function toDoNote(status: 'open' | 'completed'): string {
-  return ToDoNoteMapper.map(
-    { title: 'Fix the bug', projectName, taskLink },
+  return TaskNoteMapper.map(
+    { type: 'todo', title: 'Fix the bug', body: '', createdAt: null },
     {
+      projectName,
       syncedAt,
       statusName: status,
-      ...(status === 'completed' ? { completedAt: syncedAt } : {}),
+      parentLink: taskLink,
     },
   ).content;
 }
