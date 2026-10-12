@@ -53,9 +53,10 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
   `renameProject`, `setArchived`, `archivedTime`) and the task (`readTasks`,
-  `readTask`, `createTask`, `applyField`, `deleteTask`), plus capture
-  (`capture`, `captureProjects`). The genuinely optional surfaces are optional
-  methods: `fieldTime?`, `fetchComplete?`, `lockTask?`/`unlockTask?`,
+  `readTask`, `createTask`, `applyField`, `deleteTask`). The genuinely optional
+  surfaces are optional
+  methods: `capture?`/`captureProjects?`, `fieldTime?`, `fetchComplete?`,
+  `lockTask?`/`unlockTask?`,
   `latestActivity?` and the project-setup surface (`discoverProjects?`,
   `readProjectAddressing?`, `createProjectWithStatus?`, `adoptProject?`,
   `listProjects?`). A caller checks presence (`adapter.lockTask !== undefined`);
@@ -489,10 +490,11 @@ sequenceDiagram
 
 ### 2.7 Task capture (`CaptureTasksAction`)
 
-For each declared connection whose adapter declares `capture`, the core action
+For each declared connection whose adapter carries `capture`, the core action
 reads the tracked tasks the adapter can see (`MirrorPort.capture`) — the issues
 carrying a `type:` label — and adopts every task the vault does not already hold
-as a task note. The whole listing is scanned each pass and the adopted mirror
+as a task note. A connection whose adapter omits `capture` is skipped. The whole
+listing is scanned each pass and the adopted mirror
 items are skipped, so the pass is idempotent without a cursor. The action
 routes by the connection's application: a code-host issue through
 `CreateTaskNoteAction`, a task-manager task rendered by `CapturedTaskNoteMapper`

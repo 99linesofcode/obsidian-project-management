@@ -227,12 +227,19 @@ function buildCaptureSources(
 ): readonly CaptureSource[] {
   const sources: CaptureSource[] = [];
   for (const provider of providers) {
-    const capture = gateMirror(provider.descriptor, provider.capture());
-    if (capture !== null) {
-      sources.push({ application: provider.applicationId, capture });
+    const adapter = gateMirror(provider.descriptor, provider.capture());
+    if (adapter === null || !hasProjectCapture(adapter)) {
+      continue;
     }
+    sources.push({ application: provider.applicationId, capture: adapter });
   }
   return sources;
+}
+
+function hasProjectCapture(
+  adapter: MirrorPort,
+): adapter is MirrorPort & Required<Pick<MirrorPort, 'captureProjects'>> {
+  return adapter.captureProjects !== undefined;
 }
 
 function providerFor(

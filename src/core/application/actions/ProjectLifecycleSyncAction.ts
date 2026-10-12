@@ -4,6 +4,7 @@ import type { ProjectLifecyclePass } from '../data/ProjectLifecyclePass.js';
 import { ProjectLifecycleRecord } from '../data/ProjectLifecycleRecord.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
+import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
@@ -116,7 +117,7 @@ async function observeMirror(
     current: project.archived ? 'true' : 'false',
     baseline: pass.baselines.get(mirror.side) ?? null,
     fieldTime: await mirror.adapter.archivedTime(mirror.handle),
-    timestampTrustworthy: mirror.adapter.fieldTime !== undefined,
+    timestampTrustworthy: mirrorTrustsTimestamps(mirror.adapter),
     completeFetch: mirror.adapter.fetchComplete?.() ?? false,
     currentCompleted: false,
   });

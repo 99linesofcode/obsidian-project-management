@@ -5,6 +5,7 @@ import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
+import type { RegistryPort } from '../../../../src/core/port/RegistryPort.js';
 import type { CanonicalFieldWrite } from '../../../../src/core/port/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
@@ -169,11 +170,11 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
       }),
     ];
     const lockless = {} as MirrorPort;
-    vault.tasks.set(FIX, task(FIX, 'Building'));
-    const registry = new SyncStateAdapter(memoryStorage());
-    await seedHandles(registry, PROJECT, 'a', [
-      { handle: 'issue-1', notePath: FIX },
-    ]);
+    const registry = {
+      listMirrorHandles: async (): Promise<never> => {
+        throw new Error('a lockless connection must be skipped');
+      },
+    } as unknown as RegistryPort;
     const action = new ReconcileProjectTaskLocksAction(
       vault,
       registry,
@@ -181,8 +182,8 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
       DONE,
     );
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
-
-    expect(lockless.lockTask).toBeUndefined();
+    await expect(
+      action.invoke({ project: PROJECT, frozen: true, wasFrozen: false }),
+    ).resolves.toBeUndefined();
   });
 });

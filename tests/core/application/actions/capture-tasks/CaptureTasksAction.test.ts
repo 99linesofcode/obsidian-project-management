@@ -170,7 +170,9 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
   it('skips a connection whose adapter declares no capture', async () => {
     const vault = new FakeVault([connection('acme', 'T1', 'acme')]);
     const syncState = new FakeSyncState();
-    const factory: MirrorAdapterFactoryPort = { create: () => null };
+    const factory: MirrorAdapterFactoryPort = {
+      create: () => ({}) as MirrorPort,
+    };
     const action = new CaptureTasksAction(
       vault,
       factory,
@@ -182,6 +184,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     const result = await action.invoke('Acme', SYNCED_AT);
 
     expect(result.captured).toEqual([]);
+    expect(result.errors).toEqual([]);
     expect(vault.created).toEqual([]);
   });
 

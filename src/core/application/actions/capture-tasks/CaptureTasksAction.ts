@@ -46,7 +46,7 @@ export class CaptureTasksAction {
         connection.slug,
         project,
       );
-      if (adapter === null) {
+      if (adapter === null || adapter.capture === undefined) {
         continue;
       }
       try {
@@ -71,6 +71,9 @@ export class CaptureTasksAction {
     adapter: MirrorPort,
     syncedAt: string,
   ): Promise<CaptureTasksResult> {
+    if (adapter.capture === undefined) {
+      return { captured: [], errors: [] };
+    }
     const tasks = await adapter.capture(connection.target);
     const adopted = new Set(
       (await this.registry.listMirrorItems(project, connection.slug)).map(

@@ -2,7 +2,7 @@ import type { MirrorPort } from './MirrorPort.js';
 
 export interface CaptureSource {
   readonly application: string;
-  readonly capture: Pick<MirrorPort, 'captureProjects'>;
+  readonly capture: Required<Pick<MirrorPort, 'captureProjects'>>;
 }
 
 // The core's need: build the mirror adapter a connection's application and

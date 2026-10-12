@@ -28,11 +28,14 @@ export interface MirrorPort {
   applyField(write: CanonicalFieldWrite): Promise<void>;
   deleteTask(handle: string): Promise<void>;
 
-  capture(target: string): Promise<CanonicalTask[]>;
-  captureProjects(): Promise<readonly CapturedProject[]>;
+  // The core's need: adopt remote-born work the vault does not hold yet. A tool
+  // without a capture surface omits these methods.
+  capture?(target: string): Promise<CanonicalTask[]>;
+  captureProjects?(): Promise<readonly CapturedProject[]>;
 
-  // The core's need: know a mirror field's decisive time. An adapter without
-  // trustworthy per-field timestamps omits this method.
+  // The core's need: read a mirror field's decisive time. Providing this method
+  // asserts the times it returns are trustworthy; an adapter whose per-field
+  // times are not decisive (or that cannot report one) omits it.
   fieldTime?(handle: string, field: CanonicalField): Promise<string | null>;
 
   // The core's need: know whether a mirror's read is a verified complete fetch,

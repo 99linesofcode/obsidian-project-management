@@ -138,18 +138,18 @@ module and exposes its one mirror surface.
   state) and the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field
   to the adapter's own representation; the completion fact is separate from the
-  `Status` representation; `deleteTask` removes the mirror item), plus capture
-  (tracked tasks, and the application-born projects a source enumerates). The
-  genuinely optional surfaces are **optional methods**: `fieldTime?`
-  (trustworthy per-field timestamps), `fetchComplete?` (verified-complete
-  fetch), `lockTask?`/`unlockTask?` (task locking), `latestActivity?` (project
-  activity) and the project-setup surface (`discoverProjects?`,
-  `readProjectAddressing?`, `createProjectWithStatus?`, `adoptProject?`,
-  `listProjects?`). A caller checks presence (`adapter.lockTask !== undefined`),
-  never a capability string or a null-gated port slot; an adapter without a
-  surface simply omits the method. The project, task, capture, timestamp,
-  locking, activity and setup surfaces were separate facet ports; the tool is
-  one collaborator, so it is one port.
+  `Status` representation; `deleteTask` removes the mirror item). The
+  genuinely optional surfaces are **optional methods**: `capture?`/
+  `captureProjects?` (tracked tasks and the application-born projects a source
+  enumerates), `fieldTime?` (trustworthy per-field timestamps), `fetchComplete?`
+  (verified-complete fetch), `lockTask?`/`unlockTask?` (task locking),
+  `latestActivity?` (project activity) and the project-setup surface
+  (`discoverProjects?`, `readProjectAddressing?`, `createProjectWithStatus?`,
+  `adoptProject?`, `listProjects?`). A caller checks presence
+  (`adapter.lockTask !== undefined`), never a capability string or a null-gated
+  port slot; an adapter without a surface simply omits the method. The project,
+  task, capture, timestamp, locking, activity and setup surfaces were separate
+  facet ports; the tool is one collaborator, so it is one port.
 - **The vault port.** **`VaultPort`** — the vault as one collaborator: read a
   note by path, create/write/rename/trash a note, list a folder's notes and
   enumerate the project notes, subscribe to note change/delete/rename events;

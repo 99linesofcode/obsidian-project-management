@@ -7,6 +7,7 @@ import type { MirrorSyncPass } from '../data/MirrorSyncPass.js';
 import { PassRecord } from '../data/PassRecord.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
+import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export class MirrorSyncAction {
@@ -56,7 +57,7 @@ async function observeMirror(
     current: task === null ? null : canonicalValue(task, pass.field),
     baseline: pass.baselines.get(mirror.side) ?? null,
     fieldTime,
-    timestampTrustworthy: mirror.adapter.fieldTime !== undefined,
+    timestampTrustworthy: mirrorTrustsTimestamps(mirror.adapter),
     completeFetch: mirror.adapter.fetchComplete?.() ?? false,
     currentCompleted: task === null ? false : task.completed,
   });
