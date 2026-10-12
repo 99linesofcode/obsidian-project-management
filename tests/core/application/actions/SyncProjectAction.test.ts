@@ -257,6 +257,7 @@ describe('the multi-adapter pass', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
+      'migrateLabels:Acme Widgets',
       'lifecycle',
       'taskLocks:false:false',
       'capture:Acme Widgets',
@@ -274,6 +275,7 @@ describe('the multi-adapter pass', () => {
       await h.action.execute('Acme Widgets');
 
       expect(h.events).toEqual([
+        'migrateLabels:Acme Widgets',
         'lifecycle',
         'taskLocks:true:false',
         'renames',
@@ -286,7 +288,8 @@ describe('the multi-adapter pass', () => {
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events.slice(0, 2)).toEqual([
+    expect(h.events.slice(0, 3)).toEqual([
+      'migrateLabels:Acme Widgets',
       'ensureBoard:Acme Widgets/github',
       'lifecycle',
     ]);
