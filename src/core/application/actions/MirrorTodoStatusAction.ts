@@ -2,7 +2,7 @@ import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
 import { projectFromNotePath } from '../../domain/paths.js';
 import { splitFrontmatter, withBody } from '../../domain/note.js';
 import { taskLinkFromAffiliation } from '../../domain/affiliation.js';
-import { ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
+import { isToDoNote, ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface MirrorTodoStatusInput {
@@ -21,6 +21,10 @@ export class MirrorTodoStatusAction {
   async execute(input: MirrorTodoStatusInput): Promise<void> {
     const todo = await this.vault.getNoteByPath(input.todoPath);
     if (!todo) {
+      return;
+    }
+
+    if (!isToDoNote(todo.content)) {
       return;
     }
 

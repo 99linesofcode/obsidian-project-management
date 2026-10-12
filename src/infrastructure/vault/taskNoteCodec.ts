@@ -7,7 +7,7 @@ import {
 } from '../../core/domain/affiliation.js';
 import {
   labelSequence,
-  labelsFromSequence,
+  labelsFromNote,
   typeFromLabels,
 } from '../../core/domain/note.js';
 import { projectFromNotePath } from '../../core/domain/paths.js';
@@ -23,7 +23,7 @@ export interface TaskNote {
 
 export function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
-  const labels = labelsFrom(content);
+  const labels = labelsFromNote(content);
   return {
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
@@ -128,38 +128,6 @@ function parentFromAffiliation(
     );
   }
   return taskLinkFromAffiliation(affiliation, project);
-}
-
-function labelsFrom(content: string): readonly string[] {
-  const lines = content.split('\n');
-  const closing = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
-  const end = closing === -1 ? lines.length : closing;
-  for (let i = 1; i < end; i++) {
-    if (!lines[i]!.startsWith('labels:')) {
-      continue;
-    }
-    const inline = lines[i]!.slice('labels:'.length).trim();
-    return inline === '' ? blockLabels(lines, i + 1, end) : labelsFromSequence(inline);
-  }
-  return [];
-}
-
-function blockLabels(lines: string[], from: number, end: number): string[] {
-  const items: string[] = [];
-  for (let i = from; i < end; i++) {
-    const match = /^\s*-\s*(.*)$/.exec(lines[i]!);
-    if (match === null) {
-      break;
-    }
-    items.push(unquote(match[1]!.trim()));
-  }
-  return items;
-}
-
-function unquote(value: string): string {
-  return value.startsWith('"') && value.endsWith('"')
-    ? value.slice(1, -1)
-    : value;
 }
 
 function withBody(content: string, body: string): string {

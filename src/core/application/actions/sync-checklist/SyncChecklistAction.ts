@@ -2,16 +2,15 @@ import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
 import type { ChecklistItem } from '../../../domain/ChecklistItem.js';
 import { freePath } from '../../../domain/paths.js';
 import {
-  labelsFromSequence,
   slugify,
   splitFrontmatter,
   stemOf,
-  typeFromLabels,
   withBody,
 } from '../../../domain/note.js';
 import { taskLinkFromAffiliation } from '../../../domain/affiliation.js';
 import { TaskNoteMapper } from '../create-task-note/TaskNoteMapper.js';
 import {
+  isToDoNote,
   ToDoNoteParser,
   withToDoStatus,
 } from '../../../domain/ToDoNoteParser.js';
@@ -236,13 +235,6 @@ export class SyncChecklistAction {
 
 function isDrifted(slug: string, stem: string): boolean {
   return slug !== stem && slug !== stem.replace(/-\d+$/, '');
-}
-
-function isToDoNote(content: string): boolean {
-  const labels = labelsFromSequence(
-    splitFrontmatter(content)?.fields.get('labels') ?? null,
-  );
-  return typeFromLabels(labels) === 'todo';
 }
 
 function takenFolder(projectName: string): string {
