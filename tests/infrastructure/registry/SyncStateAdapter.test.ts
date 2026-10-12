@@ -568,6 +568,22 @@ describe('SyncStateAdapter — the core baseline store', () => {
     expect(read?.value).toBe('true');
   });
 
+  it('prefers an archived baseline over a lingering legacy lifecycle key', async () => {
+    const { storage } = fakeStorage({
+      coreBaselines: {
+        Acme: {
+          archived: { origin: { value: 'false', completed: false } },
+          lifecycle: { origin: { value: 'true', completed: false } },
+        },
+      },
+    });
+    const adapter = new SyncStateAdapter(storage);
+
+    const read = await adapter.readBaseline('Acme', 'archived', 'origin');
+
+    expect(read?.value).toBe('false');
+  });
+
   it('leaves the existing chain bases untouched', async () => {
     const existing = {
       syncState: {

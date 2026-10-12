@@ -1,4 +1,4 @@
-import type { MergedField } from '../domain/mergedField.js';
+import type { MergedField } from '../domain/canonicalField.js';
 import type { Baseline } from '../domain/Baseline.js';
 import type { EntityRecord } from './data/EntityRecord.js';
 import type { MirrorItem } from './data/MirrorItem.js';

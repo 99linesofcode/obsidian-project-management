@@ -203,8 +203,9 @@ canonical DTOs and the pure core.
 - **Canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`). `MirrorPort`
   carries one generic write entry, `applyField`, and the completion fact is a
-  separate canonical field from the `Status` representation. `mergedField.ts`
-  adds the project-level `archived` fact, so the archive reconciles through the
+  separate canonical field from the `Status` representation. `canonicalField.ts`
+  also carries `MergedField` (the canonical fields plus the project-level
+  `archived` fact), so the archive reconciles through the
   same `mergeField` ladder as the task fields.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`,
   `ConnectionDataTransferObject`,

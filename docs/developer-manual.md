@@ -75,9 +75,9 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   identity and port state, and the side baselines. The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
-  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`); `mergedField.ts`
-  adds the project-level `archived` fact, so the archive reconciles through the
-  same `mergeField` ladder as the task fields.
+  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`) and `MergedField`
+  (the canonical fields plus the project-level `archived` fact), so the archive
+  reconciles through the same `mergeField` ladder as the task fields.
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`,
   `ConnectionDataTransferObject`,
@@ -529,7 +529,7 @@ The settings save shares this one chain through `mutateRoot`.
 The core's own memory lives in a sibling top-level key, written through the
 same storage. The baselines are folded into `SyncStateAdapter`:
 
-- **`coreBaselines`** (`SyncStateAdapter`) — per entity, per `BaselineField` (a
+- **`coreBaselines`** (`SyncStateAdapter`) — per entity, per `MergedField` (a
   canonical field or `archived`), per side, a `Baseline` (`value`,
   `completed`).
 

@@ -4,7 +4,7 @@ import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';
 import type { PortState } from '../../src/core/port/data/PortState.js';
-import type { MergedField } from '../../src/core/domain/mergedField.js';
+import type { MergedField } from '../../src/core/domain/canonicalField.js';
 import type { RegistryPort } from '../../src/core/port/RegistryPort.js';
 
 interface SeededMirror {
