@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import { splitFrontmatter } from '../../../../src/core/domain/note.js';
-import { ToDoNoteMapper } from '../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
+import { TaskNoteMapper } from '../../../../src/core/application/actions/create-task-note/TaskNoteMapper.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 // Fakes at the vault port: a path-keyed note store that records writes, so the
@@ -54,7 +54,7 @@ class FakeVault extends FakeVaultBase {
 const projectName = 'Acme Widgets';
 const taskPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const taskLink = '42-fix-the-bug';
-const todoPath = 'Projecten/Acme Widgets/todos/fix-the-bug.md';
+const todoPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 const syncedAt = '2026-09-18T12:00:00Z';
 
 function taskNote(body: string): string {
@@ -74,17 +74,42 @@ function bodyOf(content: string): string {
 }
 
 function toDoNote(status: 'open' | 'completed'): string {
-  return ToDoNoteMapper.map(
-    { title: 'Fix the bug', projectName, taskLink },
+  return TaskNoteMapper.map(
+    { type: 'todo', title: 'Fix the bug', body: '', createdAt: null },
     {
+      projectName,
       syncedAt,
       statusName: status,
-      ...(status === 'completed' ? { completedAt: syncedAt } : {}),
+      parentLink: taskLink,
     },
   ).content;
 }
 
-describe('TODO-2 — a to-do state mirrors to its note', () => {
+function blockLabelToDoNote(status: 'open' | 'completed'): string {
+  return [
+    '---',
+    'labels:',
+    '  - type:todo',
+    `status: ${status}`,
+    `affiliation: ["[[${projectName}]]", "[[${taskLink}]]"]`,
+    `synced: ${syncedAt}`,
+    '---',
+    '',
+  ].join('\n');
+}
+
+function nonTodoSubtaskNote(): string {
+  return [
+    '---',
+    'status: open',
+    `affiliation: ["[[${projectName}]]", "[[${taskLink}]]"]`,
+    `synced: ${syncedAt}`,
+    '---',
+    '',
+  ].join('\n');
+}
+
+describe('TDO-3 — a to-do state mirrors to its note', () => {
   it('checks the parent line when its to-do is completed', async () => {
     const vault = new FakeVault();
     vault.notes.set(taskPath, taskNote(`- [ ] [[${todoPath}|Fix the bug]]`));
@@ -142,5 +167,32 @@ describe('TODO-2 — a to-do state mirrors to its note', () => {
     await action.execute({ todoPath, syncedAt });
 
     expect(vault.written).toEqual([]);
+  });
+
+  it('leaves a non-todo subtask note alone', async () => {
+    const vault = new FakeVault();
+    vault.notes.set(taskPath, taskNote(`- [x] [[${todoPath}|Fix the bug]]`));
+    vault.notes.set(todoPath, nonTodoSubtaskNote());
+    const action = new MirrorTodoStatusAction(vault);
+
+    await action.execute({ todoPath, syncedAt });
+
+    expect(vault.written).toEqual([]);
+    expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
+      `- [x] [[${todoPath}|Fix the bug]]`,
+    );
+  });
+
+  it('mirrors a to-do whose labels are block-form', async () => {
+    const vault = new FakeVault();
+    vault.notes.set(taskPath, taskNote(`- [ ] [[${todoPath}|Fix the bug]]`));
+    vault.notes.set(todoPath, blockLabelToDoNote('completed'));
+    const action = new MirrorTodoStatusAction(vault);
+
+    await action.execute({ todoPath, syncedAt });
+
+    expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
+      `- [x] [[${todoPath}|Fix the bug]]`,
+    );
   });
 });

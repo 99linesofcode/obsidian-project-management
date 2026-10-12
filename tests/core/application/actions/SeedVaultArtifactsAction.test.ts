@@ -70,19 +70,6 @@ const TASK_TEMPLATE = [
   '',
 ].join('\n');
 
-const TODO_TEMPLATE = [
-  '---',
-  'affiliation: []',
-  'status: open',
-  'completed:',
-  'created: {{date}}',
-  'categories:',
-  '  - "[[Todos.base|Todos]]"',
-  'tags: []',
-  '---',
-  '',
-].join('\n');
-
 const PROJECT_TEMPLATE = [
   '---',
   'affiliation: []',
@@ -137,39 +124,6 @@ const TASKS_BASE = [
   '',
 ].join('\n');
 
-const TODOS_BASE = [
-  'filters:',
-  '  and:',
-  '    - file.ext == "md"',
-  '    - list(categories).contains(link("Todos.base"))',
-  '    - \'!file.inFolder("Templates")\'',
-  'properties:',
-  '  file.name:',
-  '    displayName: To-do',
-  'views:',
-  '  - type: table',
-  '    name: All',
-  '    order:',
-  '      - file.name',
-  '    sort:',
-  '      - property: status',
-  '        direction: ASC',
-  '      - property: file.name',
-  '        direction: ASC',
-  '  - type: table',
-  '    name: byAffiliation',
-  '    filters:',
-  '      and:',
-  '        - list(affiliation).contains(this)',
-  '    order:',
-  '      - status',
-  '      - file.name',
-  '    sort:',
-  '      - property: status',
-  '        direction: ASC',
-  '',
-].join('\n');
-
 const PROJECTS_BASE = [
   'filters:',
   '  and:',
@@ -211,15 +165,13 @@ const PROJECTS_BASE = [
 
 const SEEDED: Array<[string, string]> = [
   ['Templates/Task.md', TASK_TEMPLATE],
-  ['Templates/ToDo.md', TODO_TEMPLATE],
   ['Templates/Project.md', PROJECT_TEMPLATE],
   ['Bases/Tasks.base', TASKS_BASE],
-  ['Bases/Todos.base', TODOS_BASE],
   ['Bases/Projects.base', PROJECTS_BASE],
 ];
 
-describe('seed — a fresh vault gets all six artifacts', () => {
-  it('creates all six at their default paths', async () => {
+describe('TDO-2 — a fresh vault gets four artifacts', () => {
+  it('creates the four artifacts at their default paths', async () => {
     const vault = new FakeVault();
 
     await new SeedVaultArtifactsAction(vault, settings()).execute();
@@ -227,6 +179,16 @@ describe('seed — a fresh vault gets all six artifacts', () => {
     expect(vault.created.map((entry) => entry.path).sort()).toEqual(
       SEEDED.map(([path]) => path).sort(),
     );
+    expect(vault.created).toHaveLength(4);
+  });
+
+  it('creates no to-do template and no Todos base', async () => {
+    const vault = new FakeVault();
+
+    await new SeedVaultArtifactsAction(vault, settings()).execute();
+
+    expect(vault.notes.has('Templates/ToDo.md')).toBe(false);
+    expect(vault.notes.has('Bases/Todos.base')).toBe(false);
   });
 
   it('writes each artifact verbatim, with the literal {{date}} unresolved', async () => {
@@ -238,7 +200,6 @@ describe('seed — a fresh vault gets all six artifacts', () => {
       expect(vault.notes.get(path)).toBe(content);
     }
     expect(vault.notes.get('Templates/Task.md')).toContain('created: {{date}}');
-    expect(vault.notes.get('Templates/ToDo.md')).toContain('created: {{date}}');
     expect(vault.notes.get('Templates/Project.md')).toContain(
       'created: {{date}}',
     );
@@ -246,7 +207,7 @@ describe('seed — a fresh vault gets all six artifacts', () => {
 });
 
 describe('seed — an existing artifact is never overwritten', () => {
-  it('creates nothing when all six already exist', async () => {
+  it('creates nothing when all four already exist', async () => {
     const vault = new FakeVault();
     for (const [path] of SEEDED) {
       vault.notes.set(path, 'hand-authored, deliberately different');
@@ -271,9 +232,7 @@ describe('seed — an existing artifact is never overwritten', () => {
 
     expect(vault.created.map((entry) => entry.path).sort()).toEqual([
       'Bases/Projects.base',
-      'Bases/Todos.base',
       'Templates/Project.md',
-      'Templates/ToDo.md',
     ]);
     expect(vault.notes.get('Templates/Task.md')).toBe('existing task template');
     expect(vault.notes.get('Bases/Tasks.base')).toBe('existing tasks base');
@@ -315,13 +274,13 @@ describe('seed — on-demand scaffold', () => {
     const vault = new FakeVault();
 
     await new SeedVaultArtifactsAction(vault, settings()).executeOne(
-      'todosBase',
+      'tasksBase',
     );
 
     expect(vault.created.map((entry) => entry.path)).toEqual([
-      'Bases/Todos.base',
+      'Bases/Tasks.base',
     ]);
-    expect(vault.notes.get('Bases/Todos.base')).toBe(TODOS_BASE);
+    expect(vault.notes.get('Bases/Tasks.base')).toBe(TASKS_BASE);
   });
 
   it('is idempotent — a second scaffold creates nothing', async () => {

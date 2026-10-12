@@ -7,10 +7,8 @@ export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   debounceSeconds: 5,
   projectTemplatePath: 'Templates/Project.md',
   taskTemplatePath: 'Templates/Task.md',
-  todoTemplatePath: 'Templates/ToDo.md',
   projectsBasePath: 'Bases/Projects.base',
   tasksBasePath: 'Bases/Tasks.base',
-  todosBasePath: 'Bases/Todos.base',
   statusOptions: ['Unshaped', 'Shaping', 'Shaped', 'Building', 'Shipped'],
 };
 

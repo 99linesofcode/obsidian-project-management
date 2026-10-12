@@ -24,8 +24,9 @@ directly, documented here as it exists.
 The vault is the origin of truth. A project is a folder under `Projecten/`
 (or `Archief/` when archived) whose home note declares a non-empty
 `connections` map — one entry per connection slug, `{ tool, project }`; a task
-is a note under its `taken/` folder; a to-do is a note under its `todos/`
-folder. GitHub (a repository plus a Projects v2 board) and Todoist are
+is a note under its `taken/` folder; a to-do is a task note under `taken/`
+carrying the `type:todo` label. GitHub (a repository plus a Projects v2 board)
+and Todoist are
 **mirrors**: they hold copies of the vault's title, body, status and completion,
 and the plugin keeps them honest. Identity is a vault-owned uuid held in the
 registry (`data.json`'s `syncState` container); filenames and frontmatter carry
@@ -237,7 +238,7 @@ sequenceDiagram
     SP->>Cas: execute(notePath, projectName, syncedAt)
     SP->>Chk: execute(notePath, projectName, syncedAt)
   end
-  loop each todos note
+  loop each taken note
     SP->>Mir: execute(todoPath, syncedAt)
   end
   alt not frozen
@@ -608,7 +609,7 @@ sequenceDiagram
     Chk->>V: relink or rename or complete or reopen
     Chk->>V: removeDropped, trash orphan to-dos
   end
-  loop each todos note
+  loop each taken note
     SP->>Mir: execute(todoPath, syncedAt)
     Mir->>V: find parent task and checklist line
     Mir->>V: write checkbox to match to-do status
@@ -712,7 +713,7 @@ sequenceDiagram
   end
   Q->>SP: execute(project)
   SP->>Ren: execute({ projectName, syncedAt })
-  Ren->>V: listNotesInFolder(taken and todos)
+  Ren->>V: listNotesInFolder(taken)
   Ren->>SS: listEntities(project)
   Ren->>Ren: untracked notes grouped by normalizedStem
   loop record whose note is gone
@@ -885,7 +886,7 @@ layers, and each layer owns one surface of the system.
   `src/core/application/actions/` holds the discovery/attach/board actions
   (former `projects/`), the chain (`SyncProjectAction`, `DetectNoteRenamesAction`,
   `SweepDeletedNotesAction`, `HandleDeletedNoteAction`), the cascade
-  (`CompleteTaskCascadeAction`) and the checklist/to-do actions (former `todos/`).
+  (`CompleteTaskCascadeAction`) and the checklist/to-do actions.
 - The capture and lifecycle actions:
   `src/core/application/actions/CaptureProjectsAction.ts`,
   `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`.
@@ -901,8 +902,7 @@ layers, and each layer owns one surface of the system.
   `syncStateSchema`, `loadDataSafely`).
 - The note codecs live with their consumers:
   `src/core/application/actions/create-task-note/TaskNoteMapper.ts` beside
-  `CreateTaskNoteAction`, `.../sync-checklist/ToDoNoteMapper.ts` beside
-  `SyncChecklistAction`, and
+  `CreateTaskNoteAction` and
   `src/core/application/actions/capture-tasks/CapturedTaskNoteMapper.ts` beside
   `CaptureTasksAction`.
 - The driving side: `src/ui/` (`SyncScheduler`, `SyncQueue`, the settings

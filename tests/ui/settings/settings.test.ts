@@ -95,14 +95,12 @@ describe('the board scaffolding vocabulary round-trips', () => {
   });
 });
 
-describe('the six seeded artifact paths round-trip', () => {
+describe('TDO-2 — the four seeded artifact paths round-trip', () => {
   const custom = {
     projectTemplatePath: 'Templates/MijnProject.md',
     taskTemplatePath: 'Templates/MijnTaken.md',
-    todoTemplatePath: 'Templates/MijnTodos.md',
     projectsBasePath: 'Bases/MijnProjecten.base',
     tasksBasePath: 'Bases/MijnTaken.base',
-    todosBasePath: 'Bases/MijnTodos.base',
   };
 
   it('defaults each path when data.json does not set it', () => {
@@ -110,10 +108,13 @@ describe('the six seeded artifact paths round-trip', () => {
 
     expect(settings.projectTemplatePath).toBe('Templates/Project.md');
     expect(settings.taskTemplatePath).toBe('Templates/Task.md');
-    expect(settings.todoTemplatePath).toBe('Templates/ToDo.md');
     expect(settings.projectsBasePath).toBe('Bases/Projects.base');
     expect(settings.tasksBasePath).toBe('Bases/Tasks.base');
-    expect(settings.todosBasePath).toBe('Bases/Todos.base');
+  });
+
+  it('carries no to-do template or to-dos base path', () => {
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('todoTemplatePath');
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('todosBasePath');
   });
 
   it('loads every configured path from data.json', () => {

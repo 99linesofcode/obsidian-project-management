@@ -1,8 +1,8 @@
 import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
-import { projectFromTodoPath } from '../../domain/paths.js';
+import { projectFromNotePath } from '../../domain/paths.js';
 import { splitFrontmatter, withBody } from '../../domain/note.js';
 import { taskLinkFromAffiliation } from '../../domain/affiliation.js';
-import { ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
+import { isToDoNote, ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface MirrorTodoStatusInput {
@@ -24,13 +24,17 @@ export class MirrorTodoStatusAction {
       return;
     }
 
+    if (!isToDoNote(todo.content)) {
+      return;
+    }
+
     const parsed = ToDoNoteParser.parse(todo.content);
     if (!parsed) {
       return;
     }
 
-    const projectName = projectFromTodoPath(input.todoPath);
-    if (projectName === null) {
+    const projectName = projectFromNotePath(input.todoPath);
+    if (projectName === '') {
       return;
     }
     const taskLink = taskLinkFromAffiliation(parsed.affiliation, projectName);

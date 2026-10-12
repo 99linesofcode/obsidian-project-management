@@ -4,7 +4,6 @@ import {
   folderChainForPath,
   freePath,
   projectFromNotePath,
-  projectFromTodoPath,
   projectHomePath,
   projectHomeStem,
 } from '../../../src/core/domain/paths.js';
@@ -77,30 +76,6 @@ describe('DISC-4 — only the project root names the project', () => {
     ).toBe('Acme Widgets');
     expect(projectFromNotePath('Templates/ToDo.md')).toBe('');
     expect(projectFromNotePath('taken/42-orphan.md')).toBe('');
-  });
-});
-
-describe('TODO-1 — a to-do path names its project', () => {
-  it('reads the project from a to-do path', () => {
-    const project = projectFromTodoPath(
-      'Projecten/Acme Widgets/todos/fix-the-bug.md',
-    );
-
-    expect(project).toBe('Acme Widgets');
-  });
-
-  it('returns null for a task path', () => {
-    const project = projectFromTodoPath(
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-    );
-
-    expect(project).toBeNull();
-  });
-
-  it('returns null for a path outside the vault convention', () => {
-    const project = projectFromTodoPath('Notes/random.md');
-
-    expect(project).toBeNull();
   });
 });
 
@@ -206,27 +181,27 @@ describe('MAT-5 — a taken slug gains an ordinal', () => {
   it('returns the base path when it is free', async () => {
     const vault = new FakeVault();
 
-    const path = await freePath(vault, 'Projecten/X/todos/fix-the-bug.md');
+    const path = await freePath(vault, 'Projecten/X/taken/fix-the-bug.md');
 
-    expect(path).toBe('Projecten/X/todos/fix-the-bug.md');
+    expect(path).toBe('Projecten/X/taken/fix-the-bug.md');
   });
 
   it('suffixes -2 when the base path is taken', async () => {
     const vault = new FakeVault();
-    vault.notes.add('Projecten/X/todos/fix-the-bug.md');
+    vault.notes.add('Projecten/X/taken/fix-the-bug.md');
 
-    const path = await freePath(vault, 'Projecten/X/todos/fix-the-bug.md');
+    const path = await freePath(vault, 'Projecten/X/taken/fix-the-bug.md');
 
-    expect(path).toBe('Projecten/X/todos/fix-the-bug-2.md');
+    expect(path).toBe('Projecten/X/taken/fix-the-bug-2.md');
   });
 
   it('walks past taken suffixes', async () => {
     const vault = new FakeVault();
-    vault.notes.add('Projecten/X/todos/fix-the-bug.md');
-    vault.notes.add('Projecten/X/todos/fix-the-bug-2.md');
+    vault.notes.add('Projecten/X/taken/fix-the-bug.md');
+    vault.notes.add('Projecten/X/taken/fix-the-bug-2.md');
 
-    const path = await freePath(vault, 'Projecten/X/todos/fix-the-bug.md');
+    const path = await freePath(vault, 'Projecten/X/taken/fix-the-bug.md');
 
-    expect(path).toBe('Projecten/X/todos/fix-the-bug-3.md');
+    expect(path).toBe('Projecten/X/taken/fix-the-bug-3.md');
   });
 });

@@ -1,5 +1,10 @@
 import { parseAffiliation } from './affiliation.js';
-import { rewriteFrontmatterFields, splitFrontmatter } from './note.js';
+import {
+  labelsFromNote,
+  rewriteFrontmatterFields,
+  splitFrontmatter,
+  typeFromLabels,
+} from './note.js';
 
 export interface ParsedToDoNote {
   status: string;
@@ -26,6 +31,12 @@ export const ToDoNoteParser = {
     };
   },
 };
+
+// Whether a note carries the `type:todo` label, in either the flow or the block
+// form.
+export function isToDoNote(content: string): boolean {
+  return typeFromLabels(labelsFromNote(content)) === 'todo';
+}
 
 // Rewrites the frontmatter status and completed lines of a to-do note,
 // preserving the body and every other frontmatter field. Mirrors withStatus

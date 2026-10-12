@@ -265,7 +265,7 @@ function composePlugin(
 
   const syncChecklist = new SyncChecklistAction(
     vault,
-    plugin.settings.todoTemplatePath,
+    plugin.settings.taskTemplatePath,
   );
   const mirrorTodoStatus = new MirrorTodoStatusAction(vault);
 

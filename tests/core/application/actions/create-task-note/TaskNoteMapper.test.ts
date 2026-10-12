@@ -64,6 +64,16 @@ describe('LBL-1 — a task renders as a note carrying labels', () => {
   });
 });
 
+describe('TDO-2 — every task note lives under taken/ regardless of kind', () => {
+  it('renders a todo kind under taken/ like any other kind', () => {
+    for (const type of ['task', 'todo', 'bug']) {
+      expect(TaskNoteMapper.map({ ...task, type }, context).path).toBe(
+        'Projecten/Acme Widgets/taken/fix-the-bug.md',
+      );
+    }
+  });
+});
+
 describe('TaskNoteMapper.render', () => {
   const template = [
     '---',
