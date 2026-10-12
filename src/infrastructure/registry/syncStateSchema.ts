@@ -12,8 +12,6 @@ export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
 export const IDENTITIES_KEY = 'identities';
 
-export const PROJECT_CURSORS_KEY = 'projectCursors';
-
 export function str(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }

@@ -21,7 +21,6 @@ import { CreateTaskNoteAction } from './core/application/actions/create-task-not
 import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/application/actions/capture-tasks/CaptureTasksAction.js';
-import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
 import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
@@ -95,11 +94,7 @@ function composeCoreActions(
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
-  const capture = new CaptureProjectsAction(
-    mirrorAdapters,
-    vault,
-    new RegistryProjectCursorAdapter(syncState),
-  );
+  const capture = new CaptureProjectsAction(mirrorAdapters, vault);
 
   return {
     taskFields: new MirrorSyncAction(vault, syncState, mirrorAdapters),
@@ -117,7 +112,7 @@ function composeCoreActions(
       createTaskNote,
       (application) => application === 'github',
     ),
-    projectCapture: () => capture.invoke(new Date().toISOString()),
+    projectCapture: () => capture.invoke(),
   };
 }
 

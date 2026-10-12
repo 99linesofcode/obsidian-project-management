@@ -67,9 +67,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   lifecycle and the project capture are one collaborator, so they are one port.
   The port is raw vault I/O: the task-capture adoption orchestration lives in
   `CaptureTasksAction`.
-- **The supporting ports.** `MirrorAdapterFactoryPort` (the mirror factory),
-  `ProjectSetupFactoryPort` (reach a tool's project-setup surface) and
-  `ProjectCaptureCursorPort`.
+- **The supporting ports.** `MirrorAdapterFactoryPort` (the mirror factory) and
+  `ProjectSetupFactoryPort` (reach a tool's project-setup surface).
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
   identity and port state, and the side baselines. The vault is one `VaultPort`
@@ -110,9 +109,8 @@ namespace per application.**
   and locking methods), `TaskManagerTarget`,
   `TaskManagerTransport` and `TodoistTransport`.
 - **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
-  and the `coreBaselines` store) and `RegistryProjectCursorAdapter`
-  (`ProjectCaptureCursorPort`), with the pure codecs (`coreStorageRecord`,
-  `syncStateSchema`, `loadDataSafely`) beside them.
+  and the `coreBaselines` store), with the pure codecs (`coreStorageRecord`,
+  `syncStateSchema`, `loadDataSafely`) beside it.
 - **Conformance.** `ConformanceMirrorAdapter` — an in-memory `MirrorPort` test
   double, used by the core and adapter tests.
 
@@ -408,40 +406,31 @@ from `archivedTime`, so the ladder falls through to the vault tie-break.
 
 A capture-capable adapter enumerates the application-born projects it can see
 (`MirrorPort.captureProjects`), each carrying its name, its candidate
-connection targets and its creation clock. The action reads each source's
-projects in creation order, adopts every project after that source's stored
-cursor that the vault does not already declare — writing the home note with its
-connection envelope through `VaultPort` — and advances the cursor
-only over the projects it handled. A first sight adopts the newest clock and
-captures nothing, so installing the plugin against an account full of unrelated
-projects adopts none of them. A project that links zero or several targets stops
-the watermark with a collected error; an already-declared project is skipped, so
-the pass is idempotent.
+connection targets and its creation clock. The action adopts every project the
+vault does not already declare by name+connection — writing the home note with
+its connection envelope through `VaultPort` — so the first run against an
+account adopts the whole back-catalogue. There is no cursor and no stored
+timestamp: every run re-enumerates the remote and skips what the vault already
+declares, so the pass is idempotent. A project that links zero or several
+targets collects an error and is left for the next pass; an adoption failure on
+one project is collected and the rest still adopt.
 
 ```mermaid
 sequenceDiagram
   participant C as CaptureProjectsAction
   participant S as CaptureSource
   participant V as VaultPort
-  participant Cur as ProjectCaptureCursorPort
 
   C->>S: capture.captureProjects()
   C->>V: listAdopted()
-  C->>Cur: read(application)
-  alt first sight (no cursor)
-    C->>Cur: write(newest createdAt or syncedAt)
-    Note over C: capture nothing
-  else cursor exists
-    loop projects after the cursor, oldest first
-      alt already declared by name
-        Note over C: handled, watermark may pass
-      else exactly one target
-        C->>V: adopt(project, application, slug)
-      else zero or several targets
-        Note over C: collect error, stop the watermark
-      end
+  loop each enumerated project
+    alt already declared by name or target
+      Note over C: skip
+    else exactly one target
+      C->>V: adopt(project, application, slug)
+    else zero or several targets
+      Note over C: collect error, keep enumerating
     end
-    C->>Cur: write(last handled), only when it moved
   end
 ```
 
@@ -516,9 +505,7 @@ note's connection slug (not the provider name), so a project can hold two
 connections of the same tool; discovery re-keys a renamed connection's port in
 lockstep (`rekeyPortState`). Identities are keyed per connection
 (`projects.<name>.identities.<connectionSlug>`), so two code-host connections
-address their own repositories and boards. The container also carries the
-per-surface project-capture cursors (`projectCursors`) beside the projects;
-setting a cursor to its current value is a no-op. Every write persists through a
+address their own repositories and boards. Every write persists through a
 fresh read of the `data.json` root (so settings keys survive) after asking for a
 throttled rolling backup. A container whose version is NEWER than this plugin's
 is loaded read-only: reads serve it, but every mutating port method throws
@@ -859,9 +846,8 @@ lane can no longer revert a completion.
 - **Registry writes are serialized.** Every `SyncStateAdapter` port method and
   the settings save run on one promise chain, so a load-modify-save can never
   interleave. A container written by a newer plugin version is read-only.
-- **A quiet tick writes nothing.** Setting a project cursor to its current
-  value is a no-op; a merged field or task side that already matches is advanced
-  without a remote write.
+- **A quiet tick writes nothing.** A merged field or task side that already
+  matches is advanced without a remote write.
 - **The `coreBaselines` key is a sibling of `syncState`.**
   The core's memory is separate from the registry's, so a write
   on one cannot clobber the other.
