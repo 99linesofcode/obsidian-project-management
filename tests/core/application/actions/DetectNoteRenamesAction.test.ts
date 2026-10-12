@@ -63,12 +63,12 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
 
   it('pairs a to-do record whose note was renamed', async () => {
     const h = harness();
-    const oldTodo = 'Projecten/Acme Widgets/todos/42-ship-it.md';
-    const newTodo = 'Projecten/Acme Widgets/todos/ship-it.md';
+    const oldTodo = 'Projecten/Acme Widgets/taken/42-ship-it.md';
+    const newTodo = 'Projecten/Acme Widgets/taken/ship-it.md';
     h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: oldTodo }), {
       todoist: { handle: 'T9' },
     });
-    h.vault.folders.set('Projecten/Acme Widgets/todos', [newTodo]);
+    h.vault.folders.set('Projecten/Acme Widgets/taken', [newTodo]);
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 

@@ -14,13 +14,9 @@ export class DetectNoteRenamesAction {
   ) {}
 
   async execute(input: DetectNoteRenamesInput): Promise<void> {
-    const currentPaths: string[] = [];
-    for (const folder of [
+    const currentPaths: string[] = await this.vault.listNotesInFolder(
       `Projecten/${input.projectName}/taken`,
-      `Projecten/${input.projectName}/todos`,
-    ]) {
-      currentPaths.push(...(await this.vault.listNotesInFolder(folder)));
-    }
+    );
     const currentSet = new Set(currentPaths);
 
     const records = (
