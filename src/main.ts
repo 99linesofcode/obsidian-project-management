@@ -24,7 +24,6 @@ import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
-import { ResolveProjectBoardAction } from './core/application/actions/ResolveProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './core/application/actions/MirrorTodoStatusAction.js';
 import { RekeyRenamedConnectionsAction } from './core/application/actions/RekeyRenamedConnectionsAction.js';
@@ -204,6 +203,7 @@ function composePlugin(
     createTodoistTransport,
   );
   const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
+  const taskManagerSetup = new TaskManagerMirrorAdapter(taskManagerTransport);
   const providers: ProviderTable = {
     github: {
       mirror: (target, boardIdentity) =>
@@ -221,7 +221,7 @@ function composePlugin(
       mirror: (target) =>
         new TaskManagerMirrorAdapter(taskManagerTransport, target),
       capture: () => new TaskManagerMirrorAdapter(taskManagerTransport),
-      setup: () => null,
+      setup: () => taskManagerSetup,
       token: taskManagerToken,
     },
   };
@@ -253,7 +253,6 @@ function composePlugin(
     vault,
     plugin.settings.doneOptionName,
   );
-  const resolveProjectBoard = new ResolveProjectBoardAction();
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -264,7 +263,6 @@ function composePlugin(
   const ensureProjectBoard = new EnsureProjectBoardAction(
     syncState,
     plugin.settings.statusOptions,
-    resolveProjectBoard,
   );
 
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);

@@ -4,6 +4,7 @@ import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWri
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { CapturedProject } from '../../core/port/data/CapturedProject.js';
+import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
   TaskManagerResponse,
@@ -59,6 +60,55 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
 
   async createProject(target: string, name: string): Promise<CanonicalProject> {
     TaskManagerTarget.parse(target);
+    return this.createProjectByName(name);
+  }
+
+  async resolveOrCreateProject(
+    target: string,
+    name: string,
+    _statusOptions: readonly string[],
+  ): Promise<ProjectAddressing> {
+    const projectId =
+      target.trim() === ''
+        ? await this.findOrCreateProjectId(name)
+        : await this.resolveTargetProjectId(target, name);
+    return new ProjectAddressing({
+      projectHandle: projectId,
+      statusFieldHandle: '',
+      statusOptions: [],
+    });
+  }
+
+  private async resolveTargetProjectId(
+    target: string,
+    name: string,
+  ): Promise<string> {
+    const connection = TaskManagerTarget.parse(target);
+    const response = await this.transport.get(
+      `/projects/${connection.projectId}`,
+    );
+    if (response.status !== 404) {
+      requireRecord(response, 'read project');
+      return connection.projectId;
+    }
+    return this.createProjectByName(name).then((project) => project.handle);
+  }
+
+  private async findOrCreateProjectId(name: string): Promise<string> {
+    const existing = await this.findProjectIdByName(name);
+    if (existing !== null) {
+      return existing;
+    }
+    return this.createProjectByName(name).then((project) => project.handle);
+  }
+
+  private async findProjectIdByName(name: string): Promise<string | null> {
+    const raw = await this.getList('/projects');
+    const match = raw.find((project) => stringOrEmpty(project.name) === name);
+    return match === undefined ? null : stringOrEmpty(match.id);
+  }
+
+  private async createProjectByName(name: string): Promise<CanonicalProject> {
     const response = await this.transport.post(
       '/projects',
       JSON.stringify({ name }),

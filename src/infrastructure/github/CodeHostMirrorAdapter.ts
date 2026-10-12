@@ -5,10 +5,7 @@ import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
-import { ProjectCandidate } from '../../core/port/data/ProjectCandidate.js';
-import { ProjectDiscovery } from '../../core/port/data/ProjectDiscovery.js';
 import type { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
-import { ProjectSummary } from '../../core/port/data/ProjectSummary.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
   CodeHostResponse,
@@ -511,6 +508,20 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     });
   }
 
+  // Find-or-create the board titled with the project name, link it to the repo,
+  // and ensure its Status field — the one board-provisioning ladder.
+  private async provisionBoard(
+    name: string,
+    repositoryId: string,
+    statusOptions: readonly string[],
+  ): Promise<{ projectId: string; status: StatusField }> {
+    const projectId =
+      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
+    await this.linkBoard(projectId, repositoryId);
+    const status = await this.ensureStatusField(projectId, statusOptions);
+    return { projectId, status };
+  }
+
   private async linkBoard(
     projectId: string,
     repositoryId: string,
@@ -550,56 +561,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     return null;
   }
 
-  async discoverProjects(target: string): Promise<ProjectDiscovery> {
-    const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.target);
-    const data = await this.graphql(REPO_BOARDS_QUERY, {
-      owner: repo.owner,
-      name: repo.name,
-    });
-    const repository = data.repository;
-    if (!isRecord(repository) || typeof repository.id !== 'string') {
-      throw new Error(
-        `code host: repository ${repo.owner}/${repo.name} not found`,
-      );
-    }
-    const projects = nodesOf(repository, 'projectsV2')
-      .filter(isRecord)
-      .flatMap(parseRepoBoard)
-      .map(
-        (board) =>
-          new ProjectSummary({
-            handle: board.projectNodeId,
-            name: board.name,
-          }),
-      );
-    return new ProjectDiscovery({ targetHandle: repository.id, projects });
-  }
-
-  async readProjectAddressing(
-    project: ProjectSummary,
-  ): Promise<ProjectAddressing | null> {
-    const data = await this.graphql(PROJECT_FIELDS_QUERY, {
-      projectId: project.handle,
-    });
-    const node = data.node;
-    if (!isRecord(node) || typeof node.id !== 'string') {
-      return null;
-    }
-    const status = statusField(node);
-    if (status === null) {
-      throw new Error(
-        `code host: project ${project.handle} has no Status field`,
-      );
-    }
-    return new ProjectAddressing({
-      projectHandle: project.handle,
-      statusFieldHandle: status.id,
-      statusOptions: status.options,
-    });
-  }
-
-  async createProjectWithStatus(
+  async resolveOrCreateProject(
     target: string,
     name: string,
     statusOptions: readonly string[],
@@ -607,6 +569,16 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     const connection = CodeHostTarget.parse(target);
     const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
+    const existing = await this.findBoardByName(connection.target, name);
+    if (existing !== null) {
+      await this.linkBoard(existing, repositoryId);
+      const status = await this.ensureStatusField(existing, statusOptions);
+      return new ProjectAddressing({
+        projectHandle: existing,
+        statusFieldHandle: status.id,
+        statusOptions: status.options,
+      });
+    }
     const { projectId, status } = await this.provisionBoard(
       name,
       repositoryId,
@@ -619,54 +591,26 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     });
   }
 
-  // Find-or-create the board titled with the repo name, link it to the repo,
-  // and ensure its Status field — the one board-provisioning ladder.
-  private async provisionBoard(
-    name: string,
-    repositoryId: string,
-    statusOptions: readonly string[],
-  ): Promise<{ projectId: string; status: StatusField }> {
-    const projectId =
-      (await this.findOrphanBoard(name)) ?? (await this.createBoard(name));
-    await this.linkBoard(projectId, repositoryId);
-    const status = await this.ensureStatusField(projectId, statusOptions);
-    return { projectId, status };
-  }
-
-  async adoptProject(
+  private async findBoardByName(
     target: string,
-    project: ProjectSummary,
-    statusOptions: readonly string[],
-  ): Promise<ProjectAddressing> {
-    const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.target);
-    const repositoryId = await this.repoNodeId(repo);
-    const status = await this.ensureStatusField(project.handle, statusOptions);
-    await this.linkBoard(project.handle, repositoryId);
-    return new ProjectAddressing({
-      projectHandle: project.handle,
-      statusFieldHandle: status.id,
-      statusOptions: status.options,
+    name: string,
+  ): Promise<string | null> {
+    const repo = repoParts(target);
+    const data = await this.graphql(REPO_BOARDS_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
     });
-  }
-
-  async listProjects(): Promise<readonly ProjectCandidate[]> {
-    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
-    return nodesOf(data.viewer, 'projectsV2')
-      .filter(isRecord)
-      .flatMap((node) =>
-        typeof node.id === 'string'
-          ? [
-              new ProjectCandidate({
-                project: new ProjectSummary({
-                  handle: node.id,
-                  name: typeof node.title === 'string' ? node.title : '',
-                }),
-                targets: repoUrlsOf(node),
-              }),
-            ]
-          : [],
+    const repository = data.repository;
+    if (!isRecord(repository) || typeof repository.id !== 'string') {
+      throw new Error(
+        `code host: repository ${repo.owner}/${repo.name} not found`,
       );
+    }
+    const board = nodesOf(repository, 'projectsV2')
+      .filter(isRecord)
+      .flatMap(parseRepoBoard)
+      .find((candidate) => candidate.name === name);
+    return board?.projectNodeId ?? null;
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {

@@ -1,63 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
-import { ResolveProjectBoardAction } from '../../../../src/core/application/actions/ResolveProjectBoardAction.js';
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
-import { ProjectCandidate } from '../../../../src/core/port/data/ProjectCandidate.js';
-import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
-import { ProjectSummary } from '../../../../src/core/port/data/ProjectSummary.js';
 import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
 import type { ProjectIdentityDataTransferObject } from '../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeSetup implements ProjectSetupSurface {
-  discovery: ProjectDiscovery = new ProjectDiscovery({
-    targetHandle: 'R_kgDOAAAA',
-    projects: [],
-  });
-  candidates: ProjectCandidate[] = [];
+  existing = new Map<string, ProjectAddressing>();
   createCalls: Array<{
     target: string;
     name: string;
     statusOptions: string[];
   }> = [];
-  adoptCalls: Array<{ target: string; project: ProjectSummary }> = [];
-  addressings = new Map<string, ProjectAddressing>();
+  adoptCalls: Array<{ target: string; name: string }> = [];
   created = new ProjectAddressing({
     projectHandle: 'PVT_created',
     statusFieldHandle: 'PVTF_created',
     statusOptions: [{ id: 'PVTSSF_1', name: 'Unshaped' }],
   });
 
-  async discoverProjects(): Promise<ProjectDiscovery> {
-    return this.discovery;
-  }
-  async readProjectAddressing(): Promise<never> {
-    throw new Error('not used in this test');
-  }
-  async createProjectWithStatus(
+  async resolveOrCreateProject(
     target: string,
     name: string,
     statusOptions: readonly string[],
   ): Promise<ProjectAddressing> {
+    const found = this.existing.get(name);
+    if (found !== undefined) {
+      this.adoptCalls.push({ target, name });
+      return found;
+    }
     this.createCalls.push({ target, name, statusOptions: [...statusOptions] });
     return this.created;
-  }
-  async adoptProject(
-    target: string,
-    project: ProjectSummary,
-  ): Promise<ProjectAddressing> {
-    this.adoptCalls.push({ target, project });
-    return (
-      this.addressings.get(project.handle) ??
-      new ProjectAddressing({
-        projectHandle: project.handle,
-        statusFieldHandle: '',
-        statusOptions: [],
-      })
-    );
-  }
-  async listProjects(): Promise<readonly ProjectCandidate[]> {
-    return this.candidates;
   }
 }
 
@@ -78,10 +51,6 @@ function identity(
   };
 }
 
-function project(name: string): ProjectSummary {
-  return new ProjectSummary({ handle: `PVT_${name}`, name });
-}
-
 function harness(
   projectName: string,
   stored: ProjectIdentityDataTransferObject,
@@ -93,11 +62,7 @@ function harness(
   const setup = new FakeSetup();
   const syncState = new FakeSyncState();
   syncState.identities.set(projectName, stored);
-  const action = new EnsureProjectBoardAction(
-    syncState,
-    statusOptions,
-    new ResolveProjectBoardAction(),
-  );
+  const action = new EnsureProjectBoardAction(syncState, statusOptions);
   return { action, setup, syncState };
 }
 
@@ -126,13 +91,8 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
       'widgets',
       identity({ target: repoUrl, targetHandle: 'R_kgDOAAAA' }),
     );
-    const named = project('widgets');
-    h.setup.discovery = new ProjectDiscovery({
-      targetHandle: 'R_kgDOAAAA',
-      projects: [project('Roadmap'), named],
-    });
-    h.setup.addressings.set(
-      named.handle,
+    h.setup.existing.set(
+      'widgets',
       new ProjectAddressing({
         projectHandle: 'PVT_widgets',
         statusFieldHandle: 'PVTF_live',
