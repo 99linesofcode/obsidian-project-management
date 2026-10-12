@@ -12,8 +12,8 @@ number of mirror sides through one pure N-way merge. A connection produces a
 mirror side; the vault is the origin. The old chain — the two provider halves,
 the pairwise verdict, the legacy writers — is gone; the chain
 (`SyncProjectAction`) now drives the core actions and the vault-maintenance
-steps (board-ensure, rename recovery, vault consistency, the deletion sweep)
-directly, documented here as it exists.
+steps (connection origination, rename recovery, vault consistency, the deletion
+sweep) directly, documented here as it exists.
 
 ---
 
@@ -55,21 +55,20 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   `renameProject`, `setArchived`, `archivedTime`) and the task (`readTasks`,
   `readTask`, `createTask`, `applyField`, `deleteTask`). The genuinely optional
   surfaces are optional
-  methods: `capture?`/`captureProjects?`, `fieldTime?`, `fetchComplete?`,
+  methods: `capture?`, `fieldTime?`, `fetchComplete?`,
   `lockTask?`/`unlockTask?`
-  and the project-setup surface (`discoverProjects?`,
-  `readProjectAddressing?`, `createProjectWithStatus?`, `adoptProject?`,
-  `listProjects?`). A caller checks presence (`adapter.lockTask !== undefined`);
+  and the project-origination surface (`resolveOrCreateProject?`). A caller
+  checks presence (`adapter.lockTask !== undefined`);
   an adapter without a surface omits the method.
 - **The vault port.** `VaultPort` — the vault as one collaborator: read/write/
   enumerate/watch notes; observe/apply a task note's canonical field; read a
   project's declared connections and task-note paths; observe/apply a project's
-  archived state; adopt a captured project. The origin, the project source, the
-  lifecycle and the project capture are one collaborator, so they are one port.
+  archived state. The origin, the project source and the lifecycle are one
+  collaborator, so they are one port.
   The port is raw vault I/O: the task-capture adoption orchestration lives in
   `CaptureTasksAction`.
 - **The supporting ports.** `MirrorAdapterFactoryPort` (the mirror factory) and
-  `ProjectSetupFactoryPort` (reach a tool's project-setup surface).
+  `ProjectSetupFactoryPort` (reach a tool's project-origination surface).
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
   identity and port state, and the side baselines. The vault is one `VaultPort`
@@ -81,33 +80,32 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`,
   `ConnectionDataTransferObject`,
-  `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
-  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing` and `PortState`.
+  `CanonicalFieldWrite`, `ProjectAddressing` and `PortState`.
   The boundary payloads live with the
   ports (`core/port/data/`); a merge action's private working shapes stay
   co-located with the action.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
 - **The provider table.** The composition root holds one plain `providers`
-  table mapping an application id to its mirror factory, capture factory,
-  optional setup surface and token setting; it derives the mirror-adapter
+  table mapping an application id to its mirror factory,
+  project-origination surface and token setting; it derives the mirror-adapter
   factory, the setup factory, the registered-application set and the
   token-settings list from it. No validation framework, capability vocabulary or
   registration result.
 - **The actions.** `MirrorSyncAction` (the whole-project task pass),
-  `ProjectLifecycleSyncAction` (the project-level peer), `CaptureProjectsAction`,
-  `CaptureTasksAction` and `ReconcileProjectTaskLocksAction`.
+  `ProjectLifecycleSyncAction` (the project-level peer), `EnsureProjectBoardAction`
+  (the origination step), `CaptureTasksAction` and
+  `ReconcileProjectTaskLocksAction`.
 
 **The driven adapters (`src/infrastructure/`) implement those ports, one
 namespace per application.**
 
 - **Vault.** `VaultAdapter` (the `VaultPort`), with the pure note codecs
-  (`connectionsOf`, `parseConnectionsBlock`, `renderConnectionsBlock`,
-  `taskNoteCodec`) beside it.
-- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the setup
-  and locking surfaces), `CodeHostTarget` and `CodeHostTransport`.
-- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, without the setup
-  and locking methods), `TaskManagerTarget`,
+  (`connectionsOf`, `parseConnectionsBlock`, `taskNoteCodec`) beside it.
+- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the
+  origination and locking surfaces), `CodeHostTarget` and `CodeHostTransport`.
+- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, including the
+  origination surface, without the locking methods), `TaskManagerTarget`,
   `TaskManagerTransport` and `TodoistTransport`.
 - **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
   and the `coreBaselines` store), with the pure codecs (`coreStorageRecord`,
@@ -119,10 +117,7 @@ namespace per application.**
 
 - **`SyncScheduler`** — delivery mechanics only. A poll interval and vault
   change/delete/rename events enqueue project names; renames bypass the
-  debounce. Before each tick it runs the injected project capture, so a project
-  born on a remote is captured before the per-project chain reads it — a
-  task-manager project only when a same-name code-host or vault project exists.
-  It makes no business decisions.
+  debounce. It makes no business decisions.
 - **`SyncQueue`** — one serialized promise chain for the whole plugin. Runs one
   project at a time, coalesces duplicates, swallows a failed run so the queue
   never poisons.
@@ -132,7 +127,7 @@ namespace per application.**
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`) in
   order, wrapping every step so one failure logs and skips that step.
 - **`main.ts`** — the composition root. `composePlugin` builds the provider
-  table, the vault adapter, the mirror-adapter factory, the setup adapter and
+  table, the vault adapter, the mirror-adapter factory, the setup factory and
   the maintenance actions; `composeCoreActions` eagerly builds the core actions
   and their infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
@@ -141,17 +136,15 @@ namespace per application.**
   from the settings tab.
 - **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
   `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,
-  `RekeyRenamedConnectionsAction`, `DiscoverProjectsAction`,
-  `AttachProjectAction`, `ResolveProjectBoardAction`,
-  `EnsureProjectBoardAction`,
+  `RekeyRenamedConnectionsAction`, `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
   and `CreateTaskNoteAction`.
 
 ### The provider table
 
 The composition root holds one plain `providers` table — a value mapping an
-application id to its mirror factory, capture factory, optional setup surface
-and token setting. No descriptor, no validation, no registration result: the
+application id to its mirror factory, project-origination surface and token
+setting. No descriptor, no validation, no registration result: the
 provider's name is a value in its own module and in the composition root only.
 
 `main.ts` derives the mirror-adapter factory, the setup factory, the
@@ -170,42 +163,29 @@ one-paragraph summary precedes each.
 
 ### 2.1 The pass
 
-On load, `SyncScheduler.tick` first runs the injected project capture
-(`CaptureProjectsAction`, [§2.6](#26-project-capture)) — gated on a same-name
-code-host or vault project for a task-manager source — then enumerates the
-vault's project notes and enqueues each project name; `SyncQueue` runs them one
+`SyncScheduler.tick` enumerates the vault's project notes and enqueues each
+project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
 item no-ops), then drives every step in order. It migrates a legacy home note,
-re-keys a renamed connection, and ensures a code-host board for each active
-github connection; the core actions
+re-keys a renamed connection, and resolves-or-creates each declared connection's
+remote project; the core actions
 reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
 task-field pass, finally sweeping deletions. Every step failure logs and skips
 that step without blocking the others.
 
-#### 2.1a Startup and the pre-tick capture
+#### 2.1a The poll tick
 
 ```mermaid
 sequenceDiagram
-  participant P as ProjectManagementPlugin
-  participant D as DiscoverProjectsAction
-  participant A as AttachProjectAction
-  participant Cap as CaptureProjectsAction
   participant Sched as SyncScheduler
   participant Q as SyncQueue
 
-  P->>D: execute() on layout ready
-  D->>A: execute({ target }) per connection
-  A-->>D: ProjectIdentityData
-  D->>P: projects and errors
-  P->>P: syncState.setIdentity per project
-  P->>Cap: projectCapture()
-  Note over Cap: task-manager project needs a same-name code-host/vault project
-  Cap-->>P: { captured, errors }
-  Note over Sched: next tick
-  Sched->>Cap: captureProjects()
-  Sched->>Q: enqueue(project) per project note and captured name
+  Sched->>Sched: interval tick
+  Sched->>Sched: findProjectNotes()
+  Sched->>Q: enqueue(project) per project note
+  Note over Sched: a change/delete debounces per project;<br/>a rename enqueues immediately
 ```
 
 #### 2.1b The chain order
@@ -407,40 +387,37 @@ sequenceDiagram
 `result.value === 'true'`. A mirror that exposes no archive time returns `null`
 from `archivedTime`, so the ladder falls through to the vault tie-break.
 
-### 2.6 Project capture (`CaptureProjectsAction`)
+### 2.6 Origination (`EnsureProjectBoardAction`)
 
-A capture-capable adapter enumerates the application-born projects it can see
-(`MirrorPort.captureProjects`), each carrying its name, its candidate
-connection targets and its creation clock. The action adopts every project the
-vault does not already declare by name+connection — writing the home note with
-its connection envelope through `VaultPort` — so the first run against an
-account adopts the whole back-catalogue. The code host is the origin: a
-task-manager project is adopted only when a code-host project of the same name
-exists among the code-host connections' projects or the vault's adopted set, so
-a task-manager-only project is never adopted. There is no cursor and no stored
-timestamp: every run re-enumerates the remote and skips what the vault already
-declares, so the pass is idempotent. A project that links zero or several
-targets collects an error and is left for the next pass; an adoption failure on
-one project is collected and the rest still adopt.
+A project is set up by declaring its connections on the home note; the chain's
+origination step resolves-or-creates each declared connection's remote project
+and records the addressing the core writes through. `EnsureProjectBoardAction`
+calls the one uniform
+`MirrorPort.resolveOrCreateProject(target, name, statusOptions)` — the code host
+resolves-or-creates a board named for the vault project under the connection's
+repository, the task manager resolves-or-creates a project named for the vault
+project — and writes the returned `ProjectAddressing` to the registry identity.
+An empty connection target is resolved by the vault project's name (ORG-2); a
+non-empty target overrides. A connection that already has a recorded addressing
+is left alone, so a second pass creates nothing (I14). No declared connection
+means nothing fans out (ORG-4).
 
 ```mermaid
 sequenceDiagram
-  participant C as CaptureProjectsAction
-  participant S as CaptureSource
-  participant V as VaultPort
+  participant SP as SyncProjectAction
+  participant Ens as EnsureProjectBoardAction
+  participant Setup as ProjectSetupSurface
+  participant R as MirrorPort
+  participant SS as RegistryPort
 
-  C->>S: capture.captureProjects()
-  C->>V: listAdopted()
-  loop each enumerated project
-    alt already declared by name or target
-      Note over C: skip
-    else task manager without a same-name code-host project
-      Note over C: skip (the code host is the origin)
-    else exactly one target
-      C->>V: adopt(project, application, slug)
-    else zero or several targets
-      Note over C: collect error, keep enumerating
-    end
+  SP->>Ens: execute({ projectName, connectionSlug, target, setup })
+  Ens->>SS: getIdentity(projectName, connectionSlug)
+  alt recorded addressing
+    Note over Ens: leave it alone
+  else no addressing
+    Ens->>R: resolveOrCreateProject(target, projectName, statusOptions)
+    R-->>Ens: ProjectAddressing
+    Ens->>SS: setIdentity(merged)
   end
 ```
 
@@ -580,9 +557,8 @@ sequenceDiagram
 
 The composition root holds one plain `providers` table and derives its seams
 from it. `mirrorAdapterFactory.create` looks the application id up in the table
-and builds the mirror through that entry's factory; `buildCaptureSources`
-iterates the table and keeps the entries whose capture adapter carries
-`captureProjects`; the setup factory resolves `setupFor(application)` the same
+and builds the mirror through that entry's factory; the setup factory resolves
+`setupFor(application)` the same
 way. No validation, no registration result.
 
 ```mermaid
@@ -591,7 +567,7 @@ sequenceDiagram
   participant T as providers table
   participant F as MirrorAdapterFactoryPort
 
-  M->>T: build { github, todoist } (mirror, capture, setup, token)
+  M->>T: build { github, todoist } (mirror, setup, token)
   M->>F: mirrorAdapterFactory(syncState, providers)
   F->>T: providerFor(application)
   T-->>F: the entry (or null)
@@ -733,49 +709,18 @@ sequenceDiagram
   end
 ```
 
-### 2.16 Discovery, attach and board-ensure (the setup surface)
+### 2.16 The retired setup surface
 
-At `onLayoutReady`, `DiscoverProjectsAction` enumerates the vault's project
-notes and attaches each setup-capable connection through `AttachProjectAction`,
-which consults `ResolveProjectBoardAction` — the one home for the
-create/adopt/ambiguous decision — to resolve the repository and its boards and
-pick one (or none), then uses `readProjectAddressing` to resolve
-the Status field and its options. A board that does not exist yet yields an
-identity with an empty `projectHandle`, which `EnsureProjectBoardAction`
-resolves later on the chain: it adopts a linked board, prefers the one titled
-with the repo name, creates one (with a Status field) when none exists, and
-adopts an unlinked same-name viewer board (the orphan of an interrupted
-creation) rather than duplicating it. The identities are persisted so later
-board operations can resolve them.
-
-```mermaid
-sequenceDiagram
-  participant P as ProjectManagementPlugin
-  participant D as DiscoverProjectsAction
-  participant A as AttachProjectAction
-  participant R as ResolveProjectBoardAction
-  participant Setup as ProjectSetupSurface
-  participant Ens as EnsureProjectBoardAction
-  participant SS as RegistryPort
-
-  P->>D: execute()
-  D->>A: execute({ target })
-  A->>R: execute({ target, setup })
-  R->>Setup: discoverProjects(target)
-  R->>R: deriveBoardChoice(repoName, boards)
-  alt a board exists
-    A->>Setup: readProjectAddressing(board)
-  else no board
-    Note over A: identity with empty projectHandle
-  end
-  A-->>D: ProjectIdentityData
-  D->>SS: setIdentity(projectName, connectionSlug, identity)
-  Note over Ens: chain, active github connection
-  Ens->>R: execute({ target, setup })
-  Ens->>Setup: listProjects()
-  Ens->>Setup: createProjectWithStatus or adoptProject
-  Ens->>SS: setIdentity(merged)
-```
+The project-side "initial setup" machinery is gone. The load-time discovery pass
+(`DiscoverProjectsAction` + `AttachProjectAction` at `onLayoutReady`), the
+repo→board resolution and its create/adopt/ambiguous/orphan heuristics
+(`ResolveProjectBoardAction`), the code-host-only setup surface
+(`discoverProjects`, `readProjectAddressing`, `createProjectWithStatus`,
+`adoptProject`, `listProjects`) and remote-born project capture
+(`CaptureProjectsAction` + `MirrorPort.captureProjects`) are deleted. A declared
+connection resolves-or-creates its remote project by name
+([§2.6](#26-origination-ensureprojectboardaction)); a project is declared, never
+captured.
 
 ---
 
@@ -872,13 +817,9 @@ lane can no longer revert a completion.
 
 ## 5. Code-vs-brief discrepancies
 
-These are places where the code settled something the original design brief left
-open. The code is documented above; the brief's version is recorded here.
-
-1. **The scheduler's pre-tick capture is injected, not owned.** `SyncScheduler`
-   invokes an optional `captureProjects` callback and enqueues its returned
-   names; `main.ts` wires that callback to `projectCapture()`. The scheduler
-   itself makes no decision about what the capture does.
+None currently. The scheduler's pre-tick project capture was the last recorded
+discrepancy; it is deleted with the origination model, so the scheduler is pure
+delivery mechanics again.
 
 ---
 
@@ -895,13 +836,14 @@ layers, and each layer owns one surface of the system.
   application shapes under `src/core/application/data/`, and every use
   case under `src/core/application/actions/`.
 - The use cases folded in from the former concept modules:
-  `src/core/application/actions/` holds the discovery/attach/board actions
-  (former `projects/`), the chain (`SyncProjectAction`, `DetectNoteRenamesAction`,
+  `src/core/application/actions/` holds the origination step
+  (`EnsureProjectBoardAction`), the chain (`SyncProjectAction`,
+  `DetectNoteRenamesAction`,
   `SweepDeletedNotesAction`, `HandleDeletedNoteAction`), the cascade
   (`CompleteTaskCascadeAction`) and the checklist/to-do actions.
 - The capture and lifecycle actions:
-  `src/core/application/actions/CaptureProjectsAction.ts`,
-  `CaptureTasksAction.ts`, `ReconcileProjectTaskLocksAction.ts`.
+  `src/core/application/actions/capture-tasks/CaptureTasksAction.ts`,
+  `ReconcileProjectTaskLocksAction.ts`.
 - The neutral note arithmetic and the merge vocabulary: `src/core/domain/`
   (the note transforms `note`, the project-path arithmetic `paths`, the
   affiliation helpers `affiliation`, `checklist`, `ToDoNoteParser`, and
