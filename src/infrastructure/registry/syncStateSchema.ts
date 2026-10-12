@@ -1,5 +1,4 @@
 import { isRecord } from '../../core/domain/isRecord.js';
-import { TaskDataTransferObject } from '../../core/application/data/TaskDataTransferObject.js';
 import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
 import type { PortState } from '../../core/application/data/PortState.js';
 
@@ -129,30 +128,11 @@ export function ensureItemsMap(
   return port[ITEMS_KEY] as Record<string, unknown>;
 }
 
-export function mapBase(raw: unknown): TaskDataTransferObject | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-  return new TaskDataTransferObject({
-    id: str(raw.id),
-    notePath: str(raw.notePath),
-    mirrors: {},
-    title: str(raw.title),
-    body: str(raw.body),
-    status: str(raw.status),
-    completedAt: stringOrNull(raw.completedAt),
-    type: str(raw.type),
-    parent: stringOrNull(raw.parent),
-    createdAt: stringOrNull(raw.createdAt),
-    updatedAt: stringOrNull(raw.updatedAt),
-  });
-}
-
 export function mapMirrorItem(raw: unknown): MirrorItem | null {
   if (!isRecord(raw)) {
     return null;
   }
-  return { entityId: str(raw.entityId), base: mapBase(raw.base) };
+  return { entityId: str(raw.entityId) };
 }
 
 export function mapPortState(

@@ -14,7 +14,6 @@ export function conformanceDescriptor(
       'trustworthy per-field timestamps',
       'complete-fetch',
     ],
-    representations: {},
     secretKeys: [],
     settingsRows: [],
   });

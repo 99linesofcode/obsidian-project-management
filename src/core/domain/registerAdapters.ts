@@ -43,7 +43,6 @@ function rejectionReason(
   }
   if (
     !descriptor.capabilities ||
-    !descriptor.representations ||
     !descriptor.secretKeys ||
     !descriptor.settingsRows
   ) {

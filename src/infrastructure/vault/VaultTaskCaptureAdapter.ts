@@ -65,7 +65,7 @@ export class VaultTaskCaptureAdapter implements TaskCaptureVaultPort {
       input.projectName,
       input.slug,
       input.task.handle,
-      { entityId: id, base: null },
+      { entityId: id },
     );
   }
 }

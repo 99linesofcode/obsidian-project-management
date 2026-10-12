@@ -63,7 +63,6 @@ export class CreateTaskNoteAction {
         input.url,
         {
           entityId: id,
-          base: null,
         },
       );
     }

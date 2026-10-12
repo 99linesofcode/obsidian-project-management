@@ -187,7 +187,6 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
       capabilities: base.capabilities.filter(
         (capability) => capability !== 'task-locking',
       ),
-      representations: base.representations,
       secretKeys: base.secretKeys,
       settingsRows: base.settingsRows,
     });

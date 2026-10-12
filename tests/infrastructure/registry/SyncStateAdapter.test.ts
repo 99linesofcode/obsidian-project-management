@@ -115,18 +115,16 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     await adapter.setEntity(entityRecord({ id: 'entity-1', notePath }));
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'entity-1',
-      base: null,
     });
     await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T1', {
       entityId: 'entity-1',
-      base: null,
     });
 
     const byGithub = await adapter.findMirrorItem('github', url);
     const byTodoist = await adapter.findMirrorItem('todoist', 'T1');
 
-    expect(byGithub).toEqual({ entityId: 'entity-1', base: null });
-    expect(byTodoist).toEqual({ entityId: 'entity-1', base: null });
+    expect(byGithub).toEqual({ entityId: 'entity-1' });
+    expect(byTodoist).toEqual({ entityId: 'entity-1' });
   });
 
   it('returns null for an unknown mirror handle', async () => {
@@ -135,7 +133,6 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     await adapter.setEntity(entityRecord({ id: 'entity-1', notePath }));
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'entity-1',
-      base: null,
     });
     expect(
       await adapter.findMirrorItem('github', 'https://github.com/x/1'),
@@ -148,11 +145,10 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     await adapter.setEntity(entityRecord({ id: 'entity-1', notePath }));
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'entity-1',
-      base: null,
     });
 
     expect(await adapter.listMirrorItems('Acme Widgets', 'github')).toEqual([
-      { handle: url, item: { entityId: 'entity-1', base: null } },
+      { handle: url, item: { entityId: 'entity-1' } },
     ]);
 
     await adapter.removeMirrorItem('Acme Widgets', 'github', url);
@@ -166,11 +162,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     await adapter.setEntity(entityRecord({ id: 'entity-1', notePath }));
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'entity-1',
-      base: null,
     });
     await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T1', {
       entityId: 'entity-1',
-      base: null,
     });
 
     await adapter.removeEntity('entity-1');
@@ -235,11 +229,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     );
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'older',
-      base: null,
     });
     await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T-older', {
       entityId: 'older',
-      base: null,
     });
 
     await adapter.setEntity(
@@ -250,7 +242,6 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     );
     await adapter.setMirrorItem('Acme Widgets', 'github', url, {
       entityId: 'newer',
-      base: null,
     });
 
     expect((await adapter.findMirrorItem('github', url))?.entityId).toBe(
@@ -344,7 +335,6 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
     await adapter.setMirrorItem('Acme Widgets', 'todoist', 'T1', {
       entityId: 'uuid-1',
-      base: null,
     });
 
     await adapter.rekeyPortState('Acme Widgets', 'todoist', 'todoist-work');
@@ -373,11 +363,9 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
     await adapter.setMirrorItem('A', 'todoist', 'T-a', {
       entityId: 'uuid-a',
-      base: null,
     });
     await adapter.setMirrorItem('B', 'todoist', 'T-b', {
       entityId: 'uuid-b',
-      base: null,
     });
 
     await adapter.rekeyPortState('A', 'todoist', 'work');

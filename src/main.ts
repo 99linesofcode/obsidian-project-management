@@ -370,7 +370,6 @@ function composePlugin(
   const handleDeletedNote = new HandleDeletedNoteAction(
     syncState,
     mirrorAdapters,
-    plugin.settings.doneOptionName,
   );
   const completeTaskCascade = new CompleteTaskCascadeAction(
     vault,

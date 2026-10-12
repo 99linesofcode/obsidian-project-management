@@ -124,7 +124,6 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
     await syncState.setEntity({ id: ENTITY_ID, notePath: NOTE_PATH });
     await syncState.setMirrorItem(PROJECT, 'gh-main', HANDLE, {
       entityId: ENTITY_ID,
-      base: null,
     });
     const handles = new RegistryMirrorHandleAdapter(syncState);
 

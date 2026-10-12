@@ -533,7 +533,6 @@ export class SyncStateAdapter
       }
       ensureItemsMap(port)[handle] = {
         entityId: item.entityId,
-        base: item.base,
       };
 
       let handles = indexes.byHandle.get(portId);

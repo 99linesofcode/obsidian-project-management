@@ -13,20 +13,13 @@ export class MirrorSyncAction {
   constructor(private readonly origin: OriginPort | undefined = undefined) {}
 
   async invoke(pass: MirrorSyncPass): Promise<PassRecord> {
-    const capable = pass.mirrors.filter((mirror) =>
-      mirror.adapter.descriptor.represents(pass.field),
-    );
-    const skipped = pass.mirrors
-      .filter((mirror) => !mirror.adapter.descriptor.represents(pass.field))
-      .map((mirror) => mirror.side);
-
     const observations: SideObservation[] = [];
-    for (const mirror of capable) {
+    for (const mirror of pass.mirrors) {
       observations.push(await observeMirror(mirror, pass));
     }
 
     const result = mergeField(pass.origin, observations);
-    const mirrors = await fanOut(capable, pass, result);
+    const mirrors = await fanOut(pass.mirrors, pass, result);
     const originResult = await applyToOrigin(this.origin, pass, result);
 
     const advanced = [...mirrors.advanced];
@@ -42,7 +35,6 @@ export class MirrorSyncAction {
       field: pass.field,
       result,
       written: mirrors.written,
-      skipped,
       advanced,
       failed,
     });
@@ -75,7 +67,7 @@ async function observeMirror(
 }
 
 async function fanOut(
-  capable: readonly MirrorSide[],
+  mirrors: readonly MirrorSide[],
   pass: MirrorSyncPass,
   result: MergeResult,
 ): Promise<{ written: string[]; advanced: string[]; failed: string[] }> {
@@ -84,7 +76,7 @@ async function fanOut(
   const failed: string[] = [];
 
   if (result.outcome === 'value') {
-    for (const mirror of capable) {
+    for (const mirror of mirrors) {
       const task = await mirror.adapter.tasks.readTask(mirror.handle);
       if (task !== null && canonicalValue(task, pass.field) === result.value) {
         advanced.push(mirror.side);
@@ -105,7 +97,7 @@ async function fanOut(
       }
     }
   } else if (result.outcome === 'delete') {
-    for (const mirror of capable) {
+    for (const mirror of mirrors) {
       const task = await mirror.adapter.tasks.readTask(mirror.handle);
       if (task === null) {
         advanced.push(mirror.side);
