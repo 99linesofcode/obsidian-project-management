@@ -47,7 +47,6 @@ import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMi
 import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
-import { MigrateLabelsAction } from './core/application/actions/MigrateLabelsAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
 
 async function request(
@@ -285,7 +284,6 @@ function composePlugin(
     mirrorAdapters,
   );
   const migrateHomeNote = new MigrateProjectHomeNoteAction(vault);
-  const migrateLabels = new MigrateLabelsAction(vault);
   const sweepDeletedNotes = new SweepDeletedNotesAction(
     vault,
     syncState,
@@ -298,7 +296,6 @@ function composePlugin(
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,
     taskFields: core.taskFields,
-    migrateLabels,
     migrateHomeNote,
     detectNoteRenames,
     completeTaskCascade,

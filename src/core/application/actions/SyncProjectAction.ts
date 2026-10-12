@@ -6,7 +6,6 @@ import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
-import type { MigrateLabelsAction } from './MigrateLabelsAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
 import type { MirrorSyncAction } from './MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
@@ -23,7 +22,6 @@ export interface SyncProjectDependencies {
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
   taskFields: MirrorSyncAction;
-  migrateLabels: Pick<MigrateLabelsAction, 'execute'>;
   migrateHomeNote: MigrateProjectHomeNoteAction;
   detectNoteRenames: DetectNoteRenamesAction;
   completeTaskCascade: CompleteTaskCascadeAction;
@@ -51,7 +49,6 @@ export class SyncProjectAction {
       return this.stepErrors;
     }
 
-    await this.migrateLabels(project);
     await this.migrate(project, note);
     await this.rekey(project, note.connections);
     await this.ensureBoards(project, note);
@@ -77,12 +74,6 @@ export class SyncProjectAction {
     await this.deletions(project, note.connections);
 
     return this.stepErrors;
-  }
-
-  private async migrateLabels(project: string): Promise<void> {
-    await this.step('migrate labels', () =>
-      this.deps.migrateLabels.execute({ projectName: project }),
-    );
   }
 
   private async migrate(
