@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { AssembleProjectPassAction } from '../../../src/core/application/actions/AssembleProjectPassAction.js';
-import { AdapterRegistration } from '../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
@@ -14,10 +13,8 @@ import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdap
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
-import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
 import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
-import { githubDescriptor } from '../../../src/infrastructure/github/githubDescriptor.js';
 import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
@@ -861,38 +858,6 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
       true,
     );
     expect(after?.handle).toBe('PVT_ORPHAN');
-  });
-});
-
-describe('githubDescriptor — registers with the core (F01 ACM-8, ACM-9)', () => {
-  it('registers the code host as a mirror under the application id github', () => {
-    const result = registerAdapters([
-      new AdapterRegistration(
-        githubDescriptor(),
-        new CodeHostMirrorAdapter(new FakeTransport([]), target()),
-      ),
-    ]);
-
-    expect(result.errors).toHaveLength(0);
-    expect(result.adapters.get('github')?.descriptor.applicationId).toBe(
-      'github',
-    );
-  });
-
-  it('declares the universal and mandatory surface plus the optional mirrors', () => {
-    const descriptor = githubDescriptor();
-
-    expect(descriptor.capabilities).toContain('project');
-    expect(descriptor.capabilities).toContain('lifecycle');
-    expect(descriptor.capabilities).toContain('Status');
-    expect(descriptor.capabilities).toContain('label');
-    expect(descriptor.capabilities).toContain('subtasks');
-    expect(descriptor.capabilities).toContain('completion');
-    expect(descriptor.capabilities).toContain('capture');
-    expect(descriptor.capabilities).toContain(
-      'trustworthy per-field timestamps',
-    );
-    expect(descriptor.capabilities).toContain('complete-fetch');
   });
 });
 

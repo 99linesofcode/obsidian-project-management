@@ -88,23 +88,12 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
   }
 
   private tokenRows(): SettingRow[] {
-    const rows: SettingRow[] = [];
-    for (const descriptor of this.plugin.providerDescriptors) {
-      const key = descriptor.secretKeys[0];
-      const row = descriptor.settingsRows.find(
-        (candidate) => candidate.key === key,
-      );
-      if (key === undefined || row === undefined) {
-        continue;
-      }
-      rows.push({
-        name: row.label,
-        desc: row.description ?? '',
-        populate: (setting, desc, refresh) =>
-          this.populateTokenSetting(setting, desc, key, refresh),
-      });
-    }
-    return rows;
+    return this.plugin.tokenSettings.map((token) => ({
+      name: token.label,
+      desc: token.description,
+      populate: (setting, desc, refresh) =>
+        this.populateTokenSetting(setting, desc, token.key, refresh),
+    }));
   }
 
   private populatePollInterval(setting: Setting): void {

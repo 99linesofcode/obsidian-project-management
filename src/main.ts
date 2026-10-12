@@ -36,22 +36,15 @@ import { VaultAdapter } from './infrastructure/vault/VaultAdapter.js';
 import { SyncStateAdapter } from './infrastructure/registry/SyncStateAdapter.js';
 import { loadDataSafely } from './infrastructure/registry/loadDataSafely.js';
 import { createTodoistTransport } from './infrastructure/todoist/createTodoistTransport.js';
-import { AdapterRegistration } from './core/application/data/AdapterRegistration.js';
-import type { RegistrationResult } from './core/application/data/RegistrationResult.js';
-import { registerAdapters } from './core/application/services/registerAdapters.js';
-import { ConformanceMirrorAdapter } from './infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from './infrastructure/fake/conformanceDescriptor.js';
 import { AssembleProjectPassAction } from './core/application/actions/AssembleProjectPassAction.js';
 import { AssembleProjectLifecyclePassAction } from './core/application/actions/AssembleProjectLifecyclePassAction.js';
-import type { AdapterDescriptor } from './core/application/data/AdapterDescriptor.js';
 import type { MirrorPort } from './core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
 import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
 import type { ProjectIdentityDataTransferObject } from './core/port/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
-import { githubDescriptor } from './infrastructure/github/githubDescriptor.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import { todoistDescriptor } from './infrastructure/todoist/todoistDescriptor.js';
+import type { TokenSetting } from './ui/settings/TokenSetting.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { ReactivateFrozenProjectAction } from './core/application/actions/ReactivateFrozenProjectAction.js';
 import {
@@ -189,20 +182,21 @@ function composeCoreReconcilers(
   };
 }
 
-interface Provider {
-  applicationId: string;
-  descriptor: AdapterDescriptor;
-  mirror: (
+interface ProviderEntry {
+  readonly mirror: (
     target: string,
     boardIdentity: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) => MirrorPort;
-  capture: () => MirrorPort;
-  setup: () => ProjectSetupSurface | null;
+  readonly capture: () => MirrorPort;
+  readonly setup: () => ProjectSetupSurface | null;
+  readonly token: TokenSetting;
 }
+
+type ProviderTable = Readonly<Record<string, ProviderEntry>>;
 
 function mirrorAdapterFactory(
   syncState: RegistryPort,
-  providers: readonly Provider[],
+  providers: ProviderTable,
 ): MirrorAdapterFactoryPort {
   const captureSources = buildCaptureSources(providers);
   return {
@@ -211,11 +205,8 @@ function mirrorAdapterFactory(
       if (provider === null) {
         return null;
       }
-      return gateMirror(
-        provider.descriptor,
-        provider.mirror(target, () =>
-          syncState.getIdentity(projectName, connectionSlug),
-        ),
+      return provider.mirror(target, () =>
+        syncState.getIdentity(projectName, connectionSlug),
       );
     },
     captureSources: () => captureSources,
@@ -223,15 +214,15 @@ function mirrorAdapterFactory(
 }
 
 function buildCaptureSources(
-  providers: readonly Provider[],
+  providers: ProviderTable,
 ): readonly CaptureSource[] {
   const sources: CaptureSource[] = [];
-  for (const provider of providers) {
-    const adapter = gateMirror(provider.descriptor, provider.capture());
-    if (adapter === null || !hasProjectCapture(adapter)) {
+  for (const [application, provider] of Object.entries(providers)) {
+    const adapter = provider.capture();
+    if (!hasProjectCapture(adapter)) {
       continue;
     }
-    sources.push({ application: provider.applicationId, capture: adapter });
+    sources.push({ application, capture: adapter });
   }
   return sources;
 }
@@ -243,42 +234,10 @@ function hasProjectCapture(
 }
 
 function providerFor(
-  providers: readonly Provider[],
+  providers: ProviderTable,
   application: string,
-): Provider | null {
-  return (
-    providers.find((provider) => provider.applicationId === application) ?? null
-  );
-}
-
-function secretKeyOf(descriptor: AdapterDescriptor): string {
-  const key = descriptor.secretKeys[0];
-  if (key === undefined) {
-    throw new Error(
-      `descriptor '${descriptor.applicationId}' declares no secret key`,
-    );
-  }
-  return key;
-}
-
-function registeredApplicationIds(
-  descriptors: readonly AdapterDescriptor[],
-  conformance: AdapterDescriptor,
-): ReadonlySet<string> {
-  return new Set(
-    [...descriptors, conformance].map((descriptor) => descriptor.applicationId),
-  );
-}
-
-function gateMirror(
-  descriptor: AdapterDescriptor,
-  adapter: MirrorPort,
-): MirrorPort | null {
-  return (
-    registerAdapters([
-      new AdapterRegistration(descriptor, adapter),
-    ]).adapters.get(descriptor.applicationId)?.adapter ?? null
-  );
+): ProviderEntry | null {
+  return providers[application] ?? null;
 }
 
 function composePlugin(
@@ -291,27 +250,31 @@ function composePlugin(
   discoverProjects: DiscoverProjectsAction;
   projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
-  adapters: RegistrationResult;
-  providerDescriptors: readonly AdapterDescriptor[];
+  tokenSettings: readonly TokenSetting[];
 } {
-  const conformance = conformanceDescriptor('conformance');
-  const codeHostDescriptor = githubDescriptor();
-  const taskManagerDescriptor = todoistDescriptor();
+  const codeHostToken: TokenSetting = {
+    key: 'github-token',
+    label: 'GitHub token',
+    description: 'Personal access token used to talk to the GitHub API.',
+  };
+  const taskManagerToken: TokenSetting = {
+    key: 'todoist-token',
+    label: 'Todoist token',
+    description: 'Personal API token used to talk to the Todoist API.',
+  };
   const codeHostTransport = transportFromSecret(
     secrets,
-    secretKeyOf(codeHostDescriptor),
+    codeHostToken.key,
     createCodeHostTransport,
   );
   const taskManagerTransport = transportFromSecret(
     secrets,
-    secretKeyOf(taskManagerDescriptor),
+    taskManagerToken.key,
     createTodoistTransport,
   );
   const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
-  const providers: Provider[] = [
-    {
-      applicationId: 'github',
-      descriptor: codeHostDescriptor,
+  const providers: ProviderTable = {
+    github: {
       mirror: (target, boardIdentity) =>
         new CodeHostMirrorAdapter(
           codeHostTransport,
@@ -321,21 +284,23 @@ function composePlugin(
         ),
       capture: () => new CodeHostMirrorAdapter(codeHostTransport),
       setup: () => codeHostSetup,
+      token: codeHostToken,
     },
-    {
-      applicationId: 'todoist',
-      descriptor: taskManagerDescriptor,
+    todoist: {
       mirror: (target) =>
         new TaskManagerMirrorAdapter(taskManagerTransport, target),
       capture: () => new TaskManagerMirrorAdapter(taskManagerTransport),
       setup: () => null,
+      token: taskManagerToken,
     },
-  ];
-  const providerDescriptors = providers.map((provider) => provider.descriptor);
+  };
+  const tokenSettings = Object.values(providers).map(
+    (provider) => provider.token,
+  );
   const vault: VaultAdapter = new VaultAdapter(
     plugin.app,
     (eventRef) => plugin.registerEvent(eventRef),
-    registeredApplicationIds(providerDescriptors, conformance),
+    new Set(Object.keys(providers)),
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
@@ -426,10 +391,7 @@ function composePlugin(
     discoverProjects,
     projectCapture,
     seedArtifacts,
-    adapters: registerAdapters([
-      new AdapterRegistration(conformance, new ConformanceMirrorAdapter()),
-    ]),
-    providerDescriptors,
+    tokenSettings,
   };
 }
 
@@ -439,8 +401,7 @@ export default class ProjectManagementPlugin extends Plugin {
   projectNames: string[] = [];
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
-  adapters!: RegistrationResult;
-  providerDescriptors!: readonly AdapterDescriptor[];
+  tokenSettings!: readonly TokenSetting[];
 
   override async onload(): Promise<void> {
     const raw = await loadDataSafely(
@@ -479,12 +440,10 @@ export default class ProjectManagementPlugin extends Plugin {
       discoverProjects,
       projectCapture,
       seedArtifacts,
-      adapters,
-      providerDescriptors,
+      tokenSettings,
     } = composePlugin(this, syncState, this.secrets, baselineStorage);
     this.seedArtifacts = seedArtifacts;
-    this.adapters = adapters;
-    this.providerDescriptors = providerDescriptors;
+    this.tokenSettings = tokenSettings;
     await seedArtifacts.execute();
     this.addChild(scheduler);
 

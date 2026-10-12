@@ -47,7 +47,7 @@ describe('the provider isolation matrix', () => {
     expect(
       lintExitCode(
         'src/main.ts',
-        "import './infrastructure/github/githubDescriptor.js';\n",
+        "import './infrastructure/github/CodeHostMirrorAdapter.js';\n",
       ),
     ).toBe(0);
   });
@@ -57,7 +57,7 @@ describe('the intra-core dependency seam', () => {
   it('rejects a domain file importing an application file', () => {
     const result = lint(
       'src/core/domain/probe.ts',
-      "import type { AdapterDescriptor } from '../application/data/AdapterDescriptor.js';\n",
+      "import type { ProjectManagementSettings } from '../application/data/ProjectManagementSettings.js';\n",
     );
 
     expect(result.status).not.toBe(0);
@@ -77,7 +77,7 @@ describe('the intra-core dependency seam', () => {
   it('rejects a port file importing an application file', () => {
     const result = lint(
       'src/core/port/probe.ts',
-      "import type { AdapterDescriptor } from '../application/data/AdapterDescriptor.js';\n",
+      "import type { ProjectManagementSettings } from '../application/data/ProjectManagementSettings.js';\n",
     );
 
     expect(result.status).not.toBe(0);
