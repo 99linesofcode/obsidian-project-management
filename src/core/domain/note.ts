@@ -233,6 +233,42 @@ export function labelsFromNote(content: string): string[] {
   return [];
 }
 
+// Rewrites a note's labels to the flow-sequence form, replacing the `labels:`
+// line and consuming the block items that followed it. The key is appended
+// before the closing delimiter when absent. A note with no frontmatter block is
+// returned unchanged.
+export function withLabels(content: string, labels: readonly string[]): string {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return content;
+  }
+  const closing = lines.indexOf('---', 1);
+  if (closing === -1) {
+    return content;
+  }
+  const rendered = `labels: ${labelSequence(labels)}`;
+  const index = labelsLineIndex(lines, closing);
+  if (index === -1) {
+    lines.splice(closing, 0, rendered);
+    return lines.join('\n');
+  }
+  let removed = 1;
+  while (index + removed < closing && /^\s*-\s/.test(lines[index + removed]!)) {
+    removed++;
+  }
+  lines.splice(index, removed, rendered);
+  return lines.join('\n');
+}
+
+function labelsLineIndex(lines: string[], closing: number): number {
+  for (let i = 1; i < closing; i++) {
+    if (lines[i]!.startsWith('labels:')) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 function blockLabels(lines: string[], from: number, end: number): string[] {
   const items: string[] = [];
   for (let i = from; i < end; i++) {

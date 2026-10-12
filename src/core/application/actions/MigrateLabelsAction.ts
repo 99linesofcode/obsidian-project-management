@@ -1,9 +1,8 @@
 import {
-  labelSequence,
   labelsFromNote,
   removeFrontmatterFields,
-  rewriteFrontmatterFields,
   splitFrontmatter,
+  withLabels,
 } from '../../domain/note.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
@@ -38,10 +37,8 @@ function migrateNote(content: string): string {
   const label = `type:${type}`;
   const labels = labelsFromNote(content);
   const nextLabels = labels.includes(label) ? labels : [...labels, label];
-  const withLabel = rewriteFrontmatterFields(
-    content,
-    new Map([['labels', labelSequence(nextLabels)]]),
-    true,
+  return removeFrontmatterFields(
+    withLabels(content, nextLabels),
+    new Set(['type']),
   );
-  return removeFrontmatterFields(withLabel, new Set(['type']));
 }
