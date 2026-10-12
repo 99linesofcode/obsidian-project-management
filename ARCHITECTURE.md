@@ -204,15 +204,14 @@ canonical DTOs and the pure core.
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`). `MirrorPort`
   carries one generic write entry, `applyField`, and the completion fact is a
   separate canonical field from the `Status` representation.
-- **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `MirrorSide`,
-  `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
-  `ProjectLifecycleRecord`, `ConnectionDataTransferObject`,
+- **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`,
+  `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
   `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `PortState`
   and `ProjectActivityObservation` — one canonical shape per concept, owned by
-  the core. The port boundary payloads live with the ports (`core/port/data/`);
-  the pass shapes stay in `application/data/`. The merge diffs canonical fields
-  only.
+  the core. The boundary payloads live with the ports (`core/port/data/`); a
+  merge action's private working shapes stay co-located with the action. The
+  merge diffs canonical fields only.
 - **The merge vocabulary** lives in `domain/` beside `mergeField`: `Delta`,
   `MergeResult`, `SideObservation`, `Baseline`, `OriginObservation`. A value
   the domain reads is a domain value; the ports and the application depend
@@ -240,12 +239,12 @@ canonical DTOs and the pure core.
   write entry, writes the reconciled value back to the origin (or trashes the
   note on a delete), and advances the baseline of every side written or already
   matching — a skipped write advances too; a failed write advances nothing. A
-  mirror write that throws is recorded among the pass's failed sides and fan-out
-  continues to the remaining mirrors, so one failing connection never abandons the
-  rest. The project source enumerates note paths, so a mirror side is keyed
-  `mirror:<slug>` — disjoint from the origin side's `origin` key — while the
-  origin keeps the note path as its handle. A connection whose entity has no
-  resolved handle is materialized: the origin task is read through
+  mirror write that throws is recorded among the field outcome's `failed` sides
+  and fan-out continues to the remaining mirrors, so one failing connection
+  never abandons the rest. The project source enumerates note paths, so a mirror
+  side is keyed `mirror:<slug>` — disjoint from the origin side's `origin` key —
+  while the origin keeps the note path as its handle. A connection whose entity
+  has no resolved handle is materialized: the origin task is read through
   `VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
   placeholder handle is recorded through `RegistryPort` before the item is
   created through `MirrorPort.createTask`, the real handle replaces the
@@ -469,8 +468,8 @@ over HTTPS.
     (`tests/scripts/lint-naming.test.ts`): a mis-suffixed file exits non-zero.
   - **`pnpm run typecheck`** — strict tsc; a class of runtime bugs becomes a
     compile error.
-  - **`pnpm test`** — behavioral tests per module, including the core pass
-    assembler's integration tests.
+  - **`pnpm test`** — behavioral tests per module, including the mirror-sync
+    action's integration tests.
 
 ## 9. Future Considerations / Roadmap
 
