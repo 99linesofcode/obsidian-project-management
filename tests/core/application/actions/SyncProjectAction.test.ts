@@ -418,3 +418,29 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
     expect(h.deletedConnections).toEqual(['linear']);
   });
 });
+
+describe('SHELL-2 — the chain runs its origination step before reconciliation', () => {
+  it('resolves-or-creates the declared connection, then still runs the task steps', async () => {
+    const h = harness({
+      connections: [
+        {
+          slug: 'github',
+          application: 'github',
+          target: 'https://github.com/acme/widgets',
+        },
+      ],
+      ensureBoard: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toEqual([
+      'ensureBoard:Acme Widgets/github',
+      'lifecycle',
+      'taskLocks:false:false',
+      'renames',
+      'capture:Acme Widgets',
+      'reconcile:Acme Widgets',
+    ]);
+  });
+});
