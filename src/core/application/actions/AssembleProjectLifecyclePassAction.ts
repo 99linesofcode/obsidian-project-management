@@ -10,28 +10,28 @@ import { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
 import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorProjectPort } from '../../port/MirrorProjectPort.js';
-import type { ProjectLifecycleOriginPort } from '../../port/ProjectLifecycleOriginPort.js';
-import type { ProjectSourcePort } from '../../port/ProjectSourcePort.js';
+import type { TrackedEntityPort } from '../../port/TrackedEntityPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 const ORIGIN_SIDE = 'origin';
 const LIFECYCLE_FIELD = 'lifecycle';
 
 export class AssembleProjectLifecyclePassAction {
   constructor(
-    private readonly projectSource: ProjectSourcePort,
-    private readonly origin: ProjectLifecycleOriginPort,
+    private readonly vault: VaultPort,
+    private readonly registry: TrackedEntityPort,
     private readonly baselines: BaselineStorePort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly mirrorProjects: MirrorProjectPort,
   ) {}
 
   async invoke(project: string): Promise<ProjectLifecycleRecord> {
-    const connections = await this.projectSource.readConnections(project);
+    const connections = await this.vault.readConnections(project);
     const mirrors = await this.scopeMirrors(connections, project);
     const origin = originSideObservation(
       ORIGIN_SIDE,
       await this.baselines.read(project, LIFECYCLE_FIELD, ORIGIN_SIDE),
-      await this.origin.observeProject(project),
+      await this.vault.observeProject(project),
     );
     const baselines = await this.readMirrorBaselines(project, mirrors);
     const pass = new ProjectLifecyclePass({
@@ -41,9 +41,10 @@ export class AssembleProjectLifecyclePassAction {
       baselines,
     });
 
-    const record = await new ProjectLifecycleSyncAction(this.origin).invoke(
-      pass,
-    );
+    const record = await new ProjectLifecycleSyncAction(
+      this.vault,
+      this.registry,
+    ).invoke(pass);
     await this.persistAdvanced(project, record);
     return record;
   }

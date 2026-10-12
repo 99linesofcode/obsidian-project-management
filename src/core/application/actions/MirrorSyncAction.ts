@@ -7,10 +7,10 @@ import type { MirrorSyncPass } from '../data/MirrorSyncPass.js';
 import { PassRecord } from '../data/PassRecord.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
-import type { OriginPort } from '../../port/OriginPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 
 export class MirrorSyncAction {
-  constructor(private readonly origin: OriginPort | undefined = undefined) {}
+  constructor(private readonly origin: VaultPort | undefined = undefined) {}
 
   async invoke(pass: MirrorSyncPass): Promise<PassRecord> {
     const observations: SideObservation[] = [];
@@ -117,7 +117,7 @@ async function fanOut(
 }
 
 async function applyToOrigin(
-  origin: OriginPort | undefined,
+  origin: VaultPort | undefined,
   pass: MirrorSyncPass,
   result: MergeResult,
 ): Promise<{ advanced: boolean; failed: boolean }> {
@@ -147,7 +147,7 @@ async function applyToOrigin(
     return { advanced: true, failed: false };
   }
   try {
-    await origin.trash(pass.entityId);
+    await origin.trashNote(pass.entityId);
     return { advanced: true, failed: false };
   } catch {
     return { advanced: false, failed: true };

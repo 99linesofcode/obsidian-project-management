@@ -12,9 +12,7 @@ import {
 } from '../../../domain/ToDoNoteParser.js';
 import { withBody } from '../../../domain/withBody.js';
 import { readTemplate } from '../readTemplate.js';
-import type { NoteEnumeratorPort } from '../../../port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../port/NoteWriterPort.js';
+import type { VaultPort } from '../../../port/VaultPort.js';
 
 export interface SyncChecklistInput {
   notePath: string;
@@ -24,9 +22,7 @@ export interface SyncChecklistInput {
 
 export class SyncChecklistAction {
   constructor(
-    private readonly vault: NoteReaderPort &
-      NoteWriterPort &
-      NoteEnumeratorPort,
+    private readonly vault: VaultPort,
     private readonly todoTemplatePath: string,
   ) {}
 

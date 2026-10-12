@@ -20,9 +20,7 @@ import type { IdentityStorePort } from './core/port/IdentityStorePort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
-import { CaptureTasksAction } from './core/application/actions/CaptureTasksAction.js';
-import { VaultProjectCaptureAdapter } from './infrastructure/vault/VaultProjectCaptureAdapter.js';
-import { VaultTaskCaptureAdapter } from './infrastructure/vault/VaultTaskCaptureAdapter.js';
+import { CaptureTasksAction } from './core/application/actions/capture-tasks/CaptureTasksAction.js';
 import { RegistryProjectCursorAdapter } from './infrastructure/registry/RegistryProjectCursorAdapter.js';
 import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
@@ -55,9 +53,6 @@ import {
 } from './infrastructure/registry/CoreBaselineStoreAdapter.js';
 import { RegistryMirrorHandleAdapter } from './infrastructure/registry/RegistryMirrorHandleAdapter.js';
 import { RegistryMirrorProjectAdapter } from './infrastructure/registry/RegistryMirrorProjectAdapter.js';
-import { VaultOriginAdapter } from './infrastructure/vault/VaultOriginAdapter.js';
-import { VaultProjectLifecycleAdapter } from './infrastructure/vault/VaultProjectLifecycleAdapter.js';
-import { VaultProjectSourceAdapter } from './infrastructure/vault/VaultProjectSourceAdapter.js';
 import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
 import type { ProjectIdentityDataTransferObject } from './core/application/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
@@ -133,36 +128,30 @@ function composeCoreReconcilers(
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
-  const projectSource = new VaultProjectSourceAdapter(vault);
   const baselines = new CoreBaselineStoreAdapter(baselineStorage);
 
-  const origin = new VaultOriginAdapter(plugin.app);
   const handles = new RegistryMirrorHandleAdapter(syncState);
   const taskFieldPass = new AssembleProjectPassAction(
-    projectSource,
-    origin,
+    vault,
     baselines,
     handles,
     mirrorAdapters,
   );
-  const lifecycleOrigin = new VaultProjectLifecycleAdapter(vault, syncState);
   const lifecyclePass = new AssembleProjectLifecyclePassAction(
-    projectSource,
-    lifecycleOrigin,
+    vault,
+    syncState,
     baselines,
     mirrorAdapters,
     new RegistryMirrorProjectAdapter(syncState),
   );
   const taskLocks = new ReconcileProjectTaskLocksAction(
-    projectSource,
-    origin,
+    vault,
     handles,
     mirrorAdapters,
     plugin.settings.doneOptionName,
   );
   const reactivation = new ReactivateFrozenProjectAction(
-    projectSource,
-    lifecycleOrigin,
+    vault,
     baselines,
     mirrorAdapters,
     new CoreProjectWatchAdapter(baselineStorage),
@@ -170,18 +159,15 @@ function composeCoreReconcilers(
 
   const capture = new CaptureProjectsAction(
     mirrorAdapters,
-    new VaultProjectCaptureAdapter(vault),
+    vault,
     new RegistryProjectCursorAdapter(syncState),
   );
   const captureTasks = new CaptureTasksAction(
-    projectSource,
+    vault,
     mirrorAdapters,
-    new VaultTaskCaptureAdapter(
-      vault,
-      syncState,
-      createTaskNote,
-      (application) => application === 'github',
-    ),
+    syncState,
+    createTaskNote,
+    (application) => application === 'github',
   );
 
   return {
@@ -350,7 +336,7 @@ function composePlugin(
     },
   ];
   const providerDescriptors = providers.map((provider) => provider.descriptor);
-  const vault = new VaultAdapter(
+  const vault: VaultAdapter = new VaultAdapter(
     plugin.app,
     (eventRef) => plugin.registerEvent(eventRef),
     registeredApplicationIds(providerDescriptors, conformance),
@@ -362,7 +348,7 @@ function composePlugin(
       providerFor(providers, application)?.setup() ?? null,
   };
   const mirrorAdapters = mirrorAdapterFactory(syncState, providers);
-  const createTaskNote = new CreateTaskNoteAction(
+  const createTaskNote: CreateTaskNoteAction = new CreateTaskNoteAction(
     vault,
     syncState,
     plugin.settings.taskTemplatePath,

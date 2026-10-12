@@ -1,5 +1,5 @@
 import { normalizedStem } from '../../domain/stemOf.js';
-import type { NoteEnumeratorPort } from '../../port/NoteEnumeratorPort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 import type { TrackedEntityPort } from '../../port/TrackedEntityPort.js';
 
 export interface DetectNoteRenamesInput {
@@ -9,7 +9,7 @@ export interface DetectNoteRenamesInput {
 
 export class DetectNoteRenamesAction {
   constructor(
-    private readonly vault: NoteEnumeratorPort,
+    private readonly vault: VaultPort,
     private readonly syncState: TrackedEntityPort,
   ) {}
 

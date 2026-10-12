@@ -57,21 +57,23 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   `ProjectActivityPort` (`project-activity`). An adapter implements only the
   groups its descriptor declares; an undeclared optional port is absent, so a
   capability an adapter lacks has no interface to call.
-- **The origin ports.** `OriginPort` (observe/apply/trash a task note) and
-  `ProjectLifecycleOriginPort` (observe/apply a project's archived state). The
-  origin is a role, not an application: it gets no descriptor.
+- **The vault port.** `VaultPort` — the vault as one collaborator: read/write/
+  enumerate/watch notes; observe/apply a task note's canonical field; read a
+  project's declared connections and task-note paths; observe/apply a project's
+  archived state; adopt a captured project. The origin, the project source, the
+  lifecycle and the project capture are one collaborator, so they are one port.
+  The port is raw vault I/O: the task-capture adoption orchestration lives in
+  `CaptureTasksAction`.
 - **The setup port.** `ProjectSetupPort` (discover a target's projects, resolve
   addressing, create/adopt a project, list viewer projects) is the
   code-host adapter's surface for discovery, attach and board-ensure.
-- **The supporting ports.** `ProjectSourcePort`, `BaselineStorePort`,
-  `MirrorHandlePort`, `MirrorProjectPort`, `MirrorAdapterFactoryPort`,
-  `ProjectCaptureCursorPort`, `ProjectCaptureVaultPort`, `TaskCaptureVaultPort`
+- **The supporting ports.** `BaselineStorePort`, `MirrorHandlePort`,
+  `MirrorProjectPort`, `MirrorAdapterFactoryPort`, `ProjectCaptureCursorPort`
   and `ProjectWatchPort`.
-- **The pass's seams.** The chain reaches the vault through
-  `NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort` and `VaultEventPort`,
-  and the registry through `IdentityStorePort`, `TrackedEntityPort` and
-  `ConnectionStatePort` — the whole vault and registry contract. The former
-  monolithic `VaultPort` and `SyncStatePort` are gone.
+- **The registry's seams.** The chain reaches the registry through
+  `IdentityStorePort`, `TrackedEntityPort` and `ConnectionStatePort`. The vault
+  is one `VaultPort`; the registry's facets stay narrow because each serves a
+  different consumer.
 - **The vocabulary.** `capabilities.ts` holds the thirteen capability names;
   `canonicalField.ts` holds the six canonical fields (`title`, `body`,
   `subtasks`, `completion`, `Status`, `label`).
@@ -97,11 +99,9 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 **The driven adapters (`src/infrastructure/`) implement those ports, one
 namespace per application.**
 
-- **Vault.** `VaultOriginAdapter` (`OriginPort`), `VaultProjectLifecycleAdapter`
-  (`ProjectLifecycleOriginPort`), `VaultProjectSourceAdapter`
-  (`ProjectSourcePort`), `VaultProjectCaptureAdapter`
-  (`ProjectCaptureVaultPort`) and `VaultTaskCaptureAdapter`
-  (`TaskCaptureVaultPort`).
+- **Vault.** `VaultAdapter` (the `VaultPort`), with the pure note codecs
+  (`connectionsOf`, `parseConnectionsBlock`, `CapturedTaskNoteMapper`) beside
+  it.
 - **GitHub.** `CodeHostMirrorAdapter` (the `MirrorAdapter` and
   `ProjectSetupPort`), `githubDescriptor`, `CodeHostTarget` and
   `CodeHostTransport`.
@@ -315,7 +315,7 @@ sequenceDiagram
   participant MS as MirrorSyncAction
   participant R as RegisteredAdapter
   participant MF as mergeField
-  participant O as OriginPort
+  participant O as VaultPort
 
   A->>MS: invoke(pass)
   loop each capable mirror
@@ -350,7 +350,7 @@ through `MirrorHandlePort`, and runs `MirrorSyncAction` once per
 (note, canonical field) over the six merged fields — `title`, `body`,
 `subtasks`, `completion`, `Status`, `label`. A connection whose entity has no
 resolved handle is **materialized**: the origin task is read through
-`OriginPort.readTask` (a note without a `type` is not a task and is skipped), a
+`VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
 placeholder handle is recorded through the mirror-handle port before the item is
 created through `TaskSurfacePort.createTask`, the real handle replaces the
 placeholder, and the created mirror is reconciled in the same pass. A
@@ -360,10 +360,10 @@ task title rather than re-created, so a failed record never duplicates the item.
 ```mermaid
 sequenceDiagram
   participant A as AssembleProjectPassAction
-  participant PS as ProjectSourcePort
+  participant PS as VaultPort
   participant F as MirrorAdapterFactoryPort
   participant H as MirrorHandlePort
-  participant O as OriginPort
+  participant O as VaultPort
   participant R as RegisteredAdapter
   participant MS as MirrorSyncAction
 
@@ -403,7 +403,7 @@ It scopes the mirrors, resolves each connection's mirror project through
 and recording the returned handle, so a newly-connected project is onboarded in
 the same pass — renames a mirror project whose name drifted from the vault
 project through `ProjectPort.renameProject`, reads the origin's archived state
-through `ProjectLifecycleOriginPort`, runs the same `mergeField` ladder over the
+through `VaultPort`, runs the same `mergeField` ladder over the
 archived fact, and fans the reconciled freeze out to the origin and every
 capable mirror. Any side can start the freeze or the unfreeze; the reconciled
 freeze is the pass's `frozen` verdict, which gates the task-field pass. Its
@@ -412,10 +412,10 @@ per-side baselines live under the `lifecycle` field in the same baseline store.
 ```mermaid
 sequenceDiagram
   participant A as AssembleProjectLifecyclePassAction
-  participant PS as ProjectSourcePort
+  participant PS as VaultPort
   participant MP as MirrorProjectPort
   participant R as RegisteredAdapter
-  participant O as ProjectLifecycleOriginPort
+  participant O as VaultPort
   participant LS as ProjectLifecycleSyncAction
   participant MF as mergeField
 
@@ -450,7 +450,7 @@ A capture-capable adapter enumerates the application-born projects it can see
 connection targets and its creation clock. The action reads each source's
 projects in creation order, adopts every project after that source's stored
 cursor that the vault does not already declare — writing the home note with its
-connection envelope through `ProjectCaptureVaultPort` — and advances the cursor
+connection envelope through `VaultPort` — and advances the cursor
 only over the projects it handled. A first sight adopts the newest clock and
 captures nothing, so installing the plugin against an account full of unrelated
 projects adopts none of them. A project that links zero or several targets stops
@@ -461,7 +461,7 @@ the pass is idempotent.
 sequenceDiagram
   participant C as CaptureProjectsAction
   participant S as CaptureSource
-  participant V as ProjectCaptureVaultPort
+  participant V as VaultPort
   participant Cur as ProjectCaptureCursorPort
 
   C->>S: capture.captureProjects()
@@ -490,19 +490,19 @@ For each declared connection whose adapter declares `capture`, the core action
 reads the tracked tasks the adapter can see (`CapturePort.capture`) — the issues
 carrying a `type:` label — and adopts every task the vault does not already hold
 as a task note. The whole listing is scanned each pass and the adopted mirror
-items are skipped, so the pass is idempotent without a cursor. The vault sink
+items are skipped, so the pass is idempotent without a cursor. The action
 routes by the connection's application: a code-host issue through
-`CreateTaskNoteAction`, a task-manager task through `CapturedTaskNoteMapper`. A
-connection whose listing or adoption fails is collected and never stops the
-later connections.
+`CreateTaskNoteAction`, a task-manager task rendered by `CapturedTaskNoteMapper`
+and written through `VaultPort` + `TrackedEntityPort`. A connection whose
+listing or adoption fails is collected and never stops the later connections.
 
 ```mermaid
 sequenceDiagram
   participant C as CaptureTasksAction
-  participant PS as ProjectSourcePort
+  participant PS as VaultPort
   participant F as MirrorAdapterFactoryPort
   participant R as RegisteredAdapter
-  participant V as TaskCaptureVaultPort
+  participant V as VaultPort
   participant CT as CreateTaskNoteAction
 
   C->>PS: readConnections(project)
@@ -543,7 +543,7 @@ sequenceDiagram
   participant B as BaselineStorePort
   participant R as RegisteredAdapter
   participant W as ProjectWatchPort
-  participant O as ProjectLifecycleOriginPort
+  participant O as VaultPort
   participant Lock as ReconcileProjectTaskLocksAction
   participant H as MirrorHandlePort
 
@@ -686,7 +686,7 @@ sequenceDiagram
   participant SP as SyncProjectAction
   participant Chk as SyncChecklistAction
   participant Mir as MirrorTodoStatusAction
-  participant V as NoteReaderPort & NoteWriterPort & NoteEnumeratorPort
+  participant V as VaultPort
 
   loop each taken note
     SP->>Chk: execute(notePath, projectName, syncedAt)
@@ -788,7 +788,7 @@ sequenceDiagram
   participant Q as SyncQueue
   participant SP as SyncProjectAction
   participant Ren as DetectNoteRenamesAction
-  participant V as VaultEventPort & NoteEnumeratorPort
+  participant V as VaultPort
   participant SS as TrackedEntityPort
 
   alt live rename
@@ -988,7 +988,8 @@ layers, and each layer owns one surface of the system.
 - The note codecs live with their consumers:
   `src/core/application/actions/create-task-note/TaskNoteMapper.ts` beside
   `CreateTaskNoteAction`, `.../sync-checklist/ToDoNoteMapper.ts` beside
-  `SyncChecklistAction`, and `src/infrastructure/vault/CapturedTaskNoteMapper.ts`
-  beside the vault adapter.
+  `SyncChecklistAction`, and
+  `src/core/application/actions/capture-tasks/CapturedTaskNoteMapper.ts` beside
+  `CaptureTasksAction`.
 - The driving side: `src/ui/` (`SyncScheduler`, `SyncQueue`, the settings
   module).

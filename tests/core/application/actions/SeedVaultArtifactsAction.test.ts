@@ -3,24 +3,19 @@ import { SeedVaultArtifactsAction } from '../../../../src/core/application/actio
 import { SEED_ARTIFACTS } from '../../../../src/core/application/actions/seedArtifacts.js';
 import { DEFAULT_SETTINGS } from '../../../../src/ui/settings/settings.js';
 import type { ProjectManagementSettings } from '../../../../src/core/application/data/ProjectManagementSettings.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   folders = new Set<string>();
   created: Array<{ path: string; content: string }> = [];
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
 
-  async createNote(path: string, content: string): Promise<void> {
+  override async createNote(path: string, content: string): Promise<void> {
     const segments = path.split('/');
     segments.pop();
     let folder = '';
@@ -32,28 +27,28 @@ class FakeVault
     this.created.push({ path, content });
   }
 
-  async writeNote(): Promise<never> {
+  override async writeNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async renameNote(): Promise<never> {
+  override async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
   async moveFolder(): Promise<void> {}
-  async listNotesInFolder(): Promise<never> {
+  override async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
   async modifiedTime(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async trashNote(): Promise<never> {
+  override async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async findProjectNotes(): Promise<never> {
+  override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 function settings(

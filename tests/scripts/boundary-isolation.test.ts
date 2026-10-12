@@ -67,7 +67,7 @@ describe('the intra-core dependency seam', () => {
   it('rejects a domain file importing a port file', () => {
     const result = lint(
       'src/core/domain/probe.ts',
-      "import type { NoteReaderPort } from '../port/NoteReaderPort.js';\n",
+      "import type { VaultPort } from '../port/VaultPort.js';\n",
     );
 
     expect(result.status).not.toBe(0);
@@ -87,7 +87,7 @@ describe('the intra-core dependency seam', () => {
     expect(
       lintExitCode(
         'src/core/application/probe.ts',
-        "import type { NoteReaderPort } from '../port/NoteReaderPort.js';\nexport type Probe = NoteReaderPort;\n",
+        "import type { VaultPort } from '../port/VaultPort.js';\nexport type Probe = VaultPort;\n",
       ),
     ).toBe(0);
   });

@@ -8,14 +8,9 @@ import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPor
 import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
 import type { ProjectNoteDataTransferObject } from '../../../../src/core/application/data/ProjectNoteDataTransferObject.js';
 import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
-import type { NoteEnumeratorPort } from '../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -23,26 +18,26 @@ class FakeVault
   }
   notes: ProjectNoteDataTransferObject[] = [];
 
-  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
+  override async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.notes;
   }
 
-  async getNoteByPath(): Promise<{ content: string } | null> {
+  override async getNoteByPath(): Promise<{ content: string } | null> {
     return null;
   }
-  async createNote(): Promise<void> {}
-  async writeNote(): Promise<void> {}
+  override async createNote(): Promise<void> {}
+  override async writeNote(): Promise<void> {}
   async moveFolder(): Promise<void> {}
-  async renameNote(): Promise<void> {}
-  async listNotesInFolder(): Promise<never> {
+  override async renameNote(): Promise<void> {}
+  override async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
-  async trashNote(): Promise<never> {
+  override async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 class FakeSetup implements ProjectSetupPort {

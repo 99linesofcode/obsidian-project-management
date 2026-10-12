@@ -3,14 +3,9 @@ import { SyncChecklistAction } from '../../../../../src/core/application/actions
 import { splitFrontmatter } from '../../../../../src/core/domain/splitFrontmatter.js';
 import { ToDoNoteMapper } from '../../../../../src/core/application/actions/sync-checklist/ToDoNoteMapper.js';
 import { ToDoNoteParser } from '../../../../../src/core/domain/ToDoNoteParser.js';
-import type { NoteEnumeratorPort } from '../../../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -22,23 +17,23 @@ class FakeVault
   renamed: Array<{ oldPath: string; newPath: string }> = [];
   trashed: string[] = [];
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
 
-  async createNote(path: string, content: string): Promise<void> {
+  override async createNote(path: string, content: string): Promise<void> {
     this.notes.set(path, content);
     this.created.push({ path, content });
   }
 
-  async writeNote(path: string, content: string): Promise<void> {
+  override async writeNote(path: string, content: string): Promise<void> {
     this.notes.set(path, content);
     this.written.push({ path, content });
   }
 
   async moveFolder(): Promise<void> {}
-  async renameNote(oldPath: string, newPath: string): Promise<void> {
+  override async renameNote(oldPath: string, newPath: string): Promise<void> {
     const content = this.notes.get(oldPath);
     if (content === undefined) {
       return;
@@ -48,23 +43,23 @@ class FakeVault
     this.renamed.push({ oldPath, newPath });
   }
 
-  async listNotesInFolder(folder: string): Promise<string[]> {
+  override async listNotesInFolder(folder: string): Promise<string[]> {
     const prefix = folder.endsWith('/') ? folder : `${folder}/`;
     return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
   }
 
-  async trashNote(path: string): Promise<void> {
+  override async trashNote(path: string): Promise<void> {
     this.notes.delete(path);
     this.trashed.push(path);
   }
 
-  async findProjectNotes(): Promise<never> {
+  override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 const projectName = 'Acme Widgets';

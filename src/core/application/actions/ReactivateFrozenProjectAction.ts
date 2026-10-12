@@ -2,8 +2,7 @@ import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransfe
 import type { BaselineStorePort } from '../../port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { ProjectActivityPort } from '../../port/ProjectActivityPort.js';
-import type { ProjectLifecycleOriginPort } from '../../port/ProjectLifecycleOriginPort.js';
-import type { ProjectSourcePort } from '../../port/ProjectSourcePort.js';
+import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectWatchPort } from '../../port/ProjectWatchPort.js';
 
 const ORIGIN_SIDE = 'origin';
@@ -11,8 +10,7 @@ const LIFECYCLE_FIELD = 'lifecycle';
 
 export class ReactivateFrozenProjectAction {
   constructor(
-    private readonly projectSource: ProjectSourcePort,
-    private readonly origin: ProjectLifecycleOriginPort,
+    private readonly vault: VaultPort,
     private readonly baselines: BaselineStorePort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
     private readonly watches: ProjectWatchPort,
@@ -22,7 +20,7 @@ export class ReactivateFrozenProjectAction {
     if (!(await this.wasFrozen(project))) {
       return false;
     }
-    const connections = await this.projectSource.readConnections(project);
+    const connections = await this.vault.readConnections(project);
     let reactivated = false;
     for (const connection of connections) {
       const adapter = this.mirrorAdapters.create(
@@ -76,7 +74,7 @@ export class ReactivateFrozenProjectAction {
       latest.newestCreatedAt !== null &&
       latest.newestCreatedAt > watch.cursor
     ) {
-      await this.origin.applyProjectArchived(project, false);
+      await this.vault.applyProjectArchived(project, false);
       await this.watches.write(project, connection.slug, {
         etag: null,
         cursor: null,

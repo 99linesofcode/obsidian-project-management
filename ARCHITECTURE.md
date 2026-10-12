@@ -36,8 +36,8 @@ obsidian-project-management/
 │   │   │                # (errors/)
 │   │   └── port/        # the capability and collaborator ports
 │   ├── infrastructure/  # driven adapters, one namespace per vendor:
-│   │                    # vault/ (origin, project source, lifecycle, capture,
-│   │                    # note codecs), github/ (mirror adapter + descriptor +
+│   │                    # vault/ (the single VaultAdapter + note codecs),
+│   │                    # github/ (mirror adapter + descriptor +
 │   │                    # transport), todoist/ (mirror adapter + descriptor +
 │   │                    # transport), registry/ (the data.json-backed registry),
 │   │                    # fake/ (in-memory conformance adapter)
@@ -124,7 +124,7 @@ name never appears in the core.
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                                                                                         | host plugin API              | the vault      |
 | `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                                                                             | host plugin API, `Component` | the vault      |
 | `src/core/`           | The module's hexagon: the capability vocabulary and ports, the canonical DTOs, the pure `mergeField` N-way merge, the adapter descriptor/registrar, every use case (`actions/`), the pass assemblers, the reconciler interfaces, and the neutral note arithmetic                                          | TypeScript                   | in-process     |
-| `src/infrastructure/` | Driven adapters, one namespace per vendor — the vault origin/project-source/lifecycle/capture adapters and note codecs, the GitHub and Todoist mirror adapters, the registry (the pass seams' implementation plus the core baselines/handles/project/cursor/watch), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
+| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (the pass seams' implementation plus the core baselines/handles/project/cursor/watch), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
 
@@ -147,43 +147,41 @@ module and exposes only the ports its descriptor declares.
     one `capture` capability; a provider that could adopt application-born
     projects but not tracked tasks would need the capability split, which no
     adapter does yet.
-- **The origin ports.** **`OriginPort`** — observe a task note's field as a
-  canonical value plus its edit time (trusted by default), read the whole task,
-  apply a canonical field write, trash the note (never a permanent delete).
-  **`ProjectLifecycleOriginPort`** — observe a project's archived state and
-  apply it. The origin is a role, not an application: it gets no descriptor.
+- **The vault port.** **`VaultPort`** — the vault as one collaborator: read a
+  note by path, create/write/rename/trash a note, list a folder's notes and
+  enumerate the project notes, subscribe to note change/delete/rename events;
+  observe a task note's field as a canonical value plus its edit time (trusted
+  by default), read the whole task, apply a canonical field write; read a
+  project's declared connections and its task-note paths; observe and apply a
+  project's archived state; adopt a captured project. Implementer:
+  `VaultAdapter`. The origin, the project source, the lifecycle and the project
+  capture were separate facet ports served by thin wrapper adapters; the vault is
+  one collaborator, so it is one port and one adapter. The port is raw vault I/O
+  — the task-capture adoption orchestration (choosing the renderer, writing the
+  note, recording the mirror item) lives in `CaptureTasksAction`, never in the
+  adapter.
 - **The setup port.** **`ProjectSetupPort`** — discover a target's projects,
   resolve project addressing, create or adopt a project with the core's Status
   vocabulary, and list viewer projects. The code-host adapter implements it;
   discovery, attach and board-ensure depend on it.
-- **The supporting ports.** `ProjectSourcePort` (a project's declared
-  connections and its task-note paths), `BaselineStorePort` (one side's
-  baseline for an entity + field), `MirrorHandlePort` (resolve/record/enumerate
-  a connection's handle for a note), `MirrorProjectPort` (resolve/record a
-  connection's mirror-project handle), `MirrorAdapterFactoryPort` (build a
-  mirror adapter for an application + target; expose the capture sources),
-  `ProjectCaptureCursorPort` (the per-surface creation watermark),
-  `ProjectCaptureVaultPort` and `TaskCaptureVaultPort` (the vault sinks), and
+- **The supporting ports.** `BaselineStorePort` (one side's baseline for an
+  entity + field), `MirrorHandlePort` (resolve/record/enumerate a connection's
+  handle for a note), `MirrorProjectPort` (resolve/record a connection's
+  mirror-project handle), `MirrorAdapterFactoryPort` (build a mirror adapter
+  for an application + target; expose the capture sources),
+  `ProjectCaptureCursorPort` (the per-surface creation watermark) and
   `ProjectWatchPort` (the reactivation watch).
 
-**The pass's seams (`src/core/port/`).** The chain and the driving
-side reach the vault and the registry through seven narrow, provider-neutral
-seams, each naming only the methods its call sites use:
+**The registry's seams (`src/core/port/`).** The chain and the driving side
+reach the registry through three narrow, provider-neutral seams, each naming
+only the methods its call sites use: `IdentityStorePort` (a connection's board
+identity), `TrackedEntityPort` (the tracked entities and their mirror items)
+and `ConnectionStatePort` (a project's per-connection port state and its
+re-keying). Implementer: `SyncStateAdapter`. Its records `EntityRecord`,
+`MirrorItem` and `PortState` live in `src/core/application/data/`.
 
-- **Note I/O.** `NoteReaderPort` (read a note by path), `NoteWriterPort`
-  (create, write, rename and trash a note), `NoteEnumeratorPort` (list the notes
-  under a folder; enumerate the project notes) and `VaultEventPort` (subscribe
-  to note change/delete/rename events). Implementer: `VaultAdapter`.
-- **Registry.** `IdentityStorePort` (a connection's board identity),
-  `TrackedEntityPort` (the tracked entities and their mirror items) and
-  `ConnectionStatePort` (a project's per-connection port state and its
-  re-keying). Implementer: `SyncStateAdapter`. Its records `EntityRecord`,
-  `MirrorItem` and `PortState` live in `src/core/application/data/`.
-
-The seven seams are the whole vault and registry contract. The former
-monolithic `VaultPort` and `SyncStatePort` are gone, so every consumer — the
-chain, the core's `CreateTaskNoteAction` and the driven adapters alike —
-depends on the narrow seams above.
+The registry seams stay narrow because the registry has several distinct
+consumers; the vault is one collaborator, so it carries one `VaultPort`.
 
 A component that reaches around a port is a defect.
 
@@ -191,15 +189,10 @@ A component that reaches around a port is a defect.
 _capability ports_ — `ProjectPort`, `TaskSurfacePort` and the optional
 capabilities — are the adapter contract: an adapter declares the capabilities
 it has, and an undeclared one has no interface to call (ADR 001's ≤5 grouped
-surfaces). The _collaborator ports_ — the vault's note seams, the registry's
-identity / tracked-entity / connection-state seams, the capture sinks and the
-core-registry stores — are deliberately narrow: each names only the methods its
-call sites use, so a consumer that only reads notes depends on a read-only
-interface. Collapsing a collaborator port into one wide interface trades that
-interface segregation for a smaller file count, and the cost is real: a
-read-only test double would have to implement the whole surface. The seams
-therefore stay narrow by design; the count is a consequence of the split, not
-redundancy.
+surfaces). The _collaborator ports_ — the vault's `VaultPort` and the registry's
+identity / tracked-entity / connection-state seams — name only the methods the
+core uses. The vault is one collaborator, so one port; the registry's facets
+stay split because each serves a different consumer.
 
 The API tokens are not settings and not a port: they live in Obsidian's
 SecretStorage behind `SecretStorageAdapter` (`src/ui/settings/`), which the
@@ -257,13 +250,13 @@ canonical DTOs and the pure core.
   reads each declared connection with its slug, builds the connection's mirror
   adapter through the factory (scoped by the connection's target), resolves the
   entity to that connection's own handle through the mirror-handle port,
-  assembles the origin side through `OriginPort` and each mirror's baseline
+  assembles the origin side through `VaultPort` and each mirror's baseline
   through the baseline store, and runs `MirrorSyncAction` once per (entity,
   canonical value field) against a per-connection `MirrorSide`. The project
   source enumerates note paths, so a mirror side is keyed `mirror:<slug>` —
   disjoint from the origin side's `origin` key — while the origin keeps the note
   path as its handle. A connection whose entity has no resolved handle is
-  materialized: the origin task is read through `OriginPort.readTask` (a note
+  materialized: the origin task is read through `VaultPort.readTask` (a note
   without a `type` is not a task and is skipped), a placeholder handle is
   recorded through the mirror-handle port before the item is created through
   `TaskSurfacePort.createTask`, the real handle replaces the placeholder, and
@@ -274,7 +267,7 @@ canonical DTOs and the pure core.
   `AssembleProjectLifecyclePassAction`). The project-level peer of the
   mirror-sync action: it resolves each connection's mirror project through
   `MirrorProjectPort`, onboarding a missing one via `ProjectPort.createProject`,
-  then reads the origin's archived state through `ProjectLifecycleOriginPort`
+  then reads the origin's archived state through `VaultPort`
   and each mirror's through `ProjectPort`, runs the same pure `mergeField`
   ladder over the archived fact, and fans the reconciled freeze out to the
   origin and every capable mirror. Any side can start the freeze or the
@@ -302,7 +295,7 @@ canonical DTOs and the pure core.
   connection targets and its creation clock. The core action reads each source's
   projects in creation order, adopts every project after that source's stored
   cursor that the vault does not already declare — writing the home note with
-  its connection envelope through `VaultProjectCaptureAdapter` — and advances
+  its connection envelope through `VaultAdapter` — and advances
   the cursor only over the projects it handled. A first sight adopts the newest
   clock and captures nothing; a project that links zero or several targets stops
   the watermark with a collected error.
@@ -311,9 +304,10 @@ canonical DTOs and the pure core.
   the tracked tasks the adapter can see (those carrying a `type:` label) and
   adopts every task the vault does not already hold as a task note. The whole
   listing is scanned each pass and the adopted mirror items are skipped, so the
-  pass is idempotent without a cursor. The vault sink routes by the connection's
-  application — a code-host issue through `CreateTaskNoteAction`, a
-  task-manager task through `CapturedTaskNoteMapper`.
+  pass is idempotent without a cursor. The action routes by the connection's
+  application — a code-host issue through `CreateTaskNoteAction`, a task-manager
+  task rendered by `CapturedTaskNoteMapper` and written through `VaultPort` +
+  `TrackedEntityPort`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, connection re-keying, board-ensure, rename recovery,
   vault consistency and the deletion sweep) and the `CoreReconcilers` bundle
@@ -352,11 +346,11 @@ canonical DTOs and the pure core.
   (`coreBaselines`), `CoreProjectWatchAdapter` (`coreWatches`),
   `RegistryMirrorHandleAdapter`, `RegistryMirrorProjectAdapter` and
   `RegistryProjectCursorAdapter`.
-- **The vault adapters** (`infrastructure/vault/`) implement the origin and
-  capture ports: `VaultOriginAdapter`, `VaultProjectLifecycleAdapter`,
-  `VaultProjectSourceAdapter`, `VaultProjectCaptureAdapter` and
-  `VaultTaskCaptureAdapter`. They are structural peers of the application
-  adapters, not capability adapters.
+- **The vault adapter** (`infrastructure/vault/`) implements `VaultPort`:
+  `VaultAdapter`, with the pure note codecs (`connectionsOf`,
+  `parseConnectionsBlock`, `renderConnectionsBlock`, the task-note codec) beside
+  it. It is a structural peer of the application adapters, not a capability
+  adapter.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory adapter
   registered at the composition root. It is inert unless a project names its
   application id, so the plugin behaves exactly as before.
@@ -409,9 +403,8 @@ No other persistent store. The mirrors hold copies, never authority.
   `CapturePort`, `ProjectCapturePort`, `CompleteFetchPort`, `TimestampedPort`).
   An API token, bearer.
 - **The host vault application** — the plugin API (vault read/write, events,
-  `requestUrl`, settings and data). Behind the pass's narrow note seams
-  (`NoteReaderPort`, `NoteWriterPort`, `NoteEnumeratorPort`, `VaultEventPort`)
-  and the origin adapters; only the adapters import the host package.
+  `requestUrl`, settings and data). Behind `VaultPort` and the note codecs;
+  only the adapter imports the host package.
 
 There is no server of our own: every call goes through the host's `requestUrl`
 over HTTPS.

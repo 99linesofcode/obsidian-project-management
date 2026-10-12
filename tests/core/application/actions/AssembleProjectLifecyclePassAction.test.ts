@@ -1,12 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+const { TFile } = vi.hoisted(() => {
+  class TFile {
+    stat: { mtime: number };
+    constructor(
+      public path: string,
+      public extension: string,
+      stat?: { mtime: number },
+    ) {
+      this.stat = stat ?? { mtime: 0 };
+    }
+  }
+  return { TFile };
+});
+
+vi.mock('obsidian', () => ({ TFile }));
+
+type TFileInstance = InstanceType<typeof TFile>;
+
+import type { App } from 'obsidian';
 import { AssembleProjectLifecyclePassAction } from '../../../../src/core/application/actions/AssembleProjectLifecyclePassAction.js';
 import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
-import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorProjectPort } from '../../../../src/core/port/MirrorProjectPort.js';
-import type { ProjectSourcePort } from '../../../../src/core/port/ProjectSourcePort.js';
 import type { TrackedEntityPort } from '../../../../src/core/port/TrackedEntityPort.js';
 import type { EntityRecord } from '../../../../src/core/application/data/EntityRecord.js';
 import type { MirrorItem } from '../../../../src/core/application/data/MirrorItem.js';
@@ -14,7 +32,8 @@ import { registerAdapters } from '../../../../src/core/application/services/regi
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
-import { VaultProjectLifecycleAdapter } from '../../../../src/infrastructure/vault/VaultProjectLifecycleAdapter.js';
+import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
+import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 
 const PROJECT = 'Acme';
 const ACTIVE_HOME = 'Projecten/Acme/_Acme.md';
@@ -35,48 +54,93 @@ const HOME = [
   '---',
 ].join('\n');
 
-class FakeVault {
+const ONBOARD_HOME = [
+  '---',
+  'type: project',
+  'connections:',
+  '  a:',
+  '    tool: conformance',
+  '    project: board-new',
+  '---',
+].join('\n');
+
+class FakeAppVault {
   private readonly notes = new Map<
     string,
     { content: string; mtime: number }
   >();
 
+  readonly metadataCache = {
+    getFileCache: (file: { path: string }) => ({
+      frontmatter: {
+        connections: connectionsOf(this.notes.get(file.path)?.content ?? ''),
+      },
+    }),
+  };
+
   seed(path: string, content: string, mtime: number): void {
     this.notes.set(path, { content, mtime });
   }
 
-  async findHomeNotePath(project: string): Promise<string | null> {
-    for (const path of this.notes.keys()) {
-      const segments = path.split('/');
-      if (
-        (segments[0] === 'Projecten' || segments[0] === 'Archief') &&
-        segments[1] === project &&
-        segments.length === 3
-      ) {
-        return path;
-      }
-    }
-    return null;
-  }
-
-  async modifiedTime(path: string): Promise<string | null> {
-    const note = this.notes.get(path);
-    return note === undefined ? null : new Date(note.mtime).toISOString();
-  }
-
-  async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
-    const from = `${fromPrefix}/`;
-    const to = `${toPrefix}/`;
-    for (const [path, note] of [...this.notes.entries()]) {
-      if (path.startsWith(from)) {
-        this.notes.delete(path);
-        this.notes.set(`${to}${path.slice(from.length)}`, note);
-      }
-    }
-  }
-
   has(path: string): boolean {
     return this.notes.has(path);
+  }
+
+  getAbstractFileByPath(path: string): TFileInstance | null {
+    const note = this.notes.get(path);
+    if (note === undefined) {
+      return null;
+    }
+    return new TFile(path, 'md', { mtime: note.mtime });
+  }
+
+  getMarkdownFiles(): TFileInstance[] {
+    return [...this.notes.entries()].map(
+      ([path, note]) => new TFile(path, 'md', { mtime: note.mtime }),
+    );
+  }
+
+  getFiles(): TFileInstance[] {
+    return this.getMarkdownFiles();
+  }
+
+  getFolderByPath(): object | null {
+    return {};
+  }
+
+  async createFolder(): Promise<void> {}
+
+  async read(file: TFileInstance): Promise<string> {
+    return this.notes.get(file.path)!.content;
+  }
+
+  async create(path: string, content: string): Promise<void> {
+    this.notes.set(path, { content, mtime: Date.now() });
+  }
+
+  async modify(file: TFileInstance, content: string): Promise<void> {
+    this.notes.set(file.path, { content, mtime: Date.now() });
+  }
+
+  rename(from: string, to: string): void {
+    const note = this.notes.get(from);
+    if (note === undefined) {
+      return;
+    }
+    this.notes.delete(from);
+    this.notes.set(to, note);
+  }
+}
+
+class FakeFileManager {
+  constructor(private readonly vault: FakeAppVault) {}
+
+  async renameFile(file: TFileInstance, newPath: string): Promise<void> {
+    this.vault.rename(file.path, newPath);
+  }
+
+  async trashFile(file: TFileInstance): Promise<void> {
+    this.vault.rename(file.path, `${file.path}.trashed`);
   }
 }
 
@@ -127,18 +191,6 @@ class FakeRegistry implements TrackedEntityPort {
   }
 }
 
-class FakeProjectSource implements ProjectSourcePort {
-  connections: ConnectionDataTransferObject[] = [];
-
-  async readConnections(): Promise<readonly ConnectionDataTransferObject[]> {
-    return this.connections;
-  }
-
-  async listEntities(): Promise<readonly string[]> {
-    return [];
-  }
-}
-
 function memoryStorage() {
   let data: Record<string, unknown> = {};
   return {
@@ -151,17 +203,6 @@ function memoryStorage() {
       },
     },
   };
-}
-
-function connection(
-  slug: string,
-  target: string,
-): ConnectionDataTransferObject {
-  return new ConnectionDataTransferObject({
-    slug,
-    application: 'conformance',
-    target,
-  });
 }
 
 class FakeMirrorProjects implements MirrorProjectPort {
@@ -189,18 +230,21 @@ interface SetupOptions {
 }
 
 function setup(options: SetupOptions) {
-  const vault = new FakeVault();
+  const appVault = new FakeAppVault();
   const homePath =
     options.homePath ?? (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
-  vault.seed(homePath, HOME, MTIME);
+  appVault.seed(homePath, HOME, MTIME);
   const registry = new FakeRegistry();
   registry.records = [{ id: 'e1', notePath: TASK_PATH }];
 
-  const projectSource = new FakeProjectSource();
-  projectSource.connections = [
-    connection('a', 'board-a'),
-    connection('b', 'board-b'),
-  ];
+  const app = {
+    vault: appVault,
+    fileManager: new FakeFileManager(appVault),
+    metadataCache: appVault.metadataCache,
+  } as unknown as App;
+  const vault = vaultAdapter(app, {
+    registeredApplications: new Set(['conformance']),
+  });
 
   const mirror = new ConformanceMirrorAdapter();
   mirror.seedProject('board-a', options.mirrorA);
@@ -212,17 +256,16 @@ function setup(options: SetupOptions) {
 
   const { storage } = memoryStorage();
   const baselines = new CoreBaselineStoreAdapter(storage);
-  const origin = new VaultProjectLifecycleAdapter(vault, registry);
   const mirrorProjects = new FakeMirrorProjects();
   const action = new AssembleProjectLifecyclePassAction(
-    projectSource,
-    origin,
+    vault,
+    registry,
     baselines,
     mirrorAdapters,
     mirrorProjects,
   );
 
-  return { vault, registry, mirror, baselines, mirrorProjects, action };
+  return { vault: appVault, registry, mirror, baselines, mirrorProjects, action };
 }
 
 async function seedBaseline(
@@ -427,11 +470,17 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
   });
 
   it('onboards a connection with no mirror project and syncs it in the same pass', async () => {
-    const vault = new FakeVault();
-    vault.seed(ARCHIVED_HOME, HOME, MTIME);
+    const appVault = new FakeAppVault();
+    appVault.seed(ARCHIVED_HOME, ONBOARD_HOME, MTIME);
     const registry = new FakeRegistry();
-    const projectSource = new FakeProjectSource();
-    projectSource.connections = [connection('a', 'board-new')];
+    const app = {
+      vault: appVault,
+      fileManager: new FakeFileManager(appVault),
+      metadataCache: appVault.metadataCache,
+    } as unknown as App;
+    const vault = vaultAdapter(app, {
+      registeredApplications: new Set(['conformance']),
+    });
     const mirror = new ConformanceMirrorAdapter();
     mirror.seedAbsentProject('board-new');
     const registered: RegisteredAdapter = registerAdapters([
@@ -443,8 +492,8 @@ describe('AssembleProjectLifecyclePassAction — N-way lifecycle (F02 NWM-15)', 
     const { storage } = memoryStorage();
     const mirrorProjects = new FakeMirrorProjects();
     const action = new AssembleProjectLifecyclePassAction(
-      projectSource,
-      new VaultProjectLifecycleAdapter(vault, registry),
+      vault,
+      registry,
       new CoreBaselineStoreAdapter(storage),
       mirrorAdapters,
       mirrorProjects,

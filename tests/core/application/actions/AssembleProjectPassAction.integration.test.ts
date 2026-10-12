@@ -5,14 +5,15 @@ import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTa
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { OriginPort } from '../../../../src/core/port/OriginPort.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
 import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
 import { RegistryMirrorHandleAdapter } from '../../../../src/infrastructure/registry/RegistryMirrorHandleAdapter.js';
-import { VaultProjectSourceAdapter } from '../../../../src/infrastructure/vault/VaultProjectSourceAdapter.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
+import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 const PROJECT = 'Acme';
 const ENTITY_ID = 'uuid-1';
@@ -30,19 +31,22 @@ const HOME = [
   '---',
 ].join('\n');
 
-class FakeNotes {
+class FakeNotes extends FakeVaultBase {
   private readonly notes = new Map<string, string>();
+  readonly observedHandles: string[] = [];
 
   seed(path: string, content: string): void {
     this.notes.set(path, content);
   }
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
 
-  async listNotesInFolder(folder: string): Promise<string[]> {
+  override async listNotesInFolder(folder: string): Promise<string[]> {
     const prefix = `${folder}/`;
     return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
   }
@@ -60,12 +64,33 @@ class FakeNotes {
     }
     return null;
   }
-}
 
-class RecordingOrigin implements OriginPort {
-  readonly observedHandles: string[] = [];
+  override async readConnections(
+    project: string,
+  ): Promise<readonly ConnectionDataTransferObject[]> {
+    const path = await this.findHomeNotePath(project);
+    if (path === null) {
+      return [];
+    }
+    const note = await this.getNoteByPath(path);
+    if (note === null) {
+      return [];
+    }
+    return Object.entries(connectionsOf(note.content)).map(
+      ([slug, connection]) =>
+        new ConnectionDataTransferObject({
+          slug,
+          application: connection.tool,
+          target: connection.project,
+        }),
+    );
+  }
 
-  async observe(handle: string, field: string): Promise<OriginObservation> {
+  override async listEntities(project: string): Promise<readonly string[]> {
+    return this.listNotesInFolder(`Projecten/${project}/taken`);
+  }
+
+  override async observe(handle: string, field: string): Promise<OriginObservation> {
     this.observedHandles.push(handle);
     return new OriginObservation({
       current: originValue(field),
@@ -75,13 +100,13 @@ class RecordingOrigin implements OriginPort {
     });
   }
 
-  async readTask(): Promise<CanonicalTask | null> {
+  override async readTask(): Promise<CanonicalTask | null> {
     return null;
   }
 
-  async applyField(): Promise<void> {}
+  override async applyField(): Promise<void> {}
 
-  async trash(): Promise<void> {}
+  override async trashNote(): Promise<void> {}
 }
 
 function originValue(field: string): string | null {
@@ -118,7 +143,6 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
     const notes = new FakeNotes();
     notes.seed(HOME_PATH, HOME);
     notes.seed(NOTE_PATH, '---\ntype: task\n---');
-    const projectSource = new VaultProjectSourceAdapter(notes);
 
     const syncState = new SyncStateAdapter(memoryStorage().storage);
     await syncState.setEntity({ id: ENTITY_ID, notePath: NOTE_PATH });
@@ -147,10 +171,8 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
       create: () => registered,
     };
 
-    const origin = new RecordingOrigin();
     const action = new AssembleProjectPassAction(
-      projectSource,
-      origin,
+      notes,
       new CoreBaselineStoreAdapter(memoryStorage().storage),
       handles,
       mirrorAdapters,
@@ -160,6 +182,6 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
 
     expect(mirror.currentTask(HANDLE)?.status).toBe('Done');
     expect(mirror.currentTask(NOTE_PATH)).toBeNull();
-    expect(origin.observedHandles).toContain(NOTE_PATH);
+    expect(notes.observedHandles).toContain(NOTE_PATH);
   });
 });

@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { freePath } from '../../../src/core/domain/freePath.js';
-import type { NoteEnumeratorPort } from '../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
 // A vault fake backed by a path set, so the collision walk is observable.
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -16,39 +11,39 @@ class FakeVault
   }
   notes = new Set<string>();
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     return this.notes.has(path) ? { content: '' } : null;
   }
 
-  async createNote(): Promise<never> {
+  override async createNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async writeNote(): Promise<never> {
+  override async writeNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async renameNote(): Promise<never> {
+  override async renameNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
   async moveFolder(): Promise<void> {}
 
-  async listNotesInFolder(): Promise<never> {
+  override async listNotesInFolder(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async trashNote(): Promise<never> {
+  override async trashNote(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  async findProjectNotes(): Promise<never> {
+  override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
 
-  onNoteChanged(): void {}
-  onNoteDeleted(): void {}
-  onNoteRenamed(): void {}
+  override onNoteChanged(): void {}
+  override onNoteDeleted(): void {}
+  override onNoteRenamed(): void {}
 }
 
 describe('MAT-5 — a taken slug gains an ordinal', () => {

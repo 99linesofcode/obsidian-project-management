@@ -12,8 +12,7 @@ import type { RegisteredAdapter } from '../../../src/core/application/data/Regis
 import type { BaselineStorePort } from '../../../src/core/port/BaselineStorePort.js';
 import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { MirrorHandlePort } from '../../../src/core/port/MirrorHandlePort.js';
-import type { OriginPort } from '../../../src/core/port/OriginPort.js';
-import type { ProjectSourcePort } from '../../../src/core/port/ProjectSourcePort.js';
+import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { registerAdapters } from '../../../src/core/application/services/registerAdapters.js';
@@ -943,11 +942,14 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
   });
 });
 
-class FieldOrigin implements OriginPort {
+class FieldOrigin extends FakeVaultBase {
   readonly values = new Map<string, string | null>();
   readonly applied: CanonicalFieldWrite[] = [];
 
-  async observe(_handle: string, field: string): Promise<OriginObservation> {
+  override async observe(
+    _handle: string,
+    field: string,
+  ): Promise<OriginObservation> {
     return new OriginObservation({
       current: this.values.get(field) ?? null,
       currentCompleted: false,
@@ -956,15 +958,31 @@ class FieldOrigin implements OriginPort {
     });
   }
 
-  async readTask(): Promise<CanonicalTask | null> {
+  override async readTask(): Promise<CanonicalTask | null> {
     return null;
   }
 
-  async applyField(write: CanonicalFieldWrite): Promise<void> {
+  override async applyField(write: CanonicalFieldWrite): Promise<void> {
     this.applied.push(write);
   }
 
-  async trash(): Promise<void> {}
+  override async trashNote(): Promise<void> {}
+
+  override async readConnections(): Promise<
+    readonly ConnectionDataTransferObject[]
+  > {
+    return [
+      new ConnectionDataTransferObject({
+        slug: 'gh',
+        application: 'github',
+        target: target(),
+      }),
+    ];
+  }
+
+  override async listEntities(): Promise<readonly string[]> {
+    return ['Projecten/Acme/taken/fix-the-bug.md'];
+  }
 }
 
 class MemoryBaselines implements BaselineStorePort {
@@ -1001,25 +1019,15 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
       new AdapterRegistration(githubDescriptor(), adapter),
     ]).adapters.get('github')!;
 
-    const projectSource: ProjectSourcePort = {
-      readConnections: async () => [
-        new ConnectionDataTransferObject({
-          slug: 'gh',
-          application: 'github',
-          target: target(),
-        }),
-      ],
-      listEntities: async () => [entityId],
-    };
-    const origin = new FieldOrigin();
-    origin.values.set('title', 'Fix the bug');
-    origin.values.set('body', 'The bug happens on resize.');
-    origin.values.set('completion', 'false');
-    origin.values.set('Status', 'Todo');
-    origin.values.set('label', 'type: task');
-    origin.values.set('subtasks', PARENT_URL);
+    const vault = new FieldOrigin();
+    vault.values.set('title', 'Fix the bug');
+    vault.values.set('body', 'The bug happens on resize.');
+    vault.values.set('completion', 'false');
+    vault.values.set('Status', 'Todo');
+    vault.values.set('label', 'type: task');
+    vault.values.set('subtasks', PARENT_URL);
     const baselines = new MemoryBaselines();
-    for (const [field, value] of origin.values) {
+    for (const [field, value] of vault.values) {
       await baselines.write(
         entityId,
         field,
@@ -1038,8 +1046,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
       record: async () => {},
     };
     const action = new AssembleProjectPassAction(
-      projectSource,
-      origin,
+      vault,
       baselines,
       handles,
       mirrorAdapters,
@@ -1050,7 +1057,7 @@ describe('AssembleProjectPassAction drives the code host through a resolved hand
 
     expect(status.result.value).toBe('Building');
     expect(status.result.winner).toBe('mirror:gh');
-    expect(origin.applied).toEqual([
+    expect(vault.applied).toEqual([
       new CanonicalFieldWrite({
         handle: entityId,
         field: 'Status',

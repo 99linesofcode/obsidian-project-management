@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
-import type { NoteReaderPort } from '../../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../../src/core/port/NoteWriterPort.js';
+import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
-class FakeVault {
+class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   renameCalls: Array<{ from: string; to: string }> = [];
 
-  async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
 
-  async renameNote(oldPath: string, newPath: string): Promise<void> {
+  override async renameNote(oldPath: string, newPath: string): Promise<void> {
     this.renameCalls.push({ from: oldPath, to: newPath });
     const content = this.notes.get(oldPath);
     if (content !== undefined) {
@@ -24,9 +23,7 @@ class FakeVault {
 
 function harness() {
   const vault = new FakeVault();
-  const action = new MigrateProjectHomeNoteAction(
-    vault as unknown as NoteReaderPort & NoteWriterPort,
-  );
+  const action = new MigrateProjectHomeNoteAction(vault);
   return { action, vault };
 }
 

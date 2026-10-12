@@ -16,14 +16,9 @@ vi.mock('obsidian', () => {
 import { SyncScheduler } from '../../../src/ui/sync/SyncScheduler.js';
 import type { SyncQueue } from '../../../src/ui/sync/SyncQueue.js';
 import type { ProjectNoteDataTransferObject } from '../../../src/core/application/data/ProjectNoteDataTransferObject.js';
-import type { NoteEnumeratorPort } from '../../../src/core/port/NoteEnumeratorPort.js';
-import type { NoteReaderPort } from '../../../src/core/port/NoteReaderPort.js';
-import type { NoteWriterPort } from '../../../src/core/port/NoteWriterPort.js';
-import type { VaultEventPort } from '../../../src/core/port/VaultEventPort.js';
+import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
-class FakeVault
-  implements NoteReaderPort, NoteWriterPort, NoteEnumeratorPort, VaultEventPort
-{
+class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
@@ -34,27 +29,27 @@ class FakeVault
   noteRenamedCb: ((oldPath: string, newPath: string) => void) | null = null;
   projectNotes: ProjectNoteDataTransferObject[] = [];
 
-  async getNoteByPath(): Promise<null> {
+  override async getNoteByPath(): Promise<null> {
     return null;
   }
-  async createNote(): Promise<void> {}
-  async writeNote(): Promise<void> {}
-  async renameNote(): Promise<void> {}
+  override async createNote(): Promise<void> {}
+  override async writeNote(): Promise<void> {}
+  override async renameNote(): Promise<void> {}
   async moveFolder(): Promise<void> {}
-  async listNotesInFolder(): Promise<string[]> {
+  override async listNotesInFolder(): Promise<string[]> {
     return [];
   }
-  async trashNote(): Promise<void> {}
-  async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
+  override async trashNote(): Promise<void> {}
+  override async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.projectNotes;
   }
-  onNoteChanged(cb: (path: string) => void): void {
+  override onNoteChanged(cb: (path: string) => void): void {
     this.noteChangedCb = cb;
   }
-  onNoteDeleted(cb: (path: string) => void): void {
+  override onNoteDeleted(cb: (path: string) => void): void {
     this.noteDeletedCb = cb;
   }
-  onNoteRenamed(cb: (oldPath: string, newPath: string) => void): void {
+  override onNoteRenamed(cb: (oldPath: string, newPath: string) => void): void {
     this.noteRenamedCb = cb;
   }
   fireNoteChanged(path: string): void {

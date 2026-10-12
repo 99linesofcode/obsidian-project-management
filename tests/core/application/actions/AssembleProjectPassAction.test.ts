@@ -29,9 +29,7 @@ import { registerAdapters } from '../../../../src/core/application/services/regi
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { CoreBaselineStoreAdapter } from '../../../../src/infrastructure/registry/CoreBaselineStoreAdapter.js';
-import { VaultOriginAdapter } from '../../../../src/infrastructure/vault/VaultOriginAdapter.js';
-import { VaultProjectSourceAdapter } from '../../../../src/infrastructure/vault/VaultProjectSourceAdapter.js';
-import { VaultAdapter } from '../../../../src/infrastructure/vault/VaultAdapter.js';
+import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 
 const PROJECT = 'Acme';
 const HOME_PATH = 'Projecten/Acme/_Acme.md';
@@ -170,10 +168,7 @@ function setup() {
     metadataCache: vault.metadataCache,
   } as unknown as App;
 
-  const origin = new VaultOriginAdapter(app);
-  const projectSource = new VaultProjectSourceAdapter(
-    new VaultAdapter(app, () => {}, new Set()),
-  );
+  const vaultPort = vaultAdapter(app);
 
   const mirror = new ConformanceMirrorAdapter();
   mirror.seed(mirrorTask('Building', 'Mirror body'));
@@ -196,8 +191,7 @@ function setup() {
   const { storage, snapshot } = fakeStorage();
   const baselines = new CoreBaselineStoreAdapter(storage);
   const action = new AssembleProjectPassAction(
-    projectSource,
-    origin,
+    vaultPort,
     baselines,
     handles,
     mirrorAdapters,

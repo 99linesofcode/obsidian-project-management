@@ -1,13 +1,7 @@
-import { TFile } from 'obsidian';
-import type { App } from 'obsidian';
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
-import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
-import { OriginObservation } from '../../core/domain/OriginObservation.js';
-import type { OriginPort } from '../../core/port/OriginPort.js';
-import { slugify } from '../../core/domain/slugify.js';
 
-interface TaskNote {
+export interface TaskNote {
   type: string;
   title: string;
   status: string;
@@ -17,99 +11,7 @@ interface TaskNote {
   labels: readonly string[];
 }
 
-export class VaultOriginAdapter implements OriginPort {
-  constructor(private readonly app: App) {}
-
-  async observe(
-    handle: string,
-    field: CanonicalField,
-  ): Promise<OriginObservation> {
-    const file = this.app.vault.getAbstractFileByPath(handle);
-    if (!(file instanceof TFile)) {
-      return new OriginObservation({
-        current: null,
-        currentCompleted: false,
-        fieldTime: null,
-        trustworthy: true,
-      });
-    }
-
-    const note = parseTaskNote(await this.app.vault.read(file), handle);
-    return new OriginObservation({
-      current: fieldValue(note, field),
-      currentCompleted: note.completed,
-      fieldTime: new Date(file.stat.mtime).toISOString(),
-      trustworthy: true,
-    });
-  }
-
-  async readTask(handle: string): Promise<CanonicalTask | null> {
-    const file = this.app.vault.getAbstractFileByPath(handle);
-    if (!(file instanceof TFile)) {
-      return null;
-    }
-
-    const note = parseTaskNote(await this.app.vault.read(file), handle);
-    if (note.type === '') {
-      return null;
-    }
-    return new CanonicalTask({
-      handle,
-      entityId: handle,
-      title: note.title,
-      body: note.body,
-      status: note.status,
-      completed: note.completed,
-      parent: null,
-      labels: note.labels,
-    });
-  }
-
-  async applyField(write: CanonicalFieldWrite): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(write.handle);
-    if (!(file instanceof TFile)) {
-      throw new Error(`origin note not found: ${write.handle}`);
-    }
-
-    if (write.field === 'title') {
-      await this.rename(file, write.value);
-      return;
-    }
-
-    const content = await this.app.vault.read(file);
-    const updated = writeIntoNote(content, write);
-    if (updated === content) {
-      throw new Error(
-        `origin note cannot accept ${write.field}: ${write.handle}`,
-      );
-    }
-    await this.app.vault.modify(file, updated);
-  }
-
-  async trash(handle: string): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(handle);
-    if (file instanceof TFile) {
-      await this.app.fileManager.trashFile(file);
-    }
-  }
-
-  private async rename(file: TFile, title: string | null): Promise<void> {
-    if (title === null) {
-      return;
-    }
-    const slug = slugify(title);
-    if (slug === '') {
-      throw new Error(`origin note has no usable title: ${file.path}`);
-    }
-    const folder = folderOf(file.path);
-    await this.app.fileManager.renameFile(
-      file,
-      folder === null ? `${slug}.md` : `${folder}/${slug}.md`,
-    );
-  }
-}
-
-function parseTaskNote(content: string, handle: string): TaskNote {
+export function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
   return {
     type: fields.get('type') ?? '',
@@ -122,7 +24,7 @@ function parseTaskNote(content: string, handle: string): TaskNote {
   };
 }
 
-function fieldValue(note: TaskNote, field: CanonicalField): string | null {
+export function fieldValue(note: TaskNote, field: CanonicalField): string | null {
   switch (field) {
     case 'title':
       return note.title;
@@ -139,7 +41,10 @@ function fieldValue(note: TaskNote, field: CanonicalField): string | null {
   }
 }
 
-function writeIntoNote(content: string, write: CanonicalFieldWrite): string {
+export function writeIntoNote(
+  content: string,
+  write: CanonicalFieldWrite,
+): string {
   switch (write.field) {
     case 'body':
       return withBody(content, write.value ?? '');
@@ -158,6 +63,11 @@ function writeIntoNote(content: string, write: CanonicalFieldWrite): string {
     case 'title':
       return content;
   }
+}
+
+export function folderOf(path: string): string | null {
+  const slash = path.lastIndexOf('/');
+  return slash === -1 ? null : path.slice(0, slash);
 }
 
 function frontmatterFields(content: string): Map<string, string> {
@@ -273,9 +183,4 @@ function withParent(content: string, parent: string | null): string {
 
 function renderLine(key: string, value: string | null): string {
   return value === null ? `${key}:` : `${key}: ${value}`;
-}
-
-function folderOf(path: string): string | null {
-  const slash = path.lastIndexOf('/');
-  return slash === -1 ? null : path.slice(0, slash);
 }
