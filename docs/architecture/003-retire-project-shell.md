@@ -1,6 +1,6 @@
 # ADR 003 — Retire the vault-maintenance shell
 
-- **Status:** accepted
+- **Status:** accepted (historical) — the chain-owns-the-sequence decision stands
 - **Date:** 2026-10-10
 
 ## Context

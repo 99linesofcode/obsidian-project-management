@@ -1,6 +1,7 @@
 # ADR 004 — Module-first tree: the repo is the module, no component wrapper
 
-- **Status:** accepted
+- **Status:** accepted (historical) — the tree decision stands; the
+  reconciler-interface placement it records is retired by ADR 006
 - **Date:** 2026-10-10
 - **Supersedes:** ADR 002
 
