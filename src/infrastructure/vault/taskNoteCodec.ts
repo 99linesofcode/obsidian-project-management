@@ -1,8 +1,11 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
+import {
+  labelSequence,
+  labelsFromSequence,
+} from '../../core/domain/note.js';
 
 export interface TaskNote {
-  type: string;
   title: string;
   status: string;
   body: string;
@@ -14,13 +17,12 @@ export interface TaskNote {
 export function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
   return {
-    type: fields.get('type') ?? '',
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
     body: bodyOf(content),
     completed: (fields.get('completed') ?? '') !== '',
     parent: parentFromAffiliation(fields.get('affiliation')),
-    labels: labelsFrom(fields.get('labels')),
+    labels: labelsFrom(content),
   };
 }
 
@@ -37,7 +39,7 @@ export function fieldValue(note: TaskNote, field: CanonicalField): string | null
     case 'subtasks':
       return note.parent;
     case 'label':
-      return note.labels.join(',');
+      return labelSequence(note.labels);
   }
 }
 
@@ -57,7 +59,7 @@ export function writeIntoNote(
         write.value === 'true' ? 'true' : null,
       );
     case 'label':
-      return withFrontmatter(content, 'labels', write.value);
+      return withLabels(content, write.value);
     case 'subtasks':
       return withParent(content, write.value);
     case 'title':
@@ -108,19 +110,41 @@ function parentFromAffiliation(raw: string | undefined): string | null {
   if (raw === undefined) {
     return null;
   }
-  const links = quotedLinks(raw);
-  const parent = links[1];
+  const parents = quotedLinks(raw).slice(1);
+  const parent = parents[parents.length - 1];
   return parent === undefined ? null : stripLink(parent);
 }
 
-function labelsFrom(raw: string | undefined): readonly string[] {
-  if (raw === undefined || raw === '') {
-    return [];
+function labelsFrom(content: string): readonly string[] {
+  const lines = content.split('\n');
+  const closing = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  const end = closing === -1 ? lines.length : closing;
+  for (let i = 1; i < end; i++) {
+    if (!lines[i]!.startsWith('labels:')) {
+      continue;
+    }
+    const inline = lines[i]!.slice('labels:'.length).trim();
+    return inline === '' ? blockLabels(lines, i + 1, end) : labelsFromSequence(inline);
   }
-  return raw
-    .split(',')
-    .map((label) => label.trim())
-    .filter((label) => label !== '');
+  return [];
+}
+
+function blockLabels(lines: string[], from: number, end: number): string[] {
+  const items: string[] = [];
+  for (let i = from; i < end; i++) {
+    const match = /^\s*-\s*(.*)$/.exec(lines[i]!);
+    if (match === null) {
+      break;
+    }
+    items.push(unquote(match[1]!.trim()));
+  }
+  return items;
+}
+
+function unquote(value: string): string {
+  return value.startsWith('"') && value.endsWith('"')
+    ? value.slice(1, -1)
+    : value;
 }
 
 function quotedLinks(raw: string): string[] {
@@ -162,6 +186,30 @@ function withFrontmatter(
   }
 
   lines.splice(closing, 0, renderLine(key, value));
+  return lines.join('\n');
+}
+
+function withLabels(content: string, value: string | null): string {
+  const lines = content.split('\n');
+  const closing = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  if (closing === -1) {
+    return content;
+  }
+  const index = lines.findIndex(
+    (line, i) => i > 0 && i < closing && line.startsWith('labels:'),
+  );
+  if (index === -1) {
+    lines.splice(closing, 0, renderLine('labels', value));
+    return lines.join('\n');
+  }
+  let removed = 1;
+  while (
+    index + removed < closing &&
+    /^\s*-\s/.test(lines[index + removed]!)
+  ) {
+    removed++;
+  }
+  lines.splice(index, removed, renderLine('labels', value));
   return lines.join('\n');
 }
 

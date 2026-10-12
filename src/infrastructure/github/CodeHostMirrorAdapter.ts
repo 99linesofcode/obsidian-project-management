@@ -1,4 +1,5 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
+import { labelsFromSequence, typeFromLabels } from '../../core/domain/note.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
@@ -680,7 +681,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   async readTask(handle: string): Promise<CanonicalTask | null> {
     const snapshot = await this.boardSnapshot(this.target);
     const issue = snapshot.issues.find((candidate) => candidate.url === handle);
-    if (issue === undefined) {
+    if (issue === undefined || !hasTypeLabel(issue.labels)) {
       return null;
     }
     return toCanonicalTask(issue, snapshot.cards.get(issue.url) ?? null);
@@ -1205,17 +1206,11 @@ function createdIssueUrl(created: Record<string, unknown>): string {
 }
 
 function hasTypeLabel(labels: readonly string[]): boolean {
-  return labels.some((label) => label.startsWith('type:'));
+  return typeFromLabels(labels) !== '';
 }
 
 function labelsFrom(value: string | null): readonly string[] {
-  if (value === null || value === '') {
-    return [];
-  }
-  return value
-    .split(',')
-    .map((label) => label.trim())
-    .filter((label) => label !== '');
+  return labelsFromSequence(value);
 }
 
 function optionIdByName(

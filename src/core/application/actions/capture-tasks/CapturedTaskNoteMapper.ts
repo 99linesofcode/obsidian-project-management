@@ -33,6 +33,7 @@ export const CapturedTaskNoteMapper = {
     const content = [
       '---',
       'categories: [taken]',
+      'labels: []',
       `status: ${context.statusName}`,
       `affiliation: ${affiliationValue(input)}`,
       `synced: ${context.syncedAt}`,

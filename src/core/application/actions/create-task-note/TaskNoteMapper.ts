@@ -29,7 +29,7 @@ export const TaskNoteMapper = {
     const content = [
       '---',
       'categories: [taken]',
-      `type: ${task.type}`,
+      `labels: ${labelsValue(task)}`,
       `status: ${context.statusName}`,
       `affiliation: ${affiliationValue(context)}`,
       `created: ${createdValue(task, context)}`,
@@ -58,6 +58,10 @@ function taskNotePath(task: TaskNoteSource, context: TaskNoteContext): string {
   return `Projecten/${context.projectName}/taken/${slugify(task.title)}.md`;
 }
 
+function labelsValue(task: TaskNoteSource): string {
+  return task.type === '' ? '[]' : `[type:${task.type}]`;
+}
+
 function affiliationValue(context: TaskNoteContext): string {
   const links = [projectAffiliationLink(context.projectName)];
   if (context.parentLink !== undefined && context.parentLink !== null) {
@@ -78,7 +82,7 @@ function managedValues(
   context: TaskNoteContext,
 ): Map<string, string> {
   return new Map([
-    ['type', task.type],
+    ['labels', labelsValue(task)],
     ['status', context.statusName],
     ['affiliation', affiliationValue(context)],
     ['synced', context.syncedAt],

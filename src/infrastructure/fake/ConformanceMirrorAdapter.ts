@@ -1,4 +1,5 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
+import { labelsFromSequence } from '../../core/domain/note.js';
 import { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
@@ -232,8 +233,5 @@ function withTask(
 }
 
 function labelsFrom(value: string | null): readonly string[] {
-  if (value === null || value === '') {
-    return [];
-  }
-  return value.split(',');
+  return labelsFromSequence(value);
 }

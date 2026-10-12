@@ -15,7 +15,7 @@ import {
 } from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
-import { slugify } from '../../core/domain/note.js';
+import { slugify, typeFromLabels } from '../../core/domain/note.js';
 import { connectionsOf } from './connectionsOf.js';
 import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 import { fieldValue, folderOf, parseTaskNote, writeIntoNote } from './taskNoteCodec.js';
@@ -153,6 +153,14 @@ export class VaultAdapter implements VaultPort {
     }
 
     const note = parseTaskNote(await this.app.vault.read(file), handle);
+    if (typeFromLabels(note.labels) === '') {
+      return new OriginObservation({
+        current: null,
+        currentCompleted: false,
+        fieldTime: null,
+        trustworthy: true,
+      });
+    }
     return new OriginObservation({
       current: fieldValue(note, field),
       currentCompleted: note.completed,
@@ -168,7 +176,7 @@ export class VaultAdapter implements VaultPort {
     }
 
     const note = parseTaskNote(await this.app.vault.read(file), handle);
-    if (note.type === '') {
+    if (typeFromLabels(note.labels) === '') {
       return null;
     }
     return new CanonicalTask({
@@ -178,7 +186,7 @@ export class VaultAdapter implements VaultPort {
       body: note.body,
       status: note.status,
       completed: note.completed,
-      parent: null,
+      parent: note.parent,
       labels: note.labels,
     });
   }

@@ -155,13 +155,60 @@ export function normalizedStem(path: string): string {
   return stemOf(path).replace(/^\d+-/, '').toLowerCase();
 }
 
-// The vault-owned content type carried by a `type:*` label, or '' when the
-// label set carries none. The prefix is stripped and the remainder trimmed, so
-// both the spaced (`type: task`) and legacy (`type:task`) conventions resolve.
-// This is the ONE type-from-labels rule: every surface that reads a type off
-// labels routes here, so a non-type label (e.g. `priority:high`) is never
-// mistaken for the type.
-export function typeFromLabels(labels: string[]): string {
-  const label = labels.find((candidate) => candidate.startsWith('type:'));
-  return label === undefined ? '' : label.slice('type:'.length).trim();
+const WORK_ITEM_KINDS = new Set(['slice', 'pitch', 'task', 'chore', 'bug', 'todo']);
+
+export function typeFromLabels(labels: readonly string[]): string {
+  for (const label of labels) {
+    if (!label.startsWith('type:')) {
+      continue;
+    }
+    const kind = label.slice('type:'.length).trim();
+    if (WORK_ITEM_KINDS.has(kind)) {
+      return kind;
+    }
+  }
+  return '';
+}
+
+export function labelSequence(labels: readonly string[]): string {
+  return JSON.stringify([...labels]);
+}
+
+export function labelsFromSequence(value: string | null): string[] {
+  if (value === null) {
+    return [];
+  }
+  const inner = value.trim().replace(/^\[/, '').replace(/\]$/, '');
+  return splitFlowItems(inner);
+}
+
+function splitFlowItems(inner: string): string[] {
+  if (inner.trim() === '') {
+    return [];
+  }
+  const items: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (const character of inner) {
+    if (quote !== null) {
+      if (character === quote) {
+        quote = null;
+      } else {
+        current += character;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === ',') {
+      items.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += character;
+  }
+  items.push(current.trim());
+  return items.filter((item) => item !== '');
 }
