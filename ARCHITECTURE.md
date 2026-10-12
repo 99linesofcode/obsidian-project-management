@@ -117,8 +117,10 @@ across the origin and each connection's mirror adapter through the core's ports,
 and the composition root supplies the concrete provider adapters. A provider's
 name never appears in the core.
 
-The per-project pass runs the same sequence every tick; the developer manual
-carries a sequence diagram per path. The central flow:
+The per-project pass runs the same sequence every tick — a leading label
+migration (`MigrateLabelsAction`), then the maintenance and reconciliation
+steps; the developer manual carries a sequence diagram per path. The central
+flow:
 
 ```mermaid
 sequenceDiagram
@@ -134,7 +136,7 @@ sequenceDiagram
   Sched->>Q: enqueue(project) per project note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes (no-op when missing)
-  SP->>SP: migrate home note, rekey, ensure board
+  SP->>SP: migrate labels, migrate home note, rekey, ensure board
   SP->>Life: invoke(project)
   Life->>M: resolve mirror project, merge archived, fan out
   SP->>Lock: invoke({ project, frozen, wasFrozen })
@@ -321,9 +323,9 @@ canonical DTOs and the pure core.
   `CreateTaskNoteAction`, a task-manager task rendered by
   `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
-  (home-note migration, connection re-keying, board-ensure, rename recovery,
-  vault consistency and the deletion sweep) and the core actions directly
-  (`ProjectLifecycleSyncAction`,
+  (label migration, home-note migration, connection re-keying, board-ensure,
+  rename recovery, vault consistency and the deletion sweep) and the core
+  actions directly (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
   every step wrapped so one failure logs and skips that step. It runs the
   lifecycle pass for the freeze verdict, the task-lock

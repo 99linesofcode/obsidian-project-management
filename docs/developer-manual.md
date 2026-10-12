@@ -173,9 +173,10 @@ On load, `SyncScheduler.tick` first runs the injected project capture
 (`CaptureProjectsAction`, [§2.6](#26-project-capture)), then enumerates the
 vault's project notes and enqueues each project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
-item no-ops), then drives every step in order. It migrates a legacy home note,
-re-keys a renamed connection, and ensures a code-host board for each active
-github connection; the core actions
+item no-ops), then drives every step in order. It first migrates each note's
+legacy `type` scalar into a `type:` label (`MigrateLabelsAction`), then migrates
+a legacy home note, re-keys a renamed connection, and ensures a code-host board
+for each active github connection; the core actions
 reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
@@ -214,7 +215,7 @@ sequenceDiagram
   participant Lock as ReconcileProjectTaskLocksAction
 
   SP->>SP: resolveProject (no-op when missing)
-  SP->>SP: migrate / rekey / ensureBoards
+  SP->>SP: migrateLabels / migrate / rekey / ensureBoards
   SP->>Life: invoke(project)
   Life-->>SP: { frozen, wasFrozen }
   SP->>Lock: invoke({ project, frozen, wasFrozen })
