@@ -373,10 +373,10 @@ canonical DTOs and the pure core.
 
 - **The vault** — the system of record; markdown notes, not a database.
   Project notes live under `Projecten/<name>/` (or `Archief/` when archived)
-  and declare their connections in a non-empty `connections` map; task
-  notes under `taken/`; to-do notes under `todos/`. Identity is a
-  vault-owned uuid held in the registry — filenames and frontmatter carry no
-  machine id.
+  and declare their connections in a non-empty `connections` map; every task
+  note lives under `taken/`, a to-do among them carrying the `type:todo`
+  label. Identity is a vault-owned uuid held in the registry — filenames and
+  frontmatter carry no machine id.
 - **`data.json`** — the plugin's data file. It holds three containers:
   - **`syncState`** (schema version 3) — the per-mirror registry: `projects.<name>.entities`
     (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`

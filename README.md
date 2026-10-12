@@ -102,18 +102,17 @@ Everything this task needs to say. This body becomes the issue body.
 
 ### Create a todo
 
-A todo note is smaller: frontmatter with a `status` field makes it a todo,
-`affiliation` attaches it to a project — for example
-`Projecten/My Project/todos/Call the printer.md`:
+A todo is a task note carrying the `type:todo` label, living beside the other
+task notes — for example `Projecten/My Project/taken/Call the printer.md`:
 
 ```yaml
+labels: [type:todo]
 status: open
 affiliation: '[[My Project]]'
 ```
 
 ```markdown
-- [ ] order toner
-- [ ] confirm delivery date
+Order toner and confirm the delivery date.
 ```
 
 Todos sync to Todoist as tasks; checking them off in either place is
@@ -122,7 +121,7 @@ reflected in the other.
 ### Templates
 
 You control what generated notes look like. Point the plugin at template files
-in your vault (defaults: `Templates/Task.md` and `Templates/ToDo.md`) and it
+in your vault (default: `Templates/Task.md`) and it
 renders new notes through them:
 
 - the template's frontmatter is kept — your own fields (`categories`, `tags`,
