@@ -1,6 +1,6 @@
-import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
-import type { ProjectActivityPort } from '../../port/ProjectActivityPort.js';
+import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectWatchPort } from '../../port/ProjectWatchPort.js';
@@ -29,12 +29,10 @@ export class ReactivateFrozenProjectAction {
         connection.slug,
         project,
       );
-      if (adapter === null || adapter.activity === undefined) {
+      if (adapter === null) {
         continue;
       }
-      if (
-        await this.reactivateOnNewerWork(project, connection, adapter.activity)
-      ) {
+      if (await this.reactivateOnNewerWork(project, connection, adapter)) {
         reactivated = true;
       }
     }
@@ -53,10 +51,13 @@ export class ReactivateFrozenProjectAction {
   private async reactivateOnNewerWork(
     project: string,
     connection: ConnectionDataTransferObject,
-    activity: ProjectActivityPort,
+    adapter: MirrorPort,
   ): Promise<boolean> {
+    if (adapter.latestActivity === undefined) {
+      return false;
+    }
     const watch = await this.watches.read(project, connection.slug);
-    const latest = await activity.latestActivity(
+    const latest = await adapter.latestActivity(
       connection.target,
       watch.etag ?? undefined,
     );

@@ -20,13 +20,10 @@ type TFileInstance = InstanceType<typeof TFile>;
 
 import type { App } from 'obsidian';
 import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
-import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
+import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
+import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 
@@ -172,13 +169,9 @@ async function setup() {
   const mirror = new ConformanceMirrorAdapter();
   mirror.seed(mirrorTask('Building', 'Mirror body'));
   mirror.setFieldTime(TASK_PATH, 'body', '2026-10-08T11:00:00Z');
-  const registered = registerAdapters([
-    new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-  ]).adapters.get('conformance')!;
-
   const mirrorAdapters: MirrorAdapterFactoryPort = {
-    create: (application): RegisteredAdapter | null =>
-      application === 'conformance' ? registered : null,
+    create: (application): MirrorPort | null =>
+      application === 'conformance' ? mirror : null,
   };
 
   const { storage, snapshot } = fakeStorage();

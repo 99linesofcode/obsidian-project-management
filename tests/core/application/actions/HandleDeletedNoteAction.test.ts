@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
-import { CanonicalFieldWrite } from '../../../../src/core/application/data/CanonicalFieldWrite.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
+import { CanonicalFieldWrite } from '../../../../src/core/port/data/CanonicalFieldWrite.js';
+import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { TaskSurfacePort } from '../../../../src/core/port/TaskSurfacePort.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
-class FakeTaskSurface implements TaskSurfacePort {
+class FakeTaskSurface {
   deleted: string[] = [];
   writes: CanonicalFieldWrite[] = [];
 
@@ -31,8 +30,8 @@ class FakeTaskSurface implements TaskSurfacePort {
 class FakeMirrorAdapters implements MirrorAdapterFactoryPort {
   readonly tasks = new FakeTaskSurface();
 
-  create(): RegisteredAdapter {
-    return { tasks: this.tasks } as unknown as RegisteredAdapter;
+  create(): MirrorPort {
+    return this.tasks as unknown as MirrorPort;
   }
 }
 

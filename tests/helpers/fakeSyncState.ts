@@ -1,9 +1,9 @@
-import type { ProjectIdentityDataTransferObject } from '../../src/core/application/data/ProjectIdentityDataTransferObject.js';
+import type { ProjectIdentityDataTransferObject } from '../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import { projectFromNotePath } from '../../src/core/domain/projectFromNotePath.js';
 import { Baseline } from '../../src/core/domain/Baseline.js';
-import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
-import type { MirrorItem } from '../../src/core/application/data/MirrorItem.js';
-import type { PortState } from '../../src/core/application/data/PortState.js';
+import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
+import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';
+import type { PortState } from '../../src/core/port/data/PortState.js';
 import type {
   BaselineField,
   RegistryPort,

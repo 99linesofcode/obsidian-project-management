@@ -1,17 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CanonicalField } from '../../../../src/core/domain/canonicalField.js';
-import { AdapterDescriptor } from '../../../../src/core/application/data/AdapterDescriptor.js';
 import { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
-import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
+import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
-import type { CanonicalFieldWrite } from '../../../../src/core/application/data/CanonicalFieldWrite.js';
+import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
+import type { RegistryPort } from '../../../../src/core/port/RegistryPort.js';
+import type { CanonicalFieldWrite } from '../../../../src/core/port/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -103,10 +100,7 @@ async function setup() {
     }),
   ];
   const mirror = new ConformanceMirrorAdapter();
-  const registered: RegisteredAdapter = registerAdapters([
-    new AdapterRegistration(conformanceDescriptor('conformance'), mirror),
-  ]).adapters.get('conformance')!;
-  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => registered };
+  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => mirror };
   const registry = new SyncStateAdapter(memoryStorage());
   await seedHandles(registry, PROJECT, 'a', [
     { handle: 'issue-1', notePath: FIX },
@@ -175,33 +169,21 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
         target: 'board-a',
       }),
     ];
-    const mirror = new ConformanceMirrorAdapter();
-    const base = conformanceDescriptor('plain');
-    const descriptor = new AdapterDescriptor({
-      applicationId: base.applicationId,
-      capabilities: base.capabilities.filter(
-        (capability) => capability !== 'task-locking',
-      ),
-      secretKeys: base.secretKeys,
-      settingsRows: base.settingsRows,
-    });
-    const registered: RegisteredAdapter = registerAdapters([
-      new AdapterRegistration(descriptor, mirror),
-    ]).adapters.get('plain')!;
-    vault.tasks.set(FIX, task(FIX, 'Building'));
-    const registry = new SyncStateAdapter(memoryStorage());
-    await seedHandles(registry, PROJECT, 'a', [
-      { handle: 'issue-1', notePath: FIX },
-    ]);
+    const lockless = {} as MirrorPort;
+    const registry = {
+      listMirrorHandles: async (): Promise<never> => {
+        throw new Error('a lockless connection must be skipped');
+      },
+    } as unknown as RegistryPort;
     const action = new ReconcileProjectTaskLocksAction(
       vault,
       registry,
-      { create: () => registered },
+      { create: () => lockless },
       DONE,
     );
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
-
-    expect([...mirror.lockedHandles]).toEqual([]);
+    await expect(
+      action.invoke({ project: PROJECT, frozen: true, wasFrozen: false }),
+    ).resolves.toBeUndefined();
   });
 });

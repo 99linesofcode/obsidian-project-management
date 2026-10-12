@@ -1,4 +1,4 @@
-import { CanonicalFieldWrite } from '../data/CanonicalFieldWrite.js';
+import { CanonicalFieldWrite } from '../../port/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
@@ -53,8 +53,8 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    await adapter.tasks.deleteTask(found.handle);
-    await adapter.tasks.applyField(
+    await adapter.deleteTask(found.handle);
+    await adapter.applyField(
       new CanonicalFieldWrite({
         handle: found.handle,
         field: 'completion',

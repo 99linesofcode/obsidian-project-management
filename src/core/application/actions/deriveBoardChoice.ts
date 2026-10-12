@@ -1,4 +1,4 @@
-import type { ProjectSummary } from '../data/ProjectSummary.js';
+import type { ProjectSummary } from '../../port/data/ProjectSummary.js';
 
 export type BoardChoice =
   | { kind: 'create' }

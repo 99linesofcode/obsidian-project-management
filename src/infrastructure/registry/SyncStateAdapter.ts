@@ -1,10 +1,10 @@
 import { Baseline } from '../../core/domain/Baseline.js';
 import { isRecord } from '../../core/domain/isRecord.js';
 import { projectFromNotePath } from '../../core/domain/projectFromNotePath.js';
-import { ProjectIdentityDataTransferObject } from '../../core/application/data/ProjectIdentityDataTransferObject.js';
-import type { EntityRecord } from '../../core/application/data/EntityRecord.js';
-import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
-import type { PortState } from '../../core/application/data/PortState.js';
+import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
+import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
+import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
+import type { PortState } from '../../core/port/data/PortState.js';
 import type {
   BaselineField,
   RegistryPort,

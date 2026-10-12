@@ -1,5 +1,5 @@
 import { isRecord } from '../../domain/isRecord.js';
-import { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
+import { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 
 export interface ConnectionValidationResult {
   connections: readonly ConnectionDataTransferObject[];

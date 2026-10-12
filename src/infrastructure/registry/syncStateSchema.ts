@@ -1,6 +1,6 @@
 import { isRecord } from '../../core/domain/isRecord.js';
-import type { MirrorItem } from '../../core/application/data/MirrorItem.js';
-import type { PortState } from '../../core/application/data/PortState.js';
+import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
+import type { PortState } from '../../core/port/data/PortState.js';
 
 export const SYNC_STATE_KEY = 'syncState';
 

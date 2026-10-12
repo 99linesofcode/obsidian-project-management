@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
-import { AdapterRegistration } from '../../../../src/core/application/data/AdapterRegistration.js';
-import { CanonicalTask } from '../../../../src/core/application/data/CanonicalTask.js';
+import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
-import type { RegisteredAdapter } from '../../../../src/core/application/data/RegisteredAdapter.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import { ConnectionDataTransferObject } from '../../../../src/core/application/data/ConnectionDataTransferObject.js';
-import { registerAdapters } from '../../../../src/core/application/services/registerAdapters.js';
+import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { conformanceDescriptor } from '../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
@@ -164,11 +160,8 @@ describe('AssembleProjectPassAction — the real adapter wiring (F02 NWM-2)', ()
         labels: [],
       }),
     );
-    const registered: RegisteredAdapter = registerAdapters([
-      new AdapterRegistration(conformanceDescriptor('github'), mirror),
-    ]).adapters.get('github')!;
     const mirrorAdapters: MirrorAdapterFactoryPort = {
-      create: () => registered,
+      create: () => mirror,
     };
 
     const action = new AssembleProjectPassAction(

@@ -48,9 +48,10 @@ const ALL_ELEMENT_TYPES = [
 //   file that is not domain moves out rather than inverting this edge.
 // - core/application may depend on the domain and the ports (use cases use
 //   both).
-// - core/port is the interface layer the core owns; its shapes are the
-//   canonical DTOs in application/data, so it may reference domain and
-//   application.
+// - core/port is the interface layer the core owns; its shapes are its own
+//   (in core/port/data/), so it may reference the domain only — never the
+//   application layer. This is the tightest core seam: all three collaborator
+//   ports collapsed, their payloads live with the ports.
 // - infrastructure is the block of driven adapters; it may import the core
 //   only, never the driving side or a sibling block.
 // - github/todoist never import each other. A mirror's module may not depend
@@ -63,7 +64,7 @@ const ALL_ELEMENT_TYPES = [
 const MATRIX = {
   ui: ['ui', ...CORE_LAYERS, 'infrastructure'],
   'core/domain': [],
-  'core/port': ['core/domain', 'core/application'],
+  'core/port': ['core/domain'],
   'core/application': ['core/domain', 'core/port'],
   github: [...CORE_LAYERS],
   todoist: [...CORE_LAYERS],

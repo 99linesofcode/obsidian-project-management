@@ -50,13 +50,17 @@ no machine id.
 vocabulary, the canonical DTOs, the one pure N-way merge, the descriptor and
 registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
 
-- **Capability ports.** `ProjectPort` (`project`, `lifecycle`),
-  `TaskSurfacePort` (`title`, `body`, `subtasks`, `completion`,
-  `Status`, `label`), and the optional `CapturePort`, `ProjectCapturePort`,
-  `CompleteFetchPort`, `TimestampedPort`, `TaskLockPort` (`task-locking`) and
-  `ProjectActivityPort` (`project-activity`). An adapter implements only the
-  groups its descriptor declares; an undeclared optional port is absent, so a
-  capability an adapter lacks has no interface to call.
+- **The mirror port.** `MirrorPort` — the external tool as one collaborator.
+  The required surface is the project (`readProject`, `createProject`,
+  `renameProject`, `setArchived`, `archivedTime`) and the task (`readTasks`,
+  `readTask`, `createTask`, `applyField`, `deleteTask`). The genuinely optional
+  surfaces are optional
+  methods: `capture?`/`captureProjects?`, `fieldTime?`, `fetchComplete?`,
+  `lockTask?`/`unlockTask?`,
+  `latestActivity?` and the project-setup surface (`discoverProjects?`,
+  `readProjectAddressing?`, `createProjectWithStatus?`, `adoptProject?`,
+  `listProjects?`). A caller checks presence (`adapter.lockTask !== undefined`);
+  an adapter without a surface omits the method.
 - **The vault port.** `VaultPort` — the vault as one collaborator: read/write/
   enumerate/watch notes; observe/apply a task note's canonical field; read a
   project's declared connections and task-note paths; observe/apply a project's
@@ -64,10 +68,8 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   lifecycle and the project capture are one collaborator, so they are one port.
   The port is raw vault I/O: the task-capture adoption orchestration lives in
   `CaptureTasksAction`.
-- **The setup port.** `ProjectSetupPort` (discover a target's projects, resolve
-  addressing, create/adopt a project, list viewer projects) is the
-  code-host adapter's surface for discovery, attach and board-ensure.
-- **The supporting ports.** `MirrorAdapterFactoryPort`,
+- **The supporting ports.** `MirrorAdapterFactoryPort` (the mirror factory),
+  `ProjectSetupFactoryPort` (reach a tool's project-setup surface),
   `ProjectCaptureCursorPort` and `ProjectWatchPort`.
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
@@ -81,14 +83,16 @@ registrar, the mirror-sync action, the two pass assemblers and the reconcilers.
   `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
   `ProjectLifecycleRecord`, `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
-  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `ProjectState`
-  and `ProjectActivityObservation`.
+  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `PortState`
+  and `ProjectActivityObservation`. The port boundary payloads live with the
+  ports (`core/port/data/`); the pass shapes stay in `application/data/`.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
 - **The descriptor and registrar.** `AdapterDescriptor` (application id,
   capabilities, secret keys, settings rows),
   `AdapterRegistration` and the pure `registerAdapters`, which validates and
-  returns a `RegistrationResult` of `RegisteredAdapter`s.
+  returns a `RegistrationResult` of `RegisteredAdapter`s, each pairing a
+  descriptor with its one `MirrorPort`.
 - **The actions.** `MirrorSyncAction` (the one capability-parameterized
   reconcile), `AssembleProjectPassAction` (one whole-project task pass),
   `ProjectLifecycleSyncAction` + `AssembleProjectLifecyclePassAction` (the
@@ -101,12 +105,12 @@ namespace per application.**
 - **Vault.** `VaultAdapter` (the `VaultPort`), with the pure note codecs
   (`connectionsOf`, `parseConnectionsBlock`, `CapturedTaskNoteMapper`) beside
   it.
-- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorAdapter` and
-  `ProjectSetupPort`), `githubDescriptor`, `CodeHostTarget` and
+- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the setup,
+  locking and activity surfaces), `githubDescriptor`, `CodeHostTarget` and
   `CodeHostTransport`.
-- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorAdapter`),
-  `todoistDescriptor`, `TaskManagerTarget`, `TaskManagerTransport` and
-  `TodoistTransport`.
+- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, without the setup,
+  locking and activity methods), `todoistDescriptor`, `TaskManagerTarget`,
+  `TaskManagerTransport` and `TodoistTransport`.
 - **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
   and the `coreBaselines` store), `RegistryProjectCursorAdapter`
   (`ProjectCaptureCursorPort`) and `CoreProjectWatchAdapter`
@@ -155,13 +159,14 @@ pure `registerAdapters`, which:
   duplicate id, a descriptor missing a required field, an unknown capability, an
   unknown settings-row kind, or a descriptor missing the in-scope minimum
   surface (`REQUIRED_CAPABILITIES`); and
-- returns each accepted adapter as a `RegisteredAdapter`, exposing only the
-  ports its descriptor declares (`capture`, `projectCapture`, `completeFetch`,
-  `timestamps`, `taskLock`, `activity` are gated by capability).
+- returns each accepted adapter as a `RegisteredAdapter`, pairing its
+  descriptor with its one `MirrorPort`. The capability list is descriptor
+  metadata, not a port gate: the optional surfaces are the adapter's optional
+  methods, presence-checked by the caller.
 
 `main.ts` holds one `providers` table — one entry per application, each naming
 its descriptor, its mirror factory, its capture source and its optional setup
-port. It derives the descriptor list, the setup factory and the mirror-adapter
+surface. It derives the descriptor list, the setup factory and the mirror-adapter
 factory from that table, and gates each adapter through the neutral
 `registerAdapters` (the conformance adapter in the stored registration). Adding
 an application is one table entry; the kernel is not edited. A provider name is
@@ -312,7 +317,7 @@ remaining mirrors, so one failing connection never abandons the rest.
 sequenceDiagram
   participant A as AssembleProjectPassAction
   participant MS as MirrorSyncAction
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
   participant MF as mergeField
   participant O as VaultPort
 
@@ -351,7 +356,7 @@ through `RegistryPort`, and runs `MirrorSyncAction` once per
 resolved handle is **materialized**: the origin task is read through
 `VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
 placeholder handle is recorded through `RegistryPort` before the item is
-created through `TaskSurfacePort.createTask`, the real handle replaces the
+created through `MirrorPort.createTask`, the real handle replaces the
 placeholder, and the created mirror is reconciled in the same pass. A
 placeholder left by an interrupted pass is **adopted** by matching the mirror's
 task title rather than re-created, so a failed record never duplicates the item.
@@ -363,7 +368,7 @@ sequenceDiagram
   participant F as MirrorAdapterFactoryPort
   participant H as RegistryPort
   participant O as VaultPort
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
   participant MS as MirrorSyncAction
 
   A->>PS: readConnections(project)
@@ -398,10 +403,10 @@ side's `Baseline` (value plus the completion flag) through `RegistryPort`.
 
 `AssembleProjectLifecyclePassAction` is the project-level peer of the task pass.
 It scopes the mirrors, resolves each connection's mirror project through
-`RegistryPort` — onboarding a missing one by `ProjectPort.createProject`
+`RegistryPort` — onboarding a missing one by `MirrorPort.createProject`
 and recording the returned handle, so a newly-connected project is onboarded in
 the same pass — renames a mirror project whose name drifted from the vault
-project through `ProjectPort.renameProject`, reads the origin's archived state
+project through `MirrorPort.renameProject`, reads the origin's archived state
 through `VaultPort`, runs the same `mergeField` ladder over the
 archived fact, and fans the reconciled freeze out to the origin and every
 capable mirror. Any side can start the freeze or the unfreeze; the reconciled
@@ -413,7 +418,7 @@ sequenceDiagram
   participant A as AssembleProjectLifecyclePassAction
   participant PS as VaultPort
   participant MP as RegistryPort
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
   participant O as VaultPort
   participant LS as ProjectLifecycleSyncAction
   participant MF as mergeField
@@ -445,7 +450,7 @@ from `archivedTime`, so the ladder falls through to the vault tie-break.
 ### 2.6 Project capture (`CaptureProjectsAction`)
 
 A capture-capable adapter enumerates the application-born projects it can see
-(`ProjectCapturePort.captureProjects`), each carrying its name, its candidate
+(`MirrorPort.captureProjects`), each carrying its name, its candidate
 connection targets and its creation clock. The action reads each source's
 projects in creation order, adopts every project after that source's stored
 cursor that the vault does not already declare — writing the home note with its
@@ -485,10 +490,11 @@ sequenceDiagram
 
 ### 2.7 Task capture (`CaptureTasksAction`)
 
-For each declared connection whose adapter declares `capture`, the core action
-reads the tracked tasks the adapter can see (`CapturePort.capture`) — the issues
+For each declared connection whose adapter carries `capture`, the core action
+reads the tracked tasks the adapter can see (`MirrorPort.capture`) — the issues
 carrying a `type:` label — and adopts every task the vault does not already hold
-as a task note. The whole listing is scanned each pass and the adopted mirror
+as a task note. A connection whose adapter omits `capture` is skipped. The whole
+listing is scanned each pass and the adopted mirror
 items are skipped, so the pass is idempotent without a cursor. The action
 routes by the connection's application: a code-host issue through
 `CreateTaskNoteAction`, a task-manager task rendered by `CapturedTaskNoteMapper`
@@ -500,7 +506,7 @@ sequenceDiagram
   participant C as CaptureTasksAction
   participant PS as VaultPort
   participant F as MirrorAdapterFactoryPort
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
   participant V as VaultPort
   participant CT as CreateTaskNoteAction
 
@@ -540,7 +546,7 @@ sequenceDiagram
   participant SP as SyncProjectAction
   participant React as ReactivateFrozenProjectAction
   participant B as RegistryPort
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
   participant W as ProjectWatchPort
   participant O as VaultPort
   participant Lock as ReconcileProjectTaskLocksAction
@@ -653,7 +659,7 @@ sequenceDiagram
   participant M as main.ts
   participant RA as registerAdapters
   participant D as AdapterDescriptor
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
 
   M->>RA: registerAdapters([AdapterRegistration(descriptor, adapter), ...])
   loop each registration
@@ -661,16 +667,16 @@ sequenceDiagram
     alt rejected
       RA->>RA: collect RegistrationError
     else accepted
-      RA->>R: gatePorts(descriptor, adapter)
+      RA->>R: pair descriptor with the MirrorPort
     end
   end
   RA-->>M: RegistrationResult { adapters, errors }
 ```
 
 `mirrorAdapterFactory.create` dispatches on the application id to
-`CodeHostMirrorAdapter` or `TaskManagerMirrorAdapter` and gates the result;
-`buildCaptureSources` gates the same two adapters once and collects their
-`projectCapture` surfaces.
+`CodeHostMirrorAdapter` or `TaskManagerMirrorAdapter` and validates the
+descriptor; `buildCaptureSources` validates the same two adapters once and
+collects their `captureProjects` surfaces.
 
 ### 2.12 Vault consistency
 
@@ -719,7 +725,7 @@ sequenceDiagram
   participant Cas as CompleteTaskCascadeAction
   participant Chk as SyncChecklistAction
   participant MS as MirrorSyncAction
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
 
   Note over V,R: invariant status doneLane iff completedAt not null
   alt done in the vault
@@ -740,7 +746,7 @@ project's entities and, for each whose note is gone, calls
 `HandleDeletedNoteAction`. That action finds the registry record by note path,
 resolves the connection's mirror item through `RegistryPort`, builds the
 connection's adapter through `MirrorAdapterFactoryPort`, and calls
-`TaskSurfacePort.deleteTask` (the GitHub adapter deletes the board card). When
+`MirrorPort.deleteTask` (the GitHub adapter deletes the board card). When
 the stored base lane is not the done lane it then applies
 `completion = true` through the generic write entry, which closes the issue.
 Finally it evicts the entity, dropping its remaining mirror items. Deletion
@@ -753,7 +759,7 @@ sequenceDiagram
   participant HD as HandleDeletedNoteAction
   participant SS as RegistryPort
   participant F as MirrorAdapterFactoryPort
-  participant R as RegisteredAdapter
+  participant R as MirrorPort
 
   SP->>Sweep: execute({ projectName, connectionSlug, application, target })
   Sweep->>SS: listEntities(projectName)
@@ -807,12 +813,12 @@ sequenceDiagram
   end
 ```
 
-### 2.16 Discovery, attach and board-ensure (`ProjectSetupPort`)
+### 2.16 Discovery, attach and board-ensure (the setup surface)
 
 At `onLayoutReady`, `DiscoverProjectsAction` enumerates the vault's project
 notes and attaches each setup-capable connection through `AttachProjectAction`,
 which
-uses `ProjectSetupPort.discoverProjects` to resolve the repository and its
+uses `MirrorPort.discoverProjects` to resolve the repository and its
 boards, `deriveBoardChoice` to pick one, and `readProjectAddressing` to resolve
 the Status field and its options. A board that does not exist yet yields an
 identity with an empty `projectHandle`, which `EnsureProjectBoardAction`
@@ -827,7 +833,7 @@ sequenceDiagram
   participant P as ProjectManagementPlugin
   participant D as DiscoverProjectsAction
   participant A as AttachProjectAction
-  participant Setup as ProjectSetupPort
+  participant Setup as ProjectSetupSurface
   participant Ens as EnsureProjectBoardAction
   participant SS as RegistryPort
 
@@ -964,7 +970,8 @@ layers, and each layer owns one surface of the system.
 - The core: `src/core/` — the pure engine (`mergeField`, `MirrorSyncAction`,
   `AssembleProjectPassAction`, `AssembleProjectLifecyclePassAction`,
   `ProjectLifecycleSyncAction`, `registerAdapters`, `AdapterDescriptor`), the
-  ports under `src/core/port/`, the DTOs under `src/core/application/data/`, the
+  ports and their payloads under `src/core/port/` (`port/data/`), the pass DTOs
+  under `src/core/application/data/`, the
   reconciler interfaces under `src/core/application/services/`, and every use
   case under `src/core/application/actions/`.
 - The use cases folded in from the former concept modules:

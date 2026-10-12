@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CaptureTasksAction } from '../../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
-import { CanonicalTask } from '../../../../../src/core/application/data/CanonicalTask.js';
-import { ConnectionDataTransferObject } from '../../../../../src/core/application/data/ConnectionDataTransferObject.js';
-import { RegisteredAdapter } from '../../../../../src/core/application/data/RegisteredAdapter.js';
-import type { CapturePort } from '../../../../../src/core/port/CapturePort.js';
+import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
+import { ConnectionDataTransferObject } from '../../../../../src/core/port/data/ConnectionDataTransferObject.js';
+import type { MirrorPort } from '../../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { ProjectPort } from '../../../../../src/core/port/ProjectPort.js';
-import type { TaskSurfacePort } from '../../../../../src/core/port/TaskSurfacePort.js';
-import { conformanceDescriptor } from '../../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
 import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';
 import { entityRecord } from '../../../../helpers/records.js';
@@ -71,18 +67,10 @@ function connection(
   return new ConnectionDataTransferObject({ slug, application, target });
 }
 
-function registered(capture: CapturePort): RegisteredAdapter {
-  return new RegisteredAdapter({
-    descriptor: conformanceDescriptor('acme'),
-    project: {} as ProjectPort,
-    tasks: {} as TaskSurfacePort,
-    capture,
-    projectCapture: undefined,
-    completeFetch: undefined,
-    timestamps: undefined,
-    taskLock: undefined,
-    activity: undefined,
-  });
+function registered(capture: {
+  capture: (target: string) => Promise<CanonicalTask[]>;
+}): MirrorPort {
+  return capture as unknown as MirrorPort;
 }
 
 function harness(
@@ -182,7 +170,9 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
   it('skips a connection whose adapter declares no capture', async () => {
     const vault = new FakeVault([connection('acme', 'T1', 'acme')]);
     const syncState = new FakeSyncState();
-    const factory: MirrorAdapterFactoryPort = { create: () => null };
+    const factory: MirrorAdapterFactoryPort = {
+      create: () => ({}) as MirrorPort,
+    };
     const action = new CaptureTasksAction(
       vault,
       factory,
@@ -194,6 +184,7 @@ describe('CaptureTasksAction — adopting tracked tasks', () => {
     const result = await action.invoke('Acme', SYNCED_AT);
 
     expect(result.captured).toEqual([]);
+    expect(result.errors).toEqual([]);
     expect(vault.created).toEqual([]);
   });
 

@@ -1,5 +1,5 @@
-import type { ConnectionDataTransferObject } from '../data/ConnectionDataTransferObject.js';
-import type { ProjectNoteDataTransferObject } from '../data/ProjectNoteDataTransferObject.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
+import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectSetupFactoryPort } from '../../port/ProjectSetupFactoryPort.js';
 import type { CoreReconcilers } from '../services/CoreReconcilers.js';

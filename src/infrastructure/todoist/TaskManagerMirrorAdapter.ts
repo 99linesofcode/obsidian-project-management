@@ -1,8 +1,8 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import type { CanonicalFieldWrite } from '../../core/application/data/CanonicalFieldWrite.js';
-import { CanonicalProject } from '../../core/application/data/CanonicalProject.js';
-import { CanonicalTask } from '../../core/application/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/application/data/CapturedProject.js';
+import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
+import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
+import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
+import { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
   TaskManagerResponse,
@@ -86,10 +86,6 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
 
   async archivedTime(_target: string): Promise<string | null> {
     return null;
-  }
-
-  async latestActivity(): Promise<never> {
-    throw new Error('task manager: does not support project activity');
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
@@ -192,14 +188,6 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
       return;
     }
     ensureSuccess(response);
-  }
-
-  async lockTask(_handle: string): Promise<void> {
-    throw new Error('task manager: does not support task locking');
-  }
-
-  async unlockTask(_handle: string): Promise<void> {
-    throw new Error('task manager: does not support task unlocking');
   }
 
   async capture(target: string): Promise<CanonicalTask[]> {

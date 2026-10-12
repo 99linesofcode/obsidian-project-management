@@ -1,9 +1,9 @@
 import type { CanonicalField } from '../domain/canonicalField.js';
 import type { Baseline } from '../domain/Baseline.js';
-import type { EntityRecord } from '../application/data/EntityRecord.js';
-import type { MirrorItem } from '../application/data/MirrorItem.js';
-import type { PortState } from '../application/data/PortState.js';
-import type { ProjectIdentityDataTransferObject } from '../application/data/ProjectIdentityDataTransferObject.js';
+import type { EntityRecord } from './data/EntityRecord.js';
+import type { MirrorItem } from './data/MirrorItem.js';
+import type { PortState } from './data/PortState.js';
+import type { ProjectIdentityDataTransferObject } from './data/ProjectIdentityDataTransferObject.js';
 
 export type BaselineField = CanonicalField | 'lifecycle';
 

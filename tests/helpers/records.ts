@@ -1,5 +1,5 @@
-import type { EntityRecord } from '../../src/core/application/data/EntityRecord.js';
-import type { PortState } from '../../src/core/application/data/PortState.js';
+import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
+import type { PortState } from '../../src/core/port/data/PortState.js';
 
 export function entityRecord(
   overrides: Partial<EntityRecord> = {},

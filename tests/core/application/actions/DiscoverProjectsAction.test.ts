@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoverProjectsAction } from '../../../../src/core/application/actions/DiscoverProjectsAction.js';
 import { AttachProjectAction } from '../../../../src/core/application/actions/AttachProjectAction.js';
-import { ProjectAddressing } from '../../../../src/core/application/data/ProjectAddressing.js';
-import { ProjectDiscovery } from '../../../../src/core/application/data/ProjectDiscovery.js';
-import { ProjectSummary } from '../../../../src/core/application/data/ProjectSummary.js';
-import type { ProjectSetupPort } from '../../../../src/core/port/ProjectSetupPort.js';
+import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
+import { ProjectDiscovery } from '../../../../src/core/port/data/ProjectDiscovery.js';
+import { ProjectSummary } from '../../../../src/core/port/data/ProjectSummary.js';
+import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
 import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
-import type { ProjectNoteDataTransferObject } from '../../../../src/core/application/data/ProjectNoteDataTransferObject.js';
-import type { ProjectIdentityDataTransferObject } from '../../../../src/core/application/data/ProjectIdentityDataTransferObject.js';
+import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
+import type { ProjectIdentityDataTransferObject } from '../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 class FakeVault extends FakeVaultBase {
@@ -40,7 +40,7 @@ class FakeVault extends FakeVaultBase {
   override onNoteRenamed(): void {}
 }
 
-class FakeSetup implements ProjectSetupPort {
+class FakeSetup implements ProjectSetupSurface {
   discoveries = new Map<string, ProjectDiscovery>();
   defaultDiscovery = new ProjectDiscovery({
     targetHandle: 'R_kgDOAAAA',

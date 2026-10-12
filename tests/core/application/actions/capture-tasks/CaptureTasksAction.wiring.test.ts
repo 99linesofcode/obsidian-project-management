@@ -21,15 +21,11 @@ type TFileInstance = InstanceType<typeof TFile>;
 import type { App } from 'obsidian';
 import { CaptureTasksAction } from '../../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
-import { CanonicalTask } from '../../../../../src/core/application/data/CanonicalTask.js';
-import { RegisteredAdapter } from '../../../../../src/core/application/data/RegisteredAdapter.js';
-import type { CapturePort } from '../../../../../src/core/port/CapturePort.js';
+import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
+import type { MirrorPort } from '../../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { ProjectPort } from '../../../../../src/core/port/ProjectPort.js';
-import type { TaskSurfacePort } from '../../../../../src/core/port/TaskSurfacePort.js';
 import type { VaultAdapter } from '../../../../../src/infrastructure/vault/VaultAdapter.js';
 import { connectionsOf } from '../../../../../src/infrastructure/vault/connectionsOf.js';
-import { conformanceDescriptor } from '../../../../../src/infrastructure/fake/conformanceDescriptor.js';
 import { entityRecord } from '../../../../helpers/records.js';
 import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';
 import { vaultAdapter } from '../../../../helpers/vaultAdapter.js';
@@ -94,18 +90,10 @@ function task(handle: string, title: string): CanonicalTask {
   });
 }
 
-function registered(capture: CapturePort): RegisteredAdapter {
-  return new RegisteredAdapter({
-    descriptor: conformanceDescriptor('acme'),
-    project: {} as ProjectPort,
-    tasks: {} as TaskSurfacePort,
-    capture,
-    projectCapture: undefined,
-    completeFetch: undefined,
-    timestamps: undefined,
-    taskLock: undefined,
-    activity: undefined,
-  });
+function registered(capture: {
+  capture: (target: string) => Promise<CanonicalTask[]>;
+}): MirrorPort {
+  return capture as unknown as MirrorPort;
 }
 
 function homeNote(connections: string): string {
