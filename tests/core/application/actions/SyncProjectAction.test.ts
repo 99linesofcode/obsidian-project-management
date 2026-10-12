@@ -81,6 +81,10 @@ function status(notePath: string): EntityRecord {
   return entityRecord({ id: 'entity-42', notePath });
 }
 
+type MigrateLabelsStep = {
+  execute(input: { projectName: string }): Promise<void>;
+};
+
 interface HarnessOptions {
   projectNotes?: ProjectNoteDataTransferObject[];
   frozen?: boolean;
@@ -105,6 +109,11 @@ function harness(options: HarnessOptions = {}) {
     syncState.records.set(record.id, record);
   }
 
+  const migrateLabels = {
+    execute: async (input: { projectName: string }) => {
+      events.push(`migrateLabels:${input.projectName}`);
+    },
+  } as MigrateLabelsStep;
   const renames = {
     execute: async () => {
       if (options.failRenames) {
@@ -191,6 +200,7 @@ function harness(options: HarnessOptions = {}) {
     taskLocks,
     taskCapture,
     taskFields,
+    migrateLabels,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     detectNoteRenames: renames,
     completeTaskCascade: cascade,
@@ -214,13 +224,14 @@ function harness(options: HarnessOptions = {}) {
 }
 
 describe('the multi-adapter pass', () => {
-  it('runs the steps in order', async () => {
+  it('SHELL-2 — runs the steps in order, migrate labels leading', async () => {
     const todo = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
     const h = harness({ taken: [todo] });
 
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
+      'migrateLabels:Acme Widgets',
       'lifecycle',
       'taskLocks:false:false',
       'renames',
@@ -246,6 +257,7 @@ describe('the multi-adapter pass', () => {
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toEqual([
+      'migrateLabels:Acme Widgets',
       'lifecycle',
       'taskLocks:false:false',
       'capture:Acme Widgets',
@@ -263,6 +275,7 @@ describe('the multi-adapter pass', () => {
       await h.action.execute('Acme Widgets');
 
       expect(h.events).toEqual([
+        'migrateLabels:Acme Widgets',
         'lifecycle',
         'taskLocks:true:false',
         'renames',
@@ -275,7 +288,8 @@ describe('the multi-adapter pass', () => {
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events.slice(0, 2)).toEqual([
+    expect(h.events.slice(0, 3)).toEqual([
+      'migrateLabels:Acme Widgets',
       'ensureBoard:Acme Widgets/github',
       'lifecycle',
     ]);
@@ -303,6 +317,19 @@ describe('the multi-adapter pass', () => {
         to: 'Projecten/Acme Widgets/_Acme Widgets.md',
       },
     ]);
+  });
+});
+
+describe('MIG-3 — the migrated label propagates through the normal field merge', () => {
+  it('runs migrate labels before the field merge, so the merge carries the label', async () => {
+    const h = harness();
+
+    await h.action.execute('Acme Widgets');
+
+    const migration = h.events.indexOf('migrateLabels:Acme Widgets');
+    const fieldMerge = h.events.indexOf('reconcile:Acme Widgets');
+    expect(migration).toBeGreaterThanOrEqual(0);
+    expect(migration).toBeLessThan(fieldMerge);
   });
 });
 
