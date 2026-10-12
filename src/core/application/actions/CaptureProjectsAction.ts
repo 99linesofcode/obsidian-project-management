@@ -14,35 +14,85 @@ export class CaptureProjectsAction {
   constructor(
     private readonly factory: MirrorAdapterFactoryPort,
     private readonly vault: VaultPort,
+    private readonly isCodeHost: (application: string) => boolean,
   ) {}
 
   async invoke(): Promise<CaptureProjectsResult> {
     const captured: string[] = [];
     const errors: unknown[] = [];
-    for (const source of this.factory.captureSources?.() ?? []) {
-      const result = await this.captureSource(source);
+
+    const sources = this.factory.captureSources?.() ?? [];
+    const listings = await this.listProjects(sources);
+    const codeHostNames = await this.codeHostProjectNames(sources, listings);
+
+    for (const source of sources) {
+      const result = await this.captureSource(
+        source,
+        listings.get(source) ?? [],
+        codeHostNames,
+      );
       captured.push(...result.captured);
       errors.push(...result.errors);
     }
     return { captured, errors };
   }
 
+  private async listProjects(
+    sources: readonly CaptureSource[],
+  ): Promise<Map<CaptureSource, readonly CapturedProject[]>> {
+    const listings = new Map<CaptureSource, readonly CapturedProject[]>();
+    for (const source of sources) {
+      listings.set(source, await source.capture.captureProjects());
+    }
+    return listings;
+  }
+
+  private async codeHostProjectNames(
+    sources: readonly CaptureSource[],
+    listings: ReadonlyMap<CaptureSource, readonly CapturedProject[]>,
+  ): Promise<ReadonlySet<string>> {
+    const names = new Set<string>();
+    for (const source of sources) {
+      if (!this.isCodeHost(source.application)) {
+        continue;
+      }
+      for (const project of listings.get(source) ?? []) {
+        names.add(project.name);
+      }
+    }
+    for (const project of await this.vault.listAdoptedProjects()) {
+      if (this.isCodeHost(project.application)) {
+        names.add(project.projectName);
+      }
+    }
+    return names;
+  }
+
   private async captureSource(
     source: CaptureSource,
+    projects: readonly CapturedProject[],
+    codeHostNames: ReadonlySet<string>,
   ): Promise<CaptureProjectsResult> {
-    const projects = await source.capture.captureProjects();
     const adopted = await this.vault.listAdoptedProjects();
-    const names = new Set(adopted.map((project) => project.projectName));
+    const names = new Set(
+      adopted
+        .filter((project) => project.application === source.application)
+        .map((project) => project.projectName),
+    );
     const targets = new Set(
       adopted
         .filter((project) => project.application === source.application)
         .map((project) => project.target),
     );
+    const followsCodeHost = !this.isCodeHost(source.application);
 
     const captured: string[] = [];
     const errors: unknown[] = [];
     for (const project of projects) {
       if (names.has(project.name)) {
+        continue;
+      }
+      if (followsCodeHost && !codeHostNames.has(project.name)) {
         continue;
       }
       const target = soleTarget(project);
