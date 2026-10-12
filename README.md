@@ -39,8 +39,8 @@ Install the plugin, open its settings, and provide a GitHub fine-grained PAT
 in Obsidian's SecretStorage, never in the plugin's `data.json`. Then create
 notes — the plugin discovers them and does the rest.
 
-On first run the plugin seeds six vault-owned artifacts at their configured
-paths: three note templates and three Bases files. An existing file is never
+On first run the plugin seeds four vault-owned artifacts at their configured
+paths: two note templates and two Bases files. An existing file is never
 overwritten, and the settings tab can scaffold a missing one on demand.
 
 ### Create a project

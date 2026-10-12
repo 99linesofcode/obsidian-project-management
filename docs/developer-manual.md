@@ -135,8 +135,8 @@ namespace per application.**
   the maintenance actions; `composeCoreActions` eagerly builds the core actions
   and their infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
-- **`SeedVaultArtifactsAction`** — seeds the six vault-owned artifacts (three
-  note templates, three Bases files) create-if-missing, on init and on demand
+- **`SeedVaultArtifactsAction`** — seeds the four vault-owned artifacts (two
+  note templates, two Bases files) create-if-missing, on init and on demand
   from the settings tab.
 - **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
   `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,

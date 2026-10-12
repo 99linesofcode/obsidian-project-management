@@ -391,7 +391,7 @@ canonical DTOs and the pure core.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
     `archived`), per-side `Baseline` (`value`, `completed`). A sibling of
     `syncState`, so a registry write cannot clobber it.
-  - The settings keys (poll interval, done option, debounce, the six artifact
+  - The settings keys (poll interval, done option, debounce, the four artifact
     paths and the status options) live at the root beside the containers.
 - **`main.js`** — the built bundle; never authored.
 
