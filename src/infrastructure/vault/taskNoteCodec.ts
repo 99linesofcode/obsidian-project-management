@@ -1,9 +1,16 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import {
+  parseAffiliation,
+  parentStemFromAffiliation,
+  taskLinkFromAffiliation,
+} from '../../core/domain/affiliation.js';
+import {
   labelSequence,
   labelsFromSequence,
+  typeFromLabels,
 } from '../../core/domain/note.js';
+import { projectFromNotePath } from '../../core/domain/paths.js';
 
 export interface TaskNote {
   title: string;
@@ -16,13 +23,14 @@ export interface TaskNote {
 
 export function parseTaskNote(content: string, handle: string): TaskNote {
   const fields = frontmatterFields(content);
+  const labels = labelsFrom(content);
   return {
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
     body: bodyOf(content),
     completed: (fields.get('completed') ?? '') !== '',
-    parent: parentFromAffiliation(fields.get('affiliation')),
-    labels: labelsFrom(content),
+    parent: parentFromAffiliation(fields.get('affiliation'), handle, labels),
+    labels,
   };
 }
 
@@ -106,13 +114,20 @@ function titleFromPath(handle: string): string {
   return stem.replace(/-/g, ' ');
 }
 
-function parentFromAffiliation(raw: string | undefined): string | null {
-  if (raw === undefined) {
-    return null;
+function parentFromAffiliation(
+  raw: string | undefined,
+  handle: string,
+  labels: readonly string[],
+): string | null {
+  const affiliation = parseAffiliation(raw);
+  const project = projectFromNotePath(handle);
+  if (typeFromLabels(labels) === 'todo') {
+    return (
+      parentStemFromAffiliation(affiliation, project) ??
+      taskLinkFromAffiliation(affiliation, project)
+    );
   }
-  const parents = quotedLinks(raw).slice(1);
-  const parent = parents[parents.length - 1];
-  return parent === undefined ? null : stripLink(parent);
+  return taskLinkFromAffiliation(affiliation, project);
 }
 
 function labelsFrom(content: string): readonly string[] {
@@ -145,14 +160,6 @@ function unquote(value: string): string {
   return value.startsWith('"') && value.endsWith('"')
     ? value.slice(1, -1)
     : value;
-}
-
-function quotedLinks(raw: string): string[] {
-  return [...raw.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
-}
-
-function stripLink(link: string): string {
-  return link.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0]!.trim();
 }
 
 function withBody(content: string, body: string): string {
@@ -218,8 +225,7 @@ function withParent(content: string, parent: string | null): string {
   if (raw === undefined) {
     return content;
   }
-  const links = quotedLinks(raw);
-  const project = links[0];
+  const project = parseAffiliation(raw)[0];
   if (project === undefined) {
     return content;
   }
