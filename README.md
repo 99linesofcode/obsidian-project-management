@@ -26,10 +26,11 @@ can be added without changing how the vault works.
 - **Tasks** — a task note becomes a GitHub issue and a Todoist task. Edits,
   status changes and deletions propagate in both directions.
 - **Todos** — small checklist-style notes sync to Todoist as tasks.
-- **Reconciliation** — the plugin compares your notes against its last-synced
-  snapshot and the remote state through a three-way diff. The vault wins unless
-  a remote change is provably newer, so editing offline never destroys remote
-  work and remote work never silently overwrites you.
+- **Reconciliation** — the plugin merges your notes against each remote through
+  one N-way merge: a remote change wins only on a decisive trustworthy
+  timestamp, then a completion beats a stale open, and otherwise the vault
+  wins the tie-break. Editing offline never destroys remote work and remote
+  work never silently overwrites you.
 
 ## How to use it
 
@@ -136,42 +137,47 @@ above, so the plugin works before you have written a single template.
 
 ## The architecture, in short
 
-The plugin is a study in a few classic ideas, applied where they earn their
-keep:
+The plugin is a small hexagonal system, applied where it earns its keep:
 
-- **Hexagonal architecture (ports & adapters)** — the vault is the origin; each
-  external tool sits behind a port (a small interface the core owns), and
-  GitHub and Todoist are adapters implementing those ports. Adding a new
-  project- or task-management tool means writing one adapter, not touching the
-  core.
-- **Modular monolith** — one plugin, internally divided into bounded modules
-  (`core`, `infrastructure`, `app`, `projects`, `registry`, `sync`, `tasks`,
-  `todos`, `vault`), with a dependency matrix enforced by
-  `eslint-plugin-boundaries` so modules cannot quietly reach into each other.
-- **Pragmatic DDD** — canonical data shapes (one task shape across all
-  providers), a `data.json` registry as the sync-state memory, and a pure
-  reconciliation core that is tested without faking Obsidian.
-- **Action objects** — every sync operation is its own small class with one
-  public method, so the sync chain reads as a list of composable steps.
+- **Ports & adapters** — the vault is the origin. Each external tool sits
+  behind one port the core owns, `MirrorPort`, and GitHub and Todoist are
+  adapters implementing it. The core reaches the vault and the registry through
+  one collaborator port each (`VaultPort`, `RegistryPort`), plus the two
+  factory seams that build a mirror adapter and reach a tool's project-setup
+  surface. Adding a tool means writing one adapter and adding one entry to the
+  composition root's provider table — the core is not edited.
+- **Module-first layout** — the repository is the module; its interior is the
+  layers: `ui/` (driving: the scheduler, the queue, the settings tab),
+  `core/` (the hexagon: the `application/` actions, the `domain/` pure
+  arithmetic, the `port/` interfaces) and `infrastructure/` (driven adapters,
+  one namespace per vendor). A dependency matrix enforced by
+  `eslint-plugin-boundaries` keeps the layers from reaching into each other.
+- **One N-way merge** — a canonical field is reconciled across the vault origin
+  and N mirrors by the pure `mergeField` ladder: a decisive trustworthy
+  timestamp, then completion over a stale open, then the vault tie-break. The
+  merge diffs canonical fields only, so no provider shape crosses into the core.
+- **Action objects** — every sync step is its own small class with one public
+  method, so the sync chain reads as a list of composable steps.
 
 The full architecture is in [ARCHITECTURE.md](ARCHITECTURE.md); a flow-by-flow
 developer manual is in [docs/developer-manual.md](docs/developer-manual.md).
 
 ## Development
 
+The repo carries a Nix devshell (`.envrc` → `use flake ./devshell`); run the
+project's commands through it.
+
 ```bash
-pnpm install             # install dependencies
-pnpm run build           # bundle the plugin to main.js (minified)
-pnpm run dev             # watch and rebuild on change (with sourcemaps)
-pnpm test                # run the test suite once
-pnpm run lint            # eslint (flat config + prettier)
-pnpm run lint:boundaries # provider-vocabulary boundary grep
-pnpm run typecheck       # type-check without emitting
+pnpm install              # install dependencies
+pnpm run build            # bundle the plugin to main.js (minified)
+pnpm run dev              # watch and rebuild on change (with sourcemaps)
+pnpm test                 # run the test suite once
+pnpm run typecheck        # type-check without emitting
+pnpm run lint             # eslint (flat config + prettier)
+pnpm run lint:boundaries  # provider-vocabulary boundary gate
+pnpm run lint:naming      # role-folder ↔ suffix naming gate
 ```
 
-Built on [node-skeleton](https://github.com/99linesofcode/node-skeleton):
-shared config flows via remote + rebase, pnpm runs inside the `devshell-node`
-Nix devshell (`.envrc` → `use flake ./devshell`), esbuild bundles the plugin.
 Never develop in your main vault — always use a scratch dev vault.
 
 ## Contributing
