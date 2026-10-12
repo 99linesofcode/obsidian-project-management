@@ -179,7 +179,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
       case 'label':
         await this.postOk(
           `/tasks/${write.handle}`,
-          { labels: labelsFrom(write.value) },
+          { labels: labelsFromSequence(write.value) },
           'write labels',
         );
         return;
@@ -409,10 +409,6 @@ function sectionName(
 
 function hasTypeLabel(labels: readonly string[]): boolean {
   return typeFromLabels(labels) !== '';
-}
-
-function labelsFrom(value: string | null): readonly string[] {
-  return labelsFromSequence(value);
 }
 
 function extractList(json: unknown): Record<string, unknown>[] {

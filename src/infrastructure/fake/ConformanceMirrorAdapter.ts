@@ -205,7 +205,7 @@ function applyToTask(
     case 'subtasks':
       return withTask(task, { parent: write.value });
     case 'label':
-      return withTask(task, { labels: labelsFrom(write.value) });
+      return withTask(task, { labels: labelsFromSequence(write.value) });
   }
 }
 
@@ -230,8 +230,4 @@ function withTask(
     parent: overrides.parent !== undefined ? overrides.parent : task.parent,
     labels: overrides.labels ?? task.labels,
   });
-}
-
-function labelsFrom(value: string | null): readonly string[] {
-  return labelsFromSequence(value);
 }

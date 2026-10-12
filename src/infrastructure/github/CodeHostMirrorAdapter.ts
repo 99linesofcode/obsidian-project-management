@@ -815,7 +815,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     const number = issueNumber(write.handle);
     const response = await this.transport.putPath(
       issueLabelsPath(repo, number),
-      JSON.stringify({ labels: labelsFrom(write.value) }),
+      JSON.stringify({ labels: labelsFromSequence(write.value) }),
     );
     ensureSuccess(response);
   }
@@ -1207,10 +1207,6 @@ function createdIssueUrl(created: Record<string, unknown>): string {
 
 function hasTypeLabel(labels: readonly string[]): boolean {
   return typeFromLabels(labels) !== '';
-}
-
-function labelsFrom(value: string | null): readonly string[] {
-  return labelsFromSequence(value);
 }
 
 function optionIdByName(
