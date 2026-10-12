@@ -1,9 +1,8 @@
 import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
-import { projectFromTodoPath } from '../../domain/projectFromTodoPath.js';
-import { splitFrontmatter } from '../../domain/splitFrontmatter.js';
-import { taskLinkFromAffiliation } from '../../domain/taskLinkFromAffiliation.js';
+import { projectFromTodoPath } from '../../domain/paths.js';
+import { splitFrontmatter, withBody } from '../../domain/note.js';
+import { taskLinkFromAffiliation } from '../../domain/affiliation.js';
 import { ToDoNoteParser } from '../../domain/ToDoNoteParser.js';
-import { withBody } from '../../domain/withBody.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface MirrorTodoStatusInput {

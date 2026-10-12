@@ -1,4 +1,4 @@
-import { normalizedStem } from '../../domain/stemOf.js';
+import { normalizedStem } from '../../domain/note.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 

@@ -4,8 +4,8 @@ import type { MirrorAdapterFactoryPort } from '../../../port/MirrorAdapterFactor
 import type { MirrorPort } from '../../../port/MirrorPort.js';
 import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
-import { freePath } from '../../../domain/freePath.js';
-import { typeFromLabels } from '../../../domain/typeFromLabels.js';
+import { freePath } from '../../../domain/paths.js';
+import { typeFromLabels } from '../../../domain/note.js';
 import type { CreateTaskNoteAction } from '../create-task-note/CreateTaskNoteAction.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
 

@@ -4,7 +4,7 @@ import {
   SEED_ARTIFACTS,
   type SeedArtifact,
   type SeedArtifactKey,
-} from './seedArtifacts.js';
+} from './templates.js';
 
 export class SeedVaultArtifactsAction {
   constructor(

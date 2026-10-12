@@ -1,7 +1,9 @@
-import { slugify } from '../../../domain/slugify.js';
-import { fillFrontmatterFields } from '../../../domain/fillFrontmatterFields.js';
-import { projectAffiliationLink } from '../../../domain/projectAffiliation.js';
-import { replaceTimestampPlaceholders } from '../../../domain/replaceTimestampPlaceholders.js';
+import { projectAffiliationLink } from '../../../domain/affiliation.js';
+import {
+  fillFrontmatterFields,
+  replaceTimestampPlaceholders,
+  slugify,
+} from '../../../domain/note.js';
 
 export interface ToDoNoteInput {
   title: string;

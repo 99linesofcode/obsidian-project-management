@@ -1,17 +1,19 @@
 import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
 import type { ChecklistItem } from '../../../domain/ChecklistItem.js';
-import { freePath } from '../../../domain/freePath.js';
-import { stemOf } from '../../../domain/stemOf.js';
-import { splitFrontmatter } from '../../../domain/splitFrontmatter.js';
-import { slugify } from '../../../domain/slugify.js';
-import { taskLinkFromAffiliation } from '../../../domain/taskLinkFromAffiliation.js';
+import { freePath } from '../../../domain/paths.js';
+import {
+  slugify,
+  splitFrontmatter,
+  stemOf,
+  withBody,
+} from '../../../domain/note.js';
+import { taskLinkFromAffiliation } from '../../../domain/affiliation.js';
 import { ToDoNoteMapper, type ToDoNoteContext } from './ToDoNoteMapper.js';
 import {
   ToDoNoteParser,
   withToDoStatus,
 } from '../../../domain/ToDoNoteParser.js';
-import { withBody } from '../../../domain/withBody.js';
-import { readTemplate } from '../readTemplate.js';
+import { readTemplate } from '../templates.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 
 export interface SyncChecklistInput {

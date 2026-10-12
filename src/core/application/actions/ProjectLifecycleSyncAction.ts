@@ -3,8 +3,7 @@ import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDat
 import type { MergeResult } from '../../domain/MergeResult.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
-import { mirrorSideKey } from '../../domain/mirrorSideKey.js';
-import { originSideObservation } from '../../domain/originSideObservation.js';
+import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
