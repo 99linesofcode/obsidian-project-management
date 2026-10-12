@@ -12,13 +12,6 @@ export const DEFAULT_SETTINGS: ProjectManagementSettings = {
   tasksBasePath: 'Bases/Tasks.base',
   todosBasePath: 'Bases/Todos.base',
   statusOptions: ['Unshaped', 'Shaping', 'Shaped', 'Building', 'Shipped'],
-  typeLabels: [
-    'type: bug',
-    'type: chore',
-    'type: pitch',
-    'type: slice',
-    'type: task',
-  ],
 };
 
 export function settingsFromData(
@@ -28,7 +21,6 @@ export function settingsFromData(
   delete settings[SYNC_STATE_KEY];
   const merged = Object.assign({}, DEFAULT_SETTINGS, settings);
   merged.statusOptions = [...merged.statusOptions];
-  merged.typeLabels = [...merged.typeLabels];
   return merged;
 }
 

@@ -44,7 +44,7 @@ import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAda
 import type { ProjectIdentityDataTransferObject } from './core/port/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TokenSetting } from './ui/settings/TokenSetting.js';
+import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { ReactivateFrozenProjectAction } from './core/application/actions/ReactivateFrozenProjectAction.js';
 import {
@@ -159,7 +159,7 @@ interface ProviderEntry {
   ) => MirrorPort;
   readonly capture: () => MirrorPort;
   readonly setup: () => ProjectSetupSurface | null;
-  readonly token: TokenSetting;
+  readonly token: TokenSettingRow;
 }
 
 type ProviderTable = Readonly<Record<string, ProviderEntry>>;
@@ -220,14 +220,14 @@ function composePlugin(
   discoverProjects: DiscoverProjectsAction;
   projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
-  tokenSettings: readonly TokenSetting[];
+  tokenSettings: readonly TokenSettingRow[];
 } {
-  const codeHostToken: TokenSetting = {
+  const codeHostToken: TokenSettingRow = {
     key: 'github-token',
     label: 'GitHub token',
     description: 'Personal access token used to talk to the GitHub API.',
   };
-  const taskManagerToken: TokenSetting = {
+  const taskManagerToken: TokenSettingRow = {
     key: 'todoist-token',
     label: 'Todoist token',
     description: 'Personal API token used to talk to the Todoist API.',
@@ -375,7 +375,7 @@ export default class ProjectManagementPlugin extends Plugin {
   projectNames: string[] = [];
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
-  tokenSettings!: readonly TokenSetting[];
+  tokenSettings!: readonly TokenSettingRow[];
 
   override async onload(): Promise<void> {
     const raw = await loadDataSafely(

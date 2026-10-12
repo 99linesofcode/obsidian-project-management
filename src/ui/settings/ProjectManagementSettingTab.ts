@@ -73,11 +73,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
         desc: 'The Status lanes a newly created board gets (comma-separated).',
         populate: (setting) => this.populateStatusOptions(setting),
       },
-      {
-        name: 'Type labels',
-        desc: 'The type-label vocabulary (comma-separated).',
-        populate: (setting) => this.populateTypeLabels(setting),
-      },
       ...SEED_ARTIFACTS.map((artifact) => ({
         name: artifact.label,
         desc: artifact.description,
@@ -141,17 +136,6 @@ export class ProjectManagementSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.statusOptions.join(', '))
         .onChange(async (value) => {
           this.plugin.settings.statusOptions = parseList(value);
-          await this.plugin.saveSettings();
-        }),
-    );
-  }
-
-  private populateTypeLabels(setting: Setting): void {
-    setting.addText((text) =>
-      text
-        .setValue(this.plugin.settings.typeLabels.join(', '))
-        .onChange(async (value) => {
-          this.plugin.settings.typeLabels = parseList(value);
           await this.plugin.saveSettings();
         }),
     );

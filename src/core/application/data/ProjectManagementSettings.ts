@@ -9,5 +9,4 @@ export interface ProjectManagementSettings {
   tasksBasePath: string;
   todosBasePath: string;
   statusOptions: string[];
-  typeLabels: string[];
 }
