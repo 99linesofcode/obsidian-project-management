@@ -375,8 +375,8 @@ describe('TDO-3 — checklist state mirrors to the ToDo', () => {
   });
 });
 
-describe('TDO-4 — removal is scoped to checklist provenance', () => {
-  it('trashes a ToDo the checklist promoted when its line is removed', async () => {
+describe('TDO-4 — removing a checklist line trashes its ToDo (the delete reconciles via NWM-25/NWM-27)', () => {
+  it('trashes the ToDo when its checklist line is gone', async () => {
     vault.notes.set(taskPath, taskNote('No items left.'));
     vault.notes.set(todoPath, openTodo());
 
@@ -386,26 +386,15 @@ describe('TDO-4 — removal is scoped to checklist provenance', () => {
     expect(vault.notes.has(todoPath)).toBe(false);
   });
 
-  it('never removes a captured or materialised type:todo', async () => {
+  it('trashes a captured or materialised ToDo too — the removal is not suppressed', async () => {
     vault.notes.set(taskPath, taskNote('No items left.'));
     const capturedPath = 'Projecten/Acme Widgets/taken/captured.md';
     vault.notes.set(capturedPath, capturedTodo('https://todoist.com/tasks/9'));
 
     await action.execute({ notePath: taskPath, projectName, syncedAt });
 
-    expect(vault.trashed).toEqual([]);
-    expect(vault.notes.has(capturedPath)).toBe(true);
-  });
-
-  it('keeps a ToDo this task did not promote', async () => {
-    vault.notes.set(taskPath, taskNote('No items left.'));
-    const otherPath = 'Projecten/Acme Widgets/taken/other.md';
-    vault.notes.set(otherPath, todoContent('99-other'));
-
-    await action.execute({ notePath: taskPath, projectName, syncedAt });
-
-    expect(vault.trashed).toEqual([]);
-    expect(vault.notes.has(otherPath)).toBe(true);
+    expect(vault.trashed).toEqual([capturedPath]);
+    expect(vault.notes.has(capturedPath)).toBe(false);
   });
 
   it('never removes a regular task note in taken/', async () => {

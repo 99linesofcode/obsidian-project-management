@@ -86,7 +86,6 @@ interface HarnessOptions {
   frozen?: boolean;
   statuses?: EntityRecord[];
   taken?: string[];
-  todos?: string[];
   ensureBoard?: boolean;
   connections?: readonly ConnectionDataTransferObject[];
   setupApplications?: string[];
@@ -101,7 +100,6 @@ function harness(options: HarnessOptions = {}) {
     projectNote('Acme Widgets', null, options.connections),
   ];
   vault.folders.set('Projecten/Acme Widgets/taken', options.taken ?? []);
-  vault.folders.set('Projecten/Acme Widgets/todos', options.todos ?? []);
   const syncState = new FakeSyncState();
   for (const record of options.statuses ?? []) {
     syncState.records.set(record.id, record);
@@ -217,10 +215,8 @@ function harness(options: HarnessOptions = {}) {
 
 describe('the multi-adapter pass', () => {
   it('runs the steps in order', async () => {
-    const h = harness({
-      taken: ['Projecten/Acme Widgets/taken/42-fix-the-bug.md'],
-      todos: ['Projecten/Acme Widgets/todos/fix-the-bug.md'],
-    });
+    const todo = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+    const h = harness({ taken: [todo] });
 
     await h.action.execute('Acme Widgets');
 
@@ -228,9 +224,9 @@ describe('the multi-adapter pass', () => {
       'lifecycle',
       'taskLocks:false:false',
       'renames',
-      'cascade:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      'checklist:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      'mirror:Projecten/Acme Widgets/todos/fix-the-bug.md',
+      `cascade:${todo}`,
+      `checklist:${todo}`,
+      `mirror:${todo}`,
       'capture:Acme Widgets',
       'reconcile:Acme Widgets',
     ]);
