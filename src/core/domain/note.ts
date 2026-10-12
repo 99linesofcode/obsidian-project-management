@@ -117,6 +117,30 @@ export function rewriteFrontmatterFields(
   return lines.join('\n');
 }
 
+// Removes the named frontmatter fields from a note, preserving the body and
+// every other field. A note with no frontmatter block is returned unchanged.
+export function removeFrontmatterFields(
+  content: string,
+  keys: ReadonlySet<string>,
+): string {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return content;
+  }
+  const closing = lines.indexOf('---', 1);
+  if (closing === -1) {
+    return content;
+  }
+  return lines
+    .filter((line, index) => index >= closing || !keys.has(fieldKey(line)))
+    .join('\n');
+}
+
+function fieldKey(line: string): string {
+  const colon = line.indexOf(':');
+  return colon > 0 ? line.slice(0, colon).trim() : '';
+}
+
 // Resolves a template's {{date}}/{{time}} placeholders to the sync stamp.
 export function replaceTimestampPlaceholders(
   template: string,
