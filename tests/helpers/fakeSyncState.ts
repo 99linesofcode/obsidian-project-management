@@ -4,10 +4,8 @@ import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';
 import type { PortState } from '../../src/core/port/data/PortState.js';
-import type {
-  BaselineField,
-  RegistryPort,
-} from '../../src/core/port/RegistryPort.js';
+import type { MergedField } from '../../src/core/domain/mergedField.js';
+import type { RegistryPort } from '../../src/core/port/RegistryPort.js';
 
 interface SeededMirror {
   handle: string;
@@ -386,7 +384,7 @@ export class FakeSyncState implements RegistryPort {
 
   async readBaseline(
     entityId: string,
-    field: BaselineField,
+    field: MergedField,
     side: string,
   ): Promise<Baseline | null> {
     return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
@@ -394,7 +392,7 @@ export class FakeSyncState implements RegistryPort {
 
   async writeBaseline(
     entityId: string,
-    field: BaselineField,
+    field: MergedField,
     side: string,
     baseline: Baseline,
   ): Promise<void> {

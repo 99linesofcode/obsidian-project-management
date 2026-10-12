@@ -1,11 +1,9 @@
-import type { CanonicalField } from '../domain/canonicalField.js';
+import type { MergedField } from '../domain/mergedField.js';
 import type { Baseline } from '../domain/Baseline.js';
 import type { EntityRecord } from './data/EntityRecord.js';
 import type { MirrorItem } from './data/MirrorItem.js';
 import type { PortState } from './data/PortState.js';
 import type { ProjectIdentityDataTransferObject } from './data/ProjectIdentityDataTransferObject.js';
-
-export type BaselineField = CanonicalField | 'lifecycle';
 
 // The registry as the core's sync state: the tracked entities and their mirror
 // items, the note-path↔handle and mirror-project mappings, the per-connection
@@ -108,12 +106,12 @@ export interface RegistryPort {
 
   readBaseline(
     entityId: string,
-    field: BaselineField,
+    field: MergedField,
     side: string,
   ): Promise<Baseline | null>;
   writeBaseline(
     entityId: string,
-    field: BaselineField,
+    field: MergedField,
     side: string,
     baseline: Baseline,
   ): Promise<void>;

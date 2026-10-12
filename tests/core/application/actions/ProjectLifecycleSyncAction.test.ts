@@ -193,7 +193,7 @@ async function seedBaseline(
 ): Promise<void> {
   await registry.writeBaseline(
     PROJECT,
-    'lifecycle',
+    'archived',
     side,
     new Baseline(archived ? 'true' : 'false', false),
   );
@@ -273,7 +273,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     await action.invoke(PROJECT);
 
     for (const side of ['origin', 'mirror:a', 'mirror:b']) {
-      const baseline = await registry.readBaseline(PROJECT, 'lifecycle', side);
+      const baseline = await registry.readBaseline(PROJECT, 'archived', side);
       expect(baseline?.value).toBe('true');
     }
   });
@@ -349,7 +349,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     expect(mirror.currentProject('board-b')?.archived).toBe(false);
     const baseline = await registry.readBaseline(
       PROJECT,
-      'lifecycle',
+      'archived',
       'mirror:b',
     );
     expect(baseline?.value).toBe('false');

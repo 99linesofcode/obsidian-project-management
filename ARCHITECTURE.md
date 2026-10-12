@@ -203,7 +203,9 @@ canonical DTOs and the pure core.
 - **Canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`). `MirrorPort`
   carries one generic write entry, `applyField`, and the completion fact is a
-  separate canonical field from the `Status` representation.
+  separate canonical field from the `Status` representation. `mergedField.ts`
+  adds the project-level `archived` fact, so the archive reconciles through the
+  same `mergeField` ladder as the task fields.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`,
   `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
@@ -261,7 +263,7 @@ canonical DTOs and the pure core.
   unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
   task-field pass. A mirror project whose name drifted is renamed through
   `MirrorPort.renameProject`. Its per-side baselines live in the same
-  `coreBaselines` store under the `lifecycle` field.
+  `coreBaselines` store under the `archived` field.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
   conversation while its project is frozen and reopen it on unfreeze; the code
@@ -360,7 +362,7 @@ canonical DTOs and the pure core.
     Written only through `SyncStateAdapter`, behind a serialization mutex it
     shares with the settings save.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
-    `lifecycle`), per-side `Baseline` (`value`, `completed`). A sibling of
+    `archived`), per-side `Baseline` (`value`, `completed`). A sibling of
     `syncState`, so a registry write cannot clobber it.
   - The settings keys (poll interval, done option, debounce, paths, status
     options, type labels) live at the root beside the containers.

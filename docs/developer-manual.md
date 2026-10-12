@@ -75,7 +75,9 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   identity and port state, and the side baselines. The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
-  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`).
+  (`title`, `body`, `subtasks`, `completion`, `Status`, `label`); `mergedField.ts`
+  adds the project-level `archived` fact, so the archive reconciles through the
+  same `mergeField` ladder as the task fields.
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
   `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`,
   `ConnectionDataTransferObject`,
@@ -368,7 +370,7 @@ through `VaultPort`, runs the same `mergeField` ladder over the
 archived fact, and fans the reconciled freeze out to the origin and every
 capable mirror. Any side can start the freeze or the unfreeze; the reconciled
 freeze is the pass's `frozen` verdict, which gates the task-field pass. Its
-per-side baselines live under the `lifecycle` field in the same baseline store.
+per-side baselines live under the `archived` field in the same baseline store.
 
 ```mermaid
 sequenceDiagram
@@ -528,7 +530,7 @@ The core's own memory lives in a sibling top-level key, written through the
 same storage. The baselines are folded into `SyncStateAdapter`:
 
 - **`coreBaselines`** (`SyncStateAdapter`) — per entity, per `BaselineField` (a
-  canonical field or `lifecycle`), per side, a `Baseline` (`value`,
+  canonical field or `archived`), per side, a `Baseline` (`value`,
   `completed`).
 
 ```mermaid
@@ -858,7 +860,7 @@ lane can no longer revert a completion.
   the settings save run on one promise chain, so a load-modify-save can never
   interleave. A container written by a newer plugin version is read-only.
 - **A quiet tick writes nothing.** Setting a project cursor to its current
-  value is a no-op; a lifecycle or task side that already matches is advanced
+  value is a no-op; a merged field or task side that already matches is advanced
   without a remote write.
 - **The `coreBaselines` key is a sibling of `syncState`.**
   The core's memory is separate from the registry's, so a write
