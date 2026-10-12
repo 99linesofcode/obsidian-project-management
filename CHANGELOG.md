@@ -1,3 +1,17 @@
+# [0.24.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.23.0...0.24.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **todo:** gate the ToDo-status mirror on the type label ([bca9a41](https://github.com/99linesofcode/obsidian-project-management/commit/bca9a412e7afa0606ccd0eaef4545f7de369e8c0))
+
+
+### Features
+
+* **todo:** a ToDo is a task note under taken/, not a todos/ folder ([eebe2a5](https://github.com/99linesofcode/obsidian-project-management/commit/eebe2a5c1a241864dcc06eb0fce0b4f8979cf38e))
+
+
+
 # [0.23.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.22.3...0.23.0) (2026-10-12)
 
 
@@ -28,15 +42,6 @@
 
 
 # [0.21.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.15.0...0.21.0) (2026-10-10)
-
-
-
-# [0.15.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.12.0...0.15.0) (2026-10-10)
-
-
-### Features
-
-* **core:** project capture, task capture and outward materialization ([c20dda8](https://github.com/99linesofcode/obsidian-project-management/commit/c20dda8de8deb96d7ddc93c83ae8e40c2287ce77))
 
 
 
