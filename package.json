@@ -1,7 +1,7 @@
 {
   "name": "obsidian-project-management",
   "version": "0.6.0",
-  "description": "Sync vault projects with GitHub Projects — the vault is the system of record.",
+  "description": "Sync vault projects and tasks with GitHub and Todoist — the vault is the system of record.",
   "type": "module",
   "main": "main.js",
   "scripts": {
@@ -17,7 +17,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
-  "keywords": [],
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "project-management",
+    "github",
+    "todoist",
+    "sync"
+  ],
   "author": "Jordy Schreuders <99linesofcode@gmail.com>",
   "license": "MIT",
   "engines": {
