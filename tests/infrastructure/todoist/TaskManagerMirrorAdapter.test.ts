@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
-import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
-import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
-import { SideObservation } from '../../../src/core/domain/SideObservation.js';
+import { ConnectionDataTransferObject } from '../../../src/core/port/data/ConnectionDataTransferObject.js';
+import { OriginObservation } from '../../../src/core/domain/OriginObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
+import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
+import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
 function target(): string {
   return 'P1';
@@ -409,42 +410,154 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
   });
 });
 
+const ENTITY = 'Projecten/Acme/taken/fix-the-bug.md';
+
+class FieldVault extends FakeVaultBase {
+  readonly values = new Map<string, string | null>();
+  readonly applied: CanonicalFieldWrite[] = [];
+
+  override async readConnections(): Promise<
+    readonly ConnectionDataTransferObject[]
+  > {
+    return [
+      new ConnectionDataTransferObject({
+        slug: 'todoist',
+        application: 'todoist',
+        target: target(),
+      }),
+    ];
+  }
+
+  override async listEntities(): Promise<readonly string[]> {
+    return [ENTITY];
+  }
+
+  override async observe(
+    _handle: string,
+    field: string,
+  ): Promise<OriginObservation> {
+    return new OriginObservation({
+      current: this.values.get(field) ?? null,
+      currentCompleted: false,
+      fieldTime: null,
+      trustworthy: true,
+    });
+  }
+
+  override async readTask(): Promise<CanonicalTask | null> {
+    return null;
+  }
+
+  override async applyField(write: CanonicalFieldWrite): Promise<void> {
+    this.applied.push(write);
+  }
+
+  override async trashNote(): Promise<void> {}
+}
+
+class RoutingTransport implements TaskManagerTransport {
+  readonly calls: RecordedCall[] = [];
+
+  async get(path: string): Promise<{ status: number; json: unknown }> {
+    this.calls.push({ method: 'GET', path, body: '' });
+    if (path === '/tasks/T1') {
+      return { status: 200, json: taskNode() };
+    }
+    if (path.startsWith('/sections?')) {
+      return {
+        status: 200,
+        json: [sectionNode(), sectionNode({ id: 'S2', name: 'Done' })],
+      };
+    }
+    throw new Error(`unexpected GET ${path}`);
+  }
+
+  async post(
+    path: string,
+    body: string,
+  ): Promise<{ status: number; json: unknown }> {
+    this.calls.push({ method: 'POST', path, body });
+    if (path === '/tasks/T1/move') {
+      return { status: 200, json: {} };
+    }
+    throw new Error(`unexpected POST ${path}`);
+  }
+
+  async delete(path: string): Promise<{ status: number; json: unknown }> {
+    this.calls.push({ method: 'DELETE', path, body: '' });
+    throw new Error(`unexpected DELETE ${path}`);
+  }
+}
+
+function memoryStorage() {
+  let data: Record<string, unknown> = {};
+  return {
+    async load() {
+      return data;
+    },
+    async save(next: unknown) {
+      data = next as Record<string, unknown>;
+    },
+  };
+}
+
 describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)', () => {
   it('reconciles a vault Status change onto the named section', async () => {
-    const transport = new FakeTransport([
-      { status: 200, json: taskNode() },
-      { status: 200, json: [sectionNode()] },
-      { status: 200, json: taskNode() },
-      { status: 200, json: taskNode() },
-      { status: 200, json: [sectionNode()] },
-      { status: 200, json: [sectionNode({ id: 'S2', name: 'Done' })] },
-      { status: 200, json: {} },
-    ]);
+    const transport = new RoutingTransport();
     const adapter = new TaskManagerMirrorAdapter(transport, target());
 
-    const pass = new MirrorSyncPass({
-      entityId: 'T1',
-      field: 'Status',
-      origin: new SideObservation({
-        side: 'vault',
-        role: 'origin',
-        current: 'Done',
-        baseline: new Baseline('Building', false),
-        fieldTime: null,
-        timestampTrustworthy: true,
-        completeFetch: true,
-        currentCompleted: false,
-      }),
-      mirrors: [new MirrorSide({ side: 'todoist', handle: 'T1', adapter })],
-      baselines: new Map([['todoist', new Baseline('Building', false)]]),
+    const vault = new FieldVault();
+    vault.values.set('title', 'Fix the bug');
+    vault.values.set('body', 'The bug happens on resize.');
+    vault.values.set('completion', 'false');
+    vault.values.set('Status', 'Done');
+    vault.values.set('label', 'type: task');
+    const registry = new SyncStateAdapter(memoryStorage());
+    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setMirrorItem('Acme', 'todoist', 'T1', { entityId: ENTITY });
+    for (const field of ['title', 'body', 'completion', 'label'] as const) {
+      const value = vault.values.get(field)!;
+      await registry.writeBaseline(
+        ENTITY,
+        field,
+        'origin',
+        new Baseline(value, false),
+      );
+      await registry.writeBaseline(
+        ENTITY,
+        field,
+        'mirror:todoist',
+        new Baseline(value, false),
+      );
+    }
+    await registry.writeBaseline(
+      ENTITY,
+      'Status',
+      'origin',
+      new Baseline('Building', false),
+    );
+    await registry.writeBaseline(
+      ENTITY,
+      'Status',
+      'mirror:todoist',
+      new Baseline('Building', false),
+    );
+    const action = new MirrorSyncAction(vault, registry, {
+      create: () => adapter,
     });
 
-    const record = await new MirrorSyncAction().invoke(pass);
+    const records = await action.invoke('Acme');
+    const status = records.find((record) => record.field === 'Status')!;
 
-    expect(record.result.value).toBe('Done');
-    expect(record.written).toEqual(['todoist']);
-    expect(transport.calls[6]!.path).toBe('/tasks/T1/move');
-    expect(transport.calls[6]!.body).toBe(JSON.stringify({ section_id: 'S2' }));
+    expect(status.result.value).toBe('Done');
+    expect(status.written).toEqual(['mirror:todoist']);
+    expect(
+      transport.calls.some(
+        (call) =>
+          call.path === '/tasks/T1/move' &&
+          call.body === JSON.stringify({ section_id: 'S2' }),
+      ),
+    ).toBe(true);
   });
 });
 

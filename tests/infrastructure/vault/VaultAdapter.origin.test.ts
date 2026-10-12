@@ -22,17 +22,24 @@ import type { App } from 'obsidian';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
-import { MirrorSide } from '../../../src/core/application/data/MirrorSide.js';
-import { MirrorSyncPass } from '../../../src/core/application/data/MirrorSyncPass.js';
-import { SideObservation } from '../../../src/core/domain/SideObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { ConformanceMirrorAdapter } from '../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
+import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { VaultAdapter } from '../../../src/infrastructure/vault/VaultAdapter.js';
 import { vaultAdapter } from '../../helpers/vaultAdapter.js';
-import { originSideObservation } from '../../../src/core/domain/originSideObservation.js';
 
 const NOTE_PATH = 'Projecten/Acme/taken/fix-the-bug.md';
+const HOME_PATH = 'Projecten/Acme/_Acme.md';
 const MTIME = Date.parse('2026-10-08T10:00:00Z');
+const HOME = [
+  '---',
+  'type: project',
+  'connections:',
+  '  conformance:',
+  '    tool: conformance',
+  '    project: board-1',
+  '---',
+].join('\n');
 const NOTE = [
   '---',
   'categories: [taken]',
@@ -52,6 +59,13 @@ class FakeVault {
     string,
     { content: string; mtime: number }
   >();
+  readonly frontmatter = new Map<string, Record<string, unknown>>();
+
+  readonly metadataCache = {
+    getFileCache: (file: { path: string }) => ({
+      frontmatter: this.frontmatter.get(file.path),
+    }),
+  };
 
   seed(path: string, content: string, mtime: number): void {
     this.notes.set(path, { content, mtime });
@@ -63,6 +77,12 @@ class FakeVault {
       return null;
     }
     return new TFile(path, 'md', { mtime: note.mtime });
+  }
+
+  getMarkdownFiles(): TFileInstance[] {
+    return [...this.notes.entries()].map(
+      ([path, note]) => new TFile(path, 'md', { mtime: note.mtime }),
+    );
   }
 
   getFolderByPath(): object | null {
@@ -126,8 +146,71 @@ function setup(): {
 } {
   const vault = new FakeVault();
   const fileManager = new FakeFileManager(vault);
-  const app = { vault, fileManager } as unknown as App;
-  return { vault, fileManager, adapter: vaultAdapter(app) };
+  const app = {
+    vault,
+    fileManager,
+    metadataCache: vault.metadataCache,
+  } as unknown as App;
+  return {
+    vault,
+    fileManager,
+    adapter: vaultAdapter(app, {
+      registeredApplications: new Set(['conformance']),
+    }),
+  };
+}
+
+function memoryStorage() {
+  let data: Record<string, unknown> = {};
+  return {
+    async load() {
+      return data;
+    },
+    async save(next: unknown) {
+      data = next as Record<string, unknown>;
+    },
+  };
+}
+
+async function seedOrigin(
+  vault: FakeVault,
+  registry: SyncStateAdapter,
+  statusBaseline: string,
+): Promise<void> {
+  vault.seed(HOME_PATH, HOME, MTIME);
+  vault.frontmatter.set(HOME_PATH, {
+    type: 'project',
+    connections: { conformance: { tool: 'conformance', project: 'board-1' } },
+  });
+  await registry.setEntity({ id: NOTE_PATH, notePath: NOTE_PATH });
+  await registry.setMirrorItem('Acme', 'conformance', NOTE_PATH, {
+    entityId: NOTE_PATH,
+  });
+  await registry.writeBaseline(
+    NOTE_PATH,
+    'Status',
+    'origin',
+    new Baseline(statusBaseline, false),
+  );
+  await registry.writeBaseline(
+    NOTE_PATH,
+    'Status',
+    'mirror:conformance',
+    new Baseline(statusBaseline, false),
+  );
+}
+
+function mirrorTask(status: string): CanonicalTask {
+  return new CanonicalTask({
+    handle: NOTE_PATH,
+    entityId: NOTE_PATH,
+    title: 'Task',
+    body: '',
+    status,
+    completed: false,
+    parent: null,
+    labels: [],
+  });
 }
 
 describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
@@ -317,47 +400,19 @@ describe('VaultAdapter origin — the origin round-trip (F02 NWM-3, NWM-17)', ()
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
     const mirror = new ConformanceMirrorAdapter();
-    mirror.seed(
-      new CanonicalTask({
-        handle: NOTE_PATH,
-        entityId: NOTE_PATH,
-        title: 'Task',
-        body: '',
-        status: 'Review',
-        completed: false,
-        parent: null,
-        labels: [],
-      }),
-    );
-
-    const pass = new MirrorSyncPass({
-      entityId: NOTE_PATH,
-      field: 'Status',
-      origin: new SideObservation({
-        side: 'vault',
-        role: 'origin',
-        current: 'Building',
-        baseline: new Baseline('Building', false),
-        fieldTime: null,
-        timestampTrustworthy: true,
-        completeFetch: true,
-        currentCompleted: false,
-      }),
-      mirrors: [
-        new MirrorSide({
-          side: 'conformance',
-          handle: NOTE_PATH,
-          adapter: mirror,
-        }),
-      ],
-      baselines: new Map([['conformance', new Baseline('Building', false)]]),
+    mirror.seed(mirrorTask('Review'));
+    const registry = new SyncStateAdapter(memoryStorage());
+    await seedOrigin(vault, registry, 'Building');
+    const action = new MirrorSyncAction(adapter, registry, {
+      create: () => mirror,
     });
 
-    const record = await new MirrorSyncAction(adapter).invoke(pass);
+    const records = await action.invoke('Acme');
+    const status = records.find((record) => record.field === 'Status')!;
 
     expect(vault.content(NOTE_PATH)).toContain('status: Review');
-    expect(record.advanced).toContain('vault');
-    expect(record.advanced).toContain('conformance');
+    expect(status.advanced).toContain('origin');
+    expect(status.advanced).toContain('mirror:conformance');
   });
 });
 
@@ -366,45 +421,23 @@ describe('VaultAdapter origin — the origin timestamp reaches the merge (F02 NW
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
     const mirror = new ConformanceMirrorAdapter();
-    mirror.seed(
-      new CanonicalTask({
-        handle: NOTE_PATH,
-        entityId: NOTE_PATH,
-        title: 'Task',
-        body: '',
-        status: 'Review',
-        completed: false,
-        parent: null,
-        labels: [],
-      }),
-    );
+    mirror.seed(mirrorTask('Review'));
     mirror.setFieldTime(NOTE_PATH, 'Status', '2026-10-08T09:00:00Z');
+    const registry = new SyncStateAdapter(memoryStorage());
+    await seedOrigin(vault, registry, 'Todo');
 
     const observed = await adapter.observe(NOTE_PATH, 'Status');
-    const pass = new MirrorSyncPass({
-      entityId: NOTE_PATH,
-      field: 'Status',
-      origin: originSideObservation(
-        'vault',
-        new Baseline('Todo', false),
-        observed,
-      ),
-      mirrors: [
-        new MirrorSide({
-          side: 'conformance',
-          handle: NOTE_PATH,
-          adapter: mirror,
-        }),
-      ],
-      baselines: new Map([['conformance', new Baseline('Todo', false)]]),
+    const action = new MirrorSyncAction(adapter, registry, {
+      create: () => mirror,
     });
 
-    const record = await new MirrorSyncAction(adapter).invoke(pass);
+    const records = await action.invoke('Acme');
+    const status = records.find((record) => record.field === 'Status')!;
 
     expect(observed.fieldTime).toBe(new Date(MTIME).toISOString());
-    expect(record.result.rung).toBe(1);
-    expect(record.result.winner).toBe('vault');
-    expect(record.result.value).toBe('Building');
+    expect(status.result.rung).toBe(1);
+    expect(status.result.winner).toBe('origin');
+    expect(status.result.value).toBe('Building');
     expect(mirror.currentTask(NOTE_PATH)?.status).toBe('Building');
   });
 });

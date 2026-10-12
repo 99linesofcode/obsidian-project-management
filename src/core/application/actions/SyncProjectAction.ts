@@ -2,12 +2,16 @@ import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDat
 import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { ProjectSetupFactoryPort } from '../../port/ProjectSetupFactoryPort.js';
-import type { CoreReconcilers } from '../services/CoreReconcilers.js';
+import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
+import type { MirrorSyncAction } from './MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
+import type { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
+import type { ReactivateFrozenProjectAction } from './ReactivateFrozenProjectAction.js';
+import type { ReconcileProjectTaskLocksAction } from './ReconcileProjectTaskLocksAction.js';
 import type { RekeyRenamedConnectionsAction } from './RekeyRenamedConnectionsAction.js';
 import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.js';
@@ -15,7 +19,11 @@ import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.j
 export interface SyncProjectDependencies {
   vault: VaultPort;
   setupFactory: ProjectSetupFactoryPort;
-  reconcilers: CoreReconcilers;
+  reactivation: ReactivateFrozenProjectAction;
+  lifecycle: ProjectLifecycleSyncAction;
+  taskLocks: ReconcileProjectTaskLocksAction;
+  taskCapture: CaptureTasksAction;
+  taskFields: MirrorSyncAction;
   migrateHomeNote: MigrateProjectHomeNoteAction;
   detectNoteRenames: DetectNoteRenamesAction;
   completeTaskCascade: CompleteTaskCascadeAction;
@@ -26,9 +34,9 @@ export interface SyncProjectDependencies {
   ensureProjectBoard?: EnsureProjectBoardAction | undefined;
 }
 
-// The pass for one project: it drives the vault-maintenance steps and the core
-// reconcilers in order, isolating each step's failure so one broken step never
-// starves the rest.
+// The pass for one project: it drives the vault-maintenance steps and the
+// reconciliation actions in order, isolating each step's failure so one broken
+// step never starves the rest.
 export class SyncProjectAction {
   private stepErrors: unknown[] = [];
 
@@ -48,13 +56,13 @@ export class SyncProjectAction {
     await this.ensureBoards(project, note);
 
     await this.step('reactivation', () =>
-      this.deps.reconcilers.reactivation.reactivate(project),
+      this.deps.reactivation.invoke(project),
     );
 
     const { frozen, wasFrozen } = await this.reconcileLifecycle(project, note);
 
     await this.step('task locks', () =>
-      this.deps.reconcilers.taskLocks.reconcile({ project, frozen, wasFrozen }),
+      this.deps.taskLocks.invoke({ project, frozen, wasFrozen }),
     );
 
     await this.renames(project, syncedAt);
@@ -62,10 +70,10 @@ export class SyncProjectAction {
 
     if (!frozen) {
       await this.step('task capture', () =>
-        this.deps.reconcilers.taskCapture.capture(project, syncedAt),
+        this.deps.taskCapture.invoke(project, syncedAt),
       );
       await this.step('task fields', () =>
-        this.deps.reconcilers.taskFields.reconcile(project),
+        this.deps.taskFields.invoke(project),
       );
     }
 
@@ -187,7 +195,7 @@ export class SyncProjectAction {
     note: ProjectNoteDataTransferObject,
   ): Promise<{ frozen: boolean; wasFrozen: boolean }> {
     try {
-      return await this.deps.reconcilers.lifecycle.reconcile(project);
+      return await this.deps.lifecycle.invoke(project);
     } catch (error) {
       console.error(
         `SyncProjectAction: lifecycle failed for ${project}`,

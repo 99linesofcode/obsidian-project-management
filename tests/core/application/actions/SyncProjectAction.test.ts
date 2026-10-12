@@ -6,11 +6,11 @@ import type { HandleDeletedNoteAction } from '../../../../src/core/application/a
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
-import type { ProjectLifecycleReconciler } from '../../../../src/core/application/services/ProjectLifecycleReconciler.js';
-import type { ProjectTaskLocksReconciler } from '../../../../src/core/application/services/ProjectTaskLocksReconciler.js';
-import type { ProjectReactivationReconciler } from '../../../../src/core/application/services/ProjectReactivationReconciler.js';
-import type { TaskCaptureReconciler } from '../../../../src/core/application/services/TaskCaptureReconciler.js';
-import type { TaskFieldReconciler } from '../../../../src/core/application/services/TaskFieldReconciler.js';
+import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
+import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
+import type { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
+import type { ReactivateFrozenProjectAction } from '../../../../src/core/application/actions/ReactivateFrozenProjectAction.js';
+import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
@@ -21,7 +21,6 @@ import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
-import type { CoreReconcilers } from '../../../../src/core/application/services/CoreReconcilers.js';
 
 class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
@@ -34,7 +33,9 @@ class FakeVault extends FakeVaultBase {
   folders = new Map<string, string[]>();
   renames: Array<{ from: string; to: string }> = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -54,52 +55,6 @@ class FakeVault extends FakeVaultBase {
   override onNoteChanged(): void {}
   override onNoteDeleted(): void {}
   override onNoteRenamed(): void {}
-}
-
-function reconcileRecorder(events: string[]): TaskFieldReconciler {
-  return {
-    reconcile: async (project) => {
-      events.push(`reconcile:${project}`);
-    },
-  };
-}
-
-function projectLifecycleRecorder(
-  events: string[],
-  frozen: boolean,
-  wasFrozen = false,
-): ProjectLifecycleReconciler {
-  return {
-    reconcile: async () => {
-      events.push('lifecycle');
-      return { frozen, wasFrozen };
-    },
-  };
-}
-
-function taskCaptureRecorder(events: string[]): TaskCaptureReconciler {
-  return {
-    capture: async (project) => {
-      events.push(`capture:${project}`);
-    },
-  };
-}
-
-function taskLocksRecorder(events: string[]): ProjectTaskLocksReconciler {
-  return {
-    reconcile: async (input) => {
-      events.push(`taskLocks:${input.frozen}:${input.wasFrozen}`);
-    },
-  };
-}
-
-function reactivationRecorder(events: string[]): ProjectReactivationReconciler {
-  return {
-    reactivate: async (project) => {
-      events.push(`reactivate:${project}`);
-      return false;
-    },
-  };
 }
 
 function projectNote(
@@ -202,24 +157,50 @@ function harness(options: HarnessOptions = {}) {
   const setupApplications = options.setupApplications ?? ['github'];
   const setupFactory: ProjectSetupFactoryPort = {
     setupFor: (application) =>
-      setupApplications.includes(application) ? ({} as ProjectSetupSurface) : null,
+      setupApplications.includes(application)
+        ? ({} as ProjectSetupSurface)
+        : null,
   };
 
   const frozen =
     options.frozen ?? (vault.projectNotes[0]?.archivedAt ?? null) !== null;
 
-  const reconcilers: CoreReconcilers = {
-    taskFields: reconcileRecorder(events),
-    lifecycle: projectLifecycleRecorder(events, frozen),
-    taskLocks: taskLocksRecorder(events),
-    reactivation: reactivationRecorder(events),
-    taskCapture: taskCaptureRecorder(events),
-  };
+  const reactivation = {
+    invoke: async (project: string) => {
+      events.push(`reactivate:${project}`);
+      return false;
+    },
+  } as unknown as ReactivateFrozenProjectAction;
+  const lifecycle = {
+    invoke: async () => {
+      events.push('lifecycle');
+      return { frozen, wasFrozen: false };
+    },
+  } as unknown as ProjectLifecycleSyncAction;
+  const taskLocks = {
+    invoke: async (input: { frozen: boolean; wasFrozen: boolean }) => {
+      events.push(`taskLocks:${input.frozen}:${input.wasFrozen}`);
+    },
+  } as unknown as ReconcileProjectTaskLocksAction;
+  const taskCapture = {
+    invoke: async (project: string) => {
+      events.push(`capture:${project}`);
+    },
+  } as unknown as CaptureTasksAction;
+  const taskFields = {
+    invoke: async (project: string) => {
+      events.push(`reconcile:${project}`);
+    },
+  } as unknown as MirrorSyncAction;
 
   const action = new SyncProjectAction({
     vault,
     setupFactory,
-    reconcilers,
+    reactivation,
+    lifecycle,
+    taskLocks,
+    taskCapture,
+    taskFields,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     detectNoteRenames: renames,
     completeTaskCascade: cascade,

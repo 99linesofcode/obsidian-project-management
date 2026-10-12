@@ -11,7 +11,7 @@ names no provider: it reconciles canonical fields across an origin and any
 number of mirror sides through one pure N-way merge. A connection produces a
 mirror side; the vault is the origin. The old chain — the two provider halves,
 the pairwise verdict, the legacy writers — is gone; the chain
-(`SyncProjectAction`) now drives the core reconcilers and the vault-maintenance
+(`SyncProjectAction`) now drives the core actions and the vault-maintenance
 steps (board-ensure, rename recovery, vault consistency, the deletion sweep)
 directly, documented here as it exists.
 
@@ -47,8 +47,7 @@ no machine id.
 ### The cast
 
 **The core (`src/core/`) names no provider.** It owns the canonical DTOs, the
-one pure N-way merge, the mirror-sync action, the two pass assemblers and the
-reconcilers.
+one pure N-way merge, the mirror-sync action and the project lifecycle action.
 
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
@@ -78,13 +77,13 @@ reconcilers.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`).
 - **The canonical DTOs.** `CanonicalTask`, `CanonicalProject`, `Baseline`,
-  `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`, `MirrorSide`,
-  `MirrorSyncPass`, `PassRecord`, `ProjectLifecyclePass`,
-  `ProjectLifecycleRecord`, `ConnectionDataTransferObject`,
+  `SideObservation`, `OriginObservation`, `Delta`, `MergeResult`,
+  `ConnectionDataTransferObject`,
   `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
   `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing`, `PortState`
-  and `ProjectActivityObservation`. The port boundary payloads live with the
-  ports (`core/port/data/`); the pass shapes stay in `application/data/`.
+  and `ProjectActivityObservation`. The boundary payloads live with the
+  ports (`core/port/data/`); a merge action's private working shapes stay
+  co-located with the action.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
 - **The provider table.** The composition root holds one plain `providers`
@@ -93,11 +92,10 @@ reconcilers.
   factory, the setup factory, the registered-application set and the
   token-settings list from it. No validation framework, capability vocabulary or
   registration result.
-- **The actions.** `MirrorSyncAction` (the one capability-parameterized
-  reconcile), `AssembleProjectPassAction` (one whole-project task pass),
-  `ProjectLifecycleSyncAction` + `AssembleProjectLifecyclePassAction` (the
-  project-level peer), `CaptureProjectsAction`, `CaptureTasksAction`,
-  `ReconcileProjectTaskLocksAction` and `ReactivateFrozenProjectAction`.
+- **The actions.** `MirrorSyncAction` (the whole-project task pass),
+  `ProjectLifecycleSyncAction` (the project-level peer), `CaptureProjectsAction`,
+  `CaptureTasksAction`, `ReconcileProjectTaskLocksAction` and
+  `ReactivateFrozenProjectAction`.
 
 **The driven adapters (`src/infrastructure/`) implement those ports, one
 namespace per application.**
@@ -129,14 +127,14 @@ namespace per application.**
   project at a time, coalesces duplicates, swallows a failed run so the queue
   never poisons.
 - **`SyncProjectAction`** — the chain. One work item (a project folder name) and
-  one entry point; it drives the vault-maintenance steps and the
-  `CoreReconcilers` bundle (the five core reconcilers, in
-  `src/core/application/services/`) in
+  one entry point; it drives the vault-maintenance steps and the core actions
+  (`ReactivateFrozenProjectAction`, `ProjectLifecycleSyncAction`,
+  `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`) in
   order, wrapping every step so one failure logs and skips that step.
 - **`main.ts`** — the composition root. `composePlugin` builds the provider
   table, the vault adapter, the mirror-adapter factory, the setup adapter and
-  the maintenance actions; `composeCoreReconcilers` eagerly builds the core pass
-  assemblers and their infrastructure peers.
+  the maintenance actions; `composeCoreActions` eagerly builds the core actions
+  and their infrastructure peers.
 - **`SyncStateAdapter`** — the registry (see [§2.9](#29-the-registry)).
 - **`SeedVaultArtifactsAction`** — seeds the six vault-owned artifacts (three
   note templates, three Bases files) create-if-missing, on init and on demand
@@ -177,9 +175,9 @@ vault's project notes and enqueues each project name; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
 item no-ops), then drives every step in order. It migrates a legacy home note,
 re-keys a renamed connection, and ensures a code-host board for each active
-github connection; the `CoreReconcilers` bundle reactivates a frozen project with
-newer mirror work, reconciles the lifecycle into one freeze verdict, and
-reconciles task locks on the transition; then it recovers renames, runs the
+github connection; the core actions reactivate a frozen project with
+newer mirror work, reconcile the lifecycle into one freeze verdict, and
+reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
 task-field pass, finally sweeping deletions. Every step failure logs and skips
 that step without blocking the others.
@@ -212,20 +210,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
-  participant React as ProjectReactivationReconciler
-  participant Life as ProjectLifecycleReconciler
-  participant Lock as ProjectTaskLocksReconciler
+  participant React as ReactivateFrozenProjectAction
+  participant Life as ProjectLifecycleSyncAction
+  participant Lock as ReconcileProjectTaskLocksAction
 
   SP->>SP: resolveProject (no-op when missing)
   SP->>SP: migrate / rekey / ensureBoards
-  SP->>React: reactivate(project)
-  SP->>Life: reconcile(project)
+  SP->>React: invoke(project)
+  SP->>Life: invoke(project)
   Life-->>SP: { frozen, wasFrozen }
-  SP->>Lock: reconcile({ project, frozen, wasFrozen })
+  SP->>Lock: invoke({ project, frozen, wasFrozen })
   SP->>SP: renames
 ```
 
-#### 2.1c The core reconcilers and the sweep
+#### 2.1c The core actions and the sweep
 
 ```mermaid
 sequenceDiagram
@@ -233,8 +231,8 @@ sequenceDiagram
   participant Chk as SyncChecklistAction
   participant Cas as CompleteTaskCascadeAction
   participant Mir as MirrorTodoStatusAction
-  participant TC as TaskCaptureReconciler
-  participant TF as TaskFieldReconciler
+  participant TC as CaptureTasksAction
+  participant TF as MirrorSyncAction
   participant Sweep as SweepDeletedNotesAction
 
   SP->>SP: vaultConsistency(project, syncedAt)
@@ -246,16 +244,15 @@ sequenceDiagram
     SP->>Mir: execute(todoPath, syncedAt)
   end
   alt not frozen
-    SP->>TC: capture(project, syncedAt)
-    SP->>TF: reconcile(project)
+    SP->>TC: invoke(project, syncedAt)
+    SP->>TF: invoke(project)
   end
   SP->>SP: deletions(project, connections)
   SP->>Sweep: execute({ projectName, connections })
 ```
 
-The `CoreReconcilers` bundle is the cutover seam: `SyncProjectAction` holds one
-instance and `main.ts` fills each member with an adapter over the assembled core
-action. The lifecycle reconciler returns
+`SyncProjectAction` holds one instance of each core action, built by the
+composition root. The lifecycle action returns
 `{ frozen, wasFrozen }`; when it throws, `SyncProjectAction` falls back to
 `note.archivedAt`.
 
@@ -295,71 +292,27 @@ absence is a delete only when it has a baseline **and** its adapter exposes
 
 ### 2.3 The mirror-sync action (`MirrorSyncAction`)
 
-`MirrorSyncAction` names no provider. Given a `MirrorSyncPass`, it observes
-each mirror against its own baseline, calls `mergeField` once, fans the
-reconciled value out through the one generic write entry, and applies the same
-value to the origin. It records the sides written, skipped, advanced and failed
-on a `PassRecord`. A mirror write that throws is recorded in `failed` and
-fan-out continues to the remaining mirrors, so one failing connection never
-abandons the rest.
+`MirrorSyncAction` names no provider. Given a project, it reads the declared
+connections and the project's task-note paths, builds one mirror adapter per
+connection through `MirrorAdapterFactoryPort`, resolves each note to that
+connection's own handle through `RegistryPort`, and runs the pure `mergeField`
+once per (note, canonical field) over the six merged fields — `title`, `body`,
+`subtasks`, `completion`, `Status`, `label`. For each field it observes each
+mirror against its own baseline, calls `mergeField`, fans the reconciled value
+out through the one generic write entry, applies the same value to the origin,
+and persists each advanced side's `Baseline`. A mirror write that throws is
+recorded among the field outcome's `failed` sides and fan-out continues to the
+remaining mirrors, so one failing connection never abandons the rest.
 
 ```mermaid
 sequenceDiagram
-  participant A as AssembleProjectPassAction
-  participant MS as MirrorSyncAction
-  participant R as MirrorPort
-  participant MF as mergeField
-  participant O as VaultPort
-
-  A->>MS: invoke(pass)
-  loop each capable mirror
-    MS->>R: tasks.readTask(handle)
-    MS->>R: timestamps.fieldTime(handle, field)
-    MS->>R: completeFetch.fetchComplete()
-  end
-  MS->>MF: mergeField(origin, observations)
-  alt outcome value
-    loop each capable mirror
-      MS->>R: readTask then applyField when it differs
-    end
-  else outcome delete
-    loop each capable mirror
-      MS->>R: readTask then deleteTask when it exists
-    end
-  end
-  MS->>O: applyField or trash when the origin differs
-  MS-->>A: PassRecord
-```
-
-A side is **advanced** when it was written or already matched; a skipped write
-still advances (the repair path for a widened value); a failed write advances
-nothing.
-
-### 2.4 The project pass assembler (`AssembleProjectPassAction`)
-
-`AssembleProjectPassAction.invoke` reads the project's declared connections and
-its task-note paths, builds one mirror adapter per connection through
-`MirrorAdapterFactoryPort`, resolves each note to that connection's own handle
-through `RegistryPort`, and runs `MirrorSyncAction` once per
-(note, canonical field) over the six merged fields — `title`, `body`,
-`subtasks`, `completion`, `Status`, `label`. A connection whose entity has no
-resolved handle is **materialized**: the origin task is read through
-`VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
-placeholder handle is recorded through `RegistryPort` before the item is
-created through `MirrorPort.createTask`, the real handle replaces the
-placeholder, and the created mirror is reconciled in the same pass. A
-placeholder left by an interrupted pass is **adopted** by matching the mirror's
-task title rather than re-created, so a failed record never duplicates the item.
-
-```mermaid
-sequenceDiagram
-  participant A as AssembleProjectPassAction
+  participant A as MirrorSyncAction
   participant PS as VaultPort
   participant F as MirrorAdapterFactoryPort
   participant H as RegistryPort
   participant O as VaultPort
   participant R as MirrorPort
-  participant MS as MirrorSyncAction
+  participant MF as mergeField
 
   A->>PS: readConnections(project)
   A->>PS: listEntities(project)
@@ -378,22 +331,40 @@ sequenceDiagram
       end
     end
     loop each merged field
-      A->>MS: invoke(MirrorSyncPass)
-      A->>A: persistAdvanced per advanced side
+      A->>R: tasks.readTask(handle)
+      A->>R: timestamps.fieldTime(handle, field)
+      A->>R: completeFetch.fetchComplete()
+      A->>MF: mergeField(origin, observations)
+      alt outcome value
+        A->>R: readTask then applyField when it differs
+      else outcome delete
+        A->>R: readTask then deleteTask when it exists
+      end
+      A->>O: applyField or trash when the origin differs
+      A->>H: writeBaseline per advanced side
     end
   end
 ```
 
 The side key is `mirror:<slug>` (`mirrorSideKey`), disjoint from the origin's
 `origin` key, so a connection slug of `origin` cannot collide. Two connections
-to the same application stay distinct sides. The pass persists each advanced
-side's `Baseline` (value plus the completion flag) through `RegistryPort`.
+to the same application stay distinct sides. A connection whose entity has no
+resolved handle is **materialized**: the origin task is read through
+`VaultPort.readTask` (a note without a `type` is not a task and is skipped), a
+placeholder handle is recorded through `RegistryPort` before the item is
+created through `MirrorPort.createTask`, the real handle replaces the
+placeholder, and the created mirror is reconciled in the same pass. A
+placeholder left by an interrupted pass is **adopted** by matching the mirror's
+task title rather than re-created, so a failed record never duplicates the item.
+A side is **advanced** when it was written or already matched; a skipped write
+still advances (the repair path for a widened value); a failed write advances
+nothing.
 
-### 2.5 The project lifecycle pass
+### 2.4 The project lifecycle pass (`ProjectLifecycleSyncAction`)
 
-`AssembleProjectLifecyclePassAction` is the project-level peer of the task pass.
-It scopes the mirrors, resolves each connection's mirror project through
-`RegistryPort` — onboarding a missing one by `MirrorPort.createProject`
+`ProjectLifecycleSyncAction` is the project-level peer of the mirror-sync action.
+Given a project it scopes the mirrors, resolves each connection's mirror project
+through `RegistryPort` — onboarding a missing one by `MirrorPort.createProject`
 and recording the returned handle, so a newly-connected project is onboarded in
 the same pass — renames a mirror project whose name drifted from the vault
 project through `MirrorPort.renameProject`, reads the origin's archived state
@@ -405,12 +376,11 @@ per-side baselines live under the `lifecycle` field in the same baseline store.
 
 ```mermaid
 sequenceDiagram
-  participant A as AssembleProjectLifecyclePassAction
+  participant A as ProjectLifecycleSyncAction
   participant PS as VaultPort
   participant MP as RegistryPort
   participant R as MirrorPort
   participant O as VaultPort
-  participant LS as ProjectLifecycleSyncAction
   participant MF as mergeField
 
   A->>PS: readConnections(project)
@@ -426,11 +396,10 @@ sequenceDiagram
     end
   end
   A->>O: observeProject(project)
-  A->>LS: invoke(ProjectLifecyclePass)
-  LS->>MF: mergeField(origin, mirror observations)
-  LS->>R: setArchived when the mirror differs
-  LS->>O: applyProjectArchived when the origin differs
-  LS-->>A: ProjectLifecycleRecord { frozen, wasFrozen }
+  A->>MF: mergeField(origin, mirror observations)
+  A->>R: setArchived when the mirror differs
+  A->>O: applyProjectArchived when the origin differs
+  A-->>A: outcome { frozen, wasFrozen }
 ```
 
 `wasFrozen` is `pass.origin.baseline?.value === 'true'`; `frozen` is
@@ -890,8 +859,8 @@ lane can no longer revert a completion.
 ## 4. Invariants cheat-sheet
 
 - **Base advances only after durable writes.** `MirrorSyncAction` records a
-  side as advanced only after its write resolves (or when it already matched);
-  `AssembleProjectPassAction.persistAdvanced` then writes the `Baseline`. A
+  side as advanced only after its write resolves (or when it already matched),
+  then writes that side's `Baseline`. A
   failed write is recorded in `failed` and advances nothing. A skipped write
   still advances: the side already matched the reconciled value, which is the
   repair path for a widened value.
@@ -948,13 +917,11 @@ The tree is module-first (ADR 004): the repo is the module, its interior is the
 layers, and each layer owns one surface of the system.
 
 - The wiring and construction order: `src/main.ts` (`onload`, `composePlugin`,
-  `composeCoreReconcilers`, `mirrorAdapterFactory`).
+  `composeCoreActions`, `mirrorAdapterFactory`).
 - The core: `src/core/` — the pure engine (`mergeField`, `MirrorSyncAction`,
-  `AssembleProjectPassAction`, `AssembleProjectLifecyclePassAction`,
   `ProjectLifecycleSyncAction`), the
-  ports and their payloads under `src/core/port/` (`port/data/`), the pass DTOs
-  under `src/core/application/data/`, the
-  reconciler interfaces under `src/core/application/services/`, and every use
+  ports and their payloads under `src/core/port/` (`port/data/`), the
+  application shapes under `src/core/application/data/`, and every use
   case under `src/core/application/actions/`.
 - The use cases folded in from the former concept modules:
   `src/core/application/actions/` holds the discovery/attach/board actions

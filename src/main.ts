@@ -36,22 +36,21 @@ import { VaultAdapter } from './infrastructure/vault/VaultAdapter.js';
 import { SyncStateAdapter } from './infrastructure/registry/SyncStateAdapter.js';
 import { loadDataSafely } from './infrastructure/registry/loadDataSafely.js';
 import { createTodoistTransport } from './infrastructure/todoist/createTodoistTransport.js';
-import { AssembleProjectPassAction } from './core/application/actions/AssembleProjectPassAction.js';
-import { AssembleProjectLifecyclePassAction } from './core/application/actions/AssembleProjectLifecyclePassAction.js';
+import { MirrorSyncAction } from './core/application/actions/MirrorSyncAction.js';
+import { ProjectLifecycleSyncAction } from './core/application/actions/ProjectLifecycleSyncAction.js';
 import type { MirrorPort } from './core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
 import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
 import type { ProjectIdentityDataTransferObject } from './core/port/data/ProjectIdentityDataTransferObject.js';
 import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
 import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TokenSetting } from './ui/settings/TokenSetting.js';
+import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { ReactivateFrozenProjectAction } from './core/application/actions/ReactivateFrozenProjectAction.js';
 import {
   CoreProjectWatchAdapter,
   type CoreWatchStorage,
 } from './infrastructure/registry/CoreProjectWatchAdapter.js';
-import type { CoreReconcilers } from './core/application/services/CoreReconcilers.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
 
@@ -105,11 +104,15 @@ function createCodeHostTransport(token: string): CodeHostTransport {
 }
 
 interface CoreComposition {
-  reconcilers: CoreReconcilers;
+  taskFields: MirrorSyncAction;
+  lifecycle: ProjectLifecycleSyncAction;
+  taskLocks: ReconcileProjectTaskLocksAction;
+  reactivation: ReactivateFrozenProjectAction;
+  taskCapture: CaptureTasksAction;
   projectCapture: () => Promise<CaptureProjectsResult>;
 }
 
-function composeCoreReconcilers(
+function composeCoreActions(
   plugin: ProjectManagementPlugin,
   vault: VaultAdapter,
   syncState: SyncStateAdapter,
@@ -117,67 +120,34 @@ function composeCoreReconcilers(
   createTaskNote: CreateTaskNoteAction,
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
-  const taskFieldPass = new AssembleProjectPassAction(
-    vault,
-    syncState,
-    mirrorAdapters,
-  );
-  const lifecyclePass = new AssembleProjectLifecyclePassAction(
-    vault,
-    syncState,
-    mirrorAdapters,
-  );
-  const taskLocks = new ReconcileProjectTaskLocksAction(
-    vault,
-    syncState,
-    mirrorAdapters,
-    plugin.settings.doneOptionName,
-  );
-  const reactivation = new ReactivateFrozenProjectAction(
-    vault,
-    syncState,
-    mirrorAdapters,
-    new CoreProjectWatchAdapter(baselineStorage),
-  );
-
   const capture = new CaptureProjectsAction(
     mirrorAdapters,
     vault,
     new RegistryProjectCursorAdapter(syncState),
   );
-  const captureTasks = new CaptureTasksAction(
-    vault,
-    mirrorAdapters,
-    syncState,
-    createTaskNote,
-    (application) => application === 'github',
-  );
 
   return {
-    reconcilers: {
-      taskFields: {
-        reconcile: async (project) => {
-          await taskFieldPass.invoke(project);
-        },
-      },
-      lifecycle: {
-        reconcile: async (project) => {
-          const record = await lifecyclePass.invoke(project);
-          return { frozen: record.frozen, wasFrozen: record.wasFrozen };
-        },
-      },
-      taskLocks: {
-        reconcile: (input) => taskLocks.invoke(input),
-      },
-      reactivation: {
-        reactivate: (project) => reactivation.invoke(project),
-      },
-      taskCapture: {
-        capture: async (project, syncedAt) => {
-          await captureTasks.invoke(project, syncedAt);
-        },
-      },
-    },
+    taskFields: new MirrorSyncAction(vault, syncState, mirrorAdapters),
+    lifecycle: new ProjectLifecycleSyncAction(vault, syncState, mirrorAdapters),
+    taskLocks: new ReconcileProjectTaskLocksAction(
+      vault,
+      syncState,
+      mirrorAdapters,
+      plugin.settings.doneOptionName,
+    ),
+    reactivation: new ReactivateFrozenProjectAction(
+      vault,
+      syncState,
+      mirrorAdapters,
+      new CoreProjectWatchAdapter(baselineStorage),
+    ),
+    taskCapture: new CaptureTasksAction(
+      vault,
+      mirrorAdapters,
+      syncState,
+      createTaskNote,
+      (application) => application === 'github',
+    ),
     projectCapture: () => capture.invoke(new Date().toISOString()),
   };
 }
@@ -189,7 +159,7 @@ interface ProviderEntry {
   ) => MirrorPort;
   readonly capture: () => MirrorPort;
   readonly setup: () => ProjectSetupSurface | null;
-  readonly token: TokenSetting;
+  readonly token: TokenSettingRow;
 }
 
 type ProviderTable = Readonly<Record<string, ProviderEntry>>;
@@ -250,14 +220,14 @@ function composePlugin(
   discoverProjects: DiscoverProjectsAction;
   projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
-  tokenSettings: readonly TokenSetting[];
+  tokenSettings: readonly TokenSettingRow[];
 } {
-  const codeHostToken: TokenSetting = {
+  const codeHostToken: TokenSettingRow = {
     key: 'github-token',
     label: 'GitHub token',
     description: 'Personal access token used to talk to the GitHub API.',
   };
-  const taskManagerToken: TokenSetting = {
+  const taskManagerToken: TokenSettingRow = {
     key: 'todoist-token',
     label: 'Todoist token',
     description: 'Personal API token used to talk to the Todoist API.',
@@ -340,7 +310,7 @@ function composePlugin(
   );
 
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
-  const { reconcilers, projectCapture } = composeCoreReconcilers(
+  const core = composeCoreActions(
     plugin,
     vault,
     syncState,
@@ -357,7 +327,11 @@ function composePlugin(
   const syncProject = new SyncProjectAction({
     vault,
     setupFactory,
-    reconcilers,
+    reactivation: core.reactivation,
+    lifecycle: core.lifecycle,
+    taskLocks: core.taskLocks,
+    taskCapture: core.taskCapture,
+    taskFields: core.taskFields,
     migrateHomeNote,
     detectNoteRenames,
     completeTaskCascade,
@@ -378,7 +352,7 @@ function composePlugin(
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
     () =>
-      projectCapture().then((result) => {
+      core.projectCapture().then((result) => {
         if (result.errors.length > 0) {
           console.error('Project capture collected errors', result.errors);
         }
@@ -389,7 +363,7 @@ function composePlugin(
   return {
     scheduler,
     discoverProjects,
-    projectCapture,
+    projectCapture: core.projectCapture,
     seedArtifacts,
     tokenSettings,
   };
@@ -401,7 +375,7 @@ export default class ProjectManagementPlugin extends Plugin {
   projectNames: string[] = [];
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
-  tokenSettings!: readonly TokenSetting[];
+  tokenSettings!: readonly TokenSettingRow[];
 
   override async onload(): Promise<void> {
     const raw = await loadDataSafely(

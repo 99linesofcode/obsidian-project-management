@@ -71,7 +71,7 @@ describe('the provider-vocabulary gate', () => {
 
   it('passes a provider name in its own infrastructure module', () => {
     const root = fixtureRoot({
-      'src/infrastructure/github/descriptor.ts':
+      'src/infrastructure/github/mirror.ts':
         "export const applicationId = 'github';\nexport const name = 'GitHub';\n",
     });
 

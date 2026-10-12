@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AssembleProjectPassAction } from '../../../../src/core/application/actions/AssembleProjectPassAction.js';
+import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
@@ -109,7 +109,7 @@ function setup(
     create: () => mirror,
   };
   const registry = new FakeSyncState();
-  const action = new AssembleProjectPassAction(
+  const action = new MirrorSyncAction(
     new FakeVault(connections, originTask()),
     registry,
     mirrorAdapters,
@@ -117,7 +117,7 @@ function setup(
   return { mirror, registry, action };
 }
 
-describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', () => {
+describe('MirrorSyncAction — outward materialization (F02 NWM-2)', () => {
   it('creates a vault task note once and reconciles it in the same pass', async () => {
     const { mirror, registry, action } = setup();
 
@@ -204,7 +204,7 @@ describe('AssembleProjectPassAction — outward materialization (F02 NWM-2)', ()
     const bad = new ConformanceMirrorAdapter();
     bad.seedThrowingTask('board-bad');
     const registry = new FakeSyncState();
-    const action = new AssembleProjectPassAction(
+    const action = new MirrorSyncAction(
       new FakeVault(
         [
           connection('gh-bad', 'conformance-bad', 'board-bad'),
