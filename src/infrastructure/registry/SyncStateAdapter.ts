@@ -9,7 +9,6 @@ import type { PortState } from '../../core/port/data/PortState.js';
 import type { RegistryPort } from '../../core/port/RegistryPort.js';
 import { ensureRecord, readPath, stringOrNull } from './coreStorageRecord.js';
 import {
-  PROJECT_CURSORS_KEY,
   SYNC_STATE_KEY,
   VERSION,
   ensureEntityMap,
@@ -797,34 +796,6 @@ export class SyncStateAdapter implements RegistryPort {
       const raw =
         node === null ? undefined : identitiesMap(node)[connectionSlug];
       return isRecord(raw) ? this.mapIdentity(raw) : null;
-    });
-  }
-
-  async getProjectCursor(portId: string): Promise<string | null> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      const cursors = container[PROJECT_CURSORS_KEY];
-      if (!isRecord(cursors)) {
-        return null;
-      }
-      const raw = cursors[portId];
-      return typeof raw === 'string' ? raw : null;
-    });
-  }
-
-  async setProjectCursor(portId: string, iso: string): Promise<void> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      this.assertWritable();
-      if (!isRecord(container[PROJECT_CURSORS_KEY])) {
-        container[PROJECT_CURSORS_KEY] = {};
-      }
-      const cursors = container[PROJECT_CURSORS_KEY] as Record<string, unknown>;
-      if (cursors[portId] === iso) {
-        return;
-      }
-      cursors[portId] = iso;
-      await this.persist();
     });
   }
 

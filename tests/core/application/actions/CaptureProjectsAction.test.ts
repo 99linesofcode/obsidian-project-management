@@ -7,7 +7,6 @@ import type {
   CaptureSource,
   MirrorAdapterFactoryPort,
 } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import type { ProjectCaptureCursorPort } from '../../../../src/core/port/ProjectCaptureCursorPort.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
 class FakeVault extends FakeVaultBase {
@@ -38,20 +37,6 @@ class FakeVault extends FakeVaultBase {
   }
 }
 
-class FakeCursor implements ProjectCaptureCursorPort {
-  readonly cursors = new Map<string, string>();
-  readonly writes: Array<{ application: string; iso: string }> = [];
-
-  async read(application: string): Promise<string | null> {
-    return this.cursors.get(application) ?? null;
-  }
-
-  async write(application: string, iso: string): Promise<void> {
-    this.cursors.set(application, iso);
-    this.writes.push({ application, iso });
-  }
-}
-
 function project(
   name: string,
   target: string,
@@ -63,10 +48,8 @@ function project(
 function harness(projects: CapturedProject[]): {
   action: CaptureProjectsAction;
   vault: FakeVault;
-  cursor: FakeCursor;
 } {
   const vault = new FakeVault();
-  const cursor = new FakeCursor();
   const source: CaptureSource = {
     application: 'acme',
     capture: { captureProjects: async () => projects },
@@ -76,21 +59,17 @@ function harness(projects: CapturedProject[]): {
     captureSources: () => [source],
   };
   return {
-    action: new CaptureProjectsAction(factory, vault, cursor),
+    action: new CaptureProjectsAction(factory, vault),
     vault,
-    cursor,
   };
 }
 
-const CURSOR = '2026-09-30T00:00:00Z';
-
 describe('CaptureProjectsAction — adopting application-born projects', () => {
-  it('adopts a project born after the cursor exactly once', async () => {
+  it('adopts a remote project exactly once', async () => {
     const h = harness([project('Acme Widgets', 'P1', '2026-10-05T10:00:00Z')]);
-    h.cursor.cursors.set('acme', CURSOR);
 
-    const first = await h.action.invoke('2026-10-06T12:00:00Z');
-    const second = await h.action.invoke('2026-10-06T12:05:00Z');
+    const first = await h.action.invoke();
+    const second = await h.action.invoke();
 
     expect(first.captured).toEqual(['Acme Widgets']);
     expect(second.captured).toEqual([]);
@@ -99,9 +78,20 @@ describe('CaptureProjectsAction — adopting application-born projects', () => {
     ]);
   });
 
-  it('skips a project the vault already declares', async () => {
+  it('adopts the whole back-catalogue on the first run', async () => {
+    const h = harness([
+      project('Acme Widgets', 'P1', '2026-09-01T00:00:00Z'),
+      project('Acme Gadgets', 'P2', '2026-10-05T10:00:00Z'),
+    ]);
+
+    const result = await h.action.invoke();
+
+    expect(result.captured).toEqual(['Acme Widgets', 'Acme Gadgets']);
+    expect(h.vault.adoptCalls).toHaveLength(2);
+  });
+
+  it('skips a project the vault already declares by name', async () => {
     const h = harness([project('Acme Widgets', 'P1', '2026-10-05T10:00:00Z')]);
-    h.cursor.cursors.set('acme', CURSOR);
     h.vault.adopted.push(
       new AdoptedProject({
         projectName: 'Acme Widgets',
@@ -110,45 +100,42 @@ describe('CaptureProjectsAction — adopting application-born projects', () => {
       }),
     );
 
-    const result = await h.action.invoke('2026-10-06T12:00:00Z');
+    const result = await h.action.invoke();
 
     expect(result.captured).toEqual([]);
     expect(h.vault.adoptCalls).toEqual([]);
   });
 
-  it('adopts the newest clock on first sight and captures nothing', async () => {
+  it('skips a project whose target is already adopted', async () => {
     const h = harness([project('Acme Widgets', 'P1', '2026-10-05T10:00:00Z')]);
+    h.vault.adopted.push(
+      new AdoptedProject({
+        projectName: 'Other',
+        application: 'acme',
+        target: 'P1',
+      }),
+    );
 
-    const result = await h.action.invoke('2026-10-06T12:00:00Z');
-
-    expect(result.captured).toEqual([]);
-    expect(h.vault.adoptCalls).toEqual([]);
-    expect(await h.cursor.read('acme')).toBe('2026-10-05T10:00:00Z');
-  });
-
-  it('leaves a project at or before the cursor alone', async () => {
-    const h = harness([project('Acme Widgets', 'P1', '2026-09-01T00:00:00Z')]);
-    h.cursor.cursors.set('acme', CURSOR);
-
-    const result = await h.action.invoke('2026-10-06T12:00:00Z');
+    const result = await h.action.invoke();
 
     expect(result.captured).toEqual([]);
     expect(h.vault.adoptCalls).toEqual([]);
   });
 
-  it('collects an error and stops the watermark when a project links several targets', async () => {
+  it('collects an error and keeps adopting when a project links several targets', async () => {
     const multi = new CapturedProject({
       name: 'Acme Widgets',
       targets: ['one', 'two'],
       createdAt: '2026-10-05T10:00:00Z',
     });
-    const h = harness([multi]);
-    h.cursor.cursors.set('acme', CURSOR);
+    const h = harness([
+      multi,
+      project('Acme Gadgets', 'P2', '2026-10-06T10:00:00Z'),
+    ]);
 
-    const result = await h.action.invoke('2026-10-06T12:00:00Z');
+    const result = await h.action.invoke();
 
-    expect(result.captured).toEqual([]);
+    expect(result.captured).toEqual(['Acme Gadgets']);
     expect(result.errors).toHaveLength(1);
-    expect(await h.cursor.read('acme')).toBe(CURSOR);
   });
 });

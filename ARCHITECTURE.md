@@ -123,7 +123,7 @@ name never appears in the core.
 | `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                             | host plugin API              | the vault      |
 | `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                 | host plugin API, `Component` | the vault      |
 | `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), and the neutral note arithmetic                                                                                          | TypeScript                   | in-process     |
-| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter`, plus the baseline/cursor stores), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
+| `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter` and the baseline store), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
 
@@ -163,11 +163,10 @@ its own module; the composition root wires it.
   note, recording the mirror item) lives in `CaptureTasksAction`, never in the
   adapter.
 - **The supporting ports.** `MirrorAdapterFactoryPort` (build a mirror adapter
-  for an application + target; expose the capture sources),
+  for an application + target; expose the capture sources) and
   `ProjectSetupFactoryPort` (reach a tool's project-setup surface, null for a
-  tool without setup) and `ProjectCaptureCursorPort` (the per-surface creation
-  watermark). These are the provider table's seams, not facets of a mirror
-  adapter.
+  tool without setup). These are the provider table's seams, not facets of a
+  mirror adapter.
 
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
@@ -276,13 +275,11 @@ canonical DTOs and the pure core.
 - **The project-capture surface** (`MirrorPort.captureProjects` +
   `CaptureProjectsAction`). A capture-capable adapter enumerates the
   application-born projects it can see, each carrying its name, its candidate
-  connection targets and its creation clock. The core action reads each source's
-  projects in creation order, adopts every project after that source's stored
-  cursor that the vault does not already declare — writing the home note with
-  its connection envelope through `VaultAdapter` — and advances
-  the cursor only over the projects it handled. A first sight adopts the newest
-  clock and captures nothing; a project that links zero or several targets stops
-  the watermark with a collected error.
+  connection targets and its creation clock. The core action adopts every
+  project the vault does not already declare by name+connection — writing the
+  home note with its connection envelope through `VaultAdapter` — so the first
+  run adopts the whole back-catalogue. A project that links zero or several
+  targets collects an error and is left for the next pass.
 - **The task-capture surface** (`MirrorPort.capture` + `CaptureTasksAction`). For
   each declared connection, the core action reads
   the tracked tasks the adapter can see (those carrying a `type:` label) and
@@ -326,10 +323,8 @@ canonical DTOs and the pure core.
   under the application id `todoist`.
 - **The registry adapter** (`infrastructure/registry/`) persists the core's
   memory in `data.json`: `SyncStateAdapter` (the `syncState` container and the
-  `coreBaselines` store) and
-  `RegistryProjectCursorAdapter` (the per-surface capture watermark), with the
-  pure codecs (`coreStorageRecord`, `syncStateSchema`, `loadDataSafely`) beside
-  them.
+  `coreBaselines` store), with the pure codecs (`coreStorageRecord`,
+  `syncStateSchema`, `loadDataSafely`) beside it.
 - **The vault adapter** (`infrastructure/vault/`) implements `VaultPort`:
   `VaultAdapter`, with the pure note codecs (`connectionsOf`,
   `parseConnectionsBlock`, `renderConnectionsBlock`, the task-note codec) beside
@@ -356,8 +351,8 @@ canonical DTOs and the pure core.
     (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`
     (each mirror handle's entity id), the port bookkeeping
     (`provider`, `project`, `lastPoll`, `lanes`), per-connection identities
-    (`projects.<name>.identities.<connectionSlug>`), the
-    per-project `fullScanPending` marker, and the per-surface `projectCursors`.
+    (`projects.<name>.identities.<connectionSlug>`), and the
+    per-project `fullScanPending` marker.
     Ports are keyed by the note's connection slug, so a project can hold two
     connections of the same tool; a slug rename re-keys the port in lockstep.
     Written only through `SyncStateAdapter`, behind a serialization mutex it
@@ -538,10 +533,10 @@ Date of Last Update: 2026-10-12
   it creates the missing item through the adapter, stamps the real handle over
   the placeholder, and reconciles it in the same pass; an interrupted pass
   adopts the created item instead of duplicating it.
-- **Capture** — adopting a remote-born project or tracked task into the vault. A
-  project capture is guarded by a per-surface creation watermark; a task capture
-  scans the whole application listing for the tracked tasks (those carrying a
-  type label) and skips the mirror items already stamped, so it needs no cursor.
+- **Capture** — adopting a remote-born project or tracked task into the vault.
+  Both enumerate the remote's items and adopt each the vault does not already
+  hold — a project by name+connection, a task by its mirror handle — so the
+  first run adopts the back-catalogue and a second pass is idempotent.
 
 ## 12. Conventions & Boundaries
 

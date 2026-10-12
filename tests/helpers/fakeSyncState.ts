@@ -368,18 +368,6 @@ export class FakeSyncState implements RegistryPort {
     );
   }
 
-  projectCursors = new Map<string, string>();
-  cursorSets: Array<{ portId: string; iso: string }> = [];
-
-  async getProjectCursor(portId: string): Promise<string | null> {
-    return this.projectCursors.get(portId) ?? null;
-  }
-
-  async setProjectCursor(portId: string, iso: string): Promise<void> {
-    this.projectCursors.set(portId, iso);
-    this.cursorSets.push({ portId, iso });
-  }
-
   private readonly baselines = new Map<string, Baseline>();
 
   async readBaseline(

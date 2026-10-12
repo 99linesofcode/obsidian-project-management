@@ -74,21 +74,6 @@ describe('REG-1 — the registry holds exactly the justified entities', () => {
     });
   });
 
-  it('round-trips a per-surface project cursor', async () => {
-    const { storage, snapshot } = fakeStorage();
-    const adapter = new SyncStateAdapter(storage);
-
-    const before = await adapter.getProjectCursor('todoist');
-    await adapter.setProjectCursor('todoist', '2026-10-05T10:00:00Z');
-    const after = await adapter.getProjectCursor('todoist');
-
-    expect(before).toBeNull();
-    expect(after).toBe('2026-10-05T10:00:00Z');
-    expect(container(snapshot())['projectCursors']).toEqual({
-      todoist: '2026-10-05T10:00:00Z',
-    });
-  });
-
   it('returns null for an unknown entity id', async () => {
     const { storage } = fakeStorage();
     const adapter = new SyncStateAdapter(storage);
@@ -420,24 +405,6 @@ describe('SyncStateAdapter write serialisation', () => {
     );
 
     expect(backups()).toBe(1);
-  });
-});
-
-describe('F4 — a quiet tick writes nothing', () => {
-  it('does not persist a project cursor set to its current value', async () => {
-    const { storage, saves } = fakeStorage({
-      [SYNC_STATE_KEY]: { version: 3, projectCursors: { todoist: 'T' } },
-    });
-    const adapter = new SyncStateAdapter(storage);
-    await adapter.getProjectCursor('todoist');
-    const before = saves();
-
-    await adapter.setProjectCursor('todoist', 'T');
-    expect(saves()).toBe(before);
-
-    await adapter.setProjectCursor('todoist', 'T2');
-    expect(saves()).toBe(before + 1);
-    expect(await adapter.getProjectCursor('todoist')).toBe('T2');
   });
 });
 
