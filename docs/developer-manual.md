@@ -138,13 +138,12 @@ namespace per application.**
 - **`SeedVaultArtifactsAction`** — seeds the six vault-owned artifacts (three
   note templates, three Bases files) create-if-missing, on init and on demand
   from the settings tab.
-- **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
-  `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,
-  `RekeyRenamedConnectionsAction`, `DiscoverProjectsAction`,
-  `AttachProjectAction`, `ResolveProjectBoardAction`,
-  `EnsureProjectBoardAction`,
-  `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
-  and `CreateTaskNoteAction`.
+- **The pass's actions.** `MigrateLabelsAction`, `DetectNoteRenamesAction`,
+  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`,
+  `MigrateProjectHomeNoteAction`, `RekeyRenamedConnectionsAction`,
+  `DiscoverProjectsAction`, `AttachProjectAction`, `ResolveProjectBoardAction`,
+  `EnsureProjectBoardAction`, `CompleteTaskCascadeAction`, `SyncChecklistAction`,
+  `MirrorTodoStatusAction` and `CreateTaskNoteAction`.
 
 ### The provider table
 
