@@ -1,3 +1,17 @@
+# [0.25.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.24.0...0.25.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **migration:** rewrite block-form labels without leaving dangling items ([4da6f15](https://github.com/99linesofcode/obsidian-project-management/commit/4da6f15edb268e9bdf4aa4347b36ceff4a260ebe))
+
+
+### Features
+
+* **migration:** the legacy type scalar becomes a type label ([e9ae01d](https://github.com/99linesofcode/obsidian-project-management/commit/e9ae01df7a2688e4ab4701b1fcf17e8e7fe139f1))
+
+
+
 # [0.24.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.23.0...0.24.0) (2026-10-12)
 
 
@@ -38,10 +52,6 @@
 
 
 ## [0.22.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.21.0...0.22.2) (2026-10-10)
-
-
-
-# [0.21.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.15.0...0.21.0) (2026-10-10)
 
 
 
