@@ -1,3 +1,12 @@
+## [0.25.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.25.0...0.25.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **deps:** bump devshell from `81a5ee1` to `d5fa5cc` ([#167](https://github.com/99linesofcode/obsidian-project-management/issues/167)) ([46edcbc](https://github.com/99linesofcode/obsidian-project-management/commit/46edcbc96296ae2a82ad10a6d81bcbb4d0fdcc3f))
+
+
+
 # [0.25.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.24.0...0.25.0) (2026-10-12)
 
 
@@ -48,10 +57,6 @@
 ### Bug Fixes
 
 * **deps:** bump source-map-js from 1.2.1 to 1.2.2 ([#123](https://github.com/99linesofcode/obsidian-project-management/issues/123)) ([9596423](https://github.com/99linesofcode/obsidian-project-management/commit/9596423a51ac59a0fd058a2508279d6d16553614))
-
-
-
-## [0.22.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.21.0...0.22.2) (2026-10-10)
 
 
 
