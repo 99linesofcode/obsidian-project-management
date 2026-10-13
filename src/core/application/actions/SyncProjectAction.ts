@@ -12,6 +12,7 @@ import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
 import type { ReconcileProjectTaskLocksAction } from './ReconcileProjectTaskLocksAction.js';
 import type { RekeyRenamedConnectionsAction } from './RekeyRenamedConnectionsAction.js';
+import type { RenameProjectAction } from './RenameProjectAction.js';
 import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.js';
 
@@ -23,6 +24,7 @@ export interface SyncProjectDependencies {
   taskCapture: CaptureTasksAction;
   taskFields: MirrorSyncAction;
   migrateHomeNote: MigrateProjectHomeNoteAction;
+  renameProject: RenameProjectAction;
   detectNoteRenames: DetectNoteRenamesAction;
   completeTaskCascade: CompleteTaskCascadeAction;
   syncChecklist: SyncChecklistAction;
@@ -50,6 +52,7 @@ export class SyncProjectAction {
     }
 
     await this.migrate(project, note);
+    await this.renameProject(project, note);
     await this.rekey(project, note.connections);
     await this.ensureBoards(project, note);
 
@@ -82,6 +85,19 @@ export class SyncProjectAction {
   ): Promise<void> {
     await this.step('migrate home note', () =>
       this.deps.migrateHomeNote.execute({
+        projectName: project,
+        notePath: note.path,
+        locationArchived: note.archivedAt !== null,
+      }),
+    );
+  }
+
+  private async renameProject(
+    project: string,
+    note: ProjectNoteDataTransferObject,
+  ): Promise<void> {
+    await this.step('rename project', () =>
+      this.deps.renameProject.execute({
         projectName: project,
         notePath: note.path,
         locationArchived: note.archivedAt !== null,

@@ -1,7 +1,7 @@
 import { Baseline } from '../../core/domain/Baseline.js';
 import { isRecord } from '../../core/domain/isRecord.js';
 import type { MergedField } from '../../core/domain/canonicalField.js';
-import { projectFromNotePath } from '../../core/domain/paths.js';
+import { projectFromNotePath, projectPathWithName } from '../../core/domain/paths.js';
 import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
 import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
@@ -471,6 +471,31 @@ export class SyncStateAdapter implements RegistryPort {
     });
   }
 
+  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      this.assertWritable();
+      if (fromProject === toProject) {
+        return;
+      }
+      const projects = readProjectsMap(container);
+      const fromNode = projectNode(projects, fromProject);
+      if (fromNode === null) {
+        return;
+      }
+      const toNode = ensureProjectNode(ensureProjects(container), toProject);
+      mergeProjectNode(toNode, fromNode);
+      rekeyEntityPaths(toNode, toProject);
+      delete projects[fromProject];
+      this.indexes = buildIndexes(container);
+      await this.maybeBackup();
+      const data = await this.storage.load();
+      moveProjectBaseline(data, fromProject, toProject);
+      data[SYNC_STATE_KEY] = this.container;
+      await this.storage.save(data);
+    });
+  }
+
   async recordTombstone(record: TombstoneRecord): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
@@ -928,6 +953,47 @@ export class SyncStateAdapter implements RegistryPort {
         : [],
     });
   }
+}
+
+function mergeProjectNode(
+  toNode: Record<string, unknown>,
+  fromNode: Record<string, unknown>,
+): void {
+  for (const [key, value] of Object.entries(fromNode)) {
+    if (isRecord(value)) {
+      const target = isRecord(toNode[key])
+        ? (toNode[key] as Record<string, unknown>)
+        : {};
+      Object.assign(target, value);
+      toNode[key] = target;
+    } else {
+      toNode[key] = value;
+    }
+  }
+}
+
+function rekeyEntityPaths(
+  node: Record<string, unknown>,
+  toProject: string,
+): void {
+  for (const raw of Object.values(entityMap(node))) {
+    if (isRecord(raw) && typeof raw.notePath === 'string') {
+      raw.notePath = projectPathWithName(raw.notePath, toProject);
+    }
+  }
+}
+
+function moveProjectBaseline(
+  data: Record<string, unknown>,
+  fromProject: string,
+  toProject: string,
+): void {
+  const baselines = data[CORE_BASELINES_KEY];
+  if (!isRecord(baselines) || !isRecord(baselines[fromProject])) {
+    return;
+  }
+  baselines[toProject] = baselines[fromProject];
+  delete baselines[fromProject];
 }
 
 // A registry written before the archive field was named `archived` stored its

@@ -22,6 +22,7 @@ import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
+import { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 
 class FakeVault extends FakeVaultBase {
@@ -221,6 +222,7 @@ function harness(options: HarnessOptions = {}) {
     taskCapture,
     taskFields,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
+    renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames: renames,
     completeTaskCascade: cascade,
     syncChecklist: checklist,
@@ -517,6 +519,7 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
         invoke: async () => {},
       } as unknown as MirrorSyncAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
+    renameProject: new RenameProjectAction(vault, syncState),
       detectNoteRenames: {
         execute: async () => {},
       } as unknown as DetectNoteRenamesAction,

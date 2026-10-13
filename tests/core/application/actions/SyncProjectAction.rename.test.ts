@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SyncProjectAction } from '../../../../src/core/application/actions/SyncProjectAction.js';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
+import { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
 import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
@@ -148,6 +149,7 @@ function harness(options: {
     taskCapture,
     taskFields,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
+    renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames,
     completeTaskCascade: cascade,
     syncChecklist: checklist,

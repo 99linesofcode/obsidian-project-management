@@ -1,5 +1,5 @@
 import type { ProjectIdentityDataTransferObject } from '../../src/core/port/data/ProjectIdentityDataTransferObject.js';
-import { projectFromNotePath } from '../../src/core/domain/paths.js';
+import { projectFromNotePath, projectPathWithName } from '../../src/core/domain/paths.js';
 import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';
@@ -183,6 +183,47 @@ export class FakeSyncState implements RegistryPort {
     return [...this.records.values()].filter(
       (record) => projectFromNotePath(record.notePath) === projectName,
     );
+  }
+
+  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
+    if (fromProject === toProject) {
+      return;
+    }
+    const fromPrefix = `${fromProject}\u0000`;
+    const toPrefix = `${toProject}\u0000`;
+    for (const [key, state] of [...this.portStates]) {
+      if (key.startsWith(fromPrefix)) {
+        this.portStates.delete(key);
+        this.portStates.set(`${toPrefix}${key.slice(fromPrefix.length)}`, state);
+      }
+    }
+    for (const [key, identity] of [...this.identitiesBySlug]) {
+      if (key.startsWith(fromPrefix)) {
+        this.identitiesBySlug.delete(key);
+        this.identitiesBySlug.set(
+          `${toPrefix}${key.slice(fromPrefix.length)}`,
+          identity,
+        );
+      }
+    }
+    const identity = this.identities.get(fromProject);
+    if (identity !== undefined) {
+      this.identities.delete(fromProject);
+      this.identities.set(toProject, identity);
+    }
+    for (const [id, record] of [...this.records]) {
+      if (projectFromNotePath(record.notePath) === fromProject) {
+        this.records.set(id, {
+          ...record,
+          notePath: projectPathWithName(record.notePath, toProject),
+        });
+      }
+    }
+    const todoist = this.todoistProjects.get(fromProject);
+    if (todoist !== undefined) {
+      this.todoistProjects.delete(fromProject);
+      this.todoistProjects.set(toProject, todoist);
+    }
   }
 
   async findMirrorItem(
