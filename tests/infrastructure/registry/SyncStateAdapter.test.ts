@@ -867,6 +867,19 @@ describe('REG-1, PLC-2 — a project rename re-keys the registry node', () => {
     expect(await adapter.hasProject('Missing')).toBe(false);
     expect(await adapter.listProjects()).toEqual([]);
   });
+
+  it('lists a filed project by name', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Old Name/taken/42-fix-the-bug.md',
+      }),
+    );
+
+    expect(await adapter.listProjects()).toContain('Old Name');
+  });
 });
 
 const conformanceHarness: SyncStateConformanceHarness = {
