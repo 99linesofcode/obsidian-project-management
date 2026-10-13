@@ -57,6 +57,18 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     return toCanonicalProject(requireRecord(response, 'read project'));
   }
 
+  async projectTime(target: string): Promise<string | null> {
+    const connection = TaskManagerTarget.parse(target);
+    const response = await this.transport.get(
+      `/projects/${connection.projectId}`,
+    );
+    if (response.status === 404) {
+      return null;
+    }
+    const project = requireRecord(response, 'read project time');
+    return nullableString(project.updated_at);
+  }
+
   async createProject(target: string, name: string): Promise<CanonicalProject> {
     TaskManagerTarget.parse(target);
     return this.createProjectByName(name);
