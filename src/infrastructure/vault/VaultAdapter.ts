@@ -244,7 +244,7 @@ export class VaultAdapter implements VaultPort {
     return new OriginObservation({
       current: path.startsWith('Archief/') ? 'true' : 'false',
       currentCompleted: false,
-      fieldTime: await this.modifiedTime(path),
+      fieldTime: await this.changeTime(path),
       trustworthy: true,
     });
   }
@@ -258,12 +258,12 @@ export class VaultAdapter implements VaultPort {
     await this.moveFolder(`${from}/${project}`, `${to}/${project}`);
   }
 
-  private async modifiedTime(path: string): Promise<string | null> {
+  private async changeTime(path: string): Promise<string | null> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
       return null;
     }
-    return new Date(file.stat.mtime).toISOString();
+    return new Date(file.stat.ctime).toISOString();
   }
 
   private async findHomeNotePath(project: string): Promise<string | null> {

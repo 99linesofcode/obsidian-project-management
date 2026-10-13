@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { TFile } = vi.hoisted(() => {
   class TFile {
-    stat: { mtime: number };
+    stat: { mtime: number; ctime: number };
     constructor(
       public path: string,
       public extension: string,
-      stat?: { mtime: number },
+      stat?: { mtime: number; ctime: number },
     ) {
-      this.stat = stat ?? { mtime: 0 };
+      this.stat = stat ?? { mtime: 0, ctime: 0 };
     }
   }
   return { TFile };
@@ -70,7 +70,7 @@ const TODOIST_MISSING_HOME = home([['b', 'todoist', 'proj-missing']]);
 class FakeAppVault {
   private readonly notes = new Map<
     string,
-    { content: string; mtime: number }
+    { content: string; mtime: number; ctime: number }
   >();
 
   readonly metadataCache = {
@@ -82,7 +82,7 @@ class FakeAppVault {
   };
 
   seed(path: string, content: string, mtime: number): void {
-    this.notes.set(path, { content, mtime });
+    this.notes.set(path, { content, mtime, ctime: mtime });
   }
 
   has(path: string): boolean {
@@ -94,12 +94,13 @@ class FakeAppVault {
     if (note === undefined) {
       return null;
     }
-    return new TFile(path, 'md', { mtime: note.mtime });
+    return new TFile(path, 'md', { mtime: note.mtime, ctime: note.ctime });
   }
 
   getMarkdownFiles(): TFileInstance[] {
     return [...this.notes.entries()].map(
-      ([path, note]) => new TFile(path, 'md', { mtime: note.mtime }),
+      ([path, note]) =>
+        new TFile(path, 'md', { mtime: note.mtime, ctime: note.ctime }),
     );
   }
 
@@ -118,11 +119,13 @@ class FakeAppVault {
   }
 
   async create(path: string, content: string): Promise<void> {
-    this.notes.set(path, { content, mtime: Date.now() });
+    const now = Date.now();
+    this.notes.set(path, { content, mtime: now, ctime: now });
   }
 
   async modify(file: TFileInstance, content: string): Promise<void> {
-    this.notes.set(file.path, { content, mtime: Date.now() });
+    const now = Date.now();
+    this.notes.set(file.path, { content, mtime: now, ctime: now });
   }
 
   rename(from: string, to: string): void {

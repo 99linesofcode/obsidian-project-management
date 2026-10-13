@@ -102,17 +102,6 @@ function setup(): { vault: FakeAppVault; adapter: ReturnType<typeof vaultAdapter
   };
 }
 
-describe('characterization — the vault archive clock is the home note mtime (pre-S22)', () => {
-  it('reports the home note mtime as the archive fact time', async () => {
-    const { adapter } = setup();
-
-    const observed = await adapter.observeProject(PROJECT);
-
-    expect(observed.current).toBe('false');
-    expect(observed.fieldTime).toBe(new Date(MTIME).toISOString());
-  });
-});
-
 describe('NWM-6 / NWM-28 — the vault archive clock is the home note ctime', () => {
   it('reports the home note change time, not its modified time', async () => {
     // The move that archives the project rewrites ctime and leaves mtime
