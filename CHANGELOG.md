@@ -1,3 +1,15 @@
+## [0.28.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.0...0.28.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **adapters:** drop the task manager's non-decisive archive-time surface ([68f19a3](https://github.com/99linesofcode/obsidian-project-management/commit/68f19a3494fc6398c4fb305e0d836113b63cd00b))
+* **lifecycle:** let a code host report the archive fact's decisive time ([adec0e6](https://github.com/99linesofcode/obsidian-project-management/commit/adec0e64c1474f608dbf06dd40c9dd4de2798004))
+* **lifecycle:** onboard a created mirror without observing it ([da14920](https://github.com/99linesofcode/obsidian-project-management/commit/da14920ec3b79e13a87860236159435b67186200))
+* **lifecycle:** re-drive an out-of-sync mirror whatever the merge label ([34e6b9a](https://github.com/99linesofcode/obsidian-project-management/commit/34e6b9a8535ee9261ea470938fe03a2ff4b83b25))
+
+
+
 # [0.28.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.27.0...0.28.0) (2026-10-13)
 
 
@@ -38,15 +50,6 @@
 ### Features
 
 * **capture:** gate project capture and type captured tasks ([e7683e2](https://github.com/99linesofcode/obsidian-project-management/commit/e7683e2c57e3afe4fcdc75a13de4c2b617e5ff4c))
-
-
-
-## [0.25.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.25.0...0.25.1) (2026-10-12)
-
-
-### Bug Fixes
-
-* **deps:** bump devshell from `81a5ee1` to `d5fa5cc` ([#167](https://github.com/99linesofcode/obsidian-project-management/issues/167)) ([46edcbc](https://github.com/99linesofcode/obsidian-project-management/commit/46edcbc96296ae2a82ad10a6d81bcbb4d0fdcc3f))
 
 
 
