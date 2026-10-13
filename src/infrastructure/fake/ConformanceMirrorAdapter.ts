@@ -190,6 +190,10 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     return [];
   }
 
+  materializesTodo(): boolean {
+    return true;
+  }
+
   fetchComplete(): boolean {
     return true;
   }
