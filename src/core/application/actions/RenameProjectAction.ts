@@ -7,6 +7,7 @@ import {
   hasTopLevelFrontmatterField,
   rewriteFrontmatterFields,
 } from '../../domain/note.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
@@ -14,14 +15,16 @@ export interface RenameProjectInput {
   projectName: string;
   notePath: string;
   locationArchived: boolean;
+  connections: readonly ConnectionDataTransferObject[];
 }
 
-// Reconciles a project note's declared name with the folder it sits in: a note
-// with no `project` property adopts the folder segment once; a folder that
-// disagrees with the property is renamed to match — the home note and the rest
-// of the folder within the project's current root — and the registry's project
-// node is re-keyed to the new name. A folder renamed directly, where the
-// registry already files the declared name, is renamed back and reported.
+// Reconciles a project note's declared name with the name the registry recorded
+// (the recorded key) and with the folder it sits in. A note with no `project`
+// property adopts the folder segment once. When the property differs from the
+// recorded key the project is renamed — the home note and the rest of the
+// folder within the project's current root — and the registry's project node is
+// re-keyed to the new name. When the property equals the recorded key but the
+// folder differs, the folder is renamed back and reported.
 export class RenameProjectAction {
   constructor(
     private readonly vault: VaultPort,
@@ -36,13 +39,60 @@ export class RenameProjectAction {
     if (await this.adopt(input, folderName)) {
       return [];
     }
-    if (folderName === input.projectName) {
+
+    const recordedName = await this.recordedName(input, folderName);
+    if (recordedName === input.projectName) {
+      if (folderName !== input.projectName) {
+        await this.renameNotes(input, folderName);
+        return [folderDriftWarning(input, folderName)];
+      }
       return [];
     }
-    const folderDrift = await this.syncState.hasProject(input.projectName);
-    await this.renameNotes(input, folderName);
-    await this.syncState.rekeyProject(folderName, input.projectName);
-    return folderDrift ? [folderDriftWarning(input, folderName)] : [];
+
+    if (folderName !== input.projectName) {
+      await this.renameNotes(input, folderName);
+    }
+    if (recordedName !== null) {
+      await this.syncState.rekeyProject(recordedName, input.projectName);
+    }
+    return [];
+  }
+
+  private async recordedName(
+    input: RenameProjectInput,
+    folderName: string,
+  ): Promise<string | null> {
+    const names = await this.syncState.listProjects();
+    if (names.includes(input.projectName)) {
+      return input.projectName;
+    }
+    if (names.includes(folderName)) {
+      return folderName;
+    }
+    const matches: string[] = [];
+    for (const name of names) {
+      if (await this.holdsConnection(name, input.connections)) {
+        matches.push(name);
+      }
+    }
+    return matches.length === 1 ? matches[0]! : null;
+  }
+
+  private async holdsConnection(
+    name: string,
+    connections: readonly ConnectionDataTransferObject[],
+  ): Promise<boolean> {
+    for (const connection of connections) {
+      const state = await this.syncState.getPortState(name, connection.slug);
+      if (
+        state !== null &&
+        state.provider === connection.application &&
+        (connection.target === '' || state.project === connection.target)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async adopt(

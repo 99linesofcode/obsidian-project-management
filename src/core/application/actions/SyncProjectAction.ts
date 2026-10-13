@@ -101,6 +101,7 @@ export class SyncProjectAction {
         projectName: project,
         notePath: note.path,
         locationArchived: note.archivedAt !== null,
+        connections: note.connections,
       });
       for (const warning of warnings) {
         console.warn(warning);

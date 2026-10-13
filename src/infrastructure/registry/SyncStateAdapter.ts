@@ -506,6 +506,13 @@ export class SyncStateAdapter implements RegistryPort {
     });
   }
 
+  async listProjects(): Promise<string[]> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      return Object.keys(readProjectsMap(container)).sort();
+    });
+  }
+
   async recordTombstone(record: TombstoneRecord): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();

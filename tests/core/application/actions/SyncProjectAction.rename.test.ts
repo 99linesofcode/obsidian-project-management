@@ -292,3 +292,35 @@ describe('PLC-4 — a note with no `project` adopts the folder segment, once', (
     expect(h.vault.writes.length).toBe(writesAfterFirst);
   });
 });
+
+// F3 — the re-key is gated on the recorded key, not the folder. A property
+// change whose folder was already moved (the re-key half-failed on an earlier
+// pass) still re-keys the registry: the property differs from the name the
+// registry recorded even though the folder already matches.
+describe('F3 — the re-key follows the recorded key, not the folder', () => {
+  it('re-keys a project whose folder already matches but whose record is stale', async () => {
+    const h = harness({
+      projectNotes: [
+        note({
+          path: 'Projecten/New Name/_New Name.md',
+          projectName: 'New Name',
+        }),
+      ],
+    });
+    await h.syncState.setPortState(
+      'Old Name',
+      'github',
+      portState({
+        provider: 'github',
+        project: 'https://github.com/acme/widgets',
+      }),
+    );
+    await h.syncState.setIdentity('Old Name', 'github', identity);
+
+    await h.action.execute('New Name');
+
+    expect(await h.syncState.getPortState('New Name', 'github')).not.toBeNull();
+    expect(await h.syncState.getPortState('Old Name', 'github')).toBeNull();
+    expect(await h.syncState.getIdentity('New Name', 'github')).not.toBeNull();
+  });
+});

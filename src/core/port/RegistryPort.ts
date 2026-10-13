@@ -27,6 +27,10 @@ export interface RegistryPort {
   // asks whether the registry already files the project under the declared
   // name.
   hasProject(projectName: string): Promise<boolean>;
+  // The core's need: the recorded key — the name the plugin last knew — may be
+  // neither the declared property nor the current folder after a half-finished
+  // rename, so the rename finds it by the project's connections.
+  listProjects(): Promise<string[]>;
 
   // The core's need: track a deleted note as a change — the entity's absence
   // with its delete time and the mirror handle it still owes a delete to. A
