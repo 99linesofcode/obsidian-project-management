@@ -301,14 +301,12 @@ async function fanOut(
   const advanced: string[] = [];
   const failed: string[] = [];
 
-  if (result.outcome !== 'value') {
-    return { written, advanced, failed };
-  }
-
   const archived = result.value === 'true';
   for (const { mirror, observation } of observed) {
     if (observation.current === result.value) {
-      advanced.push(mirror.side);
+      if (result.outcome === 'value') {
+        advanced.push(mirror.side);
+      }
       continue;
     }
     try {
