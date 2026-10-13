@@ -1,7 +1,7 @@
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
-import type { ProjectSetupFactoryPort } from '../../port/ProjectSetupFactoryPort.js';
+import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
@@ -17,7 +17,7 @@ import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.j
 
 export interface SyncProjectDependencies {
   vault: VaultPort;
-  setupFactory: ProjectSetupFactoryPort;
+  mirrorAdapters: MirrorAdapterFactoryPort;
   lifecycle: ProjectLifecycleSyncAction;
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
@@ -117,7 +117,12 @@ export class SyncProjectAction {
       return;
     }
     for (const connection of note.connections) {
-      const setup = this.deps.setupFactory.setupFor(connection.application);
+      const setup = this.deps.mirrorAdapters.create(
+        connection.application,
+        connection.target,
+        connection.slug,
+        project,
+      );
       if (setup === null) {
         continue;
       }
@@ -125,6 +130,7 @@ export class SyncProjectAction {
         ensureBoard.execute({
           projectName: project,
           connectionSlug: connection.slug,
+          target: connection.target,
           setup,
         }),
       );

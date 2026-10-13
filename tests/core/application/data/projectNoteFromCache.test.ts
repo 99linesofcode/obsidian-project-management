@@ -106,7 +106,6 @@ describe('DISC-1 — the project note is read from the cache', () => {
         connections: {
           'Bad Slug': { tool: 'github', project: 'x' },
           work: { tool: 'linear', project: 'x' },
-          empty: { tool: 'todoist', project: '' },
           good: github,
         },
       },
@@ -120,7 +119,7 @@ describe('DISC-1 — the project note is read from the cache', () => {
         target: 'https://github.com/acme/widgets',
       },
     ]);
-    expect(note?.connectionErrors).toHaveLength(3);
+    expect(note?.connectionErrors).toHaveLength(2);
   });
 
   it('accepts an application in the registered set beyond the built-in providers', () => {
@@ -179,5 +178,20 @@ describe('DISC-1 — the project note is read from the cache', () => {
       },
     ]);
     expect(note?.connectionErrors).toHaveLength(1);
+  });
+});
+
+describe('ORG-2 — a connection target may be empty, resolved by name', () => {
+  it('accepts a connection whose target is empty', () => {
+    const note = projectNoteFromCache(
+      'Projecten/Acme Widgets/_home.md',
+      { connections: { todoist: { tool: 'todoist', project: '' } } },
+      connectionValidator,
+    );
+
+    expect(note?.connections).toEqual([
+      { slug: 'todoist', application: 'todoist', target: '' },
+    ]);
+    expect(note?.connectionErrors).toHaveLength(0);
   });
 });

@@ -1,9 +1,7 @@
 import type { VaultPort } from '../../src/core/port/VaultPort.js';
-import type { AdoptedProject } from '../../src/core/port/data/AdoptedProject.js';
 import type { CanonicalField } from '../../src/core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../src/core/port/data/CanonicalFieldWrite.js';
 import type { CanonicalTask } from '../../src/core/port/data/CanonicalTask.js';
-import type { CapturedProject } from '../../src/core/port/data/CapturedProject.js';
 import type { ConnectionDataTransferObject } from '../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { OriginObservation } from '../../src/core/domain/OriginObservation.js';
 import type { ProjectNoteDataTransferObject } from '../../src/core/port/data/ProjectNoteDataTransferObject.js';
@@ -70,16 +68,6 @@ export class FakeVault implements VaultPort {
     _archived: boolean,
   ): Promise<void> {
     notStubbed('applyProjectArchived');
-  }
-  async listAdoptedProjects(): Promise<readonly AdoptedProject[]> {
-    return notStubbed('listAdoptedProjects');
-  }
-  async adoptProject(
-    _project: CapturedProject,
-    _application: string,
-    _slug: string,
-  ): Promise<void> {
-    notStubbed('adoptProject');
   }
 }
 

@@ -49,8 +49,8 @@ export class ConnectionValidationService {
       return new Error(`connection "${slug}" names an unknown tool`);
     }
     const target = entry.project;
-    if (typeof target !== 'string' || target === '') {
-      return new Error(`connection "${slug}" must carry a non-empty project`);
+    if (typeof target !== 'string') {
+      return new Error(`connection "${slug}" must carry a project target`);
     }
     return new ConnectionDataTransferObject({ slug, application, target });
   }

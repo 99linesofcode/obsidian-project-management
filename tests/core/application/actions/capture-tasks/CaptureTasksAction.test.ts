@@ -3,6 +3,7 @@ import { CaptureTasksAction } from '../../../../../src/core/application/actions/
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../../src/core/port/data/ConnectionDataTransferObject.js';
+import { ProjectIdentityDataTransferObject } from '../../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import type { MirrorPort } from '../../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
@@ -346,5 +347,44 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
     expect(issueNote.content).not.toMatch(/^type:/m);
     expect(remoteNote.content).toContain('labels: [type:slice]');
     expect(remoteNote.content).not.toMatch(/^type:/m);
+  });
+});
+
+describe('ORG-2 — the resolved addressing is effective downstream', () => {
+  it('captures from the recorded effective target, not the empty declared target', async () => {
+    const vault = new FakeVault([connection('acme', '', 'acme')]);
+    const syncState = new FakeSyncState();
+    syncState.identities.set(
+      'Acme',
+      new ProjectIdentityDataTransferObject({
+        target: 'P-1',
+        targetHandle: '',
+        projectHandle: 'P-1',
+        statusFieldHandle: '',
+        statusOptions: [],
+      }),
+    );
+    const targets: string[] = [];
+    const factory: MirrorAdapterFactoryPort = {
+      create: () =>
+        registered({
+          capture: async (target: string) => {
+            targets.push(target);
+            return [];
+          },
+        }),
+    };
+    const action = new CaptureTasksAction(
+      vault,
+      factory,
+      syncState,
+      new CreateTaskNoteAction(vault, syncState, ''),
+      () => false,
+    );
+
+    await action.invoke('Acme', SYNCED_AT);
+
+    expect(targets).toEqual(['P-1']);
+    expect(targets).not.toContain('');
   });
 });

@@ -5,6 +5,7 @@ import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
+import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
@@ -124,9 +125,17 @@ export class ProjectLifecycleSyncAction {
   ): Promise<ResolvedMirror[]> {
     const mirrors: ResolvedMirror[] = [];
     for (const connection of connections) {
+      const target = await effectiveConnectionTarget(
+        this.registry,
+        project,
+        connection,
+      );
+      if (target === null) {
+        continue;
+      }
       const adapter = this.mirrorAdapters.create(
         connection.application,
-        connection.target,
+        target,
         connection.slug,
         project,
       );
@@ -136,7 +145,7 @@ export class ProjectLifecycleSyncAction {
       try {
         mirrors.push({
           side: mirrorSideKey(connection.slug),
-          handle: await this.resolveProject(connection, adapter, project),
+          handle: await this.resolveProject(connection, target, adapter, project),
           adapter,
         });
       } catch (error) {
@@ -151,6 +160,7 @@ export class ProjectLifecycleSyncAction {
 
   private async resolveProject(
     connection: ConnectionDataTransferObject,
+    target: string,
     adapter: MirrorPort,
     project: string,
   ): Promise<string> {
@@ -163,14 +173,14 @@ export class ProjectLifecycleSyncAction {
       return recorded;
     }
 
-    const existing = await adapter.readProject(connection.target);
+    const existing = await adapter.readProject(target);
     if (existing !== null) {
-      await this.renameIfDrifted(adapter, connection.target, project);
-      await this.record(connection, project, connection.target);
-      return connection.target;
+      await this.renameIfDrifted(adapter, target, project);
+      await this.record(connection, project, target);
+      return target;
     }
 
-    const created = await adapter.createProject(connection.target, project);
+    const created = await adapter.createProject(target, project);
     await this.record(connection, project, created.handle);
     return created.handle;
   }

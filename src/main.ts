@@ -13,20 +13,12 @@ import { ProjectManagementSettingTab } from './ui/settings/ProjectManagementSett
 import { SeedVaultArtifactsAction } from './core/application/actions/SeedVaultArtifactsAction.js';
 import { SyncScheduler } from './ui/sync/SyncScheduler.js';
 import { SyncQueue } from './ui/sync/SyncQueue.js';
-import { AttachProjectAction } from './core/application/actions/AttachProjectAction.js';
-import type { ProjectSetupFactoryPort } from './core/port/ProjectSetupFactoryPort.js';
-import type { ProjectSetupSurface } from './core/port/MirrorPort.js';
 import type { RegistryPort } from './core/port/RegistryPort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
-import type { CaptureProjectsResult } from './core/application/actions/CaptureProjectsAction.js';
-import { CaptureProjectsAction } from './core/application/actions/CaptureProjectsAction.js';
 import { CaptureTasksAction } from './core/application/actions/capture-tasks/CaptureTasksAction.js';
-import type { CaptureSource } from './core/port/MirrorAdapterFactoryPort.js';
 import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
-import { DiscoverProjectsAction } from './core/application/actions/DiscoverProjectsAction.js';
 import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
-import { ResolveProjectBoardAction } from './core/application/actions/ResolveProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
 import { MirrorTodoStatusAction } from './core/application/actions/MirrorTodoStatusAction.js';
 import { RekeyRenamedConnectionsAction } from './core/application/actions/RekeyRenamedConnectionsAction.js';
@@ -85,7 +77,6 @@ interface CoreComposition {
   lifecycle: ProjectLifecycleSyncAction;
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
-  projectCapture: () => Promise<CaptureProjectsResult>;
 }
 
 function composeCoreActions(
@@ -96,7 +87,6 @@ function composeCoreActions(
   mirrorAdapters: MirrorAdapterFactoryPort,
 ): CoreComposition {
   const isCodeHost = (application: string): boolean => application === 'github';
-  const capture = new CaptureProjectsAction(mirrorAdapters, vault, isCodeHost);
 
   return {
     taskFields: new MirrorSyncAction(vault, syncState, mirrorAdapters),
@@ -114,7 +104,6 @@ function composeCoreActions(
       createTaskNote,
       isCodeHost,
     ),
-    projectCapture: () => capture.invoke(),
   };
 }
 
@@ -123,8 +112,6 @@ interface ProviderEntry {
     target: string,
     boardIdentity: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) => MirrorPort;
-  readonly capture: () => MirrorPort;
-  readonly setup: () => ProjectSetupSurface | null;
   readonly token: TokenSettingRow;
 }
 
@@ -134,7 +121,6 @@ function mirrorAdapterFactory(
   syncState: RegistryPort,
   providers: ProviderTable,
 ): MirrorAdapterFactoryPort {
-  const captureSources = buildCaptureSources(providers);
   return {
     create: (application, target, connectionSlug, projectName) => {
       const provider = providerFor(providers, application);
@@ -145,28 +131,7 @@ function mirrorAdapterFactory(
         syncState.getIdentity(projectName, connectionSlug),
       );
     },
-    captureSources: () => captureSources,
   };
-}
-
-function buildCaptureSources(
-  providers: ProviderTable,
-): readonly CaptureSource[] {
-  const sources: CaptureSource[] = [];
-  for (const [application, provider] of Object.entries(providers)) {
-    const adapter = provider.capture();
-    if (!hasProjectCapture(adapter)) {
-      continue;
-    }
-    sources.push({ application, capture: adapter });
-  }
-  return sources;
-}
-
-function hasProjectCapture(
-  adapter: MirrorPort,
-): adapter is MirrorPort & Required<Pick<MirrorPort, 'captureProjects'>> {
-  return adapter.captureProjects !== undefined;
 }
 
 function providerFor(
@@ -182,8 +147,6 @@ function composePlugin(
   secrets: SecretStore,
 ): {
   scheduler: SyncScheduler;
-  discoverProjects: DiscoverProjectsAction;
-  projectCapture: () => Promise<CaptureProjectsResult>;
   seedArtifacts: SeedVaultArtifactsAction;
   tokenSettings: readonly TokenSettingRow[];
 } {
@@ -207,7 +170,6 @@ function composePlugin(
     taskManagerToken.key,
     createTodoistTransport,
   );
-  const codeHostSetup = new CodeHostMirrorAdapter(codeHostTransport);
   const providers: ProviderTable = {
     github: {
       mirror: (target, boardIdentity) =>
@@ -217,15 +179,11 @@ function composePlugin(
           boardIdentity,
           plugin.settings.statusOptions,
         ),
-      capture: () => new CodeHostMirrorAdapter(codeHostTransport),
-      setup: () => codeHostSetup,
       token: codeHostToken,
     },
     todoist: {
       mirror: (target) =>
         new TaskManagerMirrorAdapter(taskManagerTransport, target),
-      capture: () => new TaskManagerMirrorAdapter(taskManagerTransport),
-      setup: () => null,
       token: taskManagerToken,
     },
   };
@@ -239,10 +197,6 @@ function composePlugin(
   );
   const seedArtifacts = new SeedVaultArtifactsAction(vault, plugin.settings);
 
-  const setupFactory: ProjectSetupFactoryPort = {
-    setupFor: (application) =>
-      providerFor(providers, application)?.setup() ?? null,
-  };
   const mirrorAdapters = mirrorAdapterFactory(syncState, providers);
   const createTaskNote: CreateTaskNoteAction = new CreateTaskNoteAction(
     vault,
@@ -257,12 +211,6 @@ function composePlugin(
     vault,
     plugin.settings.doneOptionName,
   );
-  const resolveProjectBoard = new ResolveProjectBoardAction();
-  const discoverProjects = new DiscoverProjectsAction(
-    vault,
-    setupFactory,
-    new AttachProjectAction(resolveProjectBoard),
-  );
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -273,7 +221,6 @@ function composePlugin(
   const ensureProjectBoard = new EnsureProjectBoardAction(
     syncState,
     plugin.settings.statusOptions,
-    resolveProjectBoard,
   );
 
   const detectNoteRenames = new DetectNoteRenamesAction(vault, syncState);
@@ -292,7 +239,7 @@ function composePlugin(
   );
   const syncProject = new SyncProjectAction({
     vault,
-    setupFactory,
+    mirrorAdapters,
     lifecycle: core.lifecycle,
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,
@@ -316,19 +263,10 @@ function composePlugin(
     queue,
     plugin.settings.pollIntervalMinutes * 60 * 1000,
     plugin.settings.debounceSeconds * 1000,
-    () =>
-      core.projectCapture().then((result) => {
-        if (result.errors.length > 0) {
-          console.error('Project capture collected errors', result.errors);
-        }
-        return result.captured;
-      }),
   );
 
   return {
     scheduler,
-    discoverProjects,
-    projectCapture: core.projectCapture,
     seedArtifacts,
     tokenSettings,
   };
@@ -337,7 +275,6 @@ function composePlugin(
 export default class ProjectManagementPlugin extends Plugin {
   declare settings: ProjectManagementSettings;
   secrets!: SecretStore;
-  projectNames: string[] = [];
   private syncState!: SyncStateAdapter;
   seedArtifacts!: SeedVaultArtifactsAction;
   tokenSettings!: readonly TokenSettingRow[];
@@ -364,56 +301,17 @@ export default class ProjectManagementPlugin extends Plugin {
     });
     this.syncState = syncState;
 
-    const {
-      scheduler,
-      discoverProjects,
-      projectCapture,
-      seedArtifacts,
-      tokenSettings,
-    } = composePlugin(this, syncState, this.secrets);
+    const { scheduler, seedArtifacts, tokenSettings } = composePlugin(
+      this,
+      syncState,
+      this.secrets,
+    );
     this.seedArtifacts = seedArtifacts;
     this.tokenSettings = tokenSettings;
     await seedArtifacts.execute();
     this.addChild(scheduler);
 
-    this.app.workspace.onLayoutReady(() => {
-      void this.discoverAndSync(discoverProjects, syncState, projectCapture);
-    });
-
     this.addSettingTab(new ProjectManagementSettingTab(this.app, this));
-  }
-
-  private async discoverAndSync(
-    discoverProjects: DiscoverProjectsAction,
-    syncState: RegistryPort,
-    projectCapture: () => Promise<CaptureProjectsResult>,
-  ): Promise<void> {
-    try {
-      const { projects, errors } = await discoverProjects.execute();
-      for (const project of projects) {
-        await syncState.setIdentity(
-          project.projectName,
-          project.connectionSlug,
-          project.identity,
-        );
-      }
-      this.projectNames = projects.map((project) => project.projectName);
-      if (errors.length > 0) {
-        new Notice(
-          `Project discovery: ${errors.length} project(s) could not be attached`,
-        );
-      }
-      const capture = await projectCapture();
-      if (capture.errors.length > 0) {
-        new Notice(
-          `Project capture: ${capture.errors.length} board(s) could not be captured`,
-        );
-      }
-    } catch (error) {
-      new Notice(
-        `Project discovery failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   async saveSettings(): Promise<void> {

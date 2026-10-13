@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
+import { ProjectIdentityDataTransferObject } from '../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
@@ -305,5 +306,44 @@ describe('TDO-5 — a type:todo note materialises as a tracked work item', () =>
     expect(second.every((record) => record.written.length === 0)).toBe(true);
     expect(second.every((record) => record.advanced.length === 0)).toBe(true);
     expect(mirror.currentTask(ENTITY)?.labels).toEqual(['type:todo']);
+  });
+});
+
+class RecordingMirrorAdapter extends ConformanceMirrorAdapter {
+  readonly addressed: string[] = [];
+
+  override async createTask(
+    target: string,
+    task: CanonicalTask,
+  ): Promise<CanonicalTask> {
+    this.addressed.push(target);
+    return super.createTask(target, task);
+  }
+}
+
+describe('ORG-2 — the resolved addressing is effective downstream', () => {
+  it('addresses the mirror by the recorded effective target, not the empty declared target', async () => {
+    const mirror = new RecordingMirrorAdapter();
+    const registry = new FakeSyncState();
+    registry.identities.set(
+      PROJECT,
+      new ProjectIdentityDataTransferObject({
+        target: 'board-1',
+        targetHandle: '',
+        projectHandle: 'board-1',
+        statusFieldHandle: '',
+        statusOptions: [],
+      }),
+    );
+    const action = new MirrorSyncAction(
+      new FakeVault([connection('gh-main', 'conformance', '')], originTask()),
+      registry,
+      { create: () => mirror },
+    );
+
+    await action.invoke(PROJECT);
+
+    expect(mirror.addressed).toEqual(['board-1']);
+    expect(mirror.addressed).not.toContain('');
   });
 });

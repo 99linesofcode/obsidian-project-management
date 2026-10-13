@@ -3,21 +3,14 @@ import type { ProjectNoteDataTransferObject } from '../../core/port/data/Project
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
-import { AdoptedProject } from '../../core/port/data/AdoptedProject.js';
-import type { CapturedProject } from '../../core/port/data/CapturedProject.js';
 import { ConnectionDataTransferObject } from '../../core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { VaultPort } from '../../core/port/VaultPort.js';
-import {
-  chooseHomeNotePath,
-  folderChainForPath,
-  projectHomePath,
-} from '../../core/domain/paths.js';
+import { chooseHomeNotePath, folderChainForPath } from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
 import { slugify, typeFromLabels } from '../../core/domain/note.js';
 import { connectionsOf } from './connectionsOf.js';
-import { renderConnectionsBlock } from './renderConnectionsBlock.js';
 import { fieldValue, folderOf, parseTaskNote, writeIntoNote } from './taskNoteCodec.js';
 
 export type EventRegistrar = (eventRef: EventRef) => void;
@@ -265,43 +258,6 @@ export class VaultAdapter implements VaultPort {
     await this.moveFolder(`${from}/${project}`, `${to}/${project}`);
   }
 
-  async listAdoptedProjects(): Promise<readonly AdoptedProject[]> {
-    const adopted: AdoptedProject[] = [];
-    for (const note of await this.findProjectNotes()) {
-      for (const connection of note.connections) {
-        adopted.push(
-          new AdoptedProject({
-            projectName: note.projectName,
-            application: connection.application,
-            target: connection.target,
-          }),
-        );
-      }
-    }
-    return adopted;
-  }
-
-  async adoptProject(
-    project: CapturedProject,
-    application: string,
-    slug: string,
-  ): Promise<void> {
-    const target = project.targets[0];
-    if (target === undefined) {
-      throw new Error(`project "${project.name}" has no target to adopt`);
-    }
-
-    const path = projectHomePath(project.name, false);
-    if ((await this.getNoteByPath(path)) !== null) {
-      return;
-    }
-
-    await this.createNote(
-      path,
-      homeNote(project.name, slug, application, target),
-    );
-  }
-
   private async modifiedTime(path: string): Promise<string | null> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
@@ -353,22 +309,4 @@ export class VaultAdapter implements VaultPort {
       folder === null ? `${slug}.md` : `${folder}/${slug}.md`,
     );
   }
-}
-
-function homeNote(
-  name: string,
-  slug: string,
-  application: string,
-  target: string,
-): string {
-  return [
-    '---',
-    ...renderConnectionsBlock({
-      [slug]: { tool: application, project: target },
-    }),
-    '---',
-    '',
-    `# ${name}`,
-    '',
-  ].join('\n');
 }

@@ -12,8 +12,8 @@ import type { ProjectLifecycleSyncAction } from '../../../../src/core/applicatio
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
-import type { ProjectSetupSurface } from '../../../../src/core/port/MirrorPort.js';
-import type { ProjectSetupFactoryPort } from '../../../../src/core/port/ProjectSetupFactoryPort.js';
+import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
+import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { EntityRecord } from '../../../../src/core/port/data/EntityRecord.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
@@ -88,7 +88,7 @@ interface HarnessOptions {
   taken?: string[];
   ensureBoard?: boolean;
   connections?: readonly ConnectionDataTransferObject[];
-  setupApplications?: string[];
+  adapterApplications?: string[];
   failRenames?: boolean;
 }
 
@@ -151,12 +151,10 @@ function harness(options: HarnessOptions = {}) {
       } as unknown as EnsureProjectBoardAction)
     : undefined;
 
-  const setupApplications = options.setupApplications ?? ['github'];
-  const setupFactory: ProjectSetupFactoryPort = {
-    setupFor: (application) =>
-      setupApplications.includes(application)
-        ? ({} as ProjectSetupSurface)
-        : null,
+  const adapterApplications = options.adapterApplications ?? ['github'];
+  const mirrorAdapters: MirrorAdapterFactoryPort = {
+    create: (application) =>
+      adapterApplications.includes(application) ? ({} as MirrorPort) : null,
   };
 
   const frozen =
@@ -186,7 +184,7 @@ function harness(options: HarnessOptions = {}) {
 
   const action = new SyncProjectAction({
     vault,
-    setupFactory,
+    mirrorAdapters,
     lifecycle,
     taskLocks,
     taskCapture,
@@ -358,8 +356,8 @@ describe('the deletion sweep', () => {
   });
 });
 
-describe('SHELL-2 — setup-capable connections only', () => {
-  it('skips ensure-board for a connection whose application has no setup port', async () => {
+describe('SHELL-2 — every declared connection is resolved-or-created', () => {
+  it('resolves-or-creates each declared connection, whatever its tool', async () => {
     const h = harness({
       projectNotes: [
         projectNote('Acme Widgets', null, [
@@ -371,29 +369,13 @@ describe('SHELL-2 — setup-capable connections only', () => {
           { slug: 'linear', application: 'linear', target: 'L1' },
         ]),
       ],
-      setupApplications: ['github'],
+      adapterApplications: ['github', 'linear'],
       ensureBoard: true,
     });
 
     await h.action.execute('Acme Widgets');
 
     expect(h.events).toContain('ensureBoard:Acme Widgets/github');
-    expect(h.events).not.toContain('ensureBoard:Acme Widgets/linear');
-  });
-
-  it('runs ensure-board for a setup-capable non-github connection', async () => {
-    const h = harness({
-      projectNotes: [
-        projectNote('Acme Widgets', null, [
-          { slug: 'linear', application: 'linear', target: 'L1' },
-        ]),
-      ],
-      setupApplications: ['linear'],
-      ensureBoard: true,
-    });
-
-    await h.action.execute('Acme Widgets');
-
     expect(h.events).toContain('ensureBoard:Acme Widgets/linear');
   });
 });
@@ -406,7 +388,7 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
           { slug: 'linear', application: 'linear', target: 'L1' },
         ]),
       ],
-      setupApplications: [],
+      adapterApplications: [],
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
@@ -416,5 +398,43 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
       'delete:Projecten/Acme Widgets/taken/42-gone.md',
     );
     expect(h.deletedConnections).toEqual(['linear']);
+  });
+});
+
+describe('SHELL-2 — the chain runs its origination step before reconciliation', () => {
+  it('resolves-or-creates the declared connection, then still runs the task steps', async () => {
+    const h = harness({
+      connections: [
+        {
+          slug: 'github',
+          application: 'github',
+          target: 'https://github.com/acme/widgets',
+        },
+      ],
+      ensureBoard: true,
+    });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events).toEqual([
+      'ensureBoard:Acme Widgets/github',
+      'lifecycle',
+      'taskLocks:false:false',
+      'renames',
+      'capture:Acme Widgets',
+      'reconcile:Acme Widgets',
+    ]);
+  });
+});
+
+describe('ORG-4 — no declared connection, no fan-out', () => {
+  it('fans out nothing when the project declares no connections', async () => {
+    const h = harness({ connections: [], ensureBoard: true });
+
+    await h.action.execute('Acme Widgets');
+
+    expect(h.events.filter((event) => event.startsWith('ensureBoard'))).toEqual(
+      [],
+    );
   });
 });

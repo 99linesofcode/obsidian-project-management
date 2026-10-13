@@ -1,3 +1,6 @@
+// The task manager connection's declared target. An empty target is valid: the
+// remote project is then identified by the vault project's name (ORG-2), and
+// the adapter resolves the project by name.
 export class TaskManagerTarget {
   readonly projectId: string;
 
@@ -6,10 +9,6 @@ export class TaskManagerTarget {
   }
 
   static parse(raw: string): TaskManagerTarget {
-    const projectId = raw.trim();
-    if (projectId === '') {
-      throw new Error('task manager target must carry a project id');
-    }
-    return new TaskManagerTarget({ projectId });
+    return new TaskManagerTarget({ projectId: raw.trim() });
   }
 }

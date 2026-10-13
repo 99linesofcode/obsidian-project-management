@@ -71,8 +71,8 @@ a domain or port file that reaches outward fails the lint. `infrastructure/`
 holds the driven adapters that implement those ports, one namespace per vendor.
 The composition root wires them. The old provider halves, the pairwise verdict
 and the legacy writers are deleted; the chain drives the vault-maintenance steps
-(board-ensure, rename recovery, vault consistency, deletion sweep) directly,
-documented in the developer manual.
+(connection origination, rename recovery, vault consistency, deletion sweep)
+directly, documented in the developer manual.
 
 **Growth rule.** Start flat; a folder appears when a second file of that role
 or concept exists. A consumer folder appears when an action has exclusive
@@ -134,7 +134,7 @@ sequenceDiagram
   Sched->>Q: enqueue(project) per project note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes (no-op when missing)
-  SP->>SP: migrate home note, rekey, ensure board
+  SP->>SP: migrate home note, rekey, resolve-or-create connections
   SP->>Life: invoke(project)
   Life->>M: resolve mirror project, merge archived, fan out
   SP->>Lock: invoke({ project, frozen, wasFrozen })
@@ -151,7 +151,7 @@ sequenceDiagram
 
 | Component             | Responsibility                                                                                                                                                                                                                                | Technology                   | Target         |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
-| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring, startup discovery and the project-capture pre-tick                                                                                                                             | host plugin API              | the vault      |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring and the per-pass connection origination                                                                                                                             | host plugin API              | the vault      |
 | `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                 | host plugin API, `Component` | the vault      |
 | `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), and the neutral note arithmetic                                                                                          | TypeScript                   | in-process     |
 | `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter` and the baseline store), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
@@ -165,20 +165,20 @@ its own module; the composition root wires it.
 - **The mirror port.** **`MirrorPort`** — the external tool as one collaborator,
   implemented by `CodeHostMirrorAdapter` and `TaskManagerMirrorAdapter`. The
   required surface is the project (read/create/rename, set and read archived
-  state) and the task (`title`, `body`, `subtasks`, `completion`, `Status`,
+  state), the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field
   to the adapter's own representation; the completion fact is separate from the
-  `Status` representation; `deleteTask` removes the mirror item). The
-  genuinely optional surfaces are **optional methods**: `capture?`/
-  `captureProjects?` (tracked tasks and the application-born projects a source
-  enumerates), `fieldTime?` (trustworthy per-field timestamps), `fetchComplete?`
-  (verified-complete fetch), `lockTask?`/`unlockTask?` (task locking)
-  and the project-setup surface
-  (`discoverProjects?`, `readProjectAddressing?`, `createProjectWithStatus?`,
-  `adoptProject?`, `listProjects?`). A caller checks presence
+  `Status` representation; `deleteTask` removes the mirror item) and project
+  origination (`resolveOrCreateProject`, which every adapter carries, so no
+  declared connection is left unoriginated). The
+  genuinely optional surfaces are **optional methods**: `capture?` (adopt
+  remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
+  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?` (task
+  locking).
+  A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
   port slot; an adapter without a surface simply omits the method. The project,
-  task, capture, timestamp, locking and setup surfaces were separate
+  task, capture, timestamp, locking and origination surfaces were separate
   facet ports; the tool is one collaborator, so it is one port.
 - **The vault port.** **`VaultPort`** — the vault as one collaborator: read a
   note by path, create/write/rename/trash a note, list a folder's notes and
@@ -186,18 +186,17 @@ its own module; the composition root wires it.
   observe a task note's field as a canonical value plus its edit time (trusted
   by default), read the whole task, apply a canonical field write; read a
   project's declared connections and its task-note paths; observe and apply a
-  project's archived state; adopt a captured project. Implementer:
-  `VaultAdapter`. The origin, the project source, the lifecycle and the project
-  capture were separate facet ports served by thin wrapper adapters; the vault is
+  project's archived state. Implementer:
+  `VaultAdapter`. The origin, the project source and the lifecycle were separate
+  facet ports served by thin wrapper adapters; the vault is
   one collaborator, so it is one port and one adapter. The port is raw vault I/O
   — the task-capture adoption orchestration (choosing the renderer, writing the
   note, recording the mirror item) lives in `CaptureTasksAction`, never in the
   adapter.
-- **The supporting ports.** `MirrorAdapterFactoryPort` (build a mirror adapter
-  for an application + target; expose the capture sources) and
-  `ProjectSetupFactoryPort` (reach a tool's project-setup surface, null for a
-  tool without setup). These are the provider table's seams, not facets of a
-  mirror adapter.
+- **The supporting port.** `MirrorAdapterFactoryPort` (build a mirror adapter
+  for an application + target). It is the provider table's seam, not a facet of
+  a mirror adapter; the chain reaches a connection's origination surface through
+  the adapter the factory builds.
 
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
@@ -239,8 +238,7 @@ canonical DTOs and the pure core.
   same `mergeField` ladder as the task fields.
 - **Canonical DTOs.** `CanonicalTask`, `CanonicalProject`,
   `ConnectionDataTransferObject`,
-  `CanonicalFieldWrite`, `CapturedProject`, `AdoptedProject`, `ProjectSummary`,
-  `ProjectCandidate`, `ProjectDiscovery`, `ProjectAddressing` and `PortState` —
+  `CanonicalFieldWrite`, `ProjectAddressing` and `PortState` —
   one canonical shape per concept, owned by
   the core. The boundary payloads live with the ports (`core/port/data/`); a
   merge action's private working shapes stay co-located with the action. The
@@ -255,9 +253,9 @@ canonical DTOs and the pure core.
   verified-complete fetch plus a synced baseline); the origin's absence as a
   delete delta; the origin's edit time trusted by default. No I/O, no clocks.
 - **The provider table.** The composition root holds one plain `providers`
-  table — a value mapping an application id to its mirror factory, capture
-  factory, optional setup surface and token setting. It derives the
-  mirror-adapter factory, the setup factory, the registered-application set and
+  table — a value mapping an application id to its mirror factory,
+  project-origination surface and token setting. It derives the
+  mirror-adapter factory, the registered-application set and
   the token-settings list from that table, so adding an application is one entry
   and there is no validation framework, capability vocabulary or registration
   result. The provider's name is a value in its own module and in the
@@ -303,17 +301,25 @@ canonical DTOs and the pure core.
   `RegistryPort`, skips connections whose adapter has no `lockTask`, skips the
   tasks whose vault status is the done lane, and locks the rest — or unlocks
   every tracked task on the unfreeze.
-- **The project-capture surface** (`MirrorPort.captureProjects` +
-  `CaptureProjectsAction`). A capture-capable adapter enumerates the
-  application-born projects it can see, each carrying its name, its candidate
-  connection targets and its creation clock. The core action adopts every
-  project the vault does not already declare by name+connection — writing the
-  home note with its connection envelope through `VaultAdapter` — so the first
-  run adopts the whole back-catalogue. The code host is the origin, so a
-  task-manager project is gated: it is adopted only when a code-host project of
-  the same name exists among the code-host connections' projects or the vault's
-  adopted set — a task-manager-only project is never adopted. A project that
-  links zero or several targets collects an error and is left for the next pass.
+- **The origination step** (`EnsureProjectBoardAction` +
+  `MirrorPort.resolveOrCreateProject`). A project is set up by declaring its
+  connections on the home note; on every pass, each declared connection
+  resolves-or-creates its remote project and records its addressing. The action
+  always resolves — it never trusts a recorded addressing — and the adapter
+  decides: a remote project that still exists is adopted, a remote project that
+  is gone is re-created. A connection's target may be empty — the remote project
+  is then identified by the vault project's name (ORG-2); a non-empty target
+  overrides. The plugin **never creates a code-host repository**: an empty target
+  resolves an existing repo named for the vault project under the authenticated
+  user, and an absent repo leaves the connection unoriginated with a logged
+  error. The resolved project's own address (a code host's repository, a task
+  manager's project) is recorded as the identity's `target` — the connection's
+  **effective address** — and every downstream step (mirror, capture, lifecycle)
+  addresses the remote by that effective target, not the declared one.
+  The one uniform method replaces the code-host-only setup surface, so a task
+  manager originates its project the same way the code host originates its board.
+  No declared connection means nothing fans out (ORG-4), and an existing remote
+  project is adopted without creating anything (I14).
 - **The task-capture surface** (`MirrorPort.capture` + `CaptureTasksAction`). For
   each declared connection, the core action reads the tasks the adapter's capture
   gate exposes — a code host exposes only type-labelled issues, a task manager
@@ -327,16 +333,15 @@ canonical DTOs and the pure core.
   an unlabelled one takes the kind its position implies — a root item is a
   `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
-  (home-note migration, connection re-keying, board-ensure, rename recovery,
-  vault consistency and the deletion sweep) and the core actions directly
-  (`ProjectLifecycleSyncAction`,
+  (home-note migration, connection re-keying, connection origination, rename
+  recovery, vault consistency and the deletion sweep) and the core actions
+  directly (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
   every step wrapped so one failure logs and skips that step. It runs the
   lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
   and the mirror-sync pass for task-field reconciliation. The sweep enumerates
-  the project's code-host connections directly, and the capture pre-tick runs the
-  assembled core capture.
+  the project's connections directly.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -348,15 +353,15 @@ canonical DTOs and the pure core.
   `MirrorPort` surface for the code host: title and body as the issue, Status as
   the board card's lane, completion as the issue state (kept separate from the
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
-  project, setup, capture, complete-fetch, per-field-timestamp and task-lock
-  surfaces. The composition root registers it under the application id
+  project, origination, capture, complete-fetch, per-field-timestamp and
+  task-lock surfaces. The composition root registers it under the application id
   `github`.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
   completed fact, subtasks as the parent relation, label as the task labels, and
-  the project, capture, complete-fetch and per-field-timestamp surfaces; it omits
-  the locking and setup methods. The composition root registers it
+  the project, origination, capture, complete-fetch and per-field-timestamp
+  surfaces; it omits the locking methods. The composition root registers it
   under the application id `todoist`.
 - **The registry adapter** (`infrastructure/registry/`) persists the core's
   memory in `data.json`: `SyncStateAdapter` (the `syncState` container and the
@@ -364,7 +369,7 @@ canonical DTOs and the pure core.
   `syncStateSchema`, `loadDataSafely`) beside it.
 - **The vault adapter** (`infrastructure/vault/`) implements `VaultPort`:
   `VaultAdapter`, with the pure note codecs (`connectionsOf`,
-  `parseConnectionsBlock`, `renderConnectionsBlock`, the task-note codec) beside
+  `parseConnectionsBlock`, the task-note codec) beside
   it. It is a structural peer of the application adapters, not a capability
   adapter.
 - **The conformance adapter** (`infrastructure/fake/`) is an in-memory
@@ -409,11 +414,11 @@ No other persistent store. The mirrors hold copies, never authority.
   creation, the board operations, locking and sub-issue relations; REST for the
   label and state updates. The core
   consumes it through `MirrorPort` (project, task, capture, and the optional
-  timestamp, complete-fetch, locking and setup methods). A fine-grained
+  timestamp, complete-fetch, locking and origination methods). A fine-grained
   token, bearer.
 - **Task manager** — REST v1 for projects, sections, tasks and labels. The core
   consumes it through `MirrorPort` (project, task, capture, and the optional
-  timestamp and complete-fetch methods). An API token, bearer.
+  timestamp, complete-fetch and origination methods). An API token, bearer.
 - **The host vault application** — the plugin API (vault read/write, events,
   `requestUrl`, settings and data). Behind `VaultPort` and the note codecs;
   only the adapter imports the host package.
@@ -514,16 +519,15 @@ over HTTPS.
   mirrors, but the vault note itself is trashed, never destroyed.
 
 **Known debt / open items:** None blocking. The vault-maintenance shell has been
-retired — the chain drives its steps directly (ADR 003). The developer manual
-records the remaining code-vs-brief discrepancy (the scheduler's injected
-pre-tick capture).
+retired — the chain drives its steps directly (ADR 003).
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
 GitHub and Todoist mirror adapters implement `MirrorPort`, the vault
 origin adapters complete the origin round-trip, the mirror-sync action and the
 core baseline store reconcile a whole project and persist its baselines, the
-lifecycle pass reconciles the archived fact, the capture surfaces adopt
-remote-born projects and tracked tasks, and the task-lock action handles a
+lifecycle pass reconciles the archived fact, a declared connection
+resolves-or-creates its remote project, capture adopts remote-born tasks, and the
+task-lock action handles a
 frozen project. The runtime cutover is unconditional: the
 chain builds the origin and the per-connection mirror adapters from the
 project's connections and the stored secrets and drives the core actions
@@ -537,7 +541,7 @@ Repository URL: https://github.com/99linesofcode/obsidian-project-management
 
 Primary Contact/Team: Jordy Schreuders (99linesofcode)
 
-Date of Last Update: 2026-10-12
+Date of Last Update: 2026-10-13
 
 ## 11. Glossary / Acronyms
 
@@ -570,14 +574,18 @@ Date of Last Update: 2026-10-12
   it creates the missing item through the adapter, stamps the real handle over
   the placeholder, and reconciles it in the same pass; an interrupted pass
   adopts the created item instead of duplicating it.
-- **Capture** — adopting a remote-born project or tracked task into the vault.
-  Both enumerate the remote's items and adopt each the vault does not already
-  hold — a project by name+connection, a task by its mirror handle — so the
-  first run adopts the back-catalogue and a second pass is idempotent. A
-  task-manager project is adopted only when a code-host (or vault) project of
-  the same name exists; a captured task-manager task carries a kind — an
-  explicit type label kept, else `slice` for a root item and `task` for a
-  subtask.
+- **Origination** — resolving-or-creating the remote project a declared
+  connection names. A connection declares a tool and a target; an empty target
+  means the remote project is identified by the vault project's name, a
+  non-empty target overrides. The one uniform method,
+  `MirrorPort.resolveOrCreateProject`, serves the code host's board and the task
+  manager's project alike; no declared connection means nothing fans out.
+- **Capture** — adopting remote-born **tasks** into the vault. It enumerates the
+  remote's tracked tasks and adopts each the vault does not already hold by its
+  mirror handle, so the first run adopts the back-catalogue and a second pass is
+  idempotent. A project is never captured — it is declared (origination). A
+  captured task-manager task carries a kind — an explicit type label kept, else
+  `slice` for a root item and `task` for a subtask.
 
 ## 12. Conventions & Boundaries
 

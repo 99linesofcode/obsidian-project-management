@@ -3,7 +3,7 @@ import { labelsFromSequence } from '../../core/domain/note.js';
 import { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
-import { CapturedProject } from '../../core/port/data/CapturedProject.js';
+import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 
 export class ConformanceMirrorAdapter implements MirrorPort {
@@ -103,6 +103,23 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     return new CanonicalProject({ handle: target, name, archived: false });
   }
 
+  async resolveOrCreateProject(
+    target: string,
+    name: string,
+    _statusOptions: readonly string[],
+  ): Promise<ProjectAddressing | null> {
+    const handle = target === '' ? name : target;
+    if ((await this.readProject(handle)) === null) {
+      await this.createProject(handle, name);
+    }
+    return new ProjectAddressing({
+      projectHandle: handle,
+      statusFieldHandle: '',
+      statusOptions: [],
+      effectiveTarget: handle,
+    });
+  }
+
   async renameProject(target: string, name: string): Promise<void> {
     this.names.set(target, name);
   }
@@ -170,10 +187,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
   }
 
   async capture(): Promise<CanonicalTask[]> {
-    return [];
-  }
-
-  async captureProjects(): Promise<CapturedProject[]> {
     return [];
   }
 

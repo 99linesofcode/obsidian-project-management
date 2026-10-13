@@ -1,83 +1,45 @@
 import { ProjectIdentityDataTransferObject } from '../../port/data/ProjectIdentityDataTransferObject.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
-import type { ProjectAddressing } from '../../port/data/ProjectAddressing.js';
-import type { ProjectSummary } from '../../port/data/ProjectSummary.js';
 import type { ProjectSetupSurface } from '../../port/MirrorPort.js';
-import type { ResolveProjectBoardAction } from './ResolveProjectBoardAction.js';
 
 export interface EnsureProjectBoardInput {
   projectName: string;
   connectionSlug: string;
+  target: string;
   setup: ProjectSetupSurface;
 }
 
+// A declared connection resolves-or-creates its remote project by name (or the
+// connection's explicit target) and records its addressing. The action always
+// resolves: the adapter decides whether the remote project still exists (adopt
+// it) or is gone (re-create it), so a removed remote is rebuilt. A null
+// addressing means the remote cannot be originated (a code host with no
+// repository to resolve); the connection is left unoriginated.
 export class EnsureProjectBoardAction {
   constructor(
     private readonly syncState: RegistryPort,
     private readonly statusOptions: string[],
-    private readonly resolveBoard: ResolveProjectBoardAction,
   ) {}
 
   async execute(input: EnsureProjectBoardInput): Promise<void> {
-    const { setup } = input;
-    const identity = await this.syncState.getIdentity(
+    const addressing = await input.setup.resolveOrCreateProject(
+      input.target,
       input.projectName,
-      input.connectionSlug,
+      this.statusOptions,
     );
-    if (identity?.projectHandle) {
+    if (addressing === null) {
       return;
     }
-
-    const target = identity?.target ?? '';
-    if (target === '') {
-      return;
-    }
-
-    const resolved = await this.resolveBoard.execute({ target, setup });
-    const addressing =
-      resolved.kind === 'create'
-        ? await this.createOrAdoptOrphan(setup, target, resolved.boardTitle)
-        : await setup.adoptProject(target, resolved.board, this.statusOptions);
-
-    const merged = new ProjectIdentityDataTransferObject({
-      target,
-      targetHandle: resolved.discovery.targetHandle,
-      projectHandle: addressing.projectHandle,
-      statusFieldHandle: addressing.statusFieldHandle,
-      statusOptions: [...addressing.statusOptions],
-    });
     await this.syncState.setIdentity(
       input.projectName,
       input.connectionSlug,
-      merged,
+      new ProjectIdentityDataTransferObject({
+        target: addressing.effectiveTarget || input.target,
+        targetHandle: '',
+        projectHandle: addressing.projectHandle,
+        statusFieldHandle: addressing.statusFieldHandle,
+        statusOptions: [...addressing.statusOptions],
+      }),
     );
-  }
-
-  private async createOrAdoptOrphan(
-    setup: ProjectSetupSurface,
-    target: string,
-    targetName: string,
-  ): Promise<ProjectAddressing> {
-    const orphan = await this.findOrphanProject(setup, targetName);
-    if (orphan === null) {
-      return setup.createProjectWithStatus(
-        target,
-        targetName,
-        this.statusOptions,
-      );
-    }
-    return setup.adoptProject(target, orphan, this.statusOptions);
-  }
-
-  private async findOrphanProject(
-    setup: ProjectSetupSurface,
-    targetName: string,
-  ): Promise<ProjectSummary | null> {
-    const candidates = await setup.listProjects();
-    const orphan = candidates.find(
-      (candidate) =>
-        candidate.project.name === targetName && candidate.targets.length === 0,
-    );
-    return orphan?.project ?? null;
   }
 }
