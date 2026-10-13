@@ -136,7 +136,11 @@ sequenceDiagram
   SP->>V: findProjectNotes (no-op when missing)
   SP->>SP: migrate home note, rekey, resolve-or-create connections
   SP->>Life: invoke(project)
-  Life->>M: resolve mirror project, merge archived, fan out
+  alt project folder gone
+    Life->>M: delete the remote project on every connection
+  else
+    Life->>M: resolve mirror project, merge archived, fan out
+  end
   SP->>Lock: invoke({ project, frozen, wasFrozen })
   SP->>SP: renames, cascade, checklist, mirror to-do
   alt not frozen
@@ -144,7 +148,7 @@ sequenceDiagram
     SP->>TF: invoke(project)
     TF->>M: merge each canonical field, fan out
   end
-  SP->>SP: deletion sweep
+  SP->>SP: deletion sweep (record tombstones, reconcile, prune)
 ```
 
 ## 3. Core Components
@@ -168,13 +172,14 @@ its own module; the composition root wires it.
   state), the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field
   to the adapter's own representation; the completion fact is separate from the
-  `Status` representation; `deleteTask` removes the mirror item) and project
+  `Status` representation; `deleteTask` removes the mirror item — the code host
+  deletes the board card and the issue) and project
   origination (`resolveOrCreateProject`, which every adapter carries, so no
   declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
   remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
-  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?` (task
-  locking).
+  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?`
+  (task locking).
   A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
   port slot; an adapter without a surface simply omits the method. The project,
@@ -201,9 +206,11 @@ its own module; the composition root wires it.
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
 their mirror items, the note-path↔handle and mirror-project mappings, the
-per-connection identity and port state, and the side baselines. Implementer:
+per-connection identity and port state, the deleted-note tombstones, and the
+side baselines. Implementer:
 `SyncStateAdapter`, which also composes the handle and mirror-project
-resolution. Its records `EntityRecord`, `MirrorItem` and `PortState` live in
+resolution. Its records `EntityRecord`, `MirrorItem`, `PortState` and
+`TombstoneRecord` live in
 `src/core/port/data/`; the baselines stay in the `coreBaselines` store.
 The baseline store, mirror handle, mirror project, identity store, tracked
 entity and connection state were separate facet ports served by thin wrapper
@@ -325,7 +332,9 @@ canonical DTOs and the pure core.
   gate exposes — a code host exposes only type-labelled issues, a task manager
   exposes every task — and adopts every task the vault does not already hold as a
   task note. The whole listing is scanned each pass and the adopted mirror items
-  are skipped, so the pass is idempotent without a cursor. The action routes by
+  are skipped, so the pass is idempotent without a cursor; a handle with a
+  tombstone is skipped too, so a deleted note's mirror is never re-adopted
+  (DEL-2, I16). The action routes by
   the connection's application — a code-host issue through
   `CreateTaskNoteAction`, a task-manager task rendered by
   `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`. A
@@ -341,7 +350,10 @@ canonical DTOs and the pure core.
   lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
   and the mirror-sync pass for task-field reconciliation. The sweep enumerates
-  the project's connections directly.
+  the project's connections directly, records a tombstone for each tracked note
+  whose file is gone (not under `Archief/`), hands the delete to
+  `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
+  side has settled.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -354,8 +366,9 @@ canonical DTOs and the pure core.
   the board card's lane, completion as the issue state (kept separate from the
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
   project, origination, capture, complete-fetch, per-field-timestamp and
-  task-lock surfaces. The composition root registers it under the application id
-  `github`.
+  task-lock surfaces; `deleteTask` deletes the board card **and the issue
+  itself**, so capture has nothing left to re-adopt. The composition root
+  registers it under the application id `github`.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
@@ -515,10 +528,18 @@ over HTTPS.
   a human to arbitrate. A conflict dialog was excluded on purpose.
 - **No server or database.** The registry is the plugin's own `data.json`; the
   vault is the system of record. There is no backend.
-- **No permanent deletion.** A deleted note's echoes are removed from the
-  mirrors, but the vault note itself is trashed, never destroyed.
+- **No permanent deletion.** A deleted note is a tracked change: its absence is
+  recorded as a tombstone, the delete fans out to every mirror (the code host's
+  card and issue are deleted outright), and the tombstone and registry record are
+  pruned once every side has settled. The vault note itself is trashed, never
+  destroyed.
 
-**Known debt / open items:** None blocking. The vault-maintenance shell has been
+**Known debt / open items:** A project-level delete is deferred to S17c (`P7`).
+A project's identity **is** its folder name, so a folder rename is
+indistinguishable from a delete and a false delete is unrecoverable; projects are
+never captured, so nothing resurrects — a gone folder leaves the remote project
+in place. S17c adds a durable project identity, rename detection and re-key
+before any project delete fans out. The vault-maintenance shell has been
 retired — the chain drives its steps directly (ADR 003).
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
@@ -563,6 +584,9 @@ Date of Last Update: 2026-10-13
   `coreBaselines`.
 - **Delta** — one side's change against its own baseline: a value, or a delete
   proven by a verified-complete fetch.
+- **Tombstone** — a registry record of a deleted note (entity id, note path,
+  delete time and an optional mirror handle). It stops capture re-adopting the
+  handle and is pruned with the entity once every side has settled.
 - **Decision ladder** — the ordered rules `mergeField` applies to a
   multi-sided conflict: decisive timestamp, then completion over a stale open,
   then origin authority.

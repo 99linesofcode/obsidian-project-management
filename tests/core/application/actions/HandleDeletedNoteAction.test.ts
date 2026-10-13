@@ -62,8 +62,8 @@ function makeAction(
   return new HandleDeletedNoteAction(syncState, mirrorAdapters);
 }
 
-describe('DEL-1 — a deleted note closes its issue and drops its record', () => {
-  it('deletes the card, closes the issue and removes the record', async () => {
+describe('DEL-1 — a deleted vault note is a tracked change', () => {
+  it('records a tombstone for the gone note', async () => {
     const mirrorAdapters = new FakeMirrorAdapters();
     const syncState = new FakeSyncState();
     seed(syncState);
@@ -75,12 +75,48 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
       connections: [{ slug: 'github', application, target }],
     });
 
-    expect(mirrorAdapters.tasks.deleted).toEqual([url]);
-    expect(mirrorAdapters.tasks.writes).toEqual([
-      { handle: url, field: 'completion', value: 'true' },
-    ]);
-    expect(syncState.removed).toEqual(['uuid-42']);
-    expect(await syncState.findByNotePath(notePath)).toBeNull();
+    expect(await syncState.findTombstone(url)).toMatchObject({
+      entityId: 'uuid-42',
+      notePath,
+    });
+  });
+
+  it('keeps the registry record until every side has settled', async () => {
+    const mirrorAdapters = new FakeMirrorAdapters();
+    const syncState = new FakeSyncState();
+    seed(syncState);
+    const action = makeAction(syncState, mirrorAdapters);
+
+    await action.execute({
+      notePath,
+      projectName,
+      connections: [{ slug: 'github', application, target }],
+    });
+
+    expect(await syncState.findByNotePath(notePath)).not.toBeNull();
+  });
+
+  it("deletes the code host's card, closes its issue, and deletes the task manager's task", async () => {
+    const mirrorAdapters = new FakeMirrorAdapters();
+    const syncState = new FakeSyncState();
+    seedBoth(syncState);
+    const action = makeAction(syncState, mirrorAdapters);
+
+    await action.execute({
+      notePath,
+      projectName,
+      connections: [
+        { slug: 'github', application, target },
+        { slug: 'todoist', application: 'todoist', target: todoistTarget },
+      ],
+    });
+
+    expect(mirrorAdapters.tasks.deleted.sort()).toEqual([url, 'T1'].sort());
+    expect(mirrorAdapters.tasks.writes).toContainEqual({
+      handle: url,
+      field: 'completion',
+      value: 'true',
+    });
   });
 
   it('does nothing for an untracked note', async () => {
@@ -96,11 +132,11 @@ describe('DEL-1 — a deleted note closes its issue and drops its record', () =>
 
     expect(mirrorAdapters.tasks.deleted).toEqual([]);
     expect(mirrorAdapters.tasks.writes).toEqual([]);
-    expect(syncState.removed).toEqual([]);
+    expect(syncState.tombstones.size).toBe(0);
   });
 });
 
-describe('SHELL-3 — every connection mirror is deleted before the record is dropped', () => {
+describe('SHELL-3 — every connection mirror is deleted before the record is pruned', () => {
   const orders = [
     ['todoist', 'github'],
     ['github', 'todoist'],
@@ -128,9 +164,7 @@ describe('SHELL-3 — every connection mirror is deleted before the record is dr
       });
 
       expect(mirrorAdapters.tasks.deleted.sort()).toEqual([url, 'T1'].sort());
-      expect(mirrorAdapters.tasks.writes).toHaveLength(2);
-      expect(syncState.removed).toEqual(['uuid-42']);
-      expect(await syncState.findByNotePath(notePath)).toBeNull();
+      expect(await syncState.findByNotePath(notePath)).not.toBeNull();
     });
   }
 });

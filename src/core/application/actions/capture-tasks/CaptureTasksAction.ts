@@ -98,6 +98,9 @@ export class CaptureTasksAction {
       if (adopted.has(task.handle)) {
         continue;
       }
+      if ((await this.registry.findTombstone(task.handle)) !== null) {
+        continue;
+      }
       try {
         await this.adopt({
           task,

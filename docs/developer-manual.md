@@ -38,8 +38,10 @@ no machine id.
    remote provably changed more recently.
 2. **No change is ever lost, and none is invented.** Every edit lands
    everywhere it should; nothing appears that nobody asked for.
-3. **Deletion is deliberate and thorough.** Deleting a note removes its echoes
-   everywhere. Deleting a twin on a remote never touches the note.
+3. **Deletion is deliberate and thorough.** A deleted note is tracked as a
+   tombstone, its echoes are removed everywhere, and the tombstone stops capture
+   re-adopting the note. Deleting a
+   twin on a remote never touches the note.
 4. **Completion is sticky.** A completed task stays completed unless a person
    deliberately reopens it.
 5. **Interruption is safe.** A stop at any moment recovers on the next start
@@ -53,7 +55,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
   `renameProject`, `setArchived`, `archivedTime`), the task (`readTasks`,
-  `readTask`, `createTask`, `applyField`, `deleteTask`) and project origination
+  `readTask`, `createTask`, `applyField`, `deleteTask` — the code host deletes
+  the board card and the issue) and project origination
   (`resolveOrCreateProject` — every adapter carries it, so no declared connection
   is left unoriginated). The genuinely optional
   surfaces are optional
@@ -72,7 +75,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   chain reaches a connection's origination surface through the adapter it builds.
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
-  identity and port state, and the side baselines. The vault is one `VaultPort`
+  identity and port state, the deleted-note tombstones, and the side baselines.
+  The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`) and `MergedField`
@@ -136,7 +140,8 @@ namespace per application.**
   note templates, two Bases files) create-if-missing, on init and on demand
   from the settings tab.
 - **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
-  `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,
+  `HandleDeletedNoteAction`,
+  `MigrateProjectHomeNoteAction`,
   `RekeyRenamedConnectionsAction`, `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
   and `CreateTaskNoteAction`.
@@ -173,7 +178,8 @@ remote project; the core actions
 reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
-task-field pass, finally sweeping deletions. Every step failure logs and skips
+task-field pass, finally running the deletion sweep (record tombstones,
+reconcile the deletes, prune what has settled). Every step failure logs and skips
 that step without blocking the others.
 
 #### 2.1a The poll tick
@@ -654,18 +660,27 @@ sequenceDiagram
   end
 ```
 
-### 2.14 Deletion propagation (factory-backed)
+### 2.14 Deletion propagation (a delete is a tracked change)
 
-A deleted note is swept by `SweepDeletedNotesAction`, which enumerates the
-project's entities and, for each whose note is gone, calls
-`HandleDeletedNoteAction`. That action finds the registry record by note path,
-resolves the connection's mirror item through `RegistryPort`, builds the
-connection's adapter through `MirrorAdapterFactoryPort`, and calls
-`MirrorPort.deleteTask` (the GitHub adapter deletes the board card). When
-the stored base lane is not the done lane it then applies
-`completion = true` through the generic write entry, which closes the issue.
-Finally it evicts the entity, dropping its remaining mirror items. Deletion
-starts in the vault; a remote deletion is never honored as a deletion of record.
+A delete is a change like any other. `SweepDeletedNotesAction` enumerates the
+project's tracked entities; for each whose note file is gone (and not under
+`Archief/`) it records a **tombstone** — the entity id, the note path, the
+delete time and the mirror handle the note still owed a delete to — and hands
+the delete to `HandleDeletedNoteAction`. That action finds the registry record
+by note path, resolves each connection's mirror item through `RegistryPort`,
+builds the connection's adapter through `MirrorAdapterFactoryPort`, applies
+`completion = true` through the generic write entry, then calls
+`MirrorPort.deleteTask` — the GitHub adapter deletes the board card **and the
+issue itself**, so nothing survives for capture to re-adopt. The completion write
+precedes the delete because the item is gone afterwards (a post-delete write
+would 404 and the delete would never settle); the action then drops the settled
+mirror item. It keeps the registry record: the tombstone and the record are
+pruned only once every connection's mirror item is gone, on a later sweep pass.
+
+The tombstone stops resurrection: capture skips a handle it finds tombstoned, so
+a closed issue or a deleted task is never re-adopted as a new note (DEL-2, I16).
+Deletion starts in the vault; a remote deletion is never honored as a deletion
+of record.
 
 ```mermaid
 sequenceDiagram
@@ -676,17 +691,20 @@ sequenceDiagram
   participant F as MirrorAdapterFactoryPort
   participant R as MirrorPort
 
-  SP->>Sweep: execute({ projectName, connectionSlug, application, target })
+  SP->>Sweep: execute({ projectName, connections })
   Sweep->>SS: listEntities(projectName)
-  Sweep->>Sweep: records whose note is gone
-  Sweep->>HD: execute({ notePath, ... })
-  HD->>SS: findByNotePath, findMirrorItemByEntity
-  HD->>F: create(application, target, connectionSlug, projectName)
-  HD->>R: tasks.deleteTask(handle)
-  opt base lane is not the done lane
-    HD->>R: tasks.applyField(completion, true)
+  Sweep->>Sweep: records whose note is gone (not under Archief/)
+  alt a settled tombstone
+    Sweep->>SS: removeEntity(id) (prunes tombstone + record)
+  else a gone note
+    Sweep->>SS: recordTombstone({ entityId, notePath, deletedAt, handle })
+    Sweep->>HD: execute({ notePath, projectName, connections })
+    HD->>SS: findByNotePath, findMirrorItemByEntity
+    HD->>F: create(application, target, connectionSlug, projectName)
+    HD->>R: applyField(completion, true) (before the delete)
+    HD->>R: deleteTask(handle) (card + issue)
+    HD->>SS: removeMirrorItem(project, slug, handle)
   end
-  HD->>SS: removeEntity(id)
 ```
 
 The reverse case: a twin deleted by hand whose note survives is not a deletion

@@ -5,7 +5,8 @@ import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
-import type { MirrorPort } from '../../core/port/MirrorPort.js';import type {
+import type { MirrorPort } from '../../core/port/MirrorPort.js';
+import type {
   CodeHostResponse,
   CodeHostTransport,
 } from './CodeHostTransport.js';
@@ -127,6 +128,14 @@ const DELETE_BOARD_ITEM_MUTATION = `
   mutation DeleteBoardItem($projectId: ID!, $itemId: ID!) {
     deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
       deletedItemId
+    }
+  }
+`;
+
+const DELETE_ISSUE_MUTATION = `
+  mutation DeleteIssue($issueId: ID!) {
+    deleteIssue(input: { issueId: $issueId }) {
+      issue { id }
     }
   }
 `;
@@ -727,15 +736,27 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async deleteTask(handle: string): Promise<void> {
-    const item = await this.boardItem(this.target, handle);
-    if (item === null) {
+    const snapshot = await this.boardSnapshot(this.target);
+    const card = snapshot.cards.get(handle);
+    const issue = snapshot.issues.find((candidate) => candidate.url === handle);
+
+    if (card !== undefined) {
+      const board = await this.requireBoard(this.target.target);
+      await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
+        projectId: board.projectNodeId,
+        itemId: card.itemId,
+      });
+    }
+
+    if (issue === undefined || issue.nodeId === '') {
       return;
     }
-    const board = await this.requireBoard(this.target.target);
-    await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
-      projectId: board.projectNodeId,
-      itemId: item.itemId,
-    });
+    try {
+      await this.graphql(DELETE_ISSUE_MUTATION, { issueId: issue.nodeId });
+    } catch (error) {
+      console.error(`code host: deleting issue ${handle} failed`, error);
+      throw error;
+    }
   }
 
   async capture(target: string): Promise<CanonicalTask[]> {

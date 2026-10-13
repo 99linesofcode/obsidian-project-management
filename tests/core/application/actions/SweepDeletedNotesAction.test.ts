@@ -11,10 +11,18 @@ const githubConnection = {
   target: 'https://github.com/acme/widgets',
 };
 
+const todoistConnection = {
+  slug: 'todoist',
+  application: 'todoist',
+  target: 'P1',
+};
+
 class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -54,75 +62,70 @@ function harness() {
   };
 }
 
-describe('DEL-3 — a partial deletion retries to completion', () => {
-  it('sweeps a registry record whose note is gone', async () => {
+describe('DEL-4 — the sweep records a tombstone for a gone tracked note', () => {
+  it('records a tombstone for a registry record whose note is gone', async () => {
     const h = harness();
-    h.syncState.records.set(
-      'entity-1',
-      entityRecord({
-        id: 'entity-1',
-        notePath: 'Projecten/Acme Widgets/taken/42-gone.md',
-      }),
-    );
+    const notePath = 'Projecten/Acme Widgets/taken/42-gone.md';
+    h.syncState.seed(entityRecord({ id: 'entity-1', notePath }), {
+      github: { handle: 'GH-42' },
+    });
 
     await h.action.execute({
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
 
-    expect(h.deleted).toEqual(['Projecten/Acme Widgets/taken/42-gone.md']);
+    expect(await h.syncState.findTombstoneByNotePath(notePath)).toMatchObject({
+      entityId: 'entity-1',
+      notePath,
+    });
+    expect(await h.syncState.findTombstone('GH-42')).not.toBeNull();
   });
 
   it('leaves a record whose note still exists alone', async () => {
     const h = harness();
-    h.syncState.records.set(
-      'entity-1',
-      entityRecord({
-        id: 'entity-1',
-        notePath: 'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      }),
-    );
-    h.vault.notes.set(
-      'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
-      'content',
-    );
+    const notePath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
+    h.syncState.seed(entityRecord({ id: 'entity-1', notePath }), {
+      github: { handle: 'GH-42' },
+    });
+    h.vault.notes.set(notePath, 'content');
 
     await h.action.execute({
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
 
+    expect(await h.syncState.findTombstoneByNotePath(notePath)).toBeNull();
     expect(h.deleted).toEqual([]);
   });
 
   it('never sweeps a record relocated under Archief', async () => {
     const h = harness();
-    h.syncState.records.set(
-      'entity-1',
-      entityRecord({
-        id: 'entity-1',
-        notePath: 'Archief/Acme Widgets/taken/42-gone.md',
-      }),
-    );
+    const notePath = 'Archief/Acme Widgets/taken/42-gone.md';
+    h.syncState.seed(entityRecord({ id: 'entity-1', notePath }), {
+      github: { handle: 'GH-42' },
+    });
 
     await h.action.execute({
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
 
+    expect(await h.syncState.findTombstoneByNotePath(notePath)).toBeNull();
     expect(h.deleted).toEqual([]);
   });
 
-  it('logs a failed deletion and continues with the rest', async () => {
+  it('logs a failed tombstone write and continues with the rest', async () => {
     const h = harness();
-    h.syncState.records.set(
-      'entity-1',
-      entityRecord({
-        id: 'entity-1',
-        notePath: 'Projecten/Acme Widgets/taken/42-first.md',
-      }),
-    );
-    h.failNext();
+    const first = 'Projecten/Acme Widgets/taken/42-first.md';
+    const second = 'Projecten/Acme Widgets/taken/43-second.md';
+    h.syncState.seed(entityRecord({ id: 'entity-1', notePath: first }), {
+      github: { handle: 'GH-1' },
+    });
+    h.syncState.seed(entityRecord({ id: 'entity-2', notePath: second }), {
+      github: { handle: 'GH-2' },
+    });
+    h.syncState.failTombstoneWrites = 1;
 
     await expect(
       h.action.execute({
@@ -130,30 +133,46 @@ describe('DEL-3 — a partial deletion retries to completion', () => {
         connections: [githubConnection],
       }),
     ).resolves.toBeUndefined();
-    expect(h.deleted).toEqual([]);
+
+    expect(await h.syncState.findTombstoneByNotePath(second)).not.toBeNull();
   });
 
-  it('hands every connection to the handler once per gone note', async () => {
+  it('hands every connection to the deletion handler once per gone note (SHELL-3)', async () => {
     const h = harness();
-    h.syncState.records.set(
-      'entity-1',
-      entityRecord({
-        id: 'entity-1',
-        notePath: 'Projecten/Acme Widgets/taken/42-gone.md',
-      }),
-    );
-    const connections = [
-      { slug: 'todoist', application: 'todoist', target: 'P1' },
-      githubConnection,
-    ];
+    const notePath = 'Projecten/Acme Widgets/taken/42-gone.md';
+    h.syncState.seed(entityRecord({ id: 'entity-1', notePath }), {
+      github: { handle: 'GH-42' },
+      todoist: { handle: 'T1' },
+    });
+    const connections = [todoistConnection, githubConnection];
 
     await h.action.execute({ projectName: 'Acme Widgets', connections });
 
-    expect(h.calls).toEqual([
-      {
-        notePath: 'Projecten/Acme Widgets/taken/42-gone.md',
-        connections,
-      },
-    ]);
+    expect(h.calls).toEqual([{ notePath, connections }]);
+  });
+});
+
+describe('DEL-2 — the tombstone and record are pruned once every side has settled', () => {
+  it('prunes a settled tombstone and its registry record', async () => {
+    const h = harness();
+    const notePath = 'Projecten/Acme Widgets/taken/42-gone.md';
+    h.syncState.records.set(
+      'entity-1',
+      entityRecord({ id: 'entity-1', notePath }),
+    );
+    await h.syncState.recordTombstone({
+      entityId: 'entity-1',
+      notePath,
+      deletedAt: '2026-10-13T00:00:00Z',
+      handle: 'GH-42',
+    });
+
+    await h.action.execute({
+      projectName: 'Acme Widgets',
+      connections: [githubConnection],
+    });
+
+    expect(await h.syncState.findTombstoneByNotePath(notePath)).toBeNull();
+    expect(await h.syncState.findByNotePath(notePath)).toBeNull();
   });
 });

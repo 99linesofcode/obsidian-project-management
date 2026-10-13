@@ -350,6 +350,49 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
   });
 });
 
+describe('DEL-2 — capture never re-adopts a tombstoned handle (I16)', () => {
+  it('skips a tombstoned code-host handle', async () => {
+    const h = harness(
+      [labelledTask('gh-1', 'Issue task', ['type:task'])],
+      [connection('github', 'R1', 'gh')],
+    );
+    await h.syncState.recordTombstone({
+      entityId: 'e1',
+      notePath: 'Projecten/Acme/taken/issue-task.md',
+      deletedAt: '2026-10-13T00:00:00Z',
+      handle: 'gh-1',
+    });
+
+    const result = await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(result.captured).toEqual([]);
+    expect(h.vault.created).toEqual([]);
+  });
+
+  it('skips a tombstoned task-manager handle', async () => {
+    const h = harness([task('td-1')], [connection('todoist', 'P1', 'td')]);
+    await h.syncState.recordTombstone({
+      entityId: 'e1',
+      notePath: 'Projecten/Acme/taken/td-1.md',
+      deletedAt: '2026-10-13T00:00:00Z',
+      handle: 'td-1',
+    });
+
+    const result = await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(result.captured).toEqual([]);
+    expect(h.vault.created).toEqual([]);
+  });
+
+  it('still adopts a handle with no tombstone', async () => {
+    const h = harness([task('td-1')], [connection('todoist', 'P1', 'td')]);
+
+    const result = await h.action.invoke('Acme', SYNCED_AT);
+
+    expect(result.captured).toEqual(['td-1']);
+  });
+});
+
 describe('ORG-2 — the resolved addressing is effective downstream', () => {
   it('captures from the recorded effective target, not the empty declared target', async () => {
     const vault = new FakeVault([connection('acme', '', 'acme')]);

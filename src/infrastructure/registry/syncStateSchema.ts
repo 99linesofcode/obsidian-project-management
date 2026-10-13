@@ -1,6 +1,7 @@
 import { isRecord } from '../../core/domain/isRecord.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
 import type { PortState } from '../../core/port/data/PortState.js';
+import type { TombstoneRecord } from '../../core/port/data/TombstoneRecord.js';
 
 export const SYNC_STATE_KEY = 'syncState';
 
@@ -11,6 +12,7 @@ export const PROJECTS_KEY = 'projects';
 export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
 export const IDENTITIES_KEY = 'identities';
+export const TOMBSTONES_KEY = 'tombstones';
 
 export function str(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -131,6 +133,34 @@ export function mapMirrorItem(raw: unknown): MirrorItem | null {
     return null;
   }
   return { entityId: str(raw.entityId) };
+}
+
+export function tombstonesList(container: Record<string, unknown>): unknown[] {
+  return Array.isArray(container[TOMBSTONES_KEY])
+    ? (container[TOMBSTONES_KEY] as unknown[])
+    : [];
+}
+
+export function ensureTombstonesList(
+  container: Record<string, unknown>,
+): unknown[] {
+  if (!Array.isArray(container[TOMBSTONES_KEY])) {
+    container[TOMBSTONES_KEY] = [];
+  }
+  return container[TOMBSTONES_KEY] as unknown[];
+}
+
+export function mapTombstone(raw: unknown): TombstoneRecord | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const entityId = str(raw.entityId);
+  const notePath = str(raw.notePath);
+  const deletedAt = str(raw.deletedAt);
+  if (typeof raw.handle === 'string' && raw.handle !== '') {
+    return { entityId, notePath, deletedAt, handle: raw.handle };
+  }
+  return { entityId, notePath, deletedAt };
 }
 
 export function mapPortState(

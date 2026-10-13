@@ -145,7 +145,12 @@ export class ProjectLifecycleSyncAction {
       try {
         mirrors.push({
           side: mirrorSideKey(connection.slug),
-          handle: await this.resolveProject(connection, target, adapter, project),
+          handle: await this.resolveProject(
+            connection,
+            target,
+            adapter,
+            project,
+          ),
           adapter,
         });
       } catch (error) {

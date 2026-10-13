@@ -6,10 +6,12 @@ import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectI
 import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
 import type { PortState } from '../../core/port/data/PortState.js';
+import type { TombstoneRecord } from '../../core/port/data/TombstoneRecord.js';
 import type { RegistryPort } from '../../core/port/RegistryPort.js';
 import { ensureRecord, readPath, stringOrNull } from './coreStorageRecord.js';
 import {
   SYNC_STATE_KEY,
+  TOMBSTONES_KEY,
   VERSION,
   ensureEntityMap,
   ensureIdentitiesMap,
@@ -17,16 +19,19 @@ import {
   ensurePortNode,
   ensureProjectNode,
   ensureProjects,
+  ensureTombstonesList,
   entityMap,
   identitiesMap,
   itemsMap,
   mapMirrorItem,
   mapPortState,
+  mapTombstone,
   portNode,
   portsMap,
   projectNode,
   readProjectsMap,
   str,
+  tombstonesList,
 } from './syncStateSchema.js';
 
 export interface SyncStateStorage {
@@ -164,6 +169,14 @@ function dropEntity(
     dropItem(container, indexes, ref);
   }
   indexes.itemsByEntity.delete(id);
+
+  const tombstones = tombstonesList(container);
+  if (tombstones.length > 0) {
+    container[TOMBSTONES_KEY] = tombstones.filter((raw) => {
+      const tombstone = mapTombstone(raw);
+      return tombstone === null || tombstone.entityId !== id;
+    });
+  }
 }
 
 function removeItemNode(
@@ -455,6 +468,70 @@ export class SyncStateAdapter implements RegistryPort {
           id,
           notePath: str((raw as Record<string, unknown>).notePath),
         }));
+    });
+  }
+
+  async recordTombstone(record: TombstoneRecord): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      this.assertWritable();
+      const tombstones = ensureTombstonesList(container);
+      const stored =
+        record.handle === undefined || record.handle === ''
+          ? {
+              entityId: record.entityId,
+              notePath: record.notePath,
+              deletedAt: record.deletedAt,
+            }
+          : {
+              entityId: record.entityId,
+              notePath: record.notePath,
+              deletedAt: record.deletedAt,
+              handle: record.handle,
+            };
+      const index = tombstones.findIndex((raw) => {
+        const existing = mapTombstone(raw);
+        return (
+          existing !== null &&
+          existing.notePath === record.notePath &&
+          existing.handle === record.handle
+        );
+      });
+      if (index === -1) {
+        tombstones.push(stored);
+      } else {
+        tombstones[index] = stored;
+      }
+      await this.persist();
+    });
+  }
+
+  async findTombstoneByNotePath(
+    notePath: string,
+  ): Promise<TombstoneRecord | null> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      let found: TombstoneRecord | null = null;
+      for (const raw of tombstonesList(container)) {
+        const tombstone = mapTombstone(raw);
+        if (tombstone !== null && tombstone.notePath === notePath) {
+          found = tombstone;
+        }
+      }
+      return found;
+    });
+  }
+
+  async findTombstone(handle: string): Promise<TombstoneRecord | null> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      for (const raw of tombstonesList(container)) {
+        const tombstone = mapTombstone(raw);
+        if (tombstone !== null && tombstone.handle === handle) {
+          return tombstone;
+        }
+      }
+      return null;
     });
   }
 
