@@ -335,8 +335,9 @@ canonical DTOs and the pure core.
   user, and an absent repo leaves the connection unoriginated with a logged
   error. The resolved project's own address (a code host's repository, a task
   manager's project) is recorded as the identity's `target` — the connection's
-  **effective address** — and every downstream step (mirror, capture, lifecycle)
-  addresses the remote by that effective target, not the declared one.
+  **effective address** — and every downstream step (mirror, capture, lifecycle,
+  task locking) addresses an empty-target connection by that resolved effective
+  target, not the empty declared one.
   The one uniform method replaces the code-host-only setup surface, so a task
   manager originates its project the same way the code host originates its board.
   No declared connection means nothing fans out (ORG-4), and an existing remote

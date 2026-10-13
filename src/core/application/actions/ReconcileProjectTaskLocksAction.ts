@@ -3,6 +3,7 @@ import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPo
 import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
+import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 
 export interface ReconcileProjectTaskLocksInput {
   project: string;
@@ -24,9 +25,17 @@ export class ReconcileProjectTaskLocksAction {
     }
     const connections = await this.vault.readConnections(input.project);
     for (const connection of connections) {
+      const target = await effectiveConnectionTarget(
+        this.registry,
+        input.project,
+        connection,
+      );
+      if (target === null) {
+        continue;
+      }
       const adapter = this.mirrorAdapters.create(
         connection.application,
-        connection.target,
+        target,
         connection.slug,
         input.project,
       );
