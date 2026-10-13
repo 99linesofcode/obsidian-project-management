@@ -16,7 +16,12 @@ export interface MirrorPort {
   createProject(target: string, name: string): Promise<CanonicalProject>;
   renameProject(target: string, name: string): Promise<void>;
   setArchived(target: string, archived: boolean): Promise<void>;
-  archivedTime(target: string): Promise<string | null>;
+
+  // The core's need: read the archive fact's decisive time. Providing this
+  // method asserts the tool exposes an archive-specific time; a tool whose
+  // archive fact carries no such time omits it, and the archive rung falls
+  // through to the vault tie-break.
+  archivedTime?(target: string): Promise<string | null>;
 
   readTasks(target: string): Promise<CanonicalTask[]>;
   readTask(handle: string): Promise<CanonicalTask | null>;

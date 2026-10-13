@@ -308,8 +308,12 @@ canonical DTOs and the pure core.
   to the origin and every capable mirror. Any side can start the freeze or the
   unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
   task-field pass. A mirror project whose name drifted is renamed through
-  `MirrorPort.renameProject`. Its per-side baselines live in the same
-  `coreBaselines` store under the `archived` field.
+  `MirrorPort.renameProject`. A mirror project created in the pass is recorded
+  with its created state as its baseline, skipped from observation, and still
+  driven in the fan-out; the fan-out also re-drives every capable side whose
+  current disagrees with the verdict whatever the merge label (NWM-32). Its
+  per-side baselines live in the same `coreBaselines` store under the `archived`
+  field.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
   conversation while its project is frozen and reopen it on unfreeze; the code

@@ -49,7 +49,7 @@ describe('mergeField — a single delta wins outright (NWM-2, NWM-3)', () => {
 });
 
 describe('mergeField — a quiet field stays quiet (NWM-4)', () => {
-  it('produces no delta and writes nothing when every side matches its baseline', () => {
+  it('produces no delta and the origin current as the value when every side matches its baseline', () => {
     const result = mergeField(
       side({
         side: 'vault',
@@ -62,6 +62,7 @@ describe('mergeField — a quiet field stays quiet (NWM-4)', () => {
 
     expect(result.outcome).toBe('unchanged');
     expect(result.deltas).toHaveLength(0);
+    expect(result.value).toBe('Base');
   });
 });
 
