@@ -96,13 +96,16 @@ export class SyncProjectAction {
     project: string,
     note: ProjectNoteDataTransferObject,
   ): Promise<void> {
-    await this.step('rename project', () =>
-      this.deps.renameProject.execute({
+    await this.step('rename project', async () => {
+      const warnings = await this.deps.renameProject.execute({
         projectName: project,
         notePath: note.path,
         locationArchived: note.archivedAt !== null,
-      }),
-    );
+      });
+      for (const warning of warnings) {
+        console.warn(warning);
+      }
+    });
   }
 
   private async rekey(

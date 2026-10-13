@@ -226,6 +226,26 @@ export class FakeSyncState implements RegistryPort {
     }
   }
 
+  async hasProject(projectName: string): Promise<boolean> {
+    const prefix = `${projectName}\u0000`;
+    for (const key of this.portStates.keys()) {
+      if (key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    for (const key of this.identitiesBySlug.keys()) {
+      if (key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    if (this.identities.has(projectName)) {
+      return true;
+    }
+    return [...this.records.values()].some(
+      (record) => projectFromNotePath(record.notePath) === projectName,
+    );
+  }
+
   async findMirrorItem(
     portId: string,
     handle: string,

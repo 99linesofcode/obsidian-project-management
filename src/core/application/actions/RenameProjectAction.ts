@@ -11,7 +11,9 @@ export interface RenameProjectInput {
 // Reconciles a project note's declared name with the folder it sits in: the
 // property wins, so a folder that disagrees is renamed to match — the home note
 // and the rest of the folder within the project's current root — and the
-// registry's project node is re-keyed to the new name.
+// registry's project node is re-keyed to the new name. A folder renamed
+// directly, where the registry already files the declared name, is renamed back
+// and reported.
 export class RenameProjectAction {
   constructor(
     private readonly vault: VaultPort,
@@ -23,9 +25,10 @@ export class RenameProjectAction {
     if (folderName === '' || folderName === input.projectName) {
       return [];
     }
+    const folderDrift = await this.syncState.hasProject(input.projectName);
     await this.renameNotes(input, folderName);
     await this.syncState.rekeyProject(folderName, input.projectName);
-    return [];
+    return folderDrift ? [folderDriftWarning(input, folderName)] : [];
   }
 
   private async renameNotes(
@@ -48,4 +51,13 @@ export class RenameProjectAction {
       );
     }
   }
+}
+
+function folderDriftWarning(
+  input: RenameProjectInput,
+  folderName: string,
+): Error {
+  return new Error(
+    `project "${input.projectName}" was found under the "${folderName}" folder; the folder was renamed back to match its "project" property`,
+  );
 }
