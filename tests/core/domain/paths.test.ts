@@ -6,6 +6,7 @@ import {
   projectFromNotePath,
   projectHomePath,
   projectHomeStem,
+  projectPathWithName,
 } from '../../../src/core/domain/paths.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
@@ -203,5 +204,34 @@ describe('MAT-5 — a taken slug gains an ordinal', () => {
     const path = await freePath(vault, 'Projecten/X/taken/fix-the-bug.md');
 
     expect(path).toBe('Projecten/X/taken/fix-the-bug-3.md');
+  });
+});
+
+// PLC-1 — the folder and the home-note filename derive from the project's name,
+// so renaming a project rewrites the note path's project segment and leaves
+// every other segment — the derived home note included — intact.
+describe('PLC-1 — a note path is re-derived under a renamed project', () => {
+  it('derives the home note under the new project name', () => {
+    expect(
+      projectPathWithName('Projecten/Old Name/_Old Name.md', 'New Name'),
+    ).toBe('Projecten/New Name/_Old Name.md');
+  });
+
+  it('rewrites the segment for a taken note and for an archived root', () => {
+    expect(
+      projectPathWithName(
+        'Projecten/Old Name/taken/42-fix-the-bug.md',
+        'New Name',
+      ),
+    ).toBe('Projecten/New Name/taken/42-fix-the-bug.md');
+    expect(
+      projectPathWithName('Archief/Old Name/_Old Name.md', 'New Name'),
+    ).toBe('Archief/New Name/_Old Name.md');
+  });
+
+  it('leaves a path outside the two project roots alone', () => {
+    expect(projectPathWithName('Notes/Other.md', 'New Name')).toBe(
+      'Notes/Other.md',
+    );
   });
 });
