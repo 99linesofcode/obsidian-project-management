@@ -14,10 +14,13 @@ export function projectNoteFromCache(
   if (Object.keys(frontmatter.connections).length === 0) {
     return null;
   }
-  const projectName = projectNameFromPath(path);
-  if (projectName === null) {
+  const folderName = projectNameFromPath(path);
+  if (folderName === null) {
     return null;
   }
+  const declared = frontmatter.project;
+  const projectName =
+    typeof declared === 'string' && declared !== '' ? declared : folderName;
   const { connections, errors } = connectionValidator.validate(
     frontmatter.connections,
   );
