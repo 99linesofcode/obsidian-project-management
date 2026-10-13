@@ -358,6 +358,48 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     expect(baseline?.value).toBe('true');
   });
 
+  it("records a created mirror's baseline as its created state, not the verdict (NWM-15)", async () => {
+    const { mirror, registry, action } = await setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    mirror.seedAbsentProject('board-b');
+    await seedBaseline(registry, 'origin', false);
+    await seedBaseline(registry, 'mirror:a', false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.result.outcome).toBe('unchanged');
+    expect(record.frozen).toBe(false);
+    expect(record.written).not.toContain('mirror:b');
+    expect(mirror.currentProject('board-b')?.archived).toBe(false);
+    const baseline = await registry.readBaseline(
+      PROJECT,
+      'archived',
+      'mirror:b',
+    );
+    expect(baseline?.value).toBe('false');
+  });
+
+  it('skips observing a mirror project it created in the same pass (NWM-15)', async () => {
+    const { vault, mirror, registry, action } = await setup({
+      vaultArchived: false,
+      mirrorA: false,
+      mirrorB: false,
+    });
+    mirror.seedProject('board-b', true);
+    mirror.seedAbsentProject('board-b');
+    await seedBaseline(registry, 'origin', false);
+    await seedBaseline(registry, 'mirror:a', false);
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.frozen).toBe(false);
+    expect(vault.has(ACTIVE_HOME)).toBe(true);
+    expect(record.written).not.toContain('mirror:b');
+  });
+
   it('re-drives an observed capable side that disagrees with the verdict when no side produced a delta (NWM-32)', async () => {
     const { mirror, registry, action } = await setup({
       vaultArchived: false,
