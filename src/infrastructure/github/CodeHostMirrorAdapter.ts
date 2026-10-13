@@ -25,6 +25,7 @@ const PROJECT_CONTENT_QUERY = `
         id
         title
         closed
+        closedAt
       }
     }
   }
@@ -564,8 +565,20 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     await this.graphql(UNLOCK_TASK_MUTATION, { nodeId });
   }
 
-  async archivedTime(_target: string): Promise<string | null> {
-    return null;
+  async archivedTime(target: string): Promise<string | null> {
+    const connection = CodeHostTarget.parse(target);
+    const board = await this.board(connection.target);
+    if (board === null) {
+      return null;
+    }
+    const data = await this.graphql(PROJECT_CONTENT_QUERY, {
+      projectId: board.projectNodeId,
+    });
+    const project = data.node;
+    if (!isRecord(project)) {
+      return null;
+    }
+    return typeof project.closedAt === 'string' ? project.closedAt : null;
   }
 
   async resolveOrCreateProject(

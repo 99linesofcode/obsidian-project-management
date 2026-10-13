@@ -4,7 +4,7 @@ import type { MergeResult } from '../../domain/MergeResult.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
-import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
+import { mirrorTrustsArchiveTime } from './mirrorTrustsTimestamps.js';
 import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
@@ -277,13 +277,17 @@ async function observeMirror(
     return null;
   }
 
+  const archiveTime = mirror.adapter.archivedTime
+    ? await mirror.adapter.archivedTime(mirror.handle)
+    : null;
+
   return new SideObservation({
     side: mirror.side,
     role: 'mirror',
     current: project.archived ? 'true' : 'false',
     baseline: baselines.get(mirror.side) ?? null,
-    fieldTime: await mirror.adapter.archivedTime(mirror.handle),
-    timestampTrustworthy: mirrorTrustsTimestamps(mirror.adapter),
+    fieldTime: archiveTime,
+    timestampTrustworthy: mirrorTrustsArchiveTime(mirror.adapter, archiveTime),
     completeFetch: mirror.adapter.fetchComplete?.() ?? false,
     currentCompleted: false,
   });
