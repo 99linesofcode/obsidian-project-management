@@ -1,3 +1,13 @@
+## [0.26.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.26.0...0.26.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **origination:** an empty target resolves by name; a gone remote is re-created ([293d265](https://github.com/99linesofcode/obsidian-project-management/commit/293d265845dc4328d8b1e7dab7a2b9142cdb4c78))
+* **origination:** the resolved addressing is effective downstream ([271472a](https://github.com/99linesofcode/obsidian-project-management/commit/271472ad137df07ddffce86df28f1b66f2b6654f))
+
+
+
 # [0.26.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.25.1...0.26.0) (2026-10-12)
 
 
@@ -41,22 +51,6 @@
 ### Features
 
 * **todo:** a ToDo is a task note under taken/, not a todos/ folder ([eebe2a5](https://github.com/99linesofcode/obsidian-project-management/commit/eebe2a5c1a241864dcc06eb0fce0b4f8979cf38e))
-
-
-
-# [0.23.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.22.3...0.23.0) (2026-10-12)
-
-
-### Bug Fixes
-
-* **labels:** parse the quoted flow sequence with JSON, keeping escapes ([5aaec70](https://github.com/99linesofcode/obsidian-project-management/commit/5aaec70bf9fa2a16362e2d56ac010ff90768c045))
-* **mirror:** keep capture optional so a captureless tool is skipped ([8010571](https://github.com/99linesofcode/obsidian-project-management/commit/801057124be620327f8ef663cec0b3226841d479))
-* **seed:** the Tasks base surfaces the kind from labels, not the dead type scalar ([db9e48a](https://github.com/99linesofcode/obsidian-project-management/commit/db9e48a896ae8e060ff7b0f130227b9d316d4bee))
-
-
-### Features
-
-* **labels:** the labels model — kind from the type label, labels sequence, per-adapter capture gate ([e8e3d5f](https://github.com/99linesofcode/obsidian-project-management/commit/e8e3d5f33c0cd5027d5eb210fb040f741cf0f961))
 
 
 
