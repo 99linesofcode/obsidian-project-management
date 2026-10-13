@@ -670,12 +670,14 @@ project's tracked entities; for each whose note file is gone (and not under
 delete time and the mirror handle the note still owed a delete to — and hands
 the delete to `HandleDeletedNoteAction`. That action finds the registry record
 by note path, resolves each connection's mirror item through `RegistryPort`,
-builds the connection's adapter through `MirrorAdapterFactoryPort`, and calls
+builds the connection's adapter through `MirrorAdapterFactoryPort`, applies
+`completion = true` through the generic write entry, then calls
 `MirrorPort.deleteTask` — the GitHub adapter deletes the board card **and the
-issue itself**, so nothing survives for capture to re-adopt. It then applies
-`completion = true` through the generic write entry and drops the settled mirror
-item. It keeps the registry record: the tombstone and the record are pruned only
-once every connection's mirror item is gone, on a later sweep pass.
+issue itself**, so nothing survives for capture to re-adopt. The completion write
+precedes the delete because the item is gone afterwards (a post-delete write
+would 404 and the delete would never settle); the action then drops the settled
+mirror item. It keeps the registry record: the tombstone and the record are
+pruned only once every connection's mirror item is gone, on a later sweep pass.
 
 The tombstone stops resurrection: capture skips a handle it finds tombstoned, so
 a closed issue or a deleted task is never re-adopted as a new note (DEL-2, I16).
@@ -713,8 +715,8 @@ sequenceDiagram
     Sweep->>HD: execute({ notePath, projectName, connections })
     HD->>SS: findByNotePath, findMirrorItemByEntity
     HD->>F: create(application, target, connectionSlug, projectName)
+    HD->>R: applyField(completion, true) (before the delete)
     HD->>R: deleteTask(handle) (card + issue)
-    HD->>R: applyField(completion, true)
     HD->>SS: removeMirrorItem(project, slug, handle)
   end
   SP->>SPj: execute()

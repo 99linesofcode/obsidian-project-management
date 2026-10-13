@@ -72,7 +72,8 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    await adapter.deleteTask(handle);
+    // Completion precedes the delete: the item is gone afterwards, so a
+    // completion write against it would fail and the delete would never settle.
     await adapter.applyField(
       new CanonicalFieldWrite({
         handle,
@@ -80,6 +81,7 @@ export class HandleDeletedNoteAction {
         value: 'true',
       }),
     );
+    await adapter.deleteTask(handle);
     await this.syncState.removeMirrorItem(projectName, connection.slug, handle);
   }
 }
