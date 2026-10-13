@@ -19,6 +19,19 @@ export interface RegistryPort {
   removeEntity(id: string): Promise<void>;
   listEntities(projectName: string): Promise<EntityRecord[]>;
 
+  // The core's need: a project rename re-keys the project node and its
+  // per-connection state (identities, baselines) rather than relocating them,
+  // so the registry keeps the project under the name the note now declares.
+  rekeyProject(fromProject: string, toProject: string): Promise<void>;
+  // The core's need: telling a property edit from a folder renamed directly
+  // asks whether the registry already files the project under the declared
+  // name.
+  hasProject(projectName: string): Promise<boolean>;
+  // The core's need: the recorded key — the name the plugin last knew — may be
+  // neither the declared property nor the current folder after a half-finished
+  // rename, so the rename finds it by the project's connections.
+  listProjects(): Promise<string[]>;
+
   // The core's need: track a deleted note as a change — the entity's absence
   // with its delete time and the mirror handle it still owes a delete to. A
   // tombstone stops capture re-adopting the handle, and removing the entity

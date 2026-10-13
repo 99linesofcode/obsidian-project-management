@@ -23,6 +23,21 @@ export function projectNameFromPath(path: string): string | null {
   return segments[1] ?? null;
 }
 
+// The same note path with its project segment replaced. Both roots name the
+// project in the second segment, so a rename rewrites it in place and every
+// other segment is preserved.
+export function projectPathWithName(path: string, projectName: string): string {
+  const segments = path.split('/');
+  if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
+    return path;
+  }
+  if (segments.length < 2) {
+    return path;
+  }
+  segments[1] = projectName;
+  return segments.join('/');
+}
+
 // The home note's stem: `_<project>`. Shared by the path and the wikilink
 // renderer so the two can never drift.
 export function projectHomeStem(projectName: string): string {

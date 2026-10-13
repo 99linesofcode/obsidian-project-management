@@ -816,6 +816,72 @@ describe('SyncStateAdapter — the mirror project handle (F02 NWM-2)', () => {
   });
 });
 
+describe('REG-1, PLC-2 — a project rename re-keys the registry node', () => {
+  it('moves entities, ports, identities and the archive baseline to the new name', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Old Name/taken/42-fix-the-bug.md',
+      }),
+    );
+    await adapter.setPortState('Old Name', 'github', {
+      provider: 'github',
+      project: 'https://github.com/acme/widgets',
+      lastPoll: null,
+      lanes: {},
+    });
+    await adapter.setIdentity('Old Name', 'github', identity);
+    await adapter.writeBaseline(
+      'Old Name',
+      'archived',
+      'origin',
+      new Baseline('true', false),
+    );
+
+    await adapter.rekeyProject('Old Name', 'New Name');
+
+    expect(await adapter.hasProject('Old Name')).toBe(false);
+    expect(await adapter.hasProject('New Name')).toBe(true);
+    expect(await adapter.listEntities('New Name')).toEqual([
+      {
+        id: 'entity-1',
+        notePath: 'Projecten/New Name/taken/42-fix-the-bug.md',
+      },
+    ]);
+    expect(await adapter.getPortState('New Name', 'github')).not.toBeNull();
+    expect(await adapter.getIdentity('New Name', 'github')).not.toBeNull();
+    expect(
+      (await adapter.readBaseline('New Name', 'archived', 'origin'))?.value,
+    ).toBe('true');
+    expect(
+      await adapter.readBaseline('Old Name', 'archived', 'origin'),
+    ).toBeNull();
+  });
+
+  it('reports no project for a name the registry does not file', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+
+    expect(await adapter.hasProject('Missing')).toBe(false);
+    expect(await adapter.listProjects()).toEqual([]);
+  });
+
+  it('lists a filed project by name', async () => {
+    const { storage } = fakeStorage();
+    const adapter = new SyncStateAdapter(storage);
+    await adapter.setEntity(
+      entityRecord({
+        id: 'entity-1',
+        notePath: 'Projecten/Old Name/taken/42-fix-the-bug.md',
+      }),
+    );
+
+    expect(await adapter.listProjects()).toContain('Old Name');
+  });
+});
+
 const conformanceHarness: SyncStateConformanceHarness = {
   create() {
     const { storage } = fakeStorage();

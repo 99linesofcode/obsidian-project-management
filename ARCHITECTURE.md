@@ -134,7 +134,7 @@ sequenceDiagram
   Sched->>Q: enqueue(project) per project note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes (no-op when missing)
-  SP->>SP: migrate home note, rekey, resolve-or-create connections
+  SP->>SP: migrate home note, rename project, rekey, resolve-or-create connections
   SP->>Life: invoke(project)
   alt project folder gone
     Life->>M: delete the remote project on every connection
@@ -357,8 +357,9 @@ canonical DTOs and the pure core.
   an unlabelled one takes the kind its position implies — a root item is a
   `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
-  (home-note migration, connection re-keying, connection origination, rename
-  recovery, vault consistency and the deletion sweep) and the core actions
+  (home-note migration, project-name reconciliation, connection re-keying,
+  connection origination, rename recovery, vault consistency and the deletion
+  sweep) and the core actions
   directly (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
   every step wrapped so one failure logs and skips that step. It runs the
@@ -369,6 +370,19 @@ canonical DTOs and the pure core.
   whose file is gone (not under `Archief/`), hands the delete to
   `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
   side has settled.
+- **The project rename** (`RenameProjectAction` + `RegistryPort.rekeyProject`).
+  A project note names itself from a top-level `project:` frontmatter key; the
+  folder segment and the home-note filename (`_<name>.md`) derive from it. The
+  chain runs the reconcile step after the home-note migration and before
+  origination, so every downstream step addresses the project by its current
+  name. A note with no property adopts the folder segment once; a folder that
+  disagrees with the property is renamed to match — the home note and the rest of
+  the folder within the project's current root — and the registry's project node
+  (entities, ports, identities and the project's archive baseline) is re-keyed
+  to the new name. A folder renamed directly, where the registry already files
+  the declared name, is renamed back and reported on the chain's warning
+  channel. The mirror project's display name follows through the lifecycle
+  pass's drifted-name rename (NWM-31).
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -414,8 +428,9 @@ canonical DTOs and the pure core.
 ## 4. Data Stores
 
 - **The vault** — the system of record; markdown notes, not a database.
-  Project notes live under `Projecten/<name>/` (or `Archief/` when archived)
-  and declare their connections in a non-empty `connections` map; every task
+  Project notes live under `Projecten/<name>/` (or `Archief/` when archived),
+  declare their connections in a non-empty `connections` map, and carry their
+  name in a top-level `project:` property; every task
   note lives under `taken/`, a to-do among them carrying the `type:todo`
   label. Identity is a vault-owned uuid held in the registry — filenames and
   frontmatter carry no machine id.
@@ -428,6 +443,8 @@ canonical DTOs and the pure core.
     per-project `fullScanPending` marker.
     Ports are keyed by the note's connection slug, so a project can hold two
     connections of the same tool; a slug rename re-keys the port in lockstep.
+    A project rename re-keys the project node — entities, ports, identities and
+    the project's archive baseline — to the note's declared name.
     Written only through `SyncStateAdapter`, behind a serialization mutex it
     shares with the settings save.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
@@ -554,12 +571,13 @@ over HTTPS.
   pruned once every side has settled. The vault note itself is trashed, never
   destroyed.
 
-**Known debt / open items:** A project-level delete is deferred to S17c (`P7`).
-A project's identity **is** its folder name, so a folder rename is
-indistinguishable from a delete and a false delete is unrecoverable; projects are
-never captured, so nothing resurrects — a gone folder leaves the remote project
-in place. S17c adds a durable project identity, rename detection and re-key
-before any project delete fans out. The vault-maintenance shell has been
+**Known debt / open items:** A project's name is the `project` property on its
+note (S17c); the folder segment and the home-note filename derive from it, so a
+folder rename is a rename — the registry re-keys to the declared name — not a
+delete. The project-level delete is still deferred (`DEL-3`): projects are never
+captured, so nothing resurrects — a gone folder leaves the remote project in
+place, and the positive "gone, not renamed" verdict the property makes possible
+is decided separately. The vault-maintenance shell has been
 retired — the chain drives its steps directly (ADR 003).
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
@@ -636,6 +654,11 @@ Date of Last Update: 2026-10-13
   idempotent. A project is never captured — it is declared (origination). A
   captured task-manager task carries a kind — an explicit type label kept, else
   `slice` for a root item and `task` for a subtask.
+- **Project rename** — reconciling a project note's declared name with the
+  folder it sits in. The name is a top-level `project:` property; the folder and
+  the home-note filename derive from it. A note with no property adopts the
+  folder segment once; a property change renames the folder and re-keys the
+  registry; a directly-renamed folder is renamed back and reported.
 
 ## 12. Conventions & Boundaries
 
