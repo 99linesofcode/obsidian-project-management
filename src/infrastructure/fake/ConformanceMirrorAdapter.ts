@@ -11,7 +11,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
   private readonly archived = new Map<string, boolean>();
   private readonly names = new Map<string, string>();
   private readonly projectTimes = new Map<string, string>();
-  private readonly missingProjects = new Set<string>();
   private readonly absentProjects = new Set<string>();
   private readonly throwingProjects = new Set<string>();
   private readonly throwingTasks = new Set<string>();
@@ -34,10 +33,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
 
   seedProjectName(target: string, name: string): void {
     this.names.set(target, name);
-  }
-
-  seedMissingProject(target: string): void {
-    this.missingProjects.add(target);
   }
 
   seedAbsentProject(target: string): void {
@@ -90,7 +85,7 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     if (this.throwingProjects.has(target)) {
       throw new Error(`conformance: project ${target} read failed`);
     }
-    if (this.missingProjects.has(target) || this.absentProjects.has(target)) {
+    if (this.absentProjects.has(target)) {
       return null;
     }
     return this.readProjectSync(target);
