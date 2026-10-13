@@ -25,10 +25,32 @@ export function splitFrontmatter(content: string): SplitFrontmatter | null {
   return { fields, body: lines.slice(i + 1).join('\n') };
 }
 
+// Whether the frontmatter block declares the named key at its top level. The
+// flat splitter trims indentation, so a connection's nested `project:` reads as
+// top-level there; this scans the block's raw lines instead.
+export function hasTopLevelFrontmatterField(
+  content: string,
+  key: string,
+): boolean {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') {
+    return false;
+  }
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line === '---') {
+      return false;
+    }
+    if (line.startsWith(`${key}:`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Replaces a note's body, keeping its frontmatter block verbatim. A note with
 // no frontmatter block is replaced entirely by the new body.
-export function withBody(content: string, body: string): string {
-  const lines = content.split('\n');
+export function withBody(content: string, body: string): string {  const lines = content.split('\n');
   if (lines[0] !== '---') {
     return body;
   }
