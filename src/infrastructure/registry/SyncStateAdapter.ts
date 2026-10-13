@@ -1,7 +1,10 @@
 import { Baseline } from '../../core/domain/Baseline.js';
 import { isRecord } from '../../core/domain/isRecord.js';
 import type { MergedField } from '../../core/domain/canonicalField.js';
-import { projectFromNotePath, projectPathWithName } from '../../core/domain/paths.js';
+import {
+  projectFromNotePath,
+  projectPathWithName,
+} from '../../core/domain/paths.js';
 import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
 import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';

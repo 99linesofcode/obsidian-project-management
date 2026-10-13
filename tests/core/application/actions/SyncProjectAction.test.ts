@@ -519,7 +519,7 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
         invoke: async () => {},
       } as unknown as MirrorSyncAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
-    renameProject: new RenameProjectAction(vault, syncState),
+      renameProject: new RenameProjectAction(vault, syncState),
       detectNoteRenames: {
         execute: async () => {},
       } as unknown as DetectNoteRenamesAction,

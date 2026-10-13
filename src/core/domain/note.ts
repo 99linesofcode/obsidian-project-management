@@ -50,7 +50,8 @@ export function hasTopLevelFrontmatterField(
 
 // Replaces a note's body, keeping its frontmatter block verbatim. A note with
 // no frontmatter block is replaced entirely by the new body.
-export function withBody(content: string, body: string): string {  const lines = content.split('\n');
+export function withBody(content: string, body: string): string {
+  const lines = content.split('\n');
   if (lines[0] !== '---') {
     return body;
   }

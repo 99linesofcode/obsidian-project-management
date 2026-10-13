@@ -1,5 +1,8 @@
 import type { ProjectIdentityDataTransferObject } from '../../src/core/port/data/ProjectIdentityDataTransferObject.js';
-import { projectFromNotePath, projectPathWithName } from '../../src/core/domain/paths.js';
+import {
+  projectFromNotePath,
+  projectPathWithName,
+} from '../../src/core/domain/paths.js';
 import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';
@@ -194,7 +197,10 @@ export class FakeSyncState implements RegistryPort {
     for (const [key, state] of [...this.portStates]) {
       if (key.startsWith(fromPrefix)) {
         this.portStates.delete(key);
-        this.portStates.set(`${toPrefix}${key.slice(fromPrefix.length)}`, state);
+        this.portStates.set(
+          `${toPrefix}${key.slice(fromPrefix.length)}`,
+          state,
+        );
       }
     }
     for (const [key, identity] of [...this.identitiesBySlug]) {

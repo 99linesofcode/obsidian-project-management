@@ -1,5 +1,12 @@
-import { projectFromNotePath, projectHomePath, projectPathWithName } from '../../domain/paths.js';
-import { hasTopLevelFrontmatterField, rewriteFrontmatterFields } from '../../domain/note.js';
+import {
+  projectFromNotePath,
+  projectHomePath,
+  projectPathWithName,
+} from '../../domain/paths.js';
+import {
+  hasTopLevelFrontmatterField,
+  rewriteFrontmatterFields,
+} from '../../domain/note.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
