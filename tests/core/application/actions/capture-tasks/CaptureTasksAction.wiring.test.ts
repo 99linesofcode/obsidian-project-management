@@ -137,7 +137,6 @@ function harness(
       factory,
       syncState,
       createTaskNote,
-      (application) => application === 'github',
     ),
     vault,
     syncState,

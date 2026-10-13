@@ -334,7 +334,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     expect(mirror.currentProject('board-b')?.archived).toBe(true);
   });
 
-  it('onboards a missing mirror project, excludes it from observation, and fans it out to the verdict (NWM-15)', async () => {
+  it('leaves a connection whose mirror project is absent unoriginated (ORG-3: origination is the chain step)', async () => {
     const { vault, mirror, registry, action } = await setup({
       vaultArchived: true,
       mirrorA: true,
@@ -347,59 +347,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
 
     const record = await action.invoke(PROJECT);
 
-    expect(mirror.createCalls).toEqual(['board-b']);
-    expect(await registry.resolveMirrorProject(PROJECT, 'b')).toBe('board-b');
+    expect(mirror.createCalls).toEqual([]);
+    expect(await registry.resolveMirrorProject(PROJECT, 'b')).toBeNull();
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
-    expect(record.written).toContain('mirror:b');
-    expect(mirror.currentProject('board-b')?.archived).toBe(true);
-    const baseline = await registry.readBaseline(
-      PROJECT,
-      'archived',
-      'mirror:b',
-    );
-    expect(baseline?.value).toBe('true');
-  });
-
-  it("records a created mirror's baseline as its created state, not the verdict (NWM-15)", async () => {
-    const { mirror, registry, action } = await setup({
-      vaultArchived: false,
-      mirrorA: false,
-      mirrorB: false,
-    });
-    mirror.seedAbsentProject('board-b');
-    await seedBaseline(registry, 'origin', false);
-    await seedBaseline(registry, 'mirror:a', false);
-
-    const record = await action.invoke(PROJECT);
-
-    expect(record.result.outcome).toBe('unchanged');
-    expect(record.frozen).toBe(false);
-    expect(record.written).not.toContain('mirror:b');
-    expect(mirror.currentProject('board-b')?.archived).toBe(false);
-    const baseline = await registry.readBaseline(
-      PROJECT,
-      'archived',
-      'mirror:b',
-    );
-    expect(baseline?.value).toBe('false');
-  });
-
-  it('skips observing a mirror project it created in the same pass (NWM-15)', async () => {
-    const { vault, mirror, registry, action } = await setup({
-      vaultArchived: false,
-      mirrorA: false,
-      mirrorB: false,
-    });
-    mirror.seedProject('board-b', true);
-    mirror.seedAbsentProject('board-b');
-    await seedBaseline(registry, 'origin', false);
-    await seedBaseline(registry, 'mirror:a', false);
-
-    const record = await action.invoke(PROJECT);
-
-    expect(record.frozen).toBe(false);
-    expect(vault.has(ACTIVE_HOME)).toBe(true);
     expect(record.written).not.toContain('mirror:b');
   });
 
@@ -457,7 +408,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     expect(mirror.currentProject('board-b')?.archived).toBe(false);
   });
 
-  it('onboards a connection with no mirror project and syncs it in the same pass', async () => {
+  it('leaves a connection with no mirror project unoriginated (ORG-3)', async () => {
     const appVault = new FakeAppVault();
     appVault.seed(ARCHIVED_HOME, ONBOARD_HOME, MTIME);
     const registry = new SyncStateAdapter(memoryStorage());
@@ -482,10 +433,9 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
 
     const record = await action.invoke(PROJECT);
 
-    expect(mirror.createCalls).toEqual(['board-new']);
-    expect(await registry.resolveMirrorProject(PROJECT, 'a')).toBe('board-new');
+    expect(mirror.createCalls).toEqual([]);
+    expect(await registry.resolveMirrorProject(PROJECT, 'a')).toBeNull();
     expect(record.frozen).toBe(true);
-    expect(mirror.currentProject('board-new')?.archived).toBe(true);
   });
 
   it('resolves a recorded mirror project without creating it again', async () => {

@@ -77,7 +77,6 @@ export class MirrorSyncAction {
     private readonly vault: VaultPort,
     private readonly registry: RegistryPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
-    private readonly isCodeHost: (application: string) => boolean = () => false,
   ) {}
 
   async invoke(project: string): Promise<MirrorFieldOutcome[]> {
@@ -192,7 +191,7 @@ export class MirrorSyncAction {
     if (task === null) {
       return null;
     }
-    if (isTodo(task) && this.todoIsUntracked(connection, adapter)) {
+    if (isTodo(task) && this.todoIsUntracked(adapter)) {
       return null;
     }
     if (pending !== null) {
@@ -323,14 +322,8 @@ export class MirrorSyncAction {
     return this.registry.resolveMirrorHandle(slug, identity);
   }
 
-  private todoIsUntracked(
-    connection: ConnectionDataTransferObject,
-    adapter: MirrorPort,
-  ): boolean {
-    return (
-      this.isCodeHost(connection.application) ||
-      adapter.materializesTodo?.() === false
-    );
+  private todoIsUntracked(adapter: MirrorPort): boolean {
+    return adapter.materializesTodo?.() === false;
   }
 
   private async withMirrorParent(

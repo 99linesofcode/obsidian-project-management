@@ -17,7 +17,6 @@ export interface CaptureTasksResult {
 
 interface AdoptTaskInput {
   task: CanonicalTask;
-  application: string;
   slug: string;
   projectName: string;
   syncedAt: string;
@@ -33,7 +32,6 @@ export class CaptureTasksAction {
     private readonly factory: MirrorAdapterFactoryPort,
     private readonly registry: RegistryPort,
     private readonly createTaskNote: CreateTaskNoteAction,
-    private readonly isCodeHost: (application: string) => boolean,
   ) {}
 
   async invoke(project: string, syncedAt: string): Promise<CaptureTasksResult> {
@@ -104,7 +102,6 @@ export class CaptureTasksAction {
       try {
         await this.adopt({
           task,
-          application: connection.application,
           slug: connection.slug,
           projectName: project,
           syncedAt,
@@ -123,7 +120,7 @@ export class CaptureTasksAction {
     if (input.task.handle === '') {
       throw new Error('cannot adopt a task with an empty handle');
     }
-    if (this.isCodeHost(input.application)) {
+    if (isCodeHostHandle(input.task.handle)) {
       await this.adoptCodeHostTask(input);
       return;
     }
@@ -164,6 +161,13 @@ export class CaptureTasksAction {
       { entityId: id },
     );
   }
+}
+
+// A captured task's handle decides the adoption shape: a code host's issue is
+// addressed by its url and becomes a task note; a task manager's item carries
+// an opaque id and becomes a draft note.
+function isCodeHostHandle(handle: string): boolean {
+  return handle.startsWith('http://') || handle.startsWith('https://');
 }
 
 // The kind a task-manager capture carries: its explicit type label when it has
