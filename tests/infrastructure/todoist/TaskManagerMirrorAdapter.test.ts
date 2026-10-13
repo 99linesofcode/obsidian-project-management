@@ -4,6 +4,7 @@ import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldW
 import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../src/core/domain/OriginObservation.js';
+import type { MirrorPort } from '../../../src/core/port/MirrorPort.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
 import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
@@ -420,7 +421,7 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
 });
 
 describe('TaskManagerMirrorAdapter — the archive fact has no decisive time (ADP-6)', () => {
-  it('reports no archive-specific time for an archived project', async () => {
+  it('exposes no archive-time surface for an archived project', async () => {
     const { adapter } = adapterWith([
       {
         status: 200,
@@ -432,8 +433,9 @@ describe('TaskManagerMirrorAdapter — the archive fact has no decisive time (AD
         },
       },
     ]);
+    const port: MirrorPort = adapter;
 
-    expect(await adapter.archivedTime(target())).toBeNull();
+    expect(port.archivedTime).toBeUndefined();
   });
 });
 
