@@ -178,7 +178,9 @@ its own module; the composition root wires it.
   declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
   remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
-  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?`
+  `fetchComplete?` (verified-complete fetch), `materializesTodo?` (whether a
+  `type:todo` becomes a standalone item — a code host does not, a task manager
+  does) and `lockTask?`/`unlockTask?`
   (task locking).
   A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
@@ -288,7 +290,15 @@ canonical DTOs and the pure core.
   item is created through `MirrorPort.createTask`, the real handle replaces the
   placeholder, and the created mirror is reconciled in the same pass. A
   placeholder left by an interrupted pass is adopted by matching the mirror's
-  task title rather than re-created. It names no provider.
+  task title rather than re-created. A `type:todo` is materialized only where the
+  mirror tracks one (`MirrorPort.materializesTodo?`): a code host creates **no
+  issue** — the parent's body carries the checklist line, so the todo is
+  untracked there — while a task manager creates a subtask under the parent. The
+  `subtasks` field carries the parent's **identity**, not a rendering: each
+  side's raw value (the origin's wikilink stem, the mirror's handle) is resolved
+  through `RegistryPort` to the parent's note path, compared by identity, and
+  rendered back to its own space on write — a relation that agrees by identity
+  is settled. It names no provider.
 - **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction`). The
   project-level peer of the mirror-sync action: given a project it resolves each
   connection's mirror project through `RegistryPort`, onboarding a missing one
@@ -367,15 +377,18 @@ canonical DTOs and the pure core.
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
   project, origination, capture, complete-fetch, per-field-timestamp and
   task-lock surfaces; `deleteTask` deletes the board card **and the issue
-  itself**, so capture has nothing left to re-adopt. The composition root
+  itself**, so capture has nothing left to re-adopt. It reports
+  `materializesTodo` false: a `type:todo` is untracked here — its parent's body
+  carries the checklist line. The composition root
   registers it under the application id `github`.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
   completed fact, subtasks as the parent relation, label as the task labels, and
   the project, origination, capture, complete-fetch and per-field-timestamp
-  surfaces; it omits the locking methods. The composition root registers it
-  under the application id `todoist`.
+  surfaces; it omits the locking methods. It reports `materializesTodo` true: a
+  `type:todo` becomes a subtask under its parent. The composition root registers
+  it under the application id `todoist`.
 - **The registry adapter** (`infrastructure/registry/`) persists the core's
   memory in `data.json`: `SyncStateAdapter` (the `syncState` container and the
   `coreBaselines` store), with the pure codecs (`coreStorageRecord`,
@@ -427,11 +440,13 @@ No other persistent store. The mirrors hold copies, never authority.
   creation, the board operations, locking and sub-issue relations; REST for the
   label and state updates. The core
   consumes it through `MirrorPort` (project, task, capture, and the optional
-  timestamp, complete-fetch, locking and origination methods). A fine-grained
+  timestamp, complete-fetch, todo-materialization, locking and origination
+  methods). A fine-grained
   token, bearer.
 - **Task manager** — REST v1 for projects, sections, tasks and labels. The core
   consumes it through `MirrorPort` (project, task, capture, and the optional
-  timestamp, complete-fetch and origination methods). An API token, bearer.
+  timestamp, complete-fetch, todo-materialization and origination methods). An
+  API token, bearer.
 - **The host vault application** — the plugin API (vault read/write, events,
   `requestUrl`, settings and data). Behind `VaultPort` and the note codecs;
   only the adapter imports the host package.
@@ -597,7 +612,13 @@ Date of Last Update: 2026-10-13
   placeholder-first: the mirror-sync action records a placeholder handle before
   it creates the missing item through the adapter, stamps the real handle over
   the placeholder, and reconciles it in the same pass; an interrupted pass
-  adopts the created item instead of duplicating it.
+  adopts the created item instead of duplicating it. A `type:todo` is the
+  exception: it materializes only where the mirror tracks one, so a code host
+  creates no issue while a task manager creates a subtask.
+- **Parent identity** — the canonical value of the `subtasks` field: the
+  parent's note path, not a rendering. The origin renders it as a wikilink stem
+  and the mirror as a handle; each side's raw value resolves through the
+  registry to the identity, so a relation the two sides name alike settles.
 - **Origination** — resolving-or-creating the remote project a declared
   connection names. A connection declares a tool and a target; an empty target
   means the remote project is identified by the vault project's name, a

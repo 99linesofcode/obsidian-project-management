@@ -351,6 +351,18 @@ A side is **advanced** when it was written or already matched; a skipped write
 still advances (the repair path for a widened value); a failed write advances
 nothing.
 
+Two rules refine the pass. A **`type:todo`** is materialized only where the
+mirror tracks one: a code host creates **no issue** — the parent's body carries
+the checklist line, so the todo is untracked there — while a task manager creates
+a **subtask under the parent**; the mirror advertises which through
+`MirrorPort.materializesTodo?` (the code host reports false, the task manager
+true), so the core names no provider. The **`subtasks`** field carries the
+parent's **identity** — its note path — not a rendering: the origin's raw
+wikilink stem and the mirror's handle each resolve through `RegistryPort` to the
+identity before the merge, and the winner renders back to each side's own space
+on write (the origin a stem, the mirror a handle), so a relation the two sides
+name alike is settled and a second pass writes nothing.
+
 ### 2.4 The project lifecycle pass (`ProjectLifecycleSyncAction`)
 
 `ProjectLifecycleSyncAction` is the project-level peer of the mirror-sync action.

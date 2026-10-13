@@ -1,12 +1,13 @@
 import type { CanonicalField } from '../../domain/canonicalField.js';
 import { Baseline } from '../../domain/Baseline.js';
-import type { CanonicalTask } from '../../port/data/CanonicalTask.js';
+import { CanonicalTask } from '../../port/data/CanonicalTask.js';
 import { CanonicalFieldWrite } from '../../port/data/CanonicalFieldWrite.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { MergeResult } from '../../domain/MergeResult.js';
+import { OriginObservation } from '../../domain/OriginObservation.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
-import { labelSequence } from '../../domain/note.js';
+import { labelSequence, stemOf, typeFromLabels } from '../../domain/note.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
 import { effectiveConnectionTarget } from '../services/connectionTarget.js';
@@ -35,10 +36,29 @@ interface ScopedMirror {
 }
 
 interface ResolvedMirror {
+  slug: string;
   side: string;
   handle: string;
   adapter: MirrorPort;
 }
+
+// The value space a field's canonical value lives in, per side. Most fields
+// carry the same raw value everywhere; `subtasks` carries the parent's
+// identity, which each side renders in its own space — the origin a wikilink
+// stem, the mirror a handle.
+interface FieldCodec {
+  originCurrent(raw: string | null): Promise<string | null>;
+  mirrorCurrent(slug: string, raw: string | null): Promise<string | null>;
+  originValue(identity: string | null): string | null;
+  mirrorValue(slug: string, identity: string | null): Promise<string | null>;
+}
+
+const IDENTITY_CODEC: FieldCodec = {
+  originCurrent: async (raw) => raw,
+  mirrorCurrent: async (_slug, raw) => raw,
+  originValue: (identity) => identity,
+  mirrorValue: async (_slug, identity) => identity,
+};
 
 export interface MirrorFieldOutcome {
   field: CanonicalField;
@@ -57,6 +77,7 @@ export class MirrorSyncAction {
     private readonly vault: VaultPort,
     private readonly registry: RegistryPort,
     private readonly mirrorAdapters: MirrorAdapterFactoryPort,
+    private readonly isCodeHost: (application: string) => boolean = () => false,
   ) {}
 
   async invoke(project: string): Promise<MirrorFieldOutcome[]> {
@@ -68,7 +89,7 @@ export class MirrorSyncAction {
     for (const notePath of notePaths) {
       const mirrors = await this.resolveMirrors(scoped, notePath, project);
       for (const field of MERGED_FIELDS) {
-        outcomes.push(await this.syncField(notePath, field, mirrors));
+        outcomes.push(await this.syncField(notePath, field, mirrors, project));
       }
     }
     return outcomes;
@@ -117,6 +138,7 @@ export class MirrorSyncAction {
       );
       if (handle !== null) {
         mirrors.push({
+          slug: connection.slug,
           side: mirrorSideKey(connection.slug),
           handle,
           adapter,
@@ -170,6 +192,9 @@ export class MirrorSyncAction {
     if (task === null) {
       return null;
     }
+    if (isTodo(task) && this.todoIsUntracked(connection, adapter)) {
+      return null;
+    }
     if (pending !== null) {
       const adopted = await this.adopt(
         connection,
@@ -189,7 +214,10 @@ export class MirrorSyncAction {
       notePath,
       pendingCreationHandle(notePath),
     );
-    const created = await adapter.createTask(target, task);
+    const created = await adapter.createTask(
+      target,
+      await this.withMirrorParent(task, connection, project),
+    );
     await this.registry.recordMirrorHandle(
       project,
       connection.slug,
@@ -227,26 +255,37 @@ export class MirrorSyncAction {
     notePath: string,
     field: CanonicalField,
     mirrors: readonly ResolvedMirror[],
+    project: string,
   ): Promise<MirrorFieldOutcome> {
+    const codec =
+      field === 'subtasks' ? this.parentCodec(project) : IDENTITY_CODEC;
+    const observed = await this.vault.observe(notePath, field);
+    const originCurrent = await codec.originCurrent(observed.current);
     const origin = originSideObservation(
       ORIGIN_SIDE,
       await this.registry.readBaseline(notePath, field, ORIGIN_SIDE),
-      await this.vault.observe(notePath, field),
+      new OriginObservation({
+        current: originCurrent,
+        currentCompleted: observed.currentCompleted,
+        fieldTime: observed.fieldTime,
+        trustworthy: observed.trustworthy,
+      }),
     );
     const baselines = await this.readMirrorBaselines(notePath, field, mirrors);
     const observations: SideObservation[] = [];
     for (const mirror of mirrors) {
-      observations.push(await observeMirror(mirror, field, baselines));
+      observations.push(await observeMirror(mirror, field, baselines, codec));
     }
 
     const result = mergeField(origin, observations);
-    const fanout = await fanOut(mirrors, field, result);
+    const fanout = await fanOut(mirrors, field, result, codec);
     const originResult = await applyToOrigin(
       this.vault,
       notePath,
       field,
-      origin,
+      originCurrent,
       result,
+      codec,
     );
 
     const advanced = [...fanout.advanced];
@@ -260,6 +299,96 @@ export class MirrorSyncAction {
 
     await this.persistAdvanced(notePath, field, advanced, result);
     return { field, result, written: fanout.written, advanced, failed };
+  }
+
+  // The `subtasks` codec: the canonical value is the parent's identity — its
+  // note path — so the origin's wikilink stem and the mirror's handle, two
+  // renderings of one relation, are compared and settled by identity.
+  private parentCodec(project: string): FieldCodec {
+    return {
+      originCurrent: (raw) => this.originParentIdentity(project, raw),
+      mirrorCurrent: (slug, raw) => this.mirrorParentIdentity(slug, raw),
+      originValue: (identity) => (identity === null ? null : stemOf(identity)),
+      mirrorValue: (slug, identity) => this.renderMirrorParent(slug, identity),
+    };
+  }
+
+  private async renderMirrorParent(
+    slug: string,
+    identity: string | null,
+  ): Promise<string | null> {
+    if (identity === null) {
+      return null;
+    }
+    return this.registry.resolveMirrorHandle(slug, identity);
+  }
+
+  private todoIsUntracked(
+    connection: ConnectionDataTransferObject,
+    adapter: MirrorPort,
+  ): boolean {
+    return (
+      this.isCodeHost(connection.application) ||
+      adapter.materializesTodo?.() === false
+    );
+  }
+
+  private async withMirrorParent(
+    task: CanonicalTask,
+    connection: ConnectionDataTransferObject,
+    project: string,
+  ): Promise<CanonicalTask> {
+    if (task.parent === null) {
+      return task;
+    }
+    const identity = await this.originParentIdentity(project, task.parent);
+    if (identity === null) {
+      return task;
+    }
+    const handle = await this.registry.resolveMirrorHandle(
+      connection.slug,
+      identity,
+    );
+    if (handle === null) {
+      return task;
+    }
+    return new CanonicalTask({
+      handle: task.handle,
+      entityId: task.entityId,
+      title: task.title,
+      body: task.body,
+      status: task.status,
+      completed: task.completed,
+      parent: handle,
+      labels: task.labels,
+    });
+  }
+
+  private async originParentIdentity(
+    project: string,
+    raw: string | null,
+  ): Promise<string | null> {
+    if (raw === null) {
+      return null;
+    }
+    const entities = await this.registry.listEntities(project);
+    const parent = entities.find((entity) => stemOf(entity.notePath) === raw);
+    return parent?.notePath ?? null;
+  }
+
+  private async mirrorParentIdentity(
+    slug: string,
+    raw: string | null,
+  ): Promise<string | null> {
+    if (raw === null) {
+      return null;
+    }
+    const item = await this.registry.findMirrorItem(slug, raw);
+    if (item === null) {
+      return null;
+    }
+    const entity = await this.registry.getEntity(item.entityId);
+    return entity?.notePath ?? null;
   }
 
   private async readMirrorBaselines(
@@ -306,6 +435,10 @@ function isPendingCreationHandle(handle: string): boolean {
   return handle.startsWith(PENDING_CREATION_PREFIX);
 }
 
+function isTodo(task: CanonicalTask): boolean {
+  return typeFromLabels(task.labels) === 'todo';
+}
+
 function completedValue(field: CanonicalField, value: string | null): boolean {
   return field === 'completion' && value === 'true';
 }
@@ -314,6 +447,7 @@ async function observeMirror(
   mirror: ResolvedMirror,
   field: CanonicalField,
   baselines: ReadonlyMap<string, Baseline>,
+  codec: FieldCodec,
 ): Promise<SideObservation> {
   const task = await mirror.adapter.readTask(mirror.handle);
   const fieldTime = mirror.adapter.fieldTime
@@ -323,7 +457,10 @@ async function observeMirror(
   return new SideObservation({
     side: mirror.side,
     role: 'mirror',
-    current: task === null ? null : canonicalValue(task, field),
+    current: await codec.mirrorCurrent(
+      mirror.slug,
+      task === null ? null : canonicalValue(task, field),
+    ),
     baseline: baselines.get(mirror.side) ?? null,
     fieldTime,
     timestampTrustworthy: mirrorTrustsTimestamps(mirror.adapter),
@@ -336,6 +473,7 @@ async function fanOut(
   mirrors: readonly ResolvedMirror[],
   field: CanonicalField,
   result: MergeResult,
+  codec: FieldCodec,
 ): Promise<{ written: string[]; advanced: string[]; failed: string[] }> {
   const written: string[] = [];
   const advanced: string[] = [];
@@ -344,7 +482,11 @@ async function fanOut(
   if (result.outcome === 'value') {
     for (const mirror of mirrors) {
       const task = await mirror.adapter.readTask(mirror.handle);
-      if (task !== null && canonicalValue(task, field) === result.value) {
+      const current = await codec.mirrorCurrent(
+        mirror.slug,
+        task === null ? null : canonicalValue(task, field),
+      );
+      if (current === result.value) {
         advanced.push(mirror.side);
         continue;
       }
@@ -353,7 +495,7 @@ async function fanOut(
           new CanonicalFieldWrite({
             handle: mirror.handle,
             field,
-            value: result.value,
+            value: await codec.mirrorValue(mirror.slug, result.value),
           }),
         );
         written.push(mirror.side);
@@ -386,15 +528,16 @@ async function applyToOrigin(
   origin: VaultPort,
   entityId: string,
   field: CanonicalField,
-  originObservation: SideObservation,
+  originCurrent: string | null,
   result: MergeResult,
+  codec: FieldCodec,
 ): Promise<{ advanced: boolean; failed: boolean }> {
   if (result.outcome === 'unchanged') {
     return { advanced: false, failed: false };
   }
 
   if (result.outcome === 'value') {
-    if (originObservation.current === result.value) {
+    if (originCurrent === result.value) {
       return { advanced: true, failed: false };
     }
     try {
@@ -402,7 +545,7 @@ async function applyToOrigin(
         new CanonicalFieldWrite({
           handle: entityId,
           field,
-          value: result.value,
+          value: codec.originValue(result.value),
         }),
       );
       return { advanced: true, failed: false };
@@ -411,7 +554,7 @@ async function applyToOrigin(
     }
   }
 
-  if (originObservation.current === null) {
+  if (originCurrent === null) {
     return { advanced: true, failed: false };
   }
   try {

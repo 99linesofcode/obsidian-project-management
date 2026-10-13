@@ -41,6 +41,13 @@ export interface MirrorPort {
   // without a capture surface omits this method.
   capture?(target: string): Promise<CanonicalTask[]>;
 
+  // The core's need: whether a `type:todo` becomes a standalone item on this
+  // mirror. A code host does not — the parent's body carries the checklist line,
+  // so the todo is untracked there — while a task manager does, as a subtask
+  // under the parent. An adapter that omits the method is treated as
+  // materializing todos.
+  materializesTodo?(): boolean;
+
   // The core's need: read a mirror field's decisive time. Providing this method
   // asserts the times it returns are trustworthy; an adapter whose per-field
   // times are not decisive (or that cannot report one) omits it.

@@ -768,6 +768,10 @@ export class CodeHostMirrorAdapter implements MirrorPort {
       );
   }
 
+  materializesTodo(): boolean {
+    return false;
+  }
+
   fetchComplete(): boolean {
     return true;
   }

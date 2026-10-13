@@ -89,7 +89,12 @@ function composeCoreActions(
   const isCodeHost = (application: string): boolean => application === 'github';
 
   return {
-    taskFields: new MirrorSyncAction(vault, syncState, mirrorAdapters),
+    taskFields: new MirrorSyncAction(
+      vault,
+      syncState,
+      mirrorAdapters,
+      isCodeHost,
+    ),
     lifecycle: new ProjectLifecycleSyncAction(vault, syncState, mirrorAdapters),
     taskLocks: new ReconcileProjectTaskLocksAction(
       vault,

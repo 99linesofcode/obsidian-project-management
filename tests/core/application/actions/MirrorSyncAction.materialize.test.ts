@@ -100,19 +100,6 @@ function connection(
   });
 }
 
-function todoOriginTask(): CanonicalTask {
-  return new CanonicalTask({
-    handle: ENTITY,
-    entityId: ENTITY,
-    title: 'Fix the bug',
-    body: 'Body text',
-    status: 'open',
-    completed: false,
-    parent: null,
-    labels: ['type:todo'],
-  });
-}
-
 function setup(
   connections: readonly ConnectionDataTransferObject[] = [
     connection('gh-main', 'conformance', TARGET),
@@ -274,38 +261,6 @@ describe('MirrorSyncAction — outward materialization (F02 NWM-2)', () => {
         handle: ENTITY,
       },
     ]);
-  });
-});
-
-describe('TDO-5 — a type:todo note materialises as a tracked work item', () => {
-  it('creates a remote work item carrying type:todo, deduped by handle', async () => {
-    const { mirror, registry, action } = setup(undefined, todoOriginTask());
-
-    await action.invoke(PROJECT);
-
-    expect(mirror.createTaskCalls).toEqual([ENTITY]);
-    expect(mirror.currentTask(ENTITY)?.labels).toEqual(['type:todo']);
-    expect(registry.recorded).toContainEqual({
-      project: PROJECT,
-      connection: 'gh-main',
-      notePath: ENTITY,
-      handle: ENTITY,
-    });
-
-    await action.invoke(PROJECT);
-
-    expect(mirror.createTaskCalls).toEqual([ENTITY]);
-  });
-
-  it('settles a matching pair with zero writes', async () => {
-    const { mirror, action } = setup(undefined, todoOriginTask());
-
-    await action.invoke(PROJECT);
-    const second = await action.invoke(PROJECT);
-
-    expect(second.every((record) => record.written.length === 0)).toBe(true);
-    expect(second.every((record) => record.advanced.length === 0)).toBe(true);
-    expect(mirror.currentTask(ENTITY)?.labels).toEqual(['type:todo']);
   });
 });
 

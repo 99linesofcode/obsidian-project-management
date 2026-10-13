@@ -256,6 +256,10 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     );
   }
 
+  materializesTodo(): boolean {
+    return true;
+  }
+
   fetchComplete(): boolean {
     return true;
   }
