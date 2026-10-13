@@ -54,13 +54,13 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
-  `renameProject`, `setArchived`, `archivedTime`), the task (`readTasks`,
+  `renameProject`, `setArchived`), the task (`readTasks`,
   `readTask`, `createTask`, `applyField`, `deleteTask` — the code host deletes
   the board card and the issue) and project origination
   (`resolveOrCreateProject` — every adapter carries it, so no declared connection
   is left unoriginated). The genuinely optional
   surfaces are optional
-  methods: `capture?`, `fieldTime?`, `fetchComplete?` and
+  methods: `capture?`, `projectTime?`, `fieldTime?`, `fetchComplete?` and
   `lockTask?`/`unlockTask?`. A caller
   checks presence (`adapter.lockTask !== undefined`);
   an adapter without a surface omits the method.
@@ -241,8 +241,8 @@ sequenceDiagram
 
 `SyncProjectAction` holds one instance of each core action, built by the
 composition root. The lifecycle action returns
-`{ frozen, wasFrozen }`; when it throws, `SyncProjectAction` falls back to
-`note.archivedAt`.
+`{ frozen, wasFrozen }`; when it throws, `SyncProjectAction` falls back to the
+note's folder — archived when the note lives under `Archief/`.
 
 ### 2.2 The N-way merge (`mergeField`)
 
@@ -408,8 +408,11 @@ sequenceDiagram
 ```
 
 `wasFrozen` is `pass.origin.baseline?.value === 'true'`; `frozen` is
-`result.value === 'true'`. A mirror that exposes no archive time returns `null`
-from `archivedTime`, so the ladder falls through to the vault tie-break.
+`result.value === 'true'`. Each side's archive fact carries its own project
+clock: the vault's is the home note's change time (`ctime`), the code host's is
+the board's `closedAt` (null while open), the task manager's is the project's
+`updated_at`. A mirror that exposes no project time returns `null` from
+`projectTime`, so the ladder falls through to the vault tie-break.
 
 ### 2.6 Origination (`EnsureProjectBoardAction`)
 

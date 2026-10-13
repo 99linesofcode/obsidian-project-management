@@ -657,7 +657,7 @@ describe('CodeHostMirrorAdapter — the archive fact\'s decisive time (ADP-3)', 
       },
     ]);
 
-    expect(await adapter.archivedTime(target())).toBe('2026-10-08T11:00:00Z');
+    expect(await adapter.projectTime(target())).toBe('2026-10-08T11:00:00Z');
   });
 
   it('reports null while the board is open', async () => {
@@ -672,7 +672,7 @@ describe('CodeHostMirrorAdapter — the archive fact\'s decisive time (ADP-3)', 
       },
     ]);
 
-    expect(await adapter.archivedTime(target())).toBeNull();
+    expect(await adapter.projectTime(target())).toBeNull();
   });
 });
 

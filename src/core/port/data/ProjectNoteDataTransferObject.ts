@@ -3,7 +3,6 @@ import type { ConnectionDataTransferObject } from './ConnectionDataTransferObjec
 export interface ProjectNoteDataTransferObject {
   path: string;
   projectName: string;
-  archivedAt: string | null;
   connections: readonly ConnectionDataTransferObject[];
   connectionErrors: unknown[];
 }

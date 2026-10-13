@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { TFile } = vi.hoisted(() => {
   class TFile {
-    stat: { mtime: number };
+    stat: { mtime: number; ctime: number };
     constructor(
       public path: string,
       public extension: string,
-      stat?: { mtime: number },
+      stat?: { mtime: number; ctime: number },
     ) {
-      this.stat = stat ?? { mtime: 0 };
+      this.stat = stat ?? { mtime: 0, ctime: 0 };
     }
   }
   return { TFile };
@@ -144,13 +144,14 @@ describe('VaultAdapter.onNoteRenamed', () => {
 });
 
 describe('VaultAdapter.observeProject', () => {
-  it('reads the home note mtime as the field time and reports an absent project as no value', async () => {
+  it('reads the home note change time as the field time and reports an absent project as no value', async () => {
     const homePath = 'Projecten/Acme Widgets/_Acme Widgets.md';
     const mtime = 1758196800000;
+    const ctime = 1758200400000;
     const vault = {
-      getMarkdownFiles: () => [new TFile(homePath, 'md', { mtime })],
+      getMarkdownFiles: () => [new TFile(homePath, 'md', { mtime, ctime })],
       getAbstractFileByPath: (path: string) =>
-        path === homePath ? new TFile(path, 'md', { mtime }) : null,
+        path === homePath ? new TFile(path, 'md', { mtime, ctime }) : null,
       metadataCache: {
         getFileCache: () => ({
           frontmatter: {
@@ -170,7 +171,7 @@ describe('VaultAdapter.observeProject', () => {
     const observed = await adapter.observeProject('Acme Widgets');
     const missing = await adapter.observeProject('Missing');
 
-    expect(observed.fieldTime).toBe(new Date(mtime).toISOString());
+    expect(observed.fieldTime).toBe(new Date(ctime).toISOString());
     expect(observed.current).toBe('false');
     expect(missing.fieldTime).toBeNull();
   });

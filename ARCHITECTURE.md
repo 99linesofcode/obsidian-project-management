@@ -168,7 +168,7 @@ its own module; the composition root wires it.
 
 - **The mirror port.** **`MirrorPort`** — the external tool as one collaborator,
   implemented by `CodeHostMirrorAdapter` and `TaskManagerMirrorAdapter`. The
-  required surface is the project (read/create/rename, set and read archived
+  required surface is the project (read/create/rename, set the archived
   state), the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field
   to the adapter's own representation; the completion fact is separate from the
@@ -177,7 +177,8 @@ its own module; the composition root wires it.
   origination (`resolveOrCreateProject`, which every adapter carries, so no
   declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
-  remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
+  remote-born tasks), `projectTime?` (the project's own clock, the archive
+  fact's decisive time), `fieldTime?` (trustworthy per-field timestamps),
   `fetchComplete?` (verified-complete fetch), `materializesTodo?` (whether a
   `type:todo` becomes a standalone item — a code host does not, a task manager
   does) and `lockTask?`/`unlockTask?`

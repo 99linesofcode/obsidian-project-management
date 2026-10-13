@@ -300,8 +300,8 @@ async function observeMirror(
     return null;
   }
 
-  const archiveTime = mirror.adapter.archivedTime
-    ? await mirror.adapter.archivedTime(mirror.handle)
+  const projectTime = mirror.adapter.projectTime
+    ? await mirror.adapter.projectTime(mirror.handle)
     : null;
 
   return new SideObservation({
@@ -309,8 +309,8 @@ async function observeMirror(
     role: 'mirror',
     current: project.archived ? 'true' : 'false',
     baseline: baselines.get(mirror.side) ?? null,
-    fieldTime: archiveTime,
-    timestampTrustworthy: mirrorTrustsArchiveTime(mirror.adapter, archiveTime),
+    fieldTime: projectTime,
+    timestampTrustworthy: mirrorTrustsArchiveTime(mirror.adapter, projectTime),
     completeFetch: mirror.adapter.fetchComplete?.() ?? false,
     currentCompleted: false,
   });

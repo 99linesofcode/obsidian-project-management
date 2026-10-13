@@ -23,7 +23,6 @@ describe('DISC-1 — the project note is read from the cache', () => {
     expect(active).toEqual({
       path: 'Projecten/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
-      archivedAt: null,
       connections: [
         {
           slug: 'github',
@@ -45,7 +44,6 @@ describe('DISC-1 — the project note is read from the cache', () => {
     expect(archived).toEqual({
       path: 'Archief/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
-      archivedAt: '',
       connections: [
         {
           slug: 'github',
