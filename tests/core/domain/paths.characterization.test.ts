@@ -13,9 +13,9 @@ describe('characterization — the project name is the folder segment (today)', 
     expect(
       projectFromNotePath('Projecten/Acme Widgets/taken/42-fix-the-bug.md'),
     ).toBe('Acme Widgets');
-    expect(
-      projectFromNotePath('Archief/Acme Widgets/_Acme Widgets.md'),
-    ).toBe('Acme Widgets');
+    expect(projectFromNotePath('Archief/Acme Widgets/_Acme Widgets.md')).toBe(
+      'Acme Widgets',
+    );
   });
 
   it('renders the home note as Projecten/<name>/_<name>.md', () => {
