@@ -107,7 +107,7 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     target: string,
     name: string,
     _statusOptions: readonly string[],
-  ): Promise<ProjectAddressing> {
+  ): Promise<ProjectAddressing | null> {
     const handle = target === '' ? name : target;
     if ((await this.readProject(handle)) === null) {
       await this.createProject(handle, name);
@@ -116,6 +116,7 @@ export class ConformanceMirrorAdapter implements MirrorPort {
       projectHandle: handle,
       statusFieldHandle: '',
       statusOptions: [],
+      effectiveTarget: handle,
     });
   }
 

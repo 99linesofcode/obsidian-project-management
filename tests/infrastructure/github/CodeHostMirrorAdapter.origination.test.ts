@@ -35,6 +35,8 @@ class FakeTransport implements CodeHostTransport {
   }
 }
 
+const viewer = { viewer: { id: 'U_1', login: 'acme' } };
+const repoNode = { repository: { id: 'R_1' } };
 const statusField = {
   id: 'PVTF_1',
   name: 'Status',
@@ -53,18 +55,22 @@ function fieldsFor(projectId: string): unknown {
   return { node: { id: projectId, fields: { nodes: [statusField] } } };
 }
 
+const createBoard = {
+  createProjectV2: { projectV2: { id: 'PVT_new', url: 'board' } },
+};
+const linkBoard = {
+  linkProjectV2ToRepository: { repository: { id: 'R_1' } },
+};
+
 describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
   it('creates a board under the repo, named for the project, when the target carries one and none exists', async () => {
     const transport = new FakeTransport([
       ['RepoBoards', repoBoards([])],
-      ['RepoNodeId', { repository: { id: 'R_1' } }],
       ['ViewerBoards', viewerBoards([])],
-      ['Viewer', { viewer: { id: 'U_1' } }],
-      [
-        'CreateBoard',
-        { createProjectV2: { projectV2: { id: 'PVT_new', url: 'board' } } },
-      ],
-      ['LinkBoard', { linkProjectV2ToRepository: { repository: { id: 'R_1' } } }],
+      ['RepoNodeId', repoNode],
+      ['Viewer', viewer],
+      ['CreateBoard', createBoard],
+      ['LinkBoard', linkBoard],
       ['ProjectFields', fieldsFor('PVT_new')],
     ]);
 
@@ -72,8 +78,8 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject(REPO_URL, 'widgets', ['Todo', 'Done']);
 
-    expect(addressing.projectHandle).toBe('PVT_new');
-    expect(addressing.statusFieldHandle).toBe('PVTF_1');
+    expect(addressing?.projectHandle).toBe('PVT_new');
+    expect(addressing?.effectiveTarget).toBe(REPO_URL);
     expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
       true,
     );
@@ -82,8 +88,8 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
   it('adopts the board named for the project under the repo when it exists', async () => {
     const transport = new FakeTransport([
       ['RepoBoards', repoBoards([{ id: 'PVT_1', title: 'widgets' }])],
-      ['RepoNodeId', { repository: { id: 'R_1' } }],
-      ['LinkBoard', { linkProjectV2ToRepository: { repository: { id: 'R_1' } } }],
+      ['RepoNodeId', repoNode],
+      ['LinkBoard', linkBoard],
       ['ProjectFields', fieldsFor('PVT_1')],
     ]);
 
@@ -91,20 +97,21 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject(REPO_URL, 'widgets', ['Todo']);
 
-    expect(addressing.projectHandle).toBe('PVT_1');
+    expect(addressing?.projectHandle).toBe('PVT_1');
+    expect(addressing?.effectiveTarget).toBe(REPO_URL);
     expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
       false,
     );
   });
 
-  it('creates a viewer board by name when the target is empty', async () => {
+  it('resolves an existing repo by name when the target is empty, then resolves-or-creates the board within it', async () => {
     const transport = new FakeTransport([
+      ['RepoBoards', repoBoards([])],
       ['ViewerBoards', viewerBoards([])],
-      ['Viewer', { viewer: { id: 'U_1' } }],
-      [
-        'CreateBoard',
-        { createProjectV2: { projectV2: { id: 'PVT_new', url: 'board' } } },
-      ],
+      ['RepoNodeId', repoNode],
+      ['Viewer', viewer],
+      ['CreateBoard', createBoard],
+      ['LinkBoard', linkBoard],
       ['ProjectFields', fieldsFor('PVT_new')],
     ]);
 
@@ -112,27 +119,25 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject('', 'widgets', ['Todo']);
 
-    expect(addressing.projectHandle).toBe('PVT_new');
-    expect(
-      transport.bodies.some(
-        (body) => body.includes('RepoBoards') || body.includes('LinkBoard'),
-      ),
-    ).toBe(false);
+    expect(addressing?.projectHandle).toBe('PVT_new');
+    expect(addressing?.effectiveTarget).toBe(REPO_URL);
   });
 
-  it('adopts a viewer board by name when the target is empty and it exists', async () => {
+  it('never creates a repo: an absent repo leaves the connection unoriginated', async () => {
     const transport = new FakeTransport([
-      ['ViewerBoards', viewerBoards([{ id: 'PVT_9', title: 'widgets' }])],
-      ['ProjectFields', fieldsFor('PVT_9')],
+      ['Viewer', viewer],
+      ['RepoNodeId', { repository: null }],
     ]);
 
     const addressing = await new CodeHostMirrorAdapter(
       transport,
     ).resolveOrCreateProject('', 'widgets', ['Todo']);
 
-    expect(addressing.projectHandle).toBe('PVT_9');
-    expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
-      false,
-    );
+    expect(addressing).toBeNull();
+    expect(
+      transport.bodies.some(
+        (body) => body.includes('CreateBoard') || body.includes('RepoBoards'),
+      ),
+    ).toBe(false);
   });
 });

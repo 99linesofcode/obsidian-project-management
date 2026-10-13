@@ -6,6 +6,7 @@ import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/paths.js';
 import { typeFromLabels } from '../../../domain/note.js';
+import { effectiveConnectionTarget } from '../../services/connectionTarget.js';
 import type { CreateTaskNoteAction } from '../create-task-note/CreateTaskNoteAction.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
 
@@ -40,9 +41,17 @@ export class CaptureTasksAction {
     const captured: string[] = [];
     const errors: unknown[] = [];
     for (const connection of connections) {
+      const target = await effectiveConnectionTarget(
+        this.registry,
+        project,
+        connection,
+      );
+      if (target === null) {
+        continue;
+      }
       const adapter = this.factory.create(
         connection.application,
-        connection.target,
+        target,
         connection.slug,
         project,
       );
@@ -53,6 +62,7 @@ export class CaptureTasksAction {
         const result = await this.captureConnection(
           project,
           connection,
+          target,
           adapter,
           syncedAt,
         );
@@ -68,13 +78,14 @@ export class CaptureTasksAction {
   private async captureConnection(
     project: string,
     connection: ConnectionDataTransferObject,
+    target: string,
     adapter: MirrorPort,
     syncedAt: string,
   ): Promise<CaptureTasksResult> {
     if (adapter.capture === undefined) {
       return { captured: [], errors: [] };
     }
-    const tasks = await adapter.capture(connection.target);
+    const tasks = await adapter.capture(target);
     const adopted = new Set(
       (await this.registry.listMirrorItems(project, connection.slug)).map(
         ({ handle }) => handle,

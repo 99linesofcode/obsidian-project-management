@@ -27,13 +27,15 @@ export interface MirrorPort {
   // The core's need: before a connection can mirror, its remote project must
   // exist and be addressable. Resolve the project named `name` under `target`
   // (by name alone when `target` is empty), creating it when absent, and return
-  // the addressing the core records and writes through. Every adapter carries
-  // it, so no declared connection is left unoriginated.
+  // the addressing the core records and writes through. Null when the remote
+  // cannot be originated — a code host resolves an existing repository by name
+  // and never creates one. Every adapter carries it, so no declared connection
+  // is left unoriginated.
   resolveOrCreateProject(
     target: string,
     name: string,
     statusOptions: readonly string[],
-  ): Promise<ProjectAddressing>;
+  ): Promise<ProjectAddressing | null>;
 
   // The core's need: adopt remote-born tasks the vault does not hold yet. A tool
   // without a capture surface omits this method.

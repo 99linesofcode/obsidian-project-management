@@ -48,7 +48,8 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject('', 'Widgets', []);
 
-    expect(addressing.projectHandle).toBe('P-Widgets');
+    expect(addressing?.projectHandle).toBe('P-Widgets');
+    expect(addressing?.effectiveTarget).toBe('P-Widgets');
     expect(transport.created).toEqual(['Widgets']);
   });
 
@@ -60,7 +61,8 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject('', 'Widgets', []);
 
-    expect(addressing.projectHandle).toBe('P-1');
+    expect(addressing?.projectHandle).toBe('P-1');
+    expect(addressing?.effectiveTarget).toBe('P-1');
     expect(transport.created).toEqual([]);
   });
 
@@ -72,7 +74,8 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject('P-9', 'Widgets', []);
 
-    expect(addressing.projectHandle).toBe('P-9');
+    expect(addressing?.projectHandle).toBe('P-9');
+    expect(addressing?.effectiveTarget).toBe('P-9');
     expect(transport.created).toEqual([]);
   });
 
@@ -84,7 +87,8 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
       transport,
     ).resolveOrCreateProject('P-gone', 'Widgets', []);
 
-    expect(addressing.projectHandle).toBe('P-Widgets');
+    expect(addressing?.projectHandle).toBe('P-Widgets');
+    expect(addressing?.effectiveTarget).toBe('P-Widgets');
     expect(transport.created).toEqual(['Widgets']);
   });
 });

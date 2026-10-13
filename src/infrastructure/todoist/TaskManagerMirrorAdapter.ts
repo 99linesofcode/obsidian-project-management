@@ -66,7 +66,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     target: string,
     name: string,
     _statusOptions: readonly string[],
-  ): Promise<ProjectAddressing> {
+  ): Promise<ProjectAddressing | null> {
     const projectId =
       target.trim() === ''
         ? await this.findOrCreateProjectId(name)
@@ -75,6 +75,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
       projectHandle: projectId,
       statusFieldHandle: '',
       statusOptions: [],
+      effectiveTarget: projectId,
     });
   }
 

@@ -304,12 +304,18 @@ canonical DTOs and the pure core.
 - **The origination step** (`EnsureProjectBoardAction` +
   `MirrorPort.resolveOrCreateProject`). A project is set up by declaring its
   connections on the home note; on every pass, each declared connection
-  resolves-or-creates its remote project and records the addressing the core
-  writes through. The action always resolves — it never trusts a recorded
-  addressing — and the adapter decides: a remote project that still exists is
-  adopted, a remote project that is gone is re-created. A connection's target may
-  be empty — the remote project is then identified by the vault project's name
-  (ORG-2); a non-empty target overrides.
+  resolves-or-creates its remote project and records its addressing. The action
+  always resolves — it never trusts a recorded addressing — and the adapter
+  decides: a remote project that still exists is adopted, a remote project that
+  is gone is re-created. A connection's target may be empty — the remote project
+  is then identified by the vault project's name (ORG-2); a non-empty target
+  overrides. The plugin **never creates a code-host repository**: an empty target
+  resolves an existing repo named for the vault project under the authenticated
+  user, and an absent repo leaves the connection unoriginated with a logged
+  error. The resolved project's own address (a code host's repository, a task
+  manager's project) is recorded as the identity's `target` — the connection's
+  **effective address** — and every downstream step (mirror, capture, lifecycle)
+  addresses the remote by that effective target, not the declared one.
   The one uniform method replaces the code-host-only setup surface, so a task
   manager originates its project the same way the code host originates its board.
   No declared connection means nothing fans out (ORG-4), and an existing remote

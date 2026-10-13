@@ -276,7 +276,10 @@ absence is a delete only when it has a baseline **and** its adapter exposes
 
 `MirrorSyncAction` names no provider. Given a project, it reads the declared
 connections and the project's task-note paths, builds one mirror adapter per
-connection through `MirrorAdapterFactoryPort`, resolves each note to that
+connection through `MirrorAdapterFactoryPort` — addressed by the connection's
+**effective target** ([§2.6](#26-origination-ensureprojectboardaction)), the
+identity's resolved target when origination recorded one, else the declared
+target; a connection with neither is skipped — resolves each note to that
 connection's own handle through `RegistryPort`, and runs the pure `mergeField`
 once per (note, canonical field) over the six merged fields — `title`, `body`,
 `subtasks`, `completion`, `Status`, `label`. For each field it observes each
@@ -345,7 +348,9 @@ nothing.
 ### 2.4 The project lifecycle pass (`ProjectLifecycleSyncAction`)
 
 `ProjectLifecycleSyncAction` is the project-level peer of the mirror-sync action.
-Given a project it scopes the mirrors, resolves each connection's mirror project
+Given a project it scopes the mirrors — each connection addressed by its
+**effective target** ([§2.6](#26-origination-ensureprojectboardaction)), not the
+declared target — resolves each connection's mirror project
 through `RegistryPort` — onboarding a missing one by `MirrorPort.createProject`
 and recording the returned handle, so a newly-connected project is onboarded in
 the same pass — renames a mirror project whose name drifted from the vault
@@ -392,18 +397,28 @@ from `archivedTime`, so the ladder falls through to the vault tie-break.
 
 A project is set up by declaring its connections on the home note; the chain's
 origination step resolves-or-creates each declared connection's remote project
-and records the addressing the core writes through. `EnsureProjectBoardAction`
-calls the one uniform
+and records its addressing. `EnsureProjectBoardAction` calls the one uniform
 `MirrorPort.resolveOrCreateProject(target, name, statusOptions)` — the code host
 resolves-or-creates a board named for the vault project under the connection's
-repository (by the vault project's name alone when the target is empty), the
-task manager resolves-or-creates a project named for the vault project — and
-writes the returned `ProjectAddressing` to the registry identity.
+repository, the task manager resolves-or-creates a project named for the vault
+project — and writes the returned `ProjectAddressing` to the registry identity.
 An empty connection target is resolved by the vault project's name (ORG-2); a
-non-empty target overrides. The action always resolves: it never trusts a
-recorded addressing, so a remote project that still exists is adopted (a second
-pass creates nothing, I14) and a remote project that is gone is re-created
-(ORG-3). No declared connection means nothing fans out (ORG-4).
+non-empty target overrides. The code host **never creates a repository**: an
+empty target resolves an existing repo named for the vault project under the
+authenticated user, and an absent repo leaves the connection unoriginated with a
+logged error (the action records nothing). The action always resolves: it never
+trusts a recorded addressing, so a remote project that still exists is adopted (a
+second pass creates nothing, I14) and a remote project that is gone is re-created
+where creation is allowed (ORG-3). No declared connection means nothing fans out
+(ORG-4).
+
+The resolved project's own address — a code host's repository, a task manager's
+project — is the `ProjectAddressing.effectiveTarget`, recorded as the identity's
+`target`. That is the connection's **effective address**, and every downstream
+step ([§2.3](#23-the-mirror-sync-action-mirrorsyncaction),
+[§2.4](#24-the-project-lifecycle-pass-projectlifecyclesyncaction),
+[§2.7](#27-task-capture-capturetasksaction)) addresses the remote by it, not by
+the declared `connection.target`.
 
 ```mermaid
 sequenceDiagram
@@ -417,16 +432,18 @@ sequenceDiagram
   alt the remote project exists
     Note over R: adopt it
   else the remote project is gone
-    Note over R: re-create it
+    Note over R: re-create it (a task manager project; never a repo)
   end
-  R-->>Ens: ProjectAddressing
-  Ens->>SS: setIdentity(merged)
+  R-->>Ens: ProjectAddressing (effectiveTarget)
+  Ens->>SS: setIdentity(target = effectiveTarget)
 ```
 
 ### 2.7 Task capture (`CaptureTasksAction`)
 
 For each declared connection whose adapter carries `capture`, the core action
-reads the tracked tasks the adapter can see (`MirrorPort.capture`) — the issues
+reads the tracked tasks the adapter can see (`MirrorPort.capture`) — addressed by
+the connection's **effective target** ([§2.6](#26-origination-ensureprojectboardaction)),
+not the declared target — the issues
 carrying a `type:` label — and adopts every task the vault does not already hold
 as a task note. A connection whose adapter omits `capture` is skipped. The whole
 listing is scanned each pass and the adopted mirror

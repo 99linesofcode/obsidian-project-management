@@ -9,6 +9,7 @@ import { mergeField } from '../../domain/mergeField.js';
 import { labelSequence } from '../../domain/note.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
+import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
@@ -29,6 +30,7 @@ const MERGED_FIELDS: readonly CanonicalField[] = [
 
 interface ScopedMirror {
   connection: ConnectionDataTransferObject;
+  target: string;
   adapter: MirrorPort;
 }
 
@@ -60,7 +62,7 @@ export class MirrorSyncAction {
   async invoke(project: string): Promise<MirrorFieldOutcome[]> {
     const connections = await this.vault.readConnections(project);
     const notePaths = await this.vault.listEntities(project);
-    const scoped = this.scopeMirrors(connections, project);
+    const scoped = await this.scopeMirrors(connections, project);
 
     const outcomes: MirrorFieldOutcome[] = [];
     for (const notePath of notePaths) {
@@ -72,20 +74,28 @@ export class MirrorSyncAction {
     return outcomes;
   }
 
-  private scopeMirrors(
+  private async scopeMirrors(
     connections: readonly ConnectionDataTransferObject[],
     project: string,
-  ): ScopedMirror[] {
+  ): Promise<ScopedMirror[]> {
     const scoped: ScopedMirror[] = [];
     for (const connection of connections) {
+      const target = await effectiveConnectionTarget(
+        this.registry,
+        project,
+        connection,
+      );
+      if (target === null) {
+        continue;
+      }
       const adapter = this.mirrorAdapters.create(
         connection.application,
-        connection.target,
+        target,
         connection.slug,
         project,
       );
       if (adapter !== null) {
-        scoped.push({ connection, adapter });
+        scoped.push({ connection, target, adapter });
       }
     }
     return scoped;
@@ -97,9 +107,10 @@ export class MirrorSyncAction {
     project: string,
   ): Promise<ResolvedMirror[]> {
     const mirrors: ResolvedMirror[] = [];
-    for (const { connection, adapter } of scoped) {
+    for (const { connection, target, adapter } of scoped) {
       const handle = await this.resolveHandle(
         connection,
+        target,
         adapter,
         notePath,
         project,
@@ -117,6 +128,7 @@ export class MirrorSyncAction {
 
   private async resolveHandle(
     connection: ConnectionDataTransferObject,
+    target: string,
     adapter: MirrorPort,
     notePath: string,
     project: string,
@@ -131,6 +143,7 @@ export class MirrorSyncAction {
     try {
       return await this.materialize(
         connection,
+        target,
         adapter,
         notePath,
         project,
@@ -147,6 +160,7 @@ export class MirrorSyncAction {
 
   private async materialize(
     connection: ConnectionDataTransferObject,
+    target: string,
     adapter: MirrorPort,
     notePath: string,
     project: string,
@@ -159,6 +173,7 @@ export class MirrorSyncAction {
     if (pending !== null) {
       const adopted = await this.adopt(
         connection,
+        target,
         adapter,
         notePath,
         project,
@@ -174,7 +189,7 @@ export class MirrorSyncAction {
       notePath,
       pendingCreationHandle(notePath),
     );
-    const created = await adapter.createTask(connection.target, task);
+    const created = await adapter.createTask(target, task);
     await this.registry.recordMirrorHandle(
       project,
       connection.slug,
@@ -186,12 +201,13 @@ export class MirrorSyncAction {
 
   private async adopt(
     connection: ConnectionDataTransferObject,
+    target: string,
     adapter: MirrorPort,
     notePath: string,
     project: string,
     task: CanonicalTask,
   ): Promise<string | null> {
-    const candidates = await adapter.readTasks(connection.target);
+    const candidates = await adapter.readTasks(target);
     const match = candidates.find(
       (candidate) => candidate.title === task.title,
     );

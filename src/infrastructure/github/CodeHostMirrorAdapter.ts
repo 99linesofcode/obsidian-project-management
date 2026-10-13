@@ -163,7 +163,7 @@ const LABEL_QUERY = `
 
 const VIEWER_QUERY = `
   query Viewer {
-    viewer { id }
+    viewer { id login }
   }
 `;
 
@@ -563,14 +563,20 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     target: string,
     name: string,
     statusOptions: readonly string[],
-  ): Promise<ProjectAddressing> {
+  ): Promise<ProjectAddressing | null> {
     const connection = CodeHostTarget.parse(target);
-    if (connection.target === '') {
-      return this.resolveOrCreateBoardByName(name, statusOptions);
+    const repoUrl =
+      connection.target === ''
+        ? await this.viewerRepoUrl(name)
+        : connection.target;
+    const repositoryId = await this.repoIdOrNull(repoParts(repoUrl));
+    if (repositoryId === null) {
+      console.error(
+        `code host: repository ${repoUrl} not found; leaving the connection unoriginated`,
+      );
+      return null;
     }
-    const repo = repoParts(connection.target);
-    const repositoryId = await this.repoNodeId(repo);
-    const existing = await this.findBoardByName(connection.target, name);
+    const existing = await this.findBoardByName(repoUrl, name);
     if (existing !== null) {
       await this.linkBoard(existing, repositoryId);
       const status = await this.ensureStatusField(existing, statusOptions);
@@ -578,6 +584,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
         projectHandle: existing,
         statusFieldHandle: status.id,
         statusOptions: status.options,
+        effectiveTarget: repoUrl,
       });
     }
     const { projectId, status } = await this.provisionBoard(
@@ -589,33 +596,34 @@ export class CodeHostMirrorAdapter implements MirrorPort {
       projectHandle: projectId,
       statusFieldHandle: status.id,
       statusOptions: status.options,
+      effectiveTarget: repoUrl,
     });
   }
 
   // An empty connection target names the remote project by the vault project's
-  // name alone (ORG-2): resolve-or-create a viewer-owned board titled `name`.
-  private async resolveOrCreateBoardByName(
-    name: string,
-    statusOptions: readonly string[],
-  ): Promise<ProjectAddressing> {
-    const projectId =
-      (await this.findViewerBoardByName(name)) ?? (await this.createBoard(name));
-    const status = await this.ensureStatusField(projectId, statusOptions);
-    return new ProjectAddressing({
-      projectHandle: projectId,
-      statusFieldHandle: status.id,
-      statusOptions: status.options,
-    });
+  // name alone (ORG-2): the repository is the one of that name under the
+  // authenticated user. The plugin never creates a repository.
+  private async viewerRepoUrl(name: string): Promise<string> {
+    const owner = await this.viewerLogin();
+    return `https://github.com/${owner}/${name}`;
   }
 
-  private async findViewerBoardByName(name: string): Promise<string | null> {
-    const data = await this.graphql(VIEWER_BOARDS_QUERY, {});
-    for (const node of nodesOf(data.viewer, 'projectsV2')) {
-      if (isRecord(node) && node.title === name && typeof node.id === 'string') {
-        return node.id;
-      }
+  private async repoIdOrNull(repo: RepoParts): Promise<string | null> {
+    const data = await this.graphql(REPO_QUERY, {
+      owner: repo.owner,
+      name: repo.name,
+    });
+    return isRecord(data.repository) && typeof data.repository.id === 'string'
+      ? data.repository.id
+      : null;
+  }
+
+  private async viewerLogin(): Promise<string> {
+    const data = await this.graphql(VIEWER_QUERY, {});
+    if (!isRecord(data.viewer) || typeof data.viewer.login !== 'string') {
+      throw new Error('code host: viewer login not found');
     }
-    return null;
+    return data.viewer.login;
   }
 
   private async findBoardByName(
