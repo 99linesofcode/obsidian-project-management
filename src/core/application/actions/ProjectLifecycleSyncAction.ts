@@ -18,6 +18,12 @@ interface ResolvedMirror {
   side: string;
   handle: string;
   adapter: MirrorPort;
+  createdState: string | null;
+}
+
+interface ResolvedProject {
+  handle: string;
+  createdState: string | null;
 }
 
 interface ObservedMirror {
@@ -60,7 +66,7 @@ export class ProjectLifecycleSyncAction {
       origin,
       observed.map((entry) => entry.observation),
     );
-    const fanout = await fanOut(observed, result);
+    const fanout = await fanOut(mirrors, observed, result);
     const originResult = await this.applyToOrigin(project, origin, result);
 
     const advanced = [...fanout.advanced];
@@ -111,6 +117,9 @@ export class ProjectLifecycleSyncAction {
   ): Promise<ObservedMirror[]> {
     const observed: ObservedMirror[] = [];
     for (const mirror of mirrors) {
+      if (mirror.createdState !== null) {
+        continue;
+      }
       const observation = await observeMirror(mirror, baselines);
       if (observation !== null) {
         observed.push({ mirror, observation });
@@ -143,15 +152,26 @@ export class ProjectLifecycleSyncAction {
         continue;
       }
       try {
-        mirrors.push({
-          side: mirrorSideKey(connection.slug),
-          handle: await this.resolveProject(
-            connection,
-            target,
-            adapter,
-            project,
-          ),
+        const resolved = await this.resolveProject(
+          connection,
+          target,
           adapter,
+          project,
+        );
+        const side = mirrorSideKey(connection.slug);
+        if (resolved.createdState !== null) {
+          await this.registry.writeBaseline(
+            project,
+            ARCHIVED_FIELD,
+            side,
+            new Baseline(resolved.createdState, false),
+          );
+        }
+        mirrors.push({
+          side,
+          handle: resolved.handle,
+          adapter,
+          createdState: resolved.createdState,
         });
       } catch (error) {
         console.error(
@@ -168,26 +188,29 @@ export class ProjectLifecycleSyncAction {
     target: string,
     adapter: MirrorPort,
     project: string,
-  ): Promise<string> {
+  ): Promise<ResolvedProject> {
     const recorded = await this.registry.resolveMirrorProject(
       project,
       connection.slug,
     );
     if (recorded !== null) {
       await this.renameIfDrifted(adapter, recorded, project);
-      return recorded;
+      return { handle: recorded, createdState: null };
     }
 
     const existing = await adapter.readProject(target);
     if (existing !== null) {
       await this.renameIfDrifted(adapter, target, project);
       await this.record(connection, project, target);
-      return target;
+      return { handle: target, createdState: null };
     }
 
     const created = await adapter.createProject(target, project);
     await this.record(connection, project, created.handle);
-    return created.handle;
+    return {
+      handle: created.handle,
+      createdState: created.archived ? 'true' : 'false',
+    };
   }
 
   private async renameIfDrifted(
@@ -294,16 +317,25 @@ async function observeMirror(
 }
 
 async function fanOut(
+  mirrors: readonly ResolvedMirror[],
   observed: readonly ObservedMirror[],
   result: MergeResult,
 ): Promise<{ written: string[]; advanced: string[]; failed: string[] }> {
   const written: string[] = [];
   const advanced: string[] = [];
   const failed: string[] = [];
+  const observedBySide = new Map(
+    observed.map((entry) => [entry.mirror.side, entry.observation]),
+  );
 
   const archived = result.value === 'true';
-  for (const { mirror, observation } of observed) {
-    if (observation.current === result.value) {
+  for (const mirror of mirrors) {
+    const current =
+      observedBySide.get(mirror.side)?.current ?? mirror.createdState;
+    if (current === null) {
+      continue;
+    }
+    if (current === result.value) {
       if (result.outcome === 'value') {
         advanced.push(mirror.side);
       }
