@@ -1,3 +1,13 @@
+## [0.28.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.1...0.28.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **lifecycle:** address the locks action by the connection's effective target (ORG-2) ([b7ea321](https://github.com/99linesofcode/obsidian-project-management/commit/b7ea3217190b128ff48229da6983f37ed9c02543))
+* **lifecycle:** originate an archived project's connections (ORG-3, SHELL-2) ([1098537](https://github.com/99linesofcode/obsidian-project-management/commit/109853770f5553104488af710f80ca908cda84b5))
+
+
+
 ## [0.28.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.0...0.28.1) (2026-10-13)
 
 
@@ -41,15 +51,6 @@
 
 * **origination:** an empty target resolves by name; a gone remote is re-created ([293d265](https://github.com/99linesofcode/obsidian-project-management/commit/293d265845dc4328d8b1e7dab7a2b9142cdb4c78))
 * **origination:** the resolved addressing is effective downstream ([271472a](https://github.com/99linesofcode/obsidian-project-management/commit/271472ad137df07ddffce86df28f1b66f2b6654f))
-
-
-
-# [0.26.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.25.1...0.26.0) (2026-10-12)
-
-
-### Features
-
-* **capture:** gate project capture and type captured tasks ([e7683e2](https://github.com/99linesofcode/obsidian-project-management/commit/e7683e2c57e3afe4fcdc75a13de4c2b617e5ff4c))
 
 
 
