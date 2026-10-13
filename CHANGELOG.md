@@ -1,3 +1,12 @@
+# [0.28.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.27.0...0.28.0) (2026-10-13)
+
+
+### Features
+
+* **todo:** a type:todo is a checklist item, not an issue ([800cb3d](https://github.com/99linesofcode/obsidian-project-management/commit/800cb3dc356208382c4effbc76a8b5579a7a1cdb))
+
+
+
 # [0.27.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.26.1...0.27.0) (2026-10-13)
 
 
@@ -38,20 +47,6 @@
 ### Bug Fixes
 
 * **deps:** bump devshell from `81a5ee1` to `d5fa5cc` ([#167](https://github.com/99linesofcode/obsidian-project-management/issues/167)) ([46edcbc](https://github.com/99linesofcode/obsidian-project-management/commit/46edcbc96296ae2a82ad10a6d81bcbb4d0fdcc3f))
-
-
-
-# [0.25.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.24.0...0.25.0) (2026-10-12)
-
-
-### Bug Fixes
-
-* **migration:** rewrite block-form labels without leaving dangling items ([4da6f15](https://github.com/99linesofcode/obsidian-project-management/commit/4da6f15edb268e9bdf4aa4347b36ceff4a260ebe))
-
-
-### Features
-
-* **migration:** the legacy type scalar becomes a type label ([e9ae01d](https://github.com/99linesofcode/obsidian-project-management/commit/e9ae01df7a2688e4ab4701b1fcf17e8e7fe139f1))
 
 
 
