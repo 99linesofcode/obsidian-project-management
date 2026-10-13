@@ -468,9 +468,10 @@ carrying a `type:` label — and adopts every task the vault does not already ho
 as a task note. A connection whose adapter omits `capture` is skipped. The whole
 listing is scanned each pass and the adopted mirror
 items are skipped, so the pass is idempotent without a cursor. The action
-routes by the connection's application: a code-host issue through
-`CreateTaskNoteAction`, a task-manager task rendered by `CapturedTaskNoteMapper`
-and written through `VaultPort` + `RegistryPort`. A captured task-manager task
+routes by the captured task's handle: a url-addressed issue through
+`CreateTaskNoteAction`, an id-addressed task-manager item rendered by
+`CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`. A
+captured task-manager task
 carries a kind: an explicit type label is kept, and an unlabelled one takes the
 kind its position implies — a root item a `slice`, a subtask a `task`. A
 connection whose listing or adoption fails is collected and never stops the
@@ -491,9 +492,9 @@ sequenceDiagram
     C->>R: capture(target)
     C->>H: listMirrorItems(project, slug)
     loop each task not already adopted
-      alt code host
+      alt url handle
         C->>CT: execute(url, title, body, type, ...)
-      else task manager
+      else id handle
         Note over C: kind = explicit label, else root slice / subtask task
         C->>V: createNote(mapper + freePath)
         C->>H: setEntity, setMirrorItem

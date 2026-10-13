@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
+import { CanonicalProject } from '../../../../src/core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
+import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
+import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import { CodeHostMirrorAdapter } from '../../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
 import type { CodeHostTransport } from '../../../../src/infrastructure/github/CodeHostTransport.js';
 import { TaskManagerMirrorAdapter } from '../../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
@@ -377,5 +380,75 @@ describe('SUB-3 — the parent relation is identity, not text', () => {
     const subtasks = records.find((record) => record.field === 'subtasks')!;
 
     expect(subtasks.result.outcome).not.toBe('unchanged');
+  });
+});
+
+// A mirror that reports `materializesTodo` false under an application that is
+// not a code host, so the port method alone decides whether a todo is tracked.
+class UntrackingMirror implements MirrorPort {
+  readonly createTaskCalls: string[] = [];
+
+  async readProject(): Promise<CanonicalProject | null> {
+    return null;
+  }
+
+  async resolveOrCreateProject(
+    target: string,
+    _name: string,
+  ): Promise<ProjectAddressing | null> {
+    return new ProjectAddressing({
+      projectHandle: target,
+      statusFieldHandle: '',
+      statusOptions: [],
+      effectiveTarget: target,
+    });
+  }
+
+  async createProject(target: string, name: string): Promise<CanonicalProject> {
+    return new CanonicalProject({ handle: target, name, archived: false });
+  }
+
+  async renameProject(): Promise<void> {}
+
+  async setArchived(): Promise<void> {}
+
+  async readTasks(): Promise<CanonicalTask[]> {
+    return [];
+  }
+
+  async readTask(): Promise<CanonicalTask | null> {
+    return null;
+  }
+
+  async createTask(
+    _target: string,
+    task: CanonicalTask,
+  ): Promise<CanonicalTask> {
+    this.createTaskCalls.push(task.handle);
+    return task;
+  }
+
+  async applyField(): Promise<void> {}
+
+  async deleteTask(): Promise<void> {}
+
+  materializesTodo(): boolean {
+    return false;
+  }
+}
+
+describe('the port method alone decides todo tracking', () => {
+  it('untracks a type:todo for a mirror reporting materializesTodo false, whatever its application', async () => {
+    const mirror = new UntrackingMirror();
+    const vault = new TodoVault(todoTask(PARENT_STEM), [
+      connection('other-main', 'other', 'X'),
+    ]);
+    const action = new MirrorSyncAction(vault, new FakeSyncState(), {
+      create: () => mirror,
+    });
+
+    await action.invoke(PROJECT);
+
+    expect(mirror.createTaskCalls).toEqual([]);
   });
 });

@@ -128,7 +128,6 @@ function harness(
       factory,
       syncState,
       createTaskNote,
-      (application) => application === 'github',
     ),
     vault,
     syncState,
@@ -216,7 +215,6 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       factory,
       syncState,
       new CreateTaskNoteAction(vault, syncState, ''),
-      () => false,
     );
 
     const result = await action.invoke('Acme', SYNCED_AT);
@@ -243,7 +241,6 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       factory,
       syncState,
       new CreateTaskNoteAction(vault, syncState, ''),
-      () => false,
     );
 
     const result = await action.invoke('Acme', SYNCED_AT);
@@ -277,7 +274,6 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       factory,
       syncState,
       new CreateTaskNoteAction(vault, syncState, ''),
-      () => false,
     );
 
     const result = await action.invoke('Acme', SYNCED_AT);
@@ -336,7 +332,6 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       factory,
       syncState,
       new CreateTaskNoteAction(vault, syncState, ''),
-      (application) => application === 'github',
     );
 
     await action.invoke('Acme', SYNCED_AT);
@@ -422,12 +417,42 @@ describe('ORG-2 — the resolved addressing is effective downstream', () => {
       factory,
       syncState,
       new CreateTaskNoteAction(vault, syncState, ''),
-      () => false,
     );
 
     await action.invoke('Acme', SYNCED_AT);
 
     expect(targets).toEqual(['P-1']);
     expect(targets).not.toContain('');
+  });
+});
+
+describe('the captured task decides the adoption shape', () => {
+  it('adopts a url-handled capture as a task note and an id-handled capture as a draft', async () => {
+    const url = 'https://github.com/acme/widgets/issues/42';
+    const vault = new FakeVault([
+      connection('github', 'R1', 'gh'),
+      connection('todoist', 'P1', 'td'),
+    ]);
+    const syncState = new FakeSyncState();
+    const factory: MirrorAdapterFactoryPort = {
+      create: (application) =>
+        registered({
+          capture: async () =>
+            application === 'github'
+              ? [labelledTask(url, 'Issue task', ['type:task'])]
+              : [task('td-1')],
+        }),
+    };
+    const action = new CaptureTasksAction(
+      vault,
+      factory,
+      syncState,
+      new CreateTaskNoteAction(vault, syncState, ''),
+    );
+
+    await action.invoke('Acme', SYNCED_AT);
+
+    expect(noteAt(vault, 'issue-task').content).toContain('created:');
+    expect(noteAt(vault, 'td-1').content).not.toContain('created:');
   });
 });

@@ -349,13 +349,12 @@ canonical DTOs and the pure core.
   task note. The whole listing is scanned each pass and the adopted mirror items
   are skipped, so the pass is idempotent without a cursor; a handle with a
   tombstone is skipped too, so a deleted note's mirror is never re-adopted
-  (DEL-2, I16). The action routes by
-  the connection's application — a code-host issue through
-  `CreateTaskNoteAction`, a task-manager task rendered by
-  `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`. A
-  captured task-manager task carries a kind: an explicit type label is kept, and
-  an unlabelled one takes the kind its position implies — a root item is a
-  `slice`, a subtask a `task`.
+  (DEL-2, I16). The action routes by the captured task's handle — a url-addressed
+  issue through `CreateTaskNoteAction`, an id-addressed task-manager item
+  rendered by `CapturedTaskNoteMapper` and written through `VaultPort` +
+  `RegistryPort`. A captured task-manager task carries a kind: an explicit type
+  label is kept, and an unlabelled one takes the kind its position implies — a
+  root item is a `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, project-name reconciliation, connection re-keying,
   connection origination, rename recovery, vault consistency and the deletion
