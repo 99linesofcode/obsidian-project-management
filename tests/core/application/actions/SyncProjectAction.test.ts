@@ -124,6 +124,7 @@ interface HarnessOptions {
   connections?: readonly ConnectionDataTransferObject[];
   adapterApplications?: string[];
   failRenames?: boolean;
+  failLifecycle?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -198,6 +199,9 @@ function harness(options: HarnessOptions = {}) {
 
   const lifecycle = {
     invoke: async () => {
+      if (options.failLifecycle) {
+        throw new Error('lifecycle failed');
+      }
       events.push('lifecycle');
       return { frozen, wasFrozen: false };
     },
@@ -343,6 +347,24 @@ describe('the multi-adapter pass', () => {
         to: 'Projecten/Acme Widgets/_Acme Widgets.md',
       },
     ]);
+  });
+});
+
+describe('the lifecycle fallback', () => {
+  it('derives frozen from the folder when the lifecycle pass throws', async () => {
+    for (const [archived, verdict] of [
+      [false, 'taskLocks:false:false'],
+      [true, 'taskLocks:true:false'],
+    ] as const) {
+      const h = harness({
+        projectNotes: [projectNote('Acme Widgets', archived)],
+        failLifecycle: true,
+      });
+
+      await h.action.execute('Acme Widgets');
+
+      expect(h.events).toContain(verdict);
+    }
   });
 });
 
