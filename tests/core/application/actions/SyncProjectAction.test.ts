@@ -1,20 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../../../src/core/application/actions/SyncProjectAction.js';
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
-import type { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
+import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
-import type { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
+import { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { EntityRecord } from '../../../../src/core/port/data/EntityRecord.js';
+import { Baseline } from '../../../../src/core/domain/Baseline.js';
+import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
+import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
@@ -54,6 +57,34 @@ class FakeVault extends FakeVaultBase {
   override onNoteChanged(): void {}
   override onNoteDeleted(): void {}
   override onNoteRenamed(): void {}
+
+  appliedArchived: Array<{ project: string; archived: boolean }> = [];
+
+  override async readConnections(
+    project: string,
+  ): Promise<readonly ConnectionDataTransferObject[]> {
+    return (
+      this.projectNotes.find((note) => note.projectName === project)
+        ?.connections ?? []
+    );
+  }
+  override async observeProject(project: string): Promise<OriginObservation> {
+    const note = this.projectNotes.find(
+      (candidate) => candidate.projectName === project,
+    );
+    return new OriginObservation({
+      current: note !== undefined && note.archivedAt !== null ? 'true' : 'false',
+      currentCompleted: false,
+      fieldTime: null,
+      trustworthy: false,
+    });
+  }
+  override async applyProjectArchived(
+    project: string,
+    archived: boolean,
+  ): Promise<void> {
+    this.appliedArchived.push({ project, archived });
+  }
 }
 
 function projectNote(
@@ -279,15 +310,20 @@ describe('the multi-adapter pass', () => {
     ]);
   });
 
-  it('never ensures a board for an archived project', async () => {
+  it('originates the declared connections of an archived project (SHELL-2, ORG-3)', async () => {
     const h = harness({
-      projectNotes: [projectNote('Acme Widgets', '')],
+      projectNotes: [
+        projectNote('Acme Widgets', '2026-10-08T10:00:00Z', [
+          { slug: 'todoist', application: 'todoist', target: '' },
+        ]),
+      ],
+      adapterApplications: ['todoist'],
       ensureBoard: true,
     });
 
     await h.action.execute('Acme Widgets');
 
-    expect(h.events).not.toContain('ensureBoard:Acme Widgets');
+    expect(h.events).toContain('ensureBoard:Acme Widgets/todoist');
   });
 
   it('migrates a legacy-named home note', async () => {
@@ -436,5 +472,76 @@ describe('ORG-4 — no declared connection, no fan-out', () => {
     expect(h.events.filter((event) => event.startsWith('ensureBoard'))).toEqual(
       [],
     );
+  });
+});
+
+describe('ORG-2, ORG-3 — an archived project originates its empty-target connection', () => {
+  it('records the identity and fans the restore out instead of dropping the connection (ORG-2, ORG-3)', async () => {
+    const vault = new FakeVault();
+    vault.projectNotes = [
+      projectNote('Acme Widgets', '2026-10-08T10:00:00Z', [
+        { slug: 'todoist', application: 'todoist', target: '' },
+      ]),
+    ];
+    const syncState = new FakeSyncState();
+    await syncState.writeBaseline(
+      'Acme Widgets',
+      'archived',
+      'origin',
+      new Baseline('true', false),
+    );
+    await syncState.writeBaseline(
+      'Acme Widgets',
+      'archived',
+      'mirror:todoist',
+      new Baseline('true', false),
+    );
+    const mirror = new ConformanceMirrorAdapter();
+    const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => mirror };
+
+    const action = new SyncProjectAction({
+      vault,
+      mirrorAdapters,
+      lifecycle: new ProjectLifecycleSyncAction(
+        vault,
+        syncState,
+        mirrorAdapters,
+      ),
+      taskLocks: {
+        invoke: async () => {},
+      } as unknown as ReconcileProjectTaskLocksAction,
+      taskCapture: {
+        invoke: async () => {},
+      } as unknown as CaptureTasksAction,
+      taskFields: {
+        invoke: async () => {},
+      } as unknown as MirrorSyncAction,
+      migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
+      detectNoteRenames: {
+        execute: async () => {},
+      } as unknown as DetectNoteRenamesAction,
+      completeTaskCascade: {
+        execute: async () => {},
+      } as unknown as CompleteTaskCascadeAction,
+      syncChecklist: {
+        execute: async () => {},
+      } as unknown as SyncChecklistAction,
+      mirrorTodoStatus: {
+        execute: async () => {},
+      } as unknown as MirrorTodoStatusAction,
+      sweepDeletedNotes: new SweepDeletedNotesAction(vault, syncState, {
+        execute: async () => {},
+      } as unknown as HandleDeletedNoteAction),
+      ensureProjectBoard: new EnsureProjectBoardAction(syncState, []),
+    });
+
+    await action.execute('Acme Widgets');
+
+    expect(
+      await syncState.getIdentity('Acme Widgets', 'todoist'),
+    ).not.toBeNull();
+    expect(vault.appliedArchived).toEqual([
+      { project: 'Acme Widgets', archived: false },
+    ]);
   });
 });

@@ -9,6 +9,7 @@ import type { RegistryPort } from '../../../../src/core/port/RegistryPort.js';
 import type { CanonicalFieldWrite } from '../../../../src/core/port/data/CanonicalFieldWrite.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
+import { ProjectIdentityDataTransferObject } from '../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -185,5 +186,51 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
     await expect(
       action.invoke({ project: PROJECT, frozen: true, wasFrozen: false }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("ORG-2 — the locks action addresses the connection's effective target", () => {
+  it('addresses by the recorded identity when the declared target is empty (ORG-2 — asserted at the adapter-factory seam)', async () => {
+    const vault = new FakeVault();
+    vault.connections = [
+      new ConnectionDataTransferObject({
+        slug: 'a',
+        application: 'conformance',
+        target: '',
+      }),
+    ];
+    vault.tasks.set(FIX, task(FIX, 'Building'));
+    const registry = new SyncStateAdapter(memoryStorage());
+    await registry.setEntity({ id: FIX, notePath: FIX });
+    await registry.setMirrorItem(PROJECT, 'a', 'issue-1', { entityId: FIX });
+    await registry.setIdentity(
+      PROJECT,
+      'a',
+      new ProjectIdentityDataTransferObject({
+        target: 'board-a',
+        targetHandle: '',
+        projectHandle: 'PVT_1',
+        statusFieldHandle: '',
+        statusOptions: [],
+      }),
+    );
+    const createdTargets: string[] = [];
+    const mirror = new ConformanceMirrorAdapter();
+    const mirrorAdapters: MirrorAdapterFactoryPort = {
+      create: (_application, target) => {
+        createdTargets.push(target);
+        return mirror;
+      },
+    };
+    const action = new ReconcileProjectTaskLocksAction(
+      vault,
+      registry,
+      mirrorAdapters,
+      DONE,
+    );
+
+    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
+
+    expect(createdTargets).toEqual(['board-a']);
   });
 });
