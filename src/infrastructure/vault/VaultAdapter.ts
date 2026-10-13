@@ -6,7 +6,11 @@ import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { VaultPort } from '../../core/port/VaultPort.js';
-import { chooseHomeNotePath, folderChainForPath } from '../../core/domain/paths.js';
+import {
+  archivedFromPath,
+  chooseHomeNotePath,
+  folderChainForPath,
+} from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
 import { slugify, typeFromLabels } from '../../core/domain/note.js';
@@ -242,7 +246,7 @@ export class VaultAdapter implements VaultPort {
     }
 
     return new OriginObservation({
-      current: path.startsWith('Archief/') ? 'true' : 'false',
+      current: archivedFromPath(path) ? 'true' : 'false',
       currentCompleted: false,
       fieldTime: await this.changeTime(path),
       trustworthy: true,

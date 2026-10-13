@@ -1,3 +1,4 @@
+import { archivedFromPath } from '../../domain/paths.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
@@ -87,7 +88,7 @@ export class SyncProjectAction {
       this.deps.migrateHomeNote.execute({
         projectName: project,
         notePath: note.path,
-        locationArchived: note.path.startsWith('Archief/'),
+        locationArchived: archivedFromPath(note.path),
       }),
     );
   }
@@ -100,7 +101,7 @@ export class SyncProjectAction {
       const warnings = await this.deps.renameProject.execute({
         projectName: project,
         notePath: note.path,
-        locationArchived: note.path.startsWith('Archief/'),
+        locationArchived: archivedFromPath(note.path),
         connections: note.connections,
       });
       for (const warning of warnings) {
@@ -221,7 +222,7 @@ export class SyncProjectAction {
         `SyncProjectAction: lifecycle failed for ${project}`,
         error,
       );
-      return { frozen: note.path.startsWith('Archief/'), wasFrozen: false };
+      return { frozen: archivedFromPath(note.path), wasFrozen: false };
     }
   }
 

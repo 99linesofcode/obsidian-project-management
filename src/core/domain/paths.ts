@@ -23,6 +23,12 @@ export function projectNameFromPath(path: string): string | null {
   return segments[1] ?? null;
 }
 
+// Whether a note path lives under the archived root. The folder is the archived
+// state — nothing stores it — so every reader derives it from the path here.
+export function archivedFromPath(path: string): boolean {
+  return path.startsWith('Archief/');
+}
+
 // The same note path with its project segment replaced. Both roots name the
 // project in the second segment, so a rename rewrites it in place and every
 // other segment is preserved.
