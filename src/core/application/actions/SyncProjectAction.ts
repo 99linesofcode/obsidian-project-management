@@ -113,7 +113,7 @@ export class SyncProjectAction {
     note: ProjectNoteDataTransferObject,
   ): Promise<void> {
     const ensureBoard = this.deps.ensureProjectBoard;
-    if (ensureBoard === undefined || note.archivedAt !== null) {
+    if (ensureBoard === undefined) {
       return;
     }
     for (const connection of note.connections) {
