@@ -8,6 +8,8 @@ import { ConnectionDataTransferObject } from '../../../../src/core/port/data/Con
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
+import { TaskManagerMirrorAdapter } from '../../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
+import type { TaskManagerTransport } from '../../../../src/infrastructure/todoist/TaskManagerTransport.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -89,6 +91,10 @@ class ProjectClockMirror implements MirrorPort {
 }
 
 class LifecycleVault extends FakeVaultBase {
+  constructor(private readonly archived = false) {
+    super();
+  }
+
   override async readConnections(): Promise<
     readonly ConnectionDataTransferObject[]
   > {
@@ -103,7 +109,7 @@ class LifecycleVault extends FakeVaultBase {
 
   override async observeProject(): Promise<OriginObservation> {
     return new OriginObservation({
-      current: 'false',
+      current: this.archived ? 'true' : 'false',
       currentCompleted: false,
       fieldTime: ORIGIN_TIME,
       trustworthy: true,
@@ -111,6 +117,30 @@ class LifecycleVault extends FakeVaultBase {
   }
 
   override async applyProjectArchived(): Promise<void> {}
+}
+
+// A task manager that has just un-archived: the project read reports it active
+// with the newer updated_at that un-archiving bumps.
+class UnarchivedTaskManager implements TaskManagerTransport {
+  async get(): Promise<{ status: number; json: unknown }> {
+    return {
+      status: 200,
+      json: {
+        id: MIRROR_TARGET,
+        name: PROJECT,
+        is_archived: false,
+        updated_at: MIRROR_TIME,
+      },
+    };
+  }
+
+  async post(): Promise<{ status: number; json: unknown }> {
+    throw new Error('unarchived task manager: unexpected POST');
+  }
+
+  async delete(): Promise<{ status: number; json: unknown }> {
+    throw new Error('unarchived task manager: unexpected DELETE');
+  }
 }
 
 describe('NWM-6 amended — the port surface is the project clock, not an archive-specific time', () => {
@@ -149,5 +179,41 @@ describe('NWM-6 amended — the port surface is the project clock, not an archiv
 
     expect(typeof port.projectTime).toBe('function');
     expect(port.archivedTime).toBeUndefined();
+  });
+});
+
+describe('ADP-6 / NWM-6 — a task manager is decisive in both directions', () => {
+  it('lets a task manager that un-archived win the restore rung on its updated_at', async () => {
+    // Origin archived against a baseline of active (an archive delta); the task
+    // manager un-archived against a baseline of archived (a restore delta). Its
+    // updated_at moves on un-archive and is the newer time, so the restore wins.
+    const registry = new FakeSyncState();
+    await registry.writeBaseline(
+      PROJECT,
+      'archived',
+      'origin',
+      new Baseline('false', false),
+    );
+    await registry.writeBaseline(
+      PROJECT,
+      'archived',
+      'mirror:todoist',
+      new Baseline('true', false),
+    );
+    const mirror = new TaskManagerMirrorAdapter(
+      new UnarchivedTaskManager(),
+      MIRROR_TARGET,
+    );
+    const action = new ProjectLifecycleSyncAction(
+      new LifecycleVault(true),
+      registry,
+      { create: () => mirror },
+    );
+
+    const record = await action.invoke(PROJECT);
+
+    expect(record.result.rung).toBe(1);
+    expect(record.result.winner).toBe('mirror:todoist');
+    expect(record.frozen).toBe(false);
   });
 });
