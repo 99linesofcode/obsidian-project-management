@@ -368,16 +368,16 @@ name alike is settled and a second pass writes nothing.
 `ProjectLifecycleSyncAction` is the project-level peer of the mirror-sync action.
 Given a project it scopes the mirrors — each connection addressed by its
 **effective target** ([§2.6](#26-origination-ensureprojectboardaction)), not the
-declared target — resolves each connection's mirror project
-through `RegistryPort` — onboarding a missing one by `MirrorPort.createProject`
-and recording the returned handle, so a newly-connected project is onboarded in
-the same pass — renames a mirror project whose name drifted from the vault
-project through `MirrorPort.renameProject`, reads the origin's archived state
-through `VaultPort`, runs the same `mergeField` ladder over the
-archived fact, and fans the reconciled freeze out to the origin and every
-capable mirror. Any side can start the freeze or the unfreeze; the reconciled
-freeze is the pass's `frozen` verdict, which gates the task-field pass. Its
-per-side baselines live under the `archived` field in the same baseline store.
+declared target — reads each connection's already-originated mirror project
+through `RegistryPort` (a connection whose remote project is absent is left
+unoriginated — origination is the chain step, ORG-3), renames a mirror project
+whose name drifted from the vault project through `MirrorPort.renameProject`,
+reads the origin's archived state through `VaultPort`, runs the same `mergeField`
+ladder over the archived fact, and fans the reconciled freeze out to the origin
+and every capable mirror. Any side can start the freeze or the unfreeze; the
+reconciled freeze is the pass's `frozen` verdict, which gates the task-field
+pass. Its per-side baselines live under the `archived` field in the same baseline
+store.
 
 ```mermaid
 sequenceDiagram
@@ -395,9 +395,8 @@ sequenceDiagram
       A->>R: renameProject when the name drifted
     else readProject returns a project
       A->>MP: recordMirrorProject(target)
-    else
-      A->>R: createProject(target, project)
-      A->>MP: recordMirrorProject(created.handle)
+    else absent
+      A-->>A: leave the connection unoriginated
     end
   end
   A->>O: observeProject(project)

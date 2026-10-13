@@ -301,20 +301,19 @@ canonical DTOs and the pure core.
   rendered back to its own space on write — a relation that agrees by identity
   is settled. It names no provider.
 - **The project lifecycle reconciliation** (`ProjectLifecycleSyncAction`). The
-  project-level peer of the mirror-sync action: given a project it resolves each
-  connection's mirror project through `RegistryPort`, onboarding a missing one
-  via `MirrorPort.createProject`, then reads the origin's archived state through
-  `VaultPort` and each mirror's through `MirrorPort`, runs the same pure
-  `mergeField` ladder over the archived fact, and fans the reconciled freeze out
-  to the origin and every capable mirror. Any side can start the freeze or the
-  unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
-  task-field pass. A mirror project whose name drifted is renamed through
-  `MirrorPort.renameProject`. A mirror project created in the pass is recorded
-  with its created state as its baseline, skipped from observation, and still
-  driven in the fan-out; the fan-out also re-drives every capable side whose
-  current disagrees with the verdict whatever the merge label (NWM-32). Its
-  per-side baselines live in the same `coreBaselines` store under the `archived`
-  field.
+  project-level peer of the mirror-sync action: given a project it reads each
+  connection's already-originated mirror project through `RegistryPort` — a
+  connection whose remote project is absent is left unoriginated, because
+  origination is the chain's single step (ORG-3) — then reads the origin's
+  archived state through `VaultPort` and each mirror's through `MirrorPort`, runs
+  the same pure `mergeField` ladder over the archived fact, and fans the
+  reconciled freeze out to the origin and every capable mirror. Any side can
+  start the freeze or the unfreeze; the reconciled freeze is the pass's `frozen`
+  verdict, which gates the task-field pass. A mirror project whose name drifted
+  is renamed through `MirrorPort.renameProject`. The fan-out also re-drives every
+  capable side whose current disagrees with the verdict whatever the merge label
+  (NWM-32). Its per-side baselines live in the same `coreBaselines` store under
+  the `archived` field.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
   conversation while its project is frozen and reopen it on unfreeze; the code

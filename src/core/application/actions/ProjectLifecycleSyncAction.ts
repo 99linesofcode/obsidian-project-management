@@ -18,12 +18,10 @@ interface ResolvedMirror {
   side: string;
   handle: string;
   adapter: MirrorPort;
-  createdState: string | null;
 }
 
 interface ResolvedProject {
   handle: string;
-  createdState: string | null;
 }
 
 interface ObservedMirror {
@@ -41,9 +39,9 @@ export interface ProjectLifecycleOutcome {
 }
 
 // Reconciles a project's archived state across the vault origin and N mirrors:
-// resolves each connection's mirror project, merges the archive fact through the
-// ladder, fans the verdict out to every side, and locks or unlocks the tracked
-// issues that the archive transition calls for.
+// reads each connection's already-originated mirror project, merges the archive
+// fact through the ladder, fans the verdict out to every side, and locks or
+// unlocks the tracked issues that the archive transition calls for.
 export class ProjectLifecycleSyncAction {
   constructor(
     private readonly vault: VaultPort,
@@ -117,9 +115,6 @@ export class ProjectLifecycleSyncAction {
   ): Promise<ObservedMirror[]> {
     const observed: ObservedMirror[] = [];
     for (const mirror of mirrors) {
-      if (mirror.createdState !== null) {
-        continue;
-      }
       const observation = await observeMirror(mirror, baselines);
       if (observation !== null) {
         observed.push({ mirror, observation });
@@ -158,20 +153,13 @@ export class ProjectLifecycleSyncAction {
           adapter,
           project,
         );
-        const side = mirrorSideKey(connection.slug);
-        if (resolved.createdState !== null) {
-          await this.registry.writeBaseline(
-            project,
-            ARCHIVED_FIELD,
-            side,
-            new Baseline(resolved.createdState, false),
-          );
+        if (resolved === null) {
+          continue;
         }
         mirrors.push({
-          side,
+          side: mirrorSideKey(connection.slug),
           handle: resolved.handle,
           adapter,
-          createdState: resolved.createdState,
         });
       } catch (error) {
         console.error(
@@ -188,29 +176,23 @@ export class ProjectLifecycleSyncAction {
     target: string,
     adapter: MirrorPort,
     project: string,
-  ): Promise<ResolvedProject> {
+  ): Promise<ResolvedProject | null> {
     const recorded = await this.registry.resolveMirrorProject(
       project,
       connection.slug,
     );
     if (recorded !== null) {
       await this.renameIfDrifted(adapter, recorded, project);
-      return { handle: recorded, createdState: null };
+      return { handle: recorded };
     }
 
     const existing = await adapter.readProject(target);
-    if (existing !== null) {
-      await this.renameIfDrifted(adapter, target, project);
-      await this.record(connection, project, target);
-      return { handle: target, createdState: null };
+    if (existing === null) {
+      return null;
     }
-
-    const created = await adapter.createProject(target, project);
-    await this.record(connection, project, created.handle);
-    return {
-      handle: created.handle,
-      createdState: created.archived ? 'true' : 'false',
-    };
+    await this.renameIfDrifted(adapter, target, project);
+    await this.record(connection, project, target);
+    return { handle: target };
   }
 
   private async renameIfDrifted(
@@ -330,8 +312,7 @@ async function fanOut(
 
   const archived = result.value === 'true';
   for (const mirror of mirrors) {
-    const current =
-      observedBySide.get(mirror.side)?.current ?? mirror.createdState;
+    const current = observedBySide.get(mirror.side)?.current ?? null;
     if (current === null) {
       continue;
     }

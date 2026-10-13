@@ -490,15 +490,6 @@ class StatefulTaskManager implements TaskManagerTransport {
   }
 }
 
-function projectByName(
-  taskManager: StatefulTaskManager,
-  name: string,
-): FakeProject | undefined {
-  return [...taskManager.projects.values()].find(
-    (project) => project.name === name,
-  );
-}
-
 function realFactory(
   codeHost: CodeHostTransport,
   taskManager: TaskManagerTransport,
@@ -734,7 +725,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     expect(tm.projects.get(TODOIST_TARGET)?.is_archived).toBe(false);
   });
 
-  it('onboards a missing mirror project, excludes it from observation, and fans it out to the verdict (NWM-15)', async () => {
+  it('leaves a missing mirror project unoriginated (ORG-3)', async () => {
     const taskManager = new StatefulTaskManager({
       id: 'unrelated',
       name: 'Unrelated',
@@ -749,11 +740,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
 
     const record = await action.invoke(PROJECT);
 
-    expect(tm.projects.size).toBe(2);
+    expect(tm.projects.size).toBe(1);
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
-    expect(record.written).toContain('mirror:b');
-    expect(projectByName(tm, PROJECT)?.is_archived).toBe(true);
+    expect(record.written).not.toContain('mirror:b');
   });
 
   it('records a failed mirror write and still archives the rest (NWM-2)', async () => {
