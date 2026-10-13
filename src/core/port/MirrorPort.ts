@@ -18,6 +18,12 @@ export interface MirrorPort {
   setArchived(target: string, archived: boolean): Promise<void>;
   archivedTime(target: string): Promise<string | null>;
 
+  // The core's need: remove the remote project a gone vault project mirrored,
+  // so a deleted project is a tracked change like a deleted note. An adapter
+  // that cannot remove a remote project omits this method; the caller checks
+  // presence before deleting.
+  deleteProject?(target: string): Promise<void>;
+
   readTasks(target: string): Promise<CanonicalTask[]>;
   readTask(handle: string): Promise<CanonicalTask | null>;
   createTask(target: string, task: CanonicalTask): Promise<CanonicalTask>;

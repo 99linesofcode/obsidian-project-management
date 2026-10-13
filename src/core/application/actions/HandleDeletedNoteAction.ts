@@ -12,6 +12,10 @@ export interface HandleDeletedNoteInput {
   }>;
 }
 
+// Tracks a deleted vault note as a change: records a tombstone for every mirror
+// handle the note still owed a delete to, fans the delete out to each
+// connection, and keeps the registry record — the tombstone and the record are
+// pruned once every side has settled.
 export class HandleDeletedNoteAction {
   constructor(
     private readonly syncState: RegistryPort,
@@ -24,25 +28,40 @@ export class HandleDeletedNoteAction {
       return;
     }
 
+    const deletedAt = new Date().toISOString();
+    let recorded = false;
     for (const connection of input.connections) {
-      await this.deleteMirror(record.id, input.projectName, connection);
+      const found = await this.syncState.findMirrorItemByEntity(
+        connection.slug,
+        record.id,
+      );
+      if (found === null) {
+        continue;
+      }
+      await this.syncState.recordTombstone({
+        entityId: record.id,
+        notePath: input.notePath,
+        deletedAt,
+        handle: found.handle,
+      });
+      recorded = true;
+      await this.deleteMirror(input.projectName, connection, found.handle);
     }
-    await this.syncState.removeEntity(record.id);
+
+    if (!recorded) {
+      await this.syncState.recordTombstone({
+        entityId: record.id,
+        notePath: input.notePath,
+        deletedAt,
+      });
+    }
   }
 
   private async deleteMirror(
-    entityId: string,
     projectName: string,
     connection: HandleDeletedNoteInput['connections'][number],
+    handle: string,
   ): Promise<void> {
-    const found = await this.syncState.findMirrorItemByEntity(
-      connection.slug,
-      entityId,
-    );
-    if (found === null) {
-      return;
-    }
-
     const adapter = this.mirrorAdapters.create(
       connection.application,
       connection.target,
@@ -53,13 +72,14 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    await adapter.deleteTask(found.handle);
+    await adapter.deleteTask(handle);
     await adapter.applyField(
       new CanonicalFieldWrite({
-        handle: found.handle,
+        handle,
         field: 'completion',
         value: 'true',
       }),
     );
+    await this.syncState.removeMirrorItem(projectName, connection.slug, handle);
   }
 }

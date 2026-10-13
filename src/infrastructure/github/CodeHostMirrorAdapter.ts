@@ -5,7 +5,8 @@ import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
-import type { MirrorPort } from '../../core/port/MirrorPort.js';import type {
+import type { MirrorPort } from '../../core/port/MirrorPort.js';
+import type {
   CodeHostResponse,
   CodeHostTransport,
 } from './CodeHostTransport.js';
@@ -235,6 +236,14 @@ const SET_PROJECT_CLOSED_MUTATION = `
 const RENAME_PROJECT_MUTATION = `
   mutation RenameProject($projectId: ID!, $title: String!) {
     updateProjectV2(input: { projectId: $projectId, title: $title }) {
+      projectV2 { id }
+    }
+  }
+`;
+
+const DELETE_PROJECT_MUTATION = `
+  mutation DeleteProject($projectId: ID!) {
+    deleteProjectV2(input: { projectId: $projectId }) {
       projectV2 { id }
     }
   }
@@ -542,6 +551,14 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     await this.graphql(RENAME_PROJECT_MUTATION, {
       projectId: board.projectNodeId,
       title: name,
+    });
+  }
+
+  async deleteProject(target: string): Promise<void> {
+    const connection = CodeHostTarget.parse(target);
+    const board = await this.requireBoard(connection.target);
+    await this.graphql(DELETE_PROJECT_MUTATION, {
+      projectId: board.projectNodeId,
     });
   }
 

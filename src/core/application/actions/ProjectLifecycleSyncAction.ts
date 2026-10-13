@@ -1,6 +1,6 @@
 import { Baseline } from '../../domain/Baseline.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
-import type { MergeResult } from '../../domain/MergeResult.js';
+import { MergeResult } from '../../domain/MergeResult.js';
 import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
@@ -46,13 +46,17 @@ export class ProjectLifecycleSyncAction {
   ) {}
 
   async invoke(project: string): Promise<ProjectLifecycleOutcome> {
-    const connections = await this.vault.readConnections(project);
-    const mirrors = await this.scopeMirrors(connections, project);
     const origin = originSideObservation(
       ORIGIN_SIDE,
       await this.registry.readBaseline(project, ARCHIVED_FIELD, ORIGIN_SIDE),
       await this.vault.observeProject(project),
     );
+    if (origin.current === null) {
+      return this.deleteGoneProject(project);
+    }
+
+    const connections = await this.vault.readConnections(project);
+    const mirrors = await this.scopeMirrors(connections, project);
     const baselines = await this.readMirrorBaselines(project, mirrors);
     const observed = await this.observeMirrors(mirrors, baselines);
 
@@ -79,6 +83,55 @@ export class ProjectLifecycleSyncAction {
       result,
       written: fanout.written,
       advanced,
+      failed,
+    };
+  }
+
+  // A project folder that is gone is a tracked change: every connection whose
+  // mirror project the registry recorded is told to remove it.
+  private async deleteGoneProject(
+    project: string,
+  ): Promise<ProjectLifecycleOutcome> {
+    const written: string[] = [];
+    const failed: string[] = [];
+    for (const { slug, state } of await this.registry.listPortStates(project)) {
+      if (state.project === '') {
+        continue;
+      }
+      const adapter = this.mirrorAdapters.create(
+        state.provider,
+        state.project,
+        slug,
+        project,
+      );
+      if (adapter === null || adapter.deleteProject === undefined) {
+        continue;
+      }
+      try {
+        await adapter.deleteProject(state.project);
+        written.push(mirrorSideKey(slug));
+      } catch (error) {
+        console.error(
+          `ProjectLifecycleSyncAction: deleting ${slug} failed`,
+          error,
+        );
+        failed.push(mirrorSideKey(slug));
+      }
+    }
+
+    return {
+      frozen: false,
+      wasFrozen: false,
+      result: new MergeResult({
+        outcome: 'delete',
+        value: null,
+        winner: ORIGIN_SIDE,
+        rung: 0,
+        deltas: [],
+        superseded: [],
+      }),
+      written,
+      advanced: [],
       failed,
     };
   }
@@ -145,7 +198,12 @@ export class ProjectLifecycleSyncAction {
       try {
         mirrors.push({
           side: mirrorSideKey(connection.slug),
-          handle: await this.resolveProject(connection, target, adapter, project),
+          handle: await this.resolveProject(
+            connection,
+            target,
+            adapter,
+            project,
+          ),
           adapter,
         });
       } catch (error) {

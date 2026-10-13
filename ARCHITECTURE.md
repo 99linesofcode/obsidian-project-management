@@ -136,7 +136,11 @@ sequenceDiagram
   SP->>V: findProjectNotes (no-op when missing)
   SP->>SP: migrate home note, rekey, resolve-or-create connections
   SP->>Life: invoke(project)
-  Life->>M: resolve mirror project, merge archived, fan out
+  alt project folder gone
+    Life->>M: delete the remote project on every connection
+  else
+    Life->>M: resolve mirror project, merge archived, fan out
+  end
   SP->>Lock: invoke({ project, frozen, wasFrozen })
   SP->>SP: renames, cascade, checklist, mirror to-do
   alt not frozen
@@ -144,7 +148,7 @@ sequenceDiagram
     SP->>TF: invoke(project)
     TF->>M: merge each canonical field, fan out
   end
-  SP->>SP: deletion sweep
+  SP->>SP: deletion sweep (record tombstones, reconcile, prune)
 ```
 
 ## 3. Core Components
@@ -173,8 +177,9 @@ its own module; the composition root wires it.
   declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
   remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
-  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?` (task
-  locking).
+  `fetchComplete?` (verified-complete fetch), `deleteProject?` (remove the
+  remote project a gone vault project mirrored) and `lockTask?`/`unlockTask?`
+  (task locking).
   A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
   port slot; an adapter without a surface simply omits the method. The project,
@@ -201,9 +206,11 @@ its own module; the composition root wires it.
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
 their mirror items, the note-path↔handle and mirror-project mappings, the
-per-connection identity and port state, and the side baselines. Implementer:
+per-connection identity and port state, the deleted-note tombstones, and the
+side baselines. Implementer:
 `SyncStateAdapter`, which also composes the handle and mirror-project
-resolution. Its records `EntityRecord`, `MirrorItem` and `PortState` live in
+resolution. Its records `EntityRecord`, `MirrorItem`, `PortState` and
+`TombstoneRecord` live in
 `src/core/port/data/`; the baselines stay in the `coreBaselines` store.
 The baseline store, mirror handle, mirror project, identity store, tracked
 entity and connection state were separate facet ports served by thin wrapper
@@ -291,7 +298,10 @@ canonical DTOs and the pure core.
   to the origin and every capable mirror. Any side can start the freeze or the
   unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
   task-field pass. A mirror project whose name drifted is renamed through
-  `MirrorPort.renameProject`. Its per-side baselines live in the same
+  `MirrorPort.renameProject`. A project folder that is gone — the origin's
+  archived observation is absent — is a tracked change: every connection whose
+  mirror project the registry recorded is told to remove it through
+  `MirrorPort.deleteProject?`. Its per-side baselines live in the same
   `coreBaselines` store under the `archived` field.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
@@ -325,7 +335,9 @@ canonical DTOs and the pure core.
   gate exposes — a code host exposes only type-labelled issues, a task manager
   exposes every task — and adopts every task the vault does not already hold as a
   task note. The whole listing is scanned each pass and the adopted mirror items
-  are skipped, so the pass is idempotent without a cursor. The action routes by
+  are skipped, so the pass is idempotent without a cursor; a handle with a
+  tombstone is skipped too, so a deleted note's mirror is never re-adopted
+  (DEL-2, I16). The action routes by
   the connection's application — a code-host issue through
   `CreateTaskNoteAction`, a task-manager task rendered by
   `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`. A
@@ -341,7 +353,10 @@ canonical DTOs and the pure core.
   lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
   and the mirror-sync pass for task-field reconciliation. The sweep enumerates
-  the project's connections directly.
+  the project's connections directly, records a tombstone for each tracked note
+  whose file is gone (not under `Archief/`), hands the delete to
+  `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
+  side has settled.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -515,8 +530,11 @@ over HTTPS.
   a human to arbitrate. A conflict dialog was excluded on purpose.
 - **No server or database.** The registry is the plugin's own `data.json`; the
   vault is the system of record. There is no backend.
-- **No permanent deletion.** A deleted note's echoes are removed from the
-  mirrors, but the vault note itself is trashed, never destroyed.
+- **No permanent deletion.** A deleted note is a tracked change: its absence is
+  recorded as a tombstone, the delete fans out to every mirror, and the
+  tombstone and registry record are pruned once every side has settled. The
+  vault note itself is trashed, never destroyed; a gone project removes its
+  remote project on every connection.
 
 **Known debt / open items:** None blocking. The vault-maintenance shell has been
 retired — the chain drives its steps directly (ADR 003).
@@ -563,6 +581,9 @@ Date of Last Update: 2026-10-13
   `coreBaselines`.
 - **Delta** — one side's change against its own baseline: a value, or a delete
   proven by a verified-complete fetch.
+- **Tombstone** — a registry record of a deleted note (entity id, note path,
+  delete time and an optional mirror handle). It stops capture re-adopting the
+  handle and is pruned with the entity once every side has settled.
 - **Decision ladder** — the ordered rules `mergeField` applies to a
   multi-sided conflict: decisive timestamp, then completion over a stale open,
   then origin authority.

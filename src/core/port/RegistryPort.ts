@@ -4,6 +4,7 @@ import type { EntityRecord } from './data/EntityRecord.js';
 import type { MirrorItem } from './data/MirrorItem.js';
 import type { PortState } from './data/PortState.js';
 import type { ProjectIdentityDataTransferObject } from './data/ProjectIdentityDataTransferObject.js';
+import type { TombstoneRecord } from './data/TombstoneRecord.js';
 
 // The registry as the core's sync state: the tracked entities and their mirror
 // items, the note-path↔handle and mirror-project mappings, the per-connection
@@ -17,6 +18,14 @@ export interface RegistryPort {
   setEntity(record: EntityRecord): Promise<void>;
   removeEntity(id: string): Promise<void>;
   listEntities(projectName: string): Promise<EntityRecord[]>;
+
+  // The core's need: track a deleted note as a change — the entity's absence
+  // with its delete time and the mirror handle it still owes a delete to. A
+  // tombstone stops capture re-adopting the handle, and removing the entity
+  // prunes the tombstones that belong to it.
+  recordTombstone(record: TombstoneRecord): Promise<void>;
+  findTombstoneByNotePath(notePath: string): Promise<TombstoneRecord | null>;
+  findTombstone(handle: string): Promise<TombstoneRecord | null>;
   findMirrorItem(
     connectionSlug: string,
     handle: string,

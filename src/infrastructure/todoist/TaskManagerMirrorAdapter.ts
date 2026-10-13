@@ -135,6 +135,17 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     );
   }
 
+  async deleteProject(target: string): Promise<void> {
+    const connection = TaskManagerTarget.parse(target);
+    const response = await this.transport.delete(
+      `/projects/${connection.projectId}`,
+    );
+    if (response.status === 404) {
+      return;
+    }
+    ensureSuccess(response);
+  }
+
   async archivedTime(_target: string): Promise<string | null> {
     return null;
   }
