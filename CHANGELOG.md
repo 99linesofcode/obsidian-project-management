@@ -1,3 +1,17 @@
+# [0.30.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.29.0...0.30.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* **vault:** clock the archive fact from the home note's change time ([36403c8](https://github.com/99linesofcode/obsidian-project-management/commit/36403c8b15c6b98fda4ea746d37d39019b0307d3))
+
+
+### Features
+
+* **todoist:** report the project clock from the project's updated_at ([5dabcc6](https://github.com/99linesofcode/obsidian-project-management/commit/5dabcc64b8efecff9e16d0adeb270f83526c738d))
+
+
+
 # [0.29.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.2...0.29.0) (2026-10-13)
 
 
@@ -43,21 +57,6 @@
 ### Features
 
 * **todo:** a type:todo is a checklist item, not an issue ([800cb3d](https://github.com/99linesofcode/obsidian-project-management/commit/800cb3dc356208382c4effbc76a8b5579a7a1cdb))
-
-
-
-# [0.27.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.26.1...0.27.0) (2026-10-13)
-
-
-### Bug Fixes
-
-* **delete:** settle the delete without a post-delete completion write ([fc1557e](https://github.com/99linesofcode/obsidian-project-management/commit/fc1557e01488eda1f846add2a21685e1cf75de28))
-* **delete:** the code host deletes the issue; a gone project is reached from the registry ([dac02d8](https://github.com/99linesofcode/obsidian-project-management/commit/dac02d8db99b3f6aecde760b37abaa7f37fe9f74))
-
-
-### Features
-
-* **delete:** a delete is a tracked change — tombstones stop resurrection ([60aba14](https://github.com/99linesofcode/obsidian-project-management/commit/60aba148261fa625141b2328686b7e32b5e2ab7c))
 
 
 
