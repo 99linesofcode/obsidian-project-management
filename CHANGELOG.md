@@ -1,3 +1,18 @@
+# [0.27.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.26.1...0.27.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* **delete:** settle the delete without a post-delete completion write ([fc1557e](https://github.com/99linesofcode/obsidian-project-management/commit/fc1557e01488eda1f846add2a21685e1cf75de28))
+* **delete:** the code host deletes the issue; a gone project is reached from the registry ([dac02d8](https://github.com/99linesofcode/obsidian-project-management/commit/dac02d8db99b3f6aecde760b37abaa7f37fe9f74))
+
+
+### Features
+
+* **delete:** a delete is a tracked change — tombstones stop resurrection ([60aba14](https://github.com/99linesofcode/obsidian-project-management/commit/60aba148261fa625141b2328686b7e32b5e2ab7c))
+
+
+
 ## [0.26.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.26.0...0.26.1) (2026-10-13)
 
 
@@ -37,20 +52,6 @@
 ### Features
 
 * **migration:** the legacy type scalar becomes a type label ([e9ae01d](https://github.com/99linesofcode/obsidian-project-management/commit/e9ae01df7a2688e4ab4701b1fcf17e8e7fe139f1))
-
-
-
-# [0.24.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.23.0...0.24.0) (2026-10-12)
-
-
-### Bug Fixes
-
-* **todo:** gate the ToDo-status mirror on the type label ([bca9a41](https://github.com/99linesofcode/obsidian-project-management/commit/bca9a412e7afa0606ccd0eaef4545f7de369e8c0))
-
-
-### Features
-
-* **todo:** a ToDo is a task note under taken/, not a todos/ folder ([eebe2a5](https://github.com/99linesofcode/obsidian-project-management/commit/eebe2a5c1a241864dcc06eb0fce0b4f8979cf38e))
 
 
 
