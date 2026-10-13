@@ -1,3 +1,20 @@
+# [0.29.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.2...0.29.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* **rename:** gate the re-key on the recorded key, not the folder (PLC-2/PLC-3) ([a244a2c](https://github.com/99linesofcode/obsidian-project-management/commit/a244a2c7c12639191ff83e27bcdab2211ddb6cfc))
+
+
+### Features
+
+* **rename:** a directly-renamed folder is renamed back and reported (PLC-3) ([dfb7674](https://github.com/99linesofcode/obsidian-project-management/commit/dfb7674870a2ff1b809f9ae521f1ec21602697d8))
+* **rename:** a note with no project property adopts the folder segment, once (PLC-4) ([80e5422](https://github.com/99linesofcode/obsidian-project-management/commit/80e5422f0d400a2b32ee98bca5330d4146ea4bc0))
+* **rename:** a project note names itself from its project property (PLC-1) ([5641f0e](https://github.com/99linesofcode/obsidian-project-management/commit/5641f0ece99f5bc33873214dbea94e0b402203ee))
+* **rename:** a property change renames the project and re-keys the registry (PLC-2) ([5c732d1](https://github.com/99linesofcode/obsidian-project-management/commit/5c732d176b067504f8cd2cf6ec5dc7709a054338))
+
+
+
 ## [0.28.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.1...0.28.2) (2026-10-13)
 
 
@@ -41,16 +58,6 @@
 ### Features
 
 * **delete:** a delete is a tracked change — tombstones stop resurrection ([60aba14](https://github.com/99linesofcode/obsidian-project-management/commit/60aba148261fa625141b2328686b7e32b5e2ab7c))
-
-
-
-## [0.26.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.26.0...0.26.1) (2026-10-13)
-
-
-### Bug Fixes
-
-* **origination:** an empty target resolves by name; a gone remote is re-created ([293d265](https://github.com/99linesofcode/obsidian-project-management/commit/293d265845dc4328d8b1e7dab7a2b9142cdb4c78))
-* **origination:** the resolved addressing is effective downstream ([271472a](https://github.com/99linesofcode/obsidian-project-management/commit/271472ad137df07ddffce86df28f1b66f2b6654f))
 
 
 
