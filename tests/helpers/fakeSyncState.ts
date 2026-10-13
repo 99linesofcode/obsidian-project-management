@@ -11,6 +11,13 @@ interface SeededMirror {
   handle: string;
 }
 
+export interface TombstoneRecord {
+  entityId: string;
+  notePath: string;
+  deletedAt: string;
+  handle?: string;
+}
+
 function portKey(projectName: string, portId: string): string {
   return `${projectName}\u0000${portId}`;
 }
@@ -44,6 +51,9 @@ export class FakeSyncState implements RegistryPort {
     portId: string;
     state: PortState;
   }> = [];
+  tombstones = new Map<string, TombstoneRecord>();
+  handleTombstones = new Map<string, TombstoneRecord>();
+  failTombstoneWrites = 0;
 
   seed(record: EntityRecord, mirrors: Record<string, SeededMirror> = {}): void {
     this.records.set(record.id, record);
@@ -89,6 +99,14 @@ export class FakeSyncState implements RegistryPort {
       for (const [handle, item] of handles) {
         if (item.entityId === id) {
           handles.delete(handle);
+        }
+      }
+    }
+    for (const [notePath, record] of this.tombstones) {
+      if (record.entityId === id) {
+        this.tombstones.delete(notePath);
+        if (record.handle !== undefined) {
+          this.handleTombstones.delete(record.handle);
         }
       }
     }
@@ -138,6 +156,27 @@ export class FakeSyncState implements RegistryPort {
   async removeEntity(id: string): Promise<void> {
     this.dropRecord(id);
     this.removed.push(id);
+  }
+
+  async recordTombstone(record: TombstoneRecord): Promise<void> {
+    if (this.failTombstoneWrites > 0) {
+      this.failTombstoneWrites -= 1;
+      throw new Error('tombstone write failed');
+    }
+    this.tombstones.set(record.notePath, record);
+    if (record.handle !== undefined && record.handle !== '') {
+      this.handleTombstones.set(record.handle, record);
+    }
+  }
+
+  async findTombstoneByNotePath(
+    notePath: string,
+  ): Promise<TombstoneRecord | null> {
+    return this.tombstones.get(notePath) ?? null;
+  }
+
+  async findTombstone(handle: string): Promise<TombstoneRecord | null> {
+    return this.handleTombstones.get(handle) ?? null;
   }
 
   async listEntities(projectName: string): Promise<EntityRecord[]> {
