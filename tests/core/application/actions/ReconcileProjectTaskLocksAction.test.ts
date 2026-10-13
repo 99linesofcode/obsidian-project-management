@@ -190,7 +190,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
 });
 
 describe("ORG-2 — the locks action addresses the connection's effective target", () => {
-  it('builds the adapter with the resolved effective target, not the declared one (ORG-2 — asserted at the adapter-factory seam)', async () => {
+  it('addresses by the recorded identity when the declared target is empty (ORG-2 — asserted at the adapter-factory seam)', async () => {
     const vault = new FakeVault();
     vault.connections = [
       new ConnectionDataTransferObject({
