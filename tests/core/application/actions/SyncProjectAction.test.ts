@@ -74,7 +74,10 @@ class FakeVault extends FakeVaultBase {
       (candidate) => candidate.projectName === project,
     );
     return new OriginObservation({
-      current: note !== undefined && note.archivedAt !== null ? 'true' : 'false',
+      current:
+        note !== undefined && note.path.startsWith('Archief/')
+          ? 'true'
+          : 'false',
       currentCompleted: false,
       fieldTime: null,
       trustworthy: false,
@@ -90,7 +93,7 @@ class FakeVault extends FakeVaultBase {
 
 function projectNote(
   projectName: string,
-  archivedAt: string | null,
+  archived: boolean,
   connections: readonly ConnectionDataTransferObject[] = [
     {
       slug: 'github',
@@ -101,9 +104,8 @@ function projectNote(
   ],
 ): ProjectNoteDataTransferObject {
   return {
-    path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
-    archivedAt,
     connections,
     connectionErrors: [],
   };
@@ -129,7 +131,7 @@ function harness(options: HarnessOptions = {}) {
   const deletedConnections: string[] = [];
   const vault = new FakeVault();
   vault.projectNotes = options.projectNotes ?? [
-    projectNote('Acme Widgets', null, options.connections),
+    projectNote('Acme Widgets', false, options.connections),
   ];
   vault.folders.set('Projecten/Acme Widgets/taken', options.taken ?? []);
   const syncState = new FakeSyncState();
@@ -190,7 +192,9 @@ function harness(options: HarnessOptions = {}) {
   };
 
   const frozen =
-    options.frozen ?? (vault.projectNotes[0]?.archivedAt ?? null) !== null;
+    options.frozen ??
+    vault.projectNotes[0]?.path.startsWith('Archief/') ??
+    false;
 
   const lifecycle = {
     invoke: async () => {
@@ -286,7 +290,7 @@ describe('the multi-adapter pass', () => {
 
   it('freezes a project when the folder is archived or the lifecycle pass reports it frozen', async () => {
     for (const options of [
-      { projectNotes: [projectNote('Acme Widgets', '')] },
+      { projectNotes: [projectNote('Acme Widgets', true)] },
       { frozen: true },
     ]) {
       const h = harness(options);
@@ -315,7 +319,7 @@ describe('the multi-adapter pass', () => {
   it('originates the declared connections of an archived project (SHELL-2, ORG-3)', async () => {
     const h = harness({
       projectNotes: [
-        projectNote('Acme Widgets', '2026-10-08T10:00:00Z', [
+        projectNote('Acme Widgets', true, [
           { slug: 'todoist', application: 'todoist', target: '' },
         ]),
       ],
@@ -398,7 +402,7 @@ describe('SHELL-2 — every declared connection is resolved-or-created', () => {
   it('resolves-or-creates each declared connection, whatever its tool', async () => {
     const h = harness({
       projectNotes: [
-        projectNote('Acme Widgets', null, [
+        projectNote('Acme Widgets', false, [
           {
             slug: 'github',
             application: 'github',
@@ -422,7 +426,7 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
   it('sweeps a gone note on a connection whose application has no setup port', async () => {
     const h = harness({
       projectNotes: [
-        projectNote('Acme Widgets', null, [
+        projectNote('Acme Widgets', false, [
           { slug: 'linear', application: 'linear', target: 'L1' },
         ]),
       ],
@@ -481,7 +485,7 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
   it('records the identity and fans the restore out instead of dropping the connection (ORG-2, ORG-3)', async () => {
     const vault = new FakeVault();
     vault.projectNotes = [
-      projectNote('Acme Widgets', '2026-10-08T10:00:00Z', [
+      projectNote('Acme Widgets', true, [
         { slug: 'todoist', application: 'todoist', target: '' },
       ]),
     ];

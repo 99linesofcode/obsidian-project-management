@@ -72,12 +72,11 @@ class FakeQueue {
 
 function projectNote(
   projectName: string,
-  archivedAt: string | null,
+  archived: boolean,
 ): ProjectNoteDataTransferObject {
   return {
-    path: `${archivedAt !== null ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
+    path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
-    archivedAt,
     connections: [
       {
         slug: 'github',
@@ -116,9 +115,9 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
   it('enqueues every discovered project, archived ones included, on each tick', async () => {
     const vault = new FakeVault();
     vault.projectNotes = [
-      projectNote('Acme Widgets', null),
-      projectNote('Other', null),
-      projectNote('Old Project', ''),
+      projectNote('Acme Widgets', false),
+      projectNote('Other', false),
+      projectNote('Old Project', true),
     ];
     const queue = new FakeQueue();
     schedulerWith(vault, queue).load();

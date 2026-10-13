@@ -79,12 +79,10 @@ class FakeVault extends FakeVaultBase {
 function note(overrides: {
   path: string;
   projectName: string;
-  archivedAt?: string | null;
 }): ProjectNoteDataTransferObject {
   return {
     path: overrides.path,
     projectName: overrides.projectName,
-    archivedAt: overrides.archivedAt ?? null,
     connections: [github],
     connectionErrors: [],
   };
@@ -211,7 +209,6 @@ describe('PLC-2 — a property change renames the project', () => {
         note({
           path: 'Archief/Old Name/_Old Name.md',
           projectName: 'New Name',
-          archivedAt: '',
         }),
       ],
     });

@@ -87,7 +87,7 @@ export class SyncProjectAction {
       this.deps.migrateHomeNote.execute({
         projectName: project,
         notePath: note.path,
-        locationArchived: note.archivedAt !== null,
+        locationArchived: note.path.startsWith('Archief/'),
       }),
     );
   }
@@ -100,7 +100,7 @@ export class SyncProjectAction {
       const warnings = await this.deps.renameProject.execute({
         projectName: project,
         notePath: note.path,
-        locationArchived: note.archivedAt !== null,
+        locationArchived: note.path.startsWith('Archief/'),
         connections: note.connections,
       });
       for (const warning of warnings) {
@@ -221,7 +221,7 @@ export class SyncProjectAction {
         `SyncProjectAction: lifecycle failed for ${project}`,
         error,
       );
-      return { frozen: note.archivedAt !== null, wasFrozen: false };
+      return { frozen: note.path.startsWith('Archief/'), wasFrozen: false };
     }
   }
 

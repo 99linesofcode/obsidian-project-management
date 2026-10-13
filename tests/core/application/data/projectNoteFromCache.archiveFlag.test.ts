@@ -16,13 +16,6 @@ function note(path: string) {
   );
 }
 
-describe('characterization — the note DTO carries the archive flag (pre-S22)', () => {
-  it('derives an archivedAt flag from the folder', () => {
-    expect(note('Projecten/Acme Widgets/_home.md')?.archivedAt).toBeNull();
-    expect(note('Archief/Acme Widgets/_home.md')?.archivedAt).toBe('');
-  });
-});
-
 describe('S22 — the note DTO carries no archive flag; the folder is the state', () => {
   it('returns a note without an archivedAt field', () => {
     const active = note('Projecten/Acme Widgets/_home.md');

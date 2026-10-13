@@ -27,7 +27,6 @@ export function projectNoteFromCache(
   return {
     path,
     projectName,
-    archivedAt: path.startsWith('Archief/') ? '' : null,
     connections,
     connectionErrors: errors,
   };
