@@ -149,7 +149,6 @@ sequenceDiagram
     TF->>M: merge each canonical field, fan out
   end
   SP->>SP: deletion sweep (record tombstones, reconcile, prune)
-  SP->>SP: deleted projects (registry-recorded, real-file guarded)
 ```
 
 ## 3. Core Components
@@ -179,8 +178,7 @@ its own module; the composition root wires it.
   declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
   remote-born tasks), `fieldTime?` (trustworthy per-field timestamps),
-  `fetchComplete?` (verified-complete fetch), `deleteProject?` (remove the
-  remote project a gone vault project mirrored) and `lockTask?`/`unlockTask?`
+  `fetchComplete?` (verified-complete fetch) and `lockTask?`/`unlockTask?`
   (task locking).
   A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
@@ -208,8 +206,7 @@ its own module; the composition root wires it.
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
 their mirror items, the note-path↔handle and mirror-project mappings, the
-per-connection identity and port state, the deleted-note tombstones, the
-project enumeration and prune the deleted-project sweep needs, and the
+per-connection identity and port state, the deleted-note tombstones, and the
 side baselines. Implementer:
 `SyncStateAdapter`, which also composes the handle and mirror-project
 resolution. Its records `EntityRecord`, `MirrorItem`, `PortState` and
@@ -301,19 +298,8 @@ canonical DTOs and the pure core.
   to the origin and every capable mirror. Any side can start the freeze or the
   unfreeze; the reconciled freeze is the pass's `frozen` verdict, which gates the
   task-field pass. A mirror project whose name drifted is renamed through
-  `MirrorPort.renameProject`. A project folder that is gone — the origin's
-  archived observation is absent — is a tracked change: every connection whose
-  mirror project the registry recorded is told to remove it through
-  `MirrorPort.deleteProject?`. Its per-side baselines live in the same
+  `MirrorPort.renameProject`. Its per-side baselines live in the same
   `coreBaselines` store under the `archived` field.
-- **The deleted-project sweep** (`SweepDeletedProjectsAction`). The chain reaches
-  a gone project from the **registry**, not the vault's project list (which no
-  longer carries it): it enumerates the projects the registry records, verifies
-  each against the vault's real files (an active or archived folder — never the
-  metadata cache, so a cold cache is not an absence), and for a project whose
-  folder is gone removes its remote project on every recorded connection through
-  the lifecycle's delete path, then prunes the registry record. A failed remote
-  delete keeps the record so the next pass retries.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
   conversation while its project is frozen and reopen it on unfreeze; the code
@@ -367,9 +353,7 @@ canonical DTOs and the pure core.
   the project's connections directly, records a tombstone for each tracked note
   whose file is gone (not under `Archief/`), hands the delete to
   `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
-  side has settled. A second sweep, `SweepDeletedProjectsAction`, runs with it:
-  it reaches a recorded project whose folder is gone from the registry and
-  removes its remote projects.
+  side has settled.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -548,10 +532,14 @@ over HTTPS.
   recorded as a tombstone, the delete fans out to every mirror (the code host's
   card and issue are deleted outright), and the tombstone and registry record are
   pruned once every side has settled. The vault note itself is trashed, never
-  destroyed; a gone project — reached from the registry and verified against the
-  vault's real files — removes its remote project on every connection.
+  destroyed.
 
-**Known debt / open items:** None blocking. The vault-maintenance shell has been
+**Known debt / open items:** A project-level delete is deferred to S17c (`P7`).
+A project's identity **is** its folder name, so a folder rename is
+indistinguishable from a delete and a false delete is unrecoverable; projects are
+never captured, so nothing resurrects — a gone folder leaves the remote project
+in place. S17c adds a durable project identity, rename detection and re-key
+before any project delete fans out. The vault-maintenance shell has been
 retired — the chain drives its steps directly (ADR 003).
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the

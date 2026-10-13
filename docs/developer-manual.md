@@ -40,7 +40,7 @@ no machine id.
    everywhere it should; nothing appears that nobody asked for.
 3. **Deletion is deliberate and thorough.** A deleted note is tracked as a
    tombstone, its echoes are removed everywhere, and the tombstone stops capture
-   re-adopting the note; a gone project removes its remote project. Deleting a
+   re-adopting the note. Deleting a
    twin on a remote never touches the note.
 4. **Completion is sticky.** A completed task stays completed unless a person
    deliberately reopens it.
@@ -60,7 +60,7 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   (`resolveOrCreateProject` — every adapter carries it, so no declared connection
   is left unoriginated). The genuinely optional
   surfaces are optional
-  methods: `capture?`, `fieldTime?`, `fetchComplete?`, `deleteProject?` and
+  methods: `capture?`, `fieldTime?`, `fetchComplete?` and
   `lockTask?`/`unlockTask?`. A caller
   checks presence (`adapter.lockTask !== undefined`);
   an adapter without a surface omits the method.
@@ -75,8 +75,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   chain reaches a connection's origination surface through the adapter it builds.
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
-  identity and port state, the deleted-note tombstones, the project enumeration
-  and prune, and the side baselines. The vault is one `VaultPort`
+  identity and port state, the deleted-note tombstones, and the side baselines.
+  The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`) and `MergedField`
@@ -140,7 +140,7 @@ namespace per application.**
   note templates, two Bases files) create-if-missing, on init and on demand
   from the settings tab.
 - **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
-  `HandleDeletedNoteAction`, `SweepDeletedProjectsAction`,
+  `HandleDeletedNoteAction`,
   `MigrateProjectHomeNoteAction`,
   `RekeyRenamedConnectionsAction`, `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
@@ -179,10 +179,8 @@ reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
 task-field pass, finally running the deletion sweep (record tombstones,
-reconcile the deletes, prune what has settled) and the deleted-project sweep
-(reach a registry-recorded project whose folder is gone, remove its remote
-projects, prune the record). Every step failure logs and skips that step without
-blocking the others.
+reconcile the deletes, prune what has settled). Every step failure logs and skips
+that step without blocking the others.
 
 #### 2.1a The poll tick
 
@@ -684,26 +682,14 @@ a closed issue or a deleted task is never re-adopted as a new note (DEL-2, I16).
 Deletion starts in the vault; a remote deletion is never honored as a deletion
 of record.
 
-A project folder that is gone is the same change one level up, and the chain
-reaches it from the **registry**, not the vault's project list (which no longer
-carries it). `SweepDeletedProjectsAction` enumerates the projects the registry
-records, verifies each against the vault's **real files** — an active or archived
-folder, via the vault's file listing, never the metadata cache, so a cold cache
-is not mistaken for an absence — and for a project whose folder is gone tells
-every recorded connection to remove its remote project through
-`MirrorPort.deleteProject?` (DEL-3). It then prunes the registry record; a failed
-remote delete keeps the record so the next pass retries.
-
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
   participant Sweep as SweepDeletedNotesAction
   participant HD as HandleDeletedNoteAction
-  participant SPj as SweepDeletedProjectsAction
   participant SS as RegistryPort
   participant F as MirrorAdapterFactoryPort
   participant R as MirrorPort
-  participant V as VaultPort
 
   SP->>Sweep: execute({ projectName, connections })
   Sweep->>SS: listEntities(projectName)
@@ -718,13 +704,6 @@ sequenceDiagram
     HD->>R: applyField(completion, true) (before the delete)
     HD->>R: deleteTask(handle) (card + issue)
     HD->>SS: removeMirrorItem(project, slug, handle)
-  end
-  SP->>SPj: execute()
-  SPj->>SS: listProjects()
-  SPj->>V: listNotesInFolder(Projecten|Archief/<project>) (real files)
-  alt the folder is gone
-    SPj->>R: deleteProject(handle) on every recorded connection
-    SPj->>SS: removeProject(project)
   end
 ```
 

@@ -249,14 +249,6 @@ const RENAME_PROJECT_MUTATION = `
   }
 `;
 
-const DELETE_PROJECT_MUTATION = `
-  mutation DeleteProject($projectId: ID!) {
-    deleteProjectV2(input: { projectId: $projectId }) {
-      projectV2 { id }
-    }
-  }
-`;
-
 const LOCK_TASK_MUTATION = `
   mutation LockTask($nodeId: ID!) {
     lockLockable(input: { lockableId: $nodeId }) {
@@ -559,14 +551,6 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     await this.graphql(RENAME_PROJECT_MUTATION, {
       projectId: board.projectNodeId,
       title: name,
-    });
-  }
-
-  async deleteProject(target: string): Promise<void> {
-    const connection = CodeHostTarget.parse(target);
-    const board = await this.requireBoard(connection.target);
-    await this.graphql(DELETE_PROJECT_MUTATION, {
-      projectId: board.projectNodeId,
     });
   }
 

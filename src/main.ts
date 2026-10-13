@@ -40,7 +40,6 @@ import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
-import { SweepDeletedProjectsAction } from './core/application/actions/SweepDeletedProjectsAction.js';
 
 async function request(
   token: string,
@@ -238,11 +237,6 @@ function composePlugin(
     syncState,
     handleDeletedNote,
   );
-  const sweepDeletedProjects = new SweepDeletedProjectsAction(
-    vault,
-    syncState,
-    core.lifecycle,
-  );
   const syncProject = new SyncProjectAction({
     vault,
     mirrorAdapters,
@@ -256,7 +250,6 @@ function composePlugin(
     syncChecklist,
     mirrorTodoStatus,
     sweepDeletedNotes,
-    sweepDeletedProjects,
     rekeyRenamedConnections: new RekeyRenamedConnectionsAction(syncState),
     ensureProjectBoard,
   });

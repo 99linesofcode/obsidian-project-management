@@ -13,7 +13,6 @@ import type { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js
 import type { ReconcileProjectTaskLocksAction } from './ReconcileProjectTaskLocksAction.js';
 import type { RekeyRenamedConnectionsAction } from './RekeyRenamedConnectionsAction.js';
 import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
-import type { SweepDeletedProjectsAction } from './SweepDeletedProjectsAction.js';
 import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.js';
 
 export interface SyncProjectDependencies {
@@ -29,7 +28,6 @@ export interface SyncProjectDependencies {
   syncChecklist: SyncChecklistAction;
   mirrorTodoStatus: MirrorTodoStatusAction;
   sweepDeletedNotes: SweepDeletedNotesAction;
-  sweepDeletedProjects?: SweepDeletedProjectsAction | undefined;
   rekeyRenamedConnections?: RekeyRenamedConnectionsAction | undefined;
   ensureProjectBoard?: EnsureProjectBoardAction | undefined;
 }
@@ -48,7 +46,6 @@ export class SyncProjectAction {
 
     const note = await this.resolveProject(project);
     if (note === null) {
-      await this.sweepDeletedProjects();
       return this.stepErrors;
     }
 
@@ -184,15 +181,6 @@ export class SyncProjectAction {
         connections,
       }),
     );
-    await this.sweepDeletedProjects();
-  }
-
-  private async sweepDeletedProjects(): Promise<void> {
-    const sweep = this.deps.sweepDeletedProjects;
-    if (sweep === undefined) {
-      return;
-    }
-    await this.step('deleted projects', () => sweep.execute());
   }
 
   private async resolveProject(

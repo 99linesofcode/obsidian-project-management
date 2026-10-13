@@ -19,13 +19,6 @@ export interface RegistryPort {
   removeEntity(id: string): Promise<void>;
   listEntities(projectName: string): Promise<EntityRecord[]>;
 
-  // The core's need: discover the projects the registry still records, so a
-  // project whose vault folder is gone is reached from the registry rather than
-  // the vault's project list, which no longer carries it; prune that record once
-  // its remote projects have been removed.
-  listProjects(): Promise<string[]>;
-  removeProject(project: string): Promise<void>;
-
   // The core's need: track a deleted note as a change — the entity's absence
   // with its delete time and the mirror handle it still owes a delete to. A
   // tombstone stops capture re-adopting the handle, and removing the entity

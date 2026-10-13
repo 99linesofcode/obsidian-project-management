@@ -21,13 +21,10 @@ type TFileInstance = InstanceType<typeof TFile>;
 import type { App } from 'obsidian';
 import { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
-import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
-import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
-import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 
 const PROJECT = 'Acme';
@@ -482,51 +479,5 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     await action.invoke(PROJECT);
 
     expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
-  });
-});
-
-class ProjectDeletingMirror extends ConformanceMirrorAdapter {
-  readonly deletedProjects: string[] = [];
-
-  async deleteProject(target: string): Promise<void> {
-    this.deletedProjects.push(target);
-  }
-}
-
-class GoneProjectVault extends FakeVaultBase {
-  override async readConnections(): Promise<
-    readonly ConnectionDataTransferObject[]
-  > {
-    return [];
-  }
-
-  override async observeProject(): Promise<OriginObservation> {
-    return new OriginObservation({
-      current: null,
-      currentCompleted: false,
-      fieldTime: null,
-      trustworthy: true,
-    });
-  }
-}
-
-async function deletionSetup() {
-  const vault = new GoneProjectVault();
-  const registry = new SyncStateAdapter(memoryStorage());
-  await registry.recordMirrorProject(PROJECT, 'a', 'conformance', 'board-a');
-  await registry.recordMirrorProject(PROJECT, 'b', 'conformance', 'board-b');
-  const mirror = new ProjectDeletingMirror();
-  const mirrorAdapters: MirrorAdapterFactoryPort = { create: () => mirror };
-  const action = new ProjectLifecycleSyncAction(vault, registry, mirrorAdapters);
-  return { vault, registry, mirror, action };
-}
-
-describe('DEL-3 — a deleted project is a tracked change', () => {
-  it('removes the remote project on every connection when the folder is gone', async () => {
-    const { mirror, action } = await deletionSetup();
-
-    await action.invoke(PROJECT);
-
-    expect(mirror.deletedProjects.sort()).toEqual(['board-a', 'board-b']);
   });
 });
