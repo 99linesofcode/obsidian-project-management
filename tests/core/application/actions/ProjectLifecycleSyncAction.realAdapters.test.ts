@@ -732,7 +732,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('onboards a missing mirror project, excludes it from observation, and fans it out to the verdict (NWM-15)', async () => {
-    const taskManager = new StatefulTaskManager({ id: 'unrelated' });
+    const taskManager = new StatefulTaskManager({
+      id: 'unrelated',
+      name: 'Unrelated',
+    });
     const { vault, registry, action, taskManager: tm } = await setupLifecycle({
       vaultArchived: true,
       home: TODOIST_MISSING_HOME,
