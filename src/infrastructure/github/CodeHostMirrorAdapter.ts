@@ -565,7 +565,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     await this.graphql(UNLOCK_TASK_MUTATION, { nodeId });
   }
 
-  async archivedTime(target: string): Promise<string | null> {
+  async projectTime(target: string): Promise<string | null> {
     const connection = CodeHostTarget.parse(target);
     const board = await this.board(connection.target);
     if (board === null) {

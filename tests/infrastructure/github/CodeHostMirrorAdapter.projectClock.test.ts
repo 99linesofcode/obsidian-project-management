@@ -116,20 +116,6 @@ function adapterWith(
   return { adapter: new CodeHostMirrorAdapter(transport, REPO_URL), transport };
 }
 
-describe('characterization — the code host reports closedAt (ADP-3, pre-S22)', () => {
-  it('returns the board closedAt when closed, and null while open', async () => {
-    const closed = adapterWith([
-      projectContent(true, '2026-10-08T11:00:00Z'),
-    ]);
-    const open = adapterWith([projectContent(false, null)]);
-
-    expect(await closed.adapter.archivedTime(REPO_URL)).toBe(
-      '2026-10-08T11:00:00Z',
-    );
-    expect(await open.adapter.archivedTime(REPO_URL)).toBeNull();
-  });
-});
-
 describe('ADP-3 / NWM-6 — the code host reports closedAt through the project clock', () => {
   it('reports the board closedAt as the archive fact time when the board is closed', async () => {
     const { adapter } = adapterWith([

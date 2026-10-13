@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { MirrorPort } from '../../../src/core/port/MirrorPort.js';
 import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
 import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
 
@@ -67,15 +66,6 @@ function project(
     ...overrides,
   };
 }
-
-describe('characterization — the task manager reports no archive time (ADP-6, pre-S22)', () => {
-  it('exposes no archivedTime surface', () => {
-    const { adapter } = adapterWith([]);
-    const port: MirrorPort = adapter;
-
-    expect(port.archivedTime).toBeUndefined();
-  });
-});
 
 describe('ADP-6 — the task manager reports the project clock from the project updated_at', () => {
   it('reports the project updated_at as the archive fact time', async () => {

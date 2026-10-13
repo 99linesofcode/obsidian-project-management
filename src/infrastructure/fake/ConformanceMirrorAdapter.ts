@@ -123,7 +123,7 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     this.archived.set(target, archived);
   }
 
-  async archivedTime(target: string): Promise<string | null> {
+  async projectTime(target: string): Promise<string | null> {
     return this.projectTimes.get(target) ?? null;
   }
 

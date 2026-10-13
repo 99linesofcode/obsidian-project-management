@@ -145,7 +145,7 @@ describe('NWM-6 amended — the port surface is the project clock, not an archiv
 
   it('exposes the surface as projectTime, not archivedTime', () => {
     const port = new ConformanceMirrorAdapter() as unknown as ProjectClockPort &
-      MirrorPort;
+      MirrorPort & { archivedTime?: unknown };
 
     expect(typeof port.projectTime).toBe('function');
     expect(port.archivedTime).toBeUndefined();

@@ -11,5 +11,5 @@ export function mirrorTrustsArchiveTime(
   adapter: MirrorPort,
   time: string | null,
 ): boolean {
-  return adapter.archivedTime !== undefined && time !== null;
+  return adapter.projectTime !== undefined && time !== null;
 }
