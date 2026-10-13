@@ -185,6 +185,40 @@ export class FakeSyncState implements RegistryPort {
     );
   }
 
+  async listProjects(): Promise<string[]> {
+    const names = new Set<string>();
+    for (const record of this.records.values()) {
+      names.add(projectFromNotePath(record.notePath));
+    }
+    for (const key of this.portStates.keys()) {
+      names.add(key.slice(0, key.indexOf('\u0000')));
+    }
+    for (const name of this.identities.keys()) {
+      names.add(name);
+    }
+    return [...names];
+  }
+
+  async removeProject(project: string): Promise<void> {
+    for (const [id, record] of [...this.records]) {
+      if (projectFromNotePath(record.notePath) === project) {
+        this.dropRecord(id);
+      }
+    }
+    for (const key of [...this.portStates.keys()]) {
+      if (key.startsWith(`${project}\u0000`)) {
+        this.portStates.delete(key);
+      }
+    }
+    this.todoistProjects.delete(project);
+    this.identities.delete(project);
+    for (const key of [...this.identitiesBySlug.keys()]) {
+      if (key.startsWith(`${project}\u0000`)) {
+        this.identitiesBySlug.delete(key);
+      }
+    }
+  }
+
   async findMirrorItem(
     portId: string,
     handle: string,

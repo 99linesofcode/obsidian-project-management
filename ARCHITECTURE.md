@@ -149,6 +149,7 @@ sequenceDiagram
     TF->>M: merge each canonical field, fan out
   end
   SP->>SP: deletion sweep (record tombstones, reconcile, prune)
+  SP->>SP: deleted projects (registry-recorded, real-file guarded)
 ```
 
 ## 3. Core Components
@@ -172,7 +173,8 @@ its own module; the composition root wires it.
   state), the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field
   to the adapter's own representation; the completion fact is separate from the
-  `Status` representation; `deleteTask` removes the mirror item) and project
+  `Status` representation; `deleteTask` removes the mirror item — the code host
+  deletes the board card and the issue) and project
   origination (`resolveOrCreateProject`, which every adapter carries, so no
   declared connection is left unoriginated). The
   genuinely optional surfaces are **optional methods**: `capture?` (adopt
@@ -206,7 +208,8 @@ its own module; the composition root wires it.
 **The registry port (`src/core/port/RegistryPort.ts`).** The registry is one
 collaborator, so it carries one provider-neutral seam: the tracked entities and
 their mirror items, the note-path↔handle and mirror-project mappings, the
-per-connection identity and port state, the deleted-note tombstones, and the
+per-connection identity and port state, the deleted-note tombstones, the
+project enumeration and prune the deleted-project sweep needs, and the
 side baselines. Implementer:
 `SyncStateAdapter`, which also composes the handle and mirror-project
 resolution. Its records `EntityRecord`, `MirrorItem`, `PortState` and
@@ -303,6 +306,14 @@ canonical DTOs and the pure core.
   mirror project the registry recorded is told to remove it through
   `MirrorPort.deleteProject?`. Its per-side baselines live in the same
   `coreBaselines` store under the `archived` field.
+- **The deleted-project sweep** (`SweepDeletedProjectsAction`). The chain reaches
+  a gone project from the **registry**, not the vault's project list (which no
+  longer carries it): it enumerates the projects the registry records, verifies
+  each against the vault's real files (an active or archived folder — never the
+  metadata cache, so a cold cache is not an absence), and for a project whose
+  folder is gone removes its remote project on every recorded connection through
+  the lifecycle's delete path, then prunes the registry record. A failed remote
+  delete keeps the record so the next pass retries.
 - **Task locking** (`MirrorPort.lockTask?`/`unlockTask?`) and
   `ReconcileProjectTaskLocksAction`. The core's need to close a task's
   conversation while its project is frozen and reopen it on unfreeze; the code
@@ -356,7 +367,9 @@ canonical DTOs and the pure core.
   the project's connections directly, records a tombstone for each tracked note
   whose file is gone (not under `Archief/`), hands the delete to
   `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
-  side has settled.
+  side has settled. A second sweep, `SweepDeletedProjectsAction`, runs with it:
+  it reaches a recorded project whose folder is gone from the registry and
+  removes its remote projects.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -369,8 +382,9 @@ canonical DTOs and the pure core.
   the board card's lane, completion as the issue state (kept separate from the
   lane), subtasks as the sub-issue relation, label as the issue labels, and the
   project, origination, capture, complete-fetch, per-field-timestamp and
-  task-lock surfaces. The composition root registers it under the application id
-  `github`.
+  task-lock surfaces; `deleteTask` deletes the board card **and the issue
+  itself**, so capture has nothing left to re-adopt. The composition root
+  registers it under the application id `github`.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
@@ -531,10 +545,11 @@ over HTTPS.
 - **No server or database.** The registry is the plugin's own `data.json`; the
   vault is the system of record. There is no backend.
 - **No permanent deletion.** A deleted note is a tracked change: its absence is
-  recorded as a tombstone, the delete fans out to every mirror, and the
-  tombstone and registry record are pruned once every side has settled. The
-  vault note itself is trashed, never destroyed; a gone project removes its
-  remote project on every connection.
+  recorded as a tombstone, the delete fans out to every mirror (the code host's
+  card and issue are deleted outright), and the tombstone and registry record are
+  pruned once every side has settled. The vault note itself is trashed, never
+  destroyed; a gone project — reached from the registry and verified against the
+  vault's real files — removes its remote project on every connection.
 
 **Known debt / open items:** None blocking. The vault-maintenance shell has been
 retired — the chain drives its steps directly (ADR 003).

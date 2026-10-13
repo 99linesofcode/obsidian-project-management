@@ -428,12 +428,16 @@ describe('CodeHostMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
 });
 
 describe('CodeHostMirrorAdapter — the remaining surface', () => {
-  it('deletes the issue card from the board', async () => {
+  it('deletes the issue card and the issue from the board', async () => {
     const { adapter, transport } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
       {
         status: 200,
         json: { data: { deleteProjectV2Item: { deletedItemId: 'PVTI_1' } } },
+      },
+      {
+        status: 200,
+        json: { data: { deleteIssue: { issue: { id: 'I_kwDOAAAA42' } } } },
       },
     ]);
 
@@ -442,6 +446,38 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
     expect(transport.bodies[1]).toContain('DeleteBoardItem');
     expect(transport.bodies[1]).toContain('"itemId":"PVTI_1"');
     expect(transport.bodies[1]).toContain('"projectId":"PVT_123"');
+    expect(transport.bodies[2]).toContain('DeleteIssue');
+    expect(transport.bodies[2]).toContain('"issueId":"I_kwDOAAAA42"');
+  });
+
+  it('deletes the issue even when it has no board card', async () => {
+    const { adapter, transport } = adapterWith([
+      boardResponse([issueNode()], []),
+      {
+        status: 200,
+        json: { data: { deleteIssue: { issue: { id: 'I_kwDOAAAA42' } } } },
+      },
+    ]);
+
+    await adapter.deleteTask(ISSUE_URL);
+
+    expect(transport.bodies[1]).toContain('DeleteIssue');
+    expect(transport.bodies[1]).toContain('"issueId":"I_kwDOAAAA42"');
+  });
+
+  it('reports a failed issue delete instead of leaving the issue behind', async () => {
+    const { adapter } = adapterWith([
+      boardResponse([issueNode()], [cardNode()]),
+      {
+        status: 200,
+        json: { data: { deleteProjectV2Item: { deletedItemId: 'PVTI_1' } } },
+      },
+      { status: 403, json: { message: 'Resource not accessible' } },
+    ]);
+
+    await expect(adapter.deleteTask(ISSUE_URL)).rejects.toThrow(
+      /GraphQL request failed with status 403/,
+    );
   });
 
   it('renames the board through updateProjectV2', async () => {

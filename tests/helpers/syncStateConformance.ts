@@ -181,5 +181,39 @@ export function runSyncStateConformance(
         expect((await port.findMirrorItem('todoist', TD))?.entityId).toBe('e2');
       });
     });
+
+    describe('project enumeration and prune', () => {
+      it('lists a recorded project and prunes its whole node', async () => {
+        const port = harness.create();
+        await port.setEntity(entity('e1', PATH_A));
+        await port.setMirrorItem(PROJECT_A, 'github', GH, { entityId: 'e1' });
+        await port.recordMirrorProject(
+          PROJECT_A,
+          'github',
+          'conformance',
+          'board-1',
+        );
+
+        expect(await port.listProjects()).toContain(PROJECT_A);
+
+        await port.removeProject(PROJECT_A);
+
+        expect(await port.listProjects()).not.toContain(PROJECT_A);
+        expect(await port.getEntity('e1')).toBeNull();
+        expect(await port.findMirrorItem('github', GH)).toBeNull();
+        expect(await port.resolveMirrorProject(PROJECT_A, 'github')).toBeNull();
+      });
+
+      it('leaves another project untouched', async () => {
+        const port = harness.create();
+        await port.setEntity(entity('e1', PATH_A));
+        await port.setEntity(entity('e2', PATH_B));
+
+        await port.removeProject(PROJECT_A);
+
+        expect(await port.listProjects()).toEqual([PROJECT_B]);
+        expect(await port.getEntity('e2')).not.toBeNull();
+      });
+    });
   });
 }

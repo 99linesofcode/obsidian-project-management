@@ -55,7 +55,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`, `createProject`,
   `renameProject`, `setArchived`, `archivedTime`), the task (`readTasks`,
-  `readTask`, `createTask`, `applyField`, `deleteTask`) and project origination
+  `readTask`, `createTask`, `applyField`, `deleteTask` — the code host deletes
+  the board card and the issue) and project origination
   (`resolveOrCreateProject` — every adapter carries it, so no declared connection
   is left unoriginated). The genuinely optional
   surfaces are optional
@@ -74,7 +75,8 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   chain reaches a connection's origination surface through the adapter it builds.
 - **The registry port.** `RegistryPort` — the tracked entities and their mirror
   items, the note-path↔handle and mirror-project mappings, the per-connection
-  identity and port state, and the side baselines. The vault is one `VaultPort`
+  identity and port state, the deleted-note tombstones, the project enumeration
+  and prune, and the side baselines. The vault is one `VaultPort`
   and the registry is one `RegistryPort`: one collaborator, one port.
 - **The canonical fields.** `canonicalField.ts` holds the six canonical fields
   (`title`, `body`, `subtasks`, `completion`, `Status`, `label`) and `MergedField`
@@ -138,7 +140,8 @@ namespace per application.**
   note templates, two Bases files) create-if-missing, on init and on demand
   from the settings tab.
 - **The pass's actions.** `DetectNoteRenamesAction`, `SweepDeletedNotesAction`,
-  `HandleDeletedNoteAction`, `MigrateProjectHomeNoteAction`,
+  `HandleDeletedNoteAction`, `SweepDeletedProjectsAction`,
+  `MigrateProjectHomeNoteAction`,
   `RekeyRenamedConnectionsAction`, `EnsureProjectBoardAction`,
   `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
   and `CreateTaskNoteAction`.
@@ -176,8 +179,10 @@ reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
 task-field pass, finally running the deletion sweep (record tombstones,
-reconcile the deletes, prune what has settled). Every step failure logs and skips
-that step without blocking the others.
+reconcile the deletes, prune what has settled) and the deleted-project sweep
+(reach a registry-recorded project whose folder is gone, remove its remote
+projects, prune the record). Every step failure logs and skips that step without
+blocking the others.
 
 #### 2.1a The poll tick
 
@@ -666,30 +671,37 @@ delete time and the mirror handle the note still owed a delete to — and hands
 the delete to `HandleDeletedNoteAction`. That action finds the registry record
 by note path, resolves each connection's mirror item through `RegistryPort`,
 builds the connection's adapter through `MirrorAdapterFactoryPort`, and calls
-`MirrorPort.deleteTask` (the GitHub adapter deletes the board card). It then
-applies `completion = true` through the generic write entry, which closes the
-issue, and drops the settled mirror item. It keeps the registry record: the
-tombstone and the record are pruned only once every connection's mirror item is
-gone, on a later sweep pass.
+`MirrorPort.deleteTask` — the GitHub adapter deletes the board card **and the
+issue itself**, so nothing survives for capture to re-adopt. It then applies
+`completion = true` through the generic write entry and drops the settled mirror
+item. It keeps the registry record: the tombstone and the record are pruned only
+once every connection's mirror item is gone, on a later sweep pass.
 
 The tombstone stops resurrection: capture skips a handle it finds tombstoned, so
 a closed issue or a deleted task is never re-adopted as a new note (DEL-2, I16).
 Deletion starts in the vault; a remote deletion is never honored as a deletion
 of record.
 
-A project folder that is gone is the same change one level up: the lifecycle
-pass sees the origin's archived observation absent and tells every connection
-whose mirror project the registry recorded to remove it through
-`MirrorPort.deleteProject?` (DEL-3).
+A project folder that is gone is the same change one level up, and the chain
+reaches it from the **registry**, not the vault's project list (which no longer
+carries it). `SweepDeletedProjectsAction` enumerates the projects the registry
+records, verifies each against the vault's **real files** — an active or archived
+folder, via the vault's file listing, never the metadata cache, so a cold cache
+is not mistaken for an absence — and for a project whose folder is gone tells
+every recorded connection to remove its remote project through
+`MirrorPort.deleteProject?` (DEL-3). It then prunes the registry record; a failed
+remote delete keeps the record so the next pass retries.
 
 ```mermaid
 sequenceDiagram
   participant SP as SyncProjectAction
   participant Sweep as SweepDeletedNotesAction
   participant HD as HandleDeletedNoteAction
+  participant SPj as SweepDeletedProjectsAction
   participant SS as RegistryPort
   participant F as MirrorAdapterFactoryPort
   participant R as MirrorPort
+  participant V as VaultPort
 
   SP->>Sweep: execute({ projectName, connections })
   Sweep->>SS: listEntities(projectName)
@@ -701,9 +713,16 @@ sequenceDiagram
     Sweep->>HD: execute({ notePath, projectName, connections })
     HD->>SS: findByNotePath, findMirrorItemByEntity
     HD->>F: create(application, target, connectionSlug, projectName)
-    HD->>R: deleteTask(handle)
+    HD->>R: deleteTask(handle) (card + issue)
     HD->>R: applyField(completion, true)
     HD->>SS: removeMirrorItem(project, slug, handle)
+  end
+  SP->>SPj: execute()
+  SPj->>SS: listProjects()
+  SPj->>V: listNotesInFolder(Projecten|Archief/<project>) (real files)
+  alt the folder is gone
+    SPj->>R: deleteProject(handle) on every recorded connection
+    SPj->>SS: removeProject(project)
   end
 ```
 

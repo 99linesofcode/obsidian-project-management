@@ -132,6 +132,14 @@ const DELETE_BOARD_ITEM_MUTATION = `
   }
 `;
 
+const DELETE_ISSUE_MUTATION = `
+  mutation DeleteIssue($issueId: ID!) {
+    deleteIssue(input: { issueId: $issueId }) {
+      issue { id }
+    }
+  }
+`;
+
 const CREATE_ISSUE_MUTATION = `
   mutation CreateIssue(
     $repositoryId: ID!
@@ -744,15 +752,27 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async deleteTask(handle: string): Promise<void> {
-    const item = await this.boardItem(this.target, handle);
-    if (item === null) {
+    const snapshot = await this.boardSnapshot(this.target);
+    const card = snapshot.cards.get(handle);
+    const issue = snapshot.issues.find((candidate) => candidate.url === handle);
+
+    if (card !== undefined) {
+      const board = await this.requireBoard(this.target.target);
+      await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
+        projectId: board.projectNodeId,
+        itemId: card.itemId,
+      });
+    }
+
+    if (issue === undefined || issue.nodeId === '') {
       return;
     }
-    const board = await this.requireBoard(this.target.target);
-    await this.graphql(DELETE_BOARD_ITEM_MUTATION, {
-      projectId: board.projectNodeId,
-      itemId: item.itemId,
-    });
+    try {
+      await this.graphql(DELETE_ISSUE_MUTATION, { issueId: issue.nodeId });
+    } catch (error) {
+      console.error(`code host: deleting issue ${handle} failed`, error);
+      throw error;
+    }
   }
 
   async capture(target: string): Promise<CanonicalTask[]> {
