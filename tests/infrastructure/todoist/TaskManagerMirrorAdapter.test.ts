@@ -419,6 +419,24 @@ describe('TaskManagerMirrorAdapter — the remaining surface', () => {
   });
 });
 
+describe('TaskManagerMirrorAdapter — the archive fact has no decisive time (ADP-6)', () => {
+  it('reports no archive-specific time for an archived project', async () => {
+    const { adapter } = adapterWith([
+      {
+        status: 200,
+        json: {
+          id: 'P1',
+          name: 'Widgets',
+          is_archived: true,
+          updated_at: '2026-10-08T11:00:00Z',
+        },
+      },
+    ]);
+
+    expect(await adapter.archivedTime(target())).toBeNull();
+  });
+});
+
 const ENTITY = 'Projecten/Acme/taken/fix-the-bug.md';
 
 class FieldVault extends FakeVaultBase {

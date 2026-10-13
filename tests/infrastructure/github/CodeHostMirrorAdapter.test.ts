@@ -640,6 +640,42 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
   });
 });
 
+describe('CodeHostMirrorAdapter — the archive fact\'s decisive time (ADP-3)', () => {
+  it('reports the board ProjectV2.closedAt as the archive decisive time', async () => {
+    const { adapter } = adapterWith([
+      {
+        status: 200,
+        json: {
+          data: {
+            node: {
+              id: 'PVT_123',
+              closed: true,
+              closedAt: '2026-10-08T11:00:00Z',
+            },
+          },
+        },
+      },
+    ]);
+
+    expect(await adapter.archivedTime(target())).toBe('2026-10-08T11:00:00Z');
+  });
+
+  it('reports null while the board is open', async () => {
+    const { adapter } = adapterWith([
+      {
+        status: 200,
+        json: {
+          data: {
+            node: { id: 'PVT_123', closed: false, closedAt: null },
+          },
+        },
+      },
+    ]);
+
+    expect(await adapter.archivedTime(target())).toBeNull();
+  });
+});
+
 describe('CodeHostMirrorAdapter — the board is derived from the repository (F02 NWM-2)', () => {
   it('prefers the registry identity over deriving from the repository', async () => {
     const transport = new FakeTransport([
