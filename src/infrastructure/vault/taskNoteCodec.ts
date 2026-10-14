@@ -9,6 +9,7 @@ import {
   labelSequence,
   labelsFromNote,
   typeFromLabels,
+  withBody,
 } from '../../core/domain/note.js';
 import { projectFromNotePath } from '../../core/domain/paths.js';
 
@@ -128,18 +129,6 @@ function parentFromAffiliation(
     );
   }
   return taskLinkFromAffiliation(affiliation, project);
-}
-
-function withBody(content: string, body: string): string {
-  const lines = content.split('\n');
-  if (lines[0] !== '---') {
-    return body;
-  }
-  const closing = lines.indexOf('---', 1);
-  if (closing === -1) {
-    return body;
-  }
-  return [...lines.slice(0, closing + 1), ...body.split('\n')].join('\n');
 }
 
 function withFrontmatter(

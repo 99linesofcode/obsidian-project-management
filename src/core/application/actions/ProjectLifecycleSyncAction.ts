@@ -5,6 +5,7 @@ import { SideObservation } from '../../domain/SideObservation.js';
 import { mergeField } from '../../domain/mergeField.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsArchiveTime } from './mirrorTrustsTimestamps.js';
+import type { ResolvedMirror } from './resolvedMirror.js';
 import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
@@ -13,12 +14,6 @@ import type { VaultPort } from '../../port/VaultPort.js';
 
 const ORIGIN_SIDE = 'origin';
 const ARCHIVED_FIELD = 'archived';
-
-interface ResolvedMirror {
-  side: string;
-  handle: string;
-  adapter: MirrorPort;
-}
 
 interface ResolvedProject {
   handle: string;
@@ -157,6 +152,7 @@ export class ProjectLifecycleSyncAction {
           continue;
         }
         mirrors.push({
+          slug: connection.slug,
           side: mirrorSideKey(connection.slug),
           handle: resolved.handle,
           adapter,

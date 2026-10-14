@@ -1,3 +1,5 @@
+import { isRecord } from '../../core/domain/isRecord.js';
+
 const FORBIDDEN_RECORD_KEYS = new Set([
   '__proto__',
   'constructor',
@@ -29,12 +31,4 @@ export function ensureRecord(
     parent[key] = {};
   }
   return parent[key] as Record<string, unknown>;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
 }

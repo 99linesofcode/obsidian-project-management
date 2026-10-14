@@ -1,5 +1,10 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import { labelsFromSequence, typeFromLabels } from '../../core/domain/note.js';
+import { isRecord } from '../../core/domain/isRecord.js';
+import {
+  hasTypeLabel,
+  labelsFromSequence,
+} from '../../core/domain/note.js';
+import { stringOrEmpty, stringOrNull } from '../../core/domain/strings.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
@@ -66,7 +71,7 @@ export class TodoistMirrorAdapter implements MirrorPort {
       return null;
     }
     const project = requireRecord(response, 'read project time');
-    return nullableString(project.updated_at);
+    return stringOrNull(project.updated_at);
   }
 
   async resolveOrCreateProject(
@@ -420,14 +425,14 @@ function parseTask(raw: Record<string, unknown>): RawTask {
   return {
     id: typeof raw.task_id === 'string' ? raw.task_id : stringOrEmpty(raw.id),
     projectId: stringOrEmpty(raw.project_id),
-    sectionId: nullableString(raw.section_id),
-    parentId: nullableString(raw.parent_id),
+    sectionId: stringOrNull(raw.section_id),
+    parentId: stringOrNull(raw.parent_id),
     content: stringOrEmpty(raw.content),
     description: stringOrEmpty(raw.description),
     labels: stringList(raw.labels),
     completed: raw.checked === true,
     updatedAt: stringOrEmpty(raw.updated_at),
-    completedAt: nullableString(raw.completed_at),
+    completedAt: stringOrNull(raw.completed_at),
   };
 }
 
@@ -454,10 +459,6 @@ function sectionName(
     return '';
   }
   return sections.find((section) => section.id === sectionId)?.name ?? '';
-}
-
-function hasTypeLabel(labels: readonly string[]): boolean {
-  return typeFromLabels(labels) !== '';
 }
 
 function extractList(json: unknown): Record<string, unknown>[] {
@@ -492,21 +493,9 @@ function ensureSuccess(response: TodoistResponse): void {
   }
 }
 
-function nullableString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
-function stringOrEmpty(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
 function stringList(value: unknown): readonly string[] {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.filter((item): item is string => typeof item === 'string');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

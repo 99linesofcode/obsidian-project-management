@@ -180,6 +180,10 @@ export function normalizedStem(path: string): string {
 
 const WORK_ITEM_KINDS = new Set(['slice', 'pitch', 'task', 'chore', 'bug', 'todo']);
 
+export function hasTypeLabel(labels: readonly string[]): boolean {
+  return typeFromLabels(labels) !== '';
+}
+
 export function typeFromLabels(labels: readonly string[]): string {
   for (const label of labels) {
     if (!label.startsWith('type:')) {

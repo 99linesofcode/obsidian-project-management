@@ -153,7 +153,7 @@ function composePlugin(
     label: 'GitHub token',
     description: 'Personal access token used to talk to the GitHub API.',
   };
-  const taskManagerToken: TokenSettingRow = {
+  const todoistToken: TokenSettingRow = {
     key: 'todoist-token',
     label: 'Todoist token',
     description: 'Personal API token used to talk to the Todoist API.',
@@ -163,9 +163,9 @@ function composePlugin(
     githubToken.key,
     createGithubTransport,
   );
-  const taskManagerTransport = transportFromSecret(
+  const todoistTransport = transportFromSecret(
     secrets,
-    taskManagerToken.key,
+    todoistToken.key,
     createTodoistTransport,
   );
   const providers: ProviderTable = {
@@ -180,8 +180,8 @@ function composePlugin(
     },
     todoist: {
       mirror: (target) =>
-        new TodoistMirrorAdapter(taskManagerTransport, target),
-      token: taskManagerToken,
+        new TodoistMirrorAdapter(todoistTransport, target),
+      token: todoistToken,
     },
   };
   const tokenSettings = Object.values(providers).map(

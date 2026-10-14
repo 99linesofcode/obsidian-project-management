@@ -10,6 +10,7 @@ import { mergeField } from '../../domain/mergeField.js';
 import { labelSequence, stemOf, typeFromLabels } from '../../domain/note.js';
 import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
+import type { ResolvedMirror } from './resolvedMirror.js';
 import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
@@ -32,13 +33,6 @@ const MERGED_FIELDS: readonly CanonicalField[] = [
 interface ScopedMirror {
   connection: ConnectionDataTransferObject;
   target: string;
-  adapter: MirrorPort;
-}
-
-interface ResolvedMirror {
-  slug: string;
-  side: string;
-  handle: string;
   adapter: MirrorPort;
 }
 

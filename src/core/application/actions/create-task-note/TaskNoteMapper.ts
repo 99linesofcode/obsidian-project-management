@@ -19,13 +19,13 @@ export interface TaskNoteContext {
   parentLink?: string | null;
 }
 
-export interface TaskNote {
+export interface RenderedTaskNote {
   path: string;
   content: string;
 }
 
 export const TaskNoteMapper = {
-  map(task: TaskNoteSource, context: TaskNoteContext): TaskNote {
+  map(task: TaskNoteSource, context: TaskNoteContext): RenderedTaskNote {
     const content = [
       '---',
       'categories: [taken]',
@@ -44,7 +44,7 @@ export const TaskNoteMapper = {
     template: string | null,
     task: TaskNoteSource,
     context: TaskNoteContext,
-  ): TaskNote {
+  ): RenderedTaskNote {
     const rendered =
       template === null ? null : renderTemplate(template, task, context);
     return {

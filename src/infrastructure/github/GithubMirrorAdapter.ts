@@ -1,5 +1,9 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
-import { labelsFromSequence, typeFromLabels } from '../../core/domain/note.js';
+import { isRecord } from '../../core/domain/isRecord.js';
+import {
+  hasTypeLabel,
+  labelsFromSequence,
+} from '../../core/domain/note.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
@@ -1176,10 +1180,6 @@ function createdIssueUrl(created: Record<string, unknown>): string {
   return issue.url;
 }
 
-function hasTypeLabel(labels: readonly string[]): boolean {
-  return typeFromLabels(labels) !== '';
-}
-
 function optionIdByName(
   options: readonly StatusOption[],
   name: string,
@@ -1231,8 +1231,4 @@ function ensureSuccess(response: GithubResponse): void {
       `code host: REST request failed with status ${response.status}`,
     );
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
