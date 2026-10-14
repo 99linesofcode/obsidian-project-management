@@ -1,15 +1,12 @@
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { EntityRecord } from '../../port/data/EntityRecord.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
   projectName: string;
-  connections: ReadonlyArray<{
-    slug: string;
-    application: string;
-    target: string;
-  }>;
+  connections: readonly ConnectionDataTransferObject[];
 }
 
 // The deletion sweep: a tracked note whose file is gone (and is not under
