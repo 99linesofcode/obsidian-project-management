@@ -1,3 +1,12 @@
+# [0.31.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.30.0...0.31.0) (2026-10-14)
+
+
+### Features
+
+* **capture:** link a remote task whose title already exists instead of duplicating ([38027dd](https://github.com/99linesofcode/obsidian-project-management/commit/38027dd7fd4116ff32ebc8d1b073922abdd38160))
+
+
+
 # [0.30.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.29.0...0.30.0) (2026-10-13)
 
 
@@ -48,15 +57,6 @@
 * **lifecycle:** let a code host report the archive fact's decisive time ([adec0e6](https://github.com/99linesofcode/obsidian-project-management/commit/adec0e64c1474f608dbf06dd40c9dd4de2798004))
 * **lifecycle:** onboard a created mirror without observing it ([da14920](https://github.com/99linesofcode/obsidian-project-management/commit/da14920ec3b79e13a87860236159435b67186200))
 * **lifecycle:** re-drive an out-of-sync mirror whatever the merge label ([34e6b9a](https://github.com/99linesofcode/obsidian-project-management/commit/34e6b9a8535ee9261ea470938fe03a2ff4b83b25))
-
-
-
-# [0.28.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.27.0...0.28.0) (2026-10-13)
-
-
-### Features
-
-* **todo:** a type:todo is a checklist item, not an issue ([800cb3d](https://github.com/99linesofcode/obsidian-project-management/commit/800cb3dc356208382c4effbc76a8b5579a7a1cdb))
 
 
 
