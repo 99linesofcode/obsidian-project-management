@@ -338,7 +338,6 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     private readonly transport: CodeHostTransport,
     target = '',
     private readonly boardIdentity?: () => Promise<ProjectIdentityDataTransferObject | null>,
-    private readonly statusOptions: readonly string[] = [],
   ) {
     this.rawTarget = target;
   }
@@ -489,30 +488,6 @@ export class CodeHostMirrorAdapter implements MirrorPort {
       handle: project.id,
       name: typeof project.title === 'string' ? project.title : '',
       archived: project.closed === true,
-    });
-  }
-
-  async createProject(target: string, name: string): Promise<CanonicalProject> {
-    const connection = CodeHostTarget.parse(target);
-    const repo = repoParts(connection.target);
-    const repositoryId = await this.repoNodeId(repo);
-    const { projectId, status } = await this.provisionBoard(
-      name,
-      repositoryId,
-      this.statusOptions,
-    );
-    this.boards.set(
-      connection.target,
-      Promise.resolve({
-        projectNodeId: projectId,
-        statusFieldId: status.id,
-        statusOptions: status.options,
-      }),
-    );
-    return new CanonicalProject({
-      handle: connection.target,
-      name,
-      archived: false,
     });
   }
 

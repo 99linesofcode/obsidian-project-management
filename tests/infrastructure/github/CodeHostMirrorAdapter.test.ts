@@ -725,7 +725,7 @@ describe('CodeHostMirrorAdapter — the board is derived from the repository (F0
 });
 
 describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () => {
-  it('reconciles a board it created in the same pass', async () => {
+  it('creates the board and its Status field with the given options when none exists', async () => {
     const transport = new FakeTransport(
       [
         { status: 200, json: { data: { repository: { id: 'R_kgDOAAAA' } } } },
@@ -793,19 +793,15 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
         },
       ],
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target(), undefined, [
-      'Unshaped',
-      'Done',
-    ]);
+    const adapter = new CodeHostMirrorAdapter(transport, target());
 
-    const before = await adapter.readProject(target());
-    const created = await adapter.createProject(target(), 'widgets');
-    const after = await adapter.readProject(target());
+    const addressing = await adapter.resolveOrCreateProject(
+      target(),
+      'widgets',
+      ['Unshaped', 'Done'],
+    );
 
-    expect(before).toBeNull();
-    expect(created.handle).toBe(target());
-    expect(after?.handle).toBe('PVT_NEW');
-    expect(after?.archived).toBe(false);
+    expect(addressing?.projectHandle).toBe('PVT_NEW');
     expect(transport.bodies[5]).toContain('CreateStatusField');
     expect(transport.bodies[5]).toContain('"name":"Unshaped"');
     expect(transport.bodies[5]).toContain('"name":"Done"');
@@ -883,13 +879,11 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
         },
       ],
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target(), undefined, [
+    const adapter = new CodeHostMirrorAdapter(transport, target());
+
+    const addressing = await adapter.resolveOrCreateProject(target(), 'widgets', [
       'Unshaped',
     ]);
-
-    await adapter.readProject(target());
-    await adapter.createProject(target(), 'widgets');
-    const after = await adapter.readProject(target());
 
     expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
       false,
@@ -897,7 +891,7 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
     expect(transport.bodies.some((body) => body.includes('LinkBoard'))).toBe(
       true,
     );
-    expect(after?.handle).toBe('PVT_ORPHAN');
+    expect(addressing?.projectHandle).toBe('PVT_ORPHAN');
   });
 });
 

@@ -42,10 +42,6 @@ class ProjectClockMirror implements MirrorPort {
     });
   }
 
-  async createProject(target: string, name: string): Promise<CanonicalProject> {
-    return new CanonicalProject({ handle: target, name, archived: false });
-  }
-
   async renameProject(_target: string, name: string): Promise<void> {
     this.name = name;
   }

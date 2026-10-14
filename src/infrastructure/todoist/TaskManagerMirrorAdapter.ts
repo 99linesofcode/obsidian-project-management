@@ -69,11 +69,6 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     return nullableString(project.updated_at);
   }
 
-  async createProject(target: string, name: string): Promise<CanonicalProject> {
-    TaskManagerTarget.parse(target);
-    return this.createProjectByName(name);
-  }
-
   async resolveOrCreateProject(
     target: string,
     name: string,

@@ -15,11 +15,10 @@ const TARGET = 'P1';
 
 // A mirror whose resolve-or-create builds the project by name under a handle
 // distinct from the declared target — the task manager's shape — while a read
-// of the declared target stays absent. It records both origination surfaces so
-// a pass that runs both is visible.
+// of the declared target stays absent. It records the origination surface so a
+// pass that originates is visible.
 class OriginationProbe implements MirrorPort {
   readonly resolveOrCreateTargets: string[] = [];
-  readonly createProjectTargets: string[] = [];
   private readonly projects = new Map<string, CanonicalProject>();
 
   async resolveOrCreateProject(
@@ -42,17 +41,6 @@ class OriginationProbe implements MirrorPort {
 
   async readProject(target: string): Promise<CanonicalProject | null> {
     return this.projects.get(target) ?? null;
-  }
-
-  async createProject(target: string, name: string): Promise<CanonicalProject> {
-    this.createProjectTargets.push(target);
-    const project = new CanonicalProject({
-      handle: target,
-      name,
-      archived: false,
-    });
-    this.projects.set(target, project);
-    return project;
   }
 
   async renameProject(): Promise<void> {}
@@ -126,11 +114,5 @@ describe('origination — one owner, the chain site', () => {
     const probe = await runBothSites();
 
     expect(probe.resolveOrCreateTargets).toEqual([TARGET]);
-  });
-
-  it('reads the already-originated project at the lifecycle site instead of creating a second one (ORG-3, SHELL-2)', async () => {
-    const probe = await runBothSites();
-
-    expect(probe.createProjectTargets).toEqual([]);
   });
 });
