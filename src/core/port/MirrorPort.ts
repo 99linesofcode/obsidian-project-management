@@ -5,15 +5,14 @@ import type { CanonicalTask } from './data/CanonicalTask.js';
 import type { ProjectAddressing } from './data/ProjectAddressing.js';
 
 // The external tool as the core's mirror — one collaborator, one surface. The
-// project and task surfaces are what every adapter carries, and so is project
-// origination: every adapter resolves-or-creates the remote project a declared
-// connection names. The capture, timestamp and locking surfaces are genuinely
-// optional and are optional methods, so a caller checks presence rather than a
-// capability string or a null-gated port slot. Designed for the core, never the
-// provider's API.
+// project (read, rename, archive) and task surfaces are what every adapter
+// carries, and so is project origination: every adapter resolves-or-creates the
+// remote project a declared connection names. The capture, timestamp and
+// locking surfaces are genuinely optional and are optional methods, so a caller
+// checks presence rather than a capability string or a null-gated port slot.
+// Designed for the core, never the provider's API.
 export interface MirrorPort {
   readProject(target: string): Promise<CanonicalProject | null>;
-  createProject(target: string, name: string): Promise<CanonicalProject>;
   renameProject(target: string, name: string): Promise<void>;
   setArchived(target: string, archived: boolean): Promise<void>;
 

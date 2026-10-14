@@ -91,13 +91,6 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     return this.readProjectSync(target);
   }
 
-  async createProject(target: string, name: string): Promise<CanonicalProject> {
-    this.createCalls.push(target);
-    this.absentProjects.delete(target);
-    this.names.set(target, name);
-    return new CanonicalProject({ handle: target, name, archived: false });
-  }
-
   async resolveOrCreateProject(
     target: string,
     name: string,
@@ -105,7 +98,9 @@ export class ConformanceMirrorAdapter implements MirrorPort {
   ): Promise<ProjectAddressing | null> {
     const handle = target === '' ? name : target;
     if ((await this.readProject(handle)) === null) {
-      await this.createProject(handle, name);
+      this.createCalls.push(handle);
+      this.absentProjects.delete(handle);
+      this.names.set(handle, name);
     }
     return new ProjectAddressing({
       projectHandle: handle,

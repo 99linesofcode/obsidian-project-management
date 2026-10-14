@@ -404,10 +404,6 @@ class UntrackingMirror implements MirrorPort {
     });
   }
 
-  async createProject(target: string, name: string): Promise<CanonicalProject> {
-    return new CanonicalProject({ handle: target, name, archived: false });
-  }
-
   async renameProject(): Promise<void> {}
 
   async setArchived(): Promise<void> {}

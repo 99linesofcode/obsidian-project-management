@@ -53,7 +53,7 @@ no machine id.
 one pure N-way merge, the mirror-sync action and the project lifecycle action.
 
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
-  The required surface is the project (`readProject`, `createProject`,
+  The required surface is the project (`readProject`,
   `renameProject`, `setArchived`), the task (`readTasks`,
   `readTask`, `createTask`, `applyField`, `deleteTask` — the code host deletes
   the board card and the issue) and project origination

@@ -175,7 +175,6 @@ function composePlugin(
           codeHostTransport,
           target,
           boardIdentity,
-          plugin.settings.statusOptions,
         ),
       token: codeHostToken,
     },
