@@ -4,8 +4,8 @@ import { SweepDeletedNotesAction } from '../../../../src/core/application/action
 import type { CanonicalFieldWrite } from '../../../../src/core/port/data/CanonicalFieldWrite.js';
 import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
-import { CodeHostMirrorAdapter } from '../../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
-import type { CodeHostTransport } from '../../../../src/infrastructure/github/CodeHostTransport.js';
+import { GithubMirrorAdapter } from '../../../../src/infrastructure/github/GithubMirrorAdapter.js';
+import type { GithubTransport } from '../../../../src/infrastructure/github/GithubTransport.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
@@ -106,9 +106,9 @@ describe('a delete settles (NEW-1) — the completion write precedes the delete'
       entityId: 'e1',
     });
 
-    const transport = new StatefulCodeHostTransport();
+    const transport = new StatefulGithubTransport();
     const factory: MirrorAdapterFactoryPort = {
-      create: () => new CodeHostMirrorAdapter(transport, repoUrl),
+      create: () => new GithubMirrorAdapter(transport, repoUrl),
     };
     const sweep = new SweepDeletedNotesAction(
       new GoneNoteVault(),
@@ -210,7 +210,7 @@ function restIssue(): Record<string, unknown> {
 
 // The remote's real state: after the issue delete the issue and its card leave
 // the listing, so a completion PATCH against it is a 404 — the reviewer's repro.
-class StatefulCodeHostTransport implements CodeHostTransport {
+class StatefulGithubTransport implements GithubTransport {
   private deleted = false;
   readonly calls: string[] = [];
 

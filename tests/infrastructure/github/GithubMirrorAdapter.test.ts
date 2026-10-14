@@ -9,8 +9,8 @@ import type { MirrorPort } from '../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
-import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
-import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
+import { GithubMirrorAdapter } from '../../../src/infrastructure/github/GithubMirrorAdapter.js';
+import type { GithubTransport } from '../../../src/infrastructure/github/GithubTransport.js';
 import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
@@ -68,7 +68,7 @@ function projectFieldsResponse(): { status: number; json: unknown } {
   };
 }
 
-class FakeTransport implements CodeHostTransport {
+class FakeTransport implements GithubTransport {
   readonly bodies: string[] = [];
   readonly paths: string[] = [];
   readonly derivationBodies: string[] = [];
@@ -216,14 +216,14 @@ function restIssue(
 function adapterWith(
   responses: Array<{ status: number; json: unknown; etag?: string }>,
 ): {
-  adapter: CodeHostMirrorAdapter;
+  adapter: GithubMirrorAdapter;
   transport: FakeTransport;
 } {
   const transport = new FakeTransport(responses);
-  return { adapter: new CodeHostMirrorAdapter(transport, target()), transport };
+  return { adapter: new GithubMirrorAdapter(transport, target()), transport };
 }
 
-describe('CodeHostMirrorAdapter — the canonical read (F01 ACM-5)', () => {
+describe('GithubMirrorAdapter — the canonical read (F01 ACM-5)', () => {
   it('maps the issue and its board card onto the canonical task', async () => {
     const { adapter } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
@@ -272,7 +272,7 @@ describe('CodeHostMirrorAdapter — the canonical read (F01 ACM-5)', () => {
   });
 });
 
-describe('CodeHostMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
+describe('GithubMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
   it('writes a title through the issue REST endpoint', async () => {
     const { adapter, transport } = adapterWith([
       { status: 200, json: restIssue({ title: 'New title' }) },
@@ -427,7 +427,7 @@ describe('CodeHostMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
   });
 });
 
-describe('CodeHostMirrorAdapter — the remaining surface', () => {
+describe('GithubMirrorAdapter — the remaining surface', () => {
   it('deletes the issue card and the issue from the board', async () => {
     const { adapter, transport } = adapterWith([
       boardResponse([issueNode()], [cardNode()]),
@@ -640,7 +640,7 @@ describe('CodeHostMirrorAdapter — the remaining surface', () => {
   });
 });
 
-describe('CodeHostMirrorAdapter — the archive fact\'s decisive time (ADP-3)', () => {
+describe('GithubMirrorAdapter — the archive fact\'s decisive time (ADP-3)', () => {
   it('reports the board ProjectV2.closedAt as the archive decisive time', async () => {
     const { adapter } = adapterWith([
       {
@@ -676,12 +676,12 @@ describe('CodeHostMirrorAdapter — the archive fact\'s decisive time (ADP-3)', 
   });
 });
 
-describe('CodeHostMirrorAdapter — the board is derived from the repository (F02 NWM-2)', () => {
+describe('GithubMirrorAdapter — the board is derived from the repository (F02 NWM-2)', () => {
   it('prefers the registry identity over deriving from the repository', async () => {
     const transport = new FakeTransport([
       boardResponse([issueNode()], [cardNode()]),
     ]);
-    const adapter = new CodeHostMirrorAdapter(
+    const adapter = new GithubMirrorAdapter(
       transport,
       target(),
       async () => ({
@@ -716,7 +716,7 @@ describe('CodeHostMirrorAdapter — the board is derived from the repository (F0
         },
       ],
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const adapter = new GithubMirrorAdapter(transport, target());
 
     await expect(adapter.readTask(ISSUE_URL)).rejects.toThrow(
       'repository widgets has no board',
@@ -724,7 +724,7 @@ describe('CodeHostMirrorAdapter — the board is derived from the repository (F0
   });
 });
 
-describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () => {
+describe('GithubMirrorAdapter — onboarding a missing board (F02 NWM-2)', () => {
   it('creates the board and its Status field with the given options when none exists', async () => {
     const transport = new FakeTransport(
       [
@@ -793,7 +793,7 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
         },
       ],
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const adapter = new GithubMirrorAdapter(transport, target());
 
     const addressing = await adapter.resolveOrCreateProject(
       target(),
@@ -879,7 +879,7 @@ describe('CodeHostMirrorAdapter — onboarding a missing board (F02 NWM-2)', () 
         },
       ],
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const adapter = new GithubMirrorAdapter(transport, target());
 
     const addressing = await adapter.resolveOrCreateProject(target(), 'widgets', [
       'Unshaped',
@@ -904,7 +904,7 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
         boardResponse([emptyIssue()], [cardNode()]),
       ),
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const adapter = new GithubMirrorAdapter(transport, target());
 
     const vault = new FieldOrigin();
     vault.values.set('title', '');
@@ -1023,7 +1023,7 @@ describe('MirrorSyncAction drives the code host through a resolved handle (F02 N
         boardResponse([issueNode()], [cardNode()]),
       ),
     );
-    const adapter = new CodeHostMirrorAdapter(transport, target());
+    const adapter = new GithubMirrorAdapter(transport, target());
 
     const vault = new FieldOrigin();
     vault.values.set('title', 'Fix the bug');

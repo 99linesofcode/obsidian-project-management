@@ -8,8 +8,8 @@ import { ConnectionDataTransferObject } from '../../../../src/core/port/data/Con
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
 import { ConformanceMirrorAdapter } from '../../../../src/infrastructure/fake/ConformanceMirrorAdapter.js';
-import { TaskManagerMirrorAdapter } from '../../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TaskManagerTransport } from '../../../../src/infrastructure/todoist/TaskManagerTransport.js';
+import { TodoistMirrorAdapter } from '../../../../src/infrastructure/todoist/TodoistMirrorAdapter.js';
+import type { TodoistTransport } from '../../../../src/infrastructure/todoist/TodoistTransport.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -117,7 +117,7 @@ class LifecycleVault extends FakeVaultBase {
 
 // A task manager that has just un-archived: the project read reports it active
 // with the newer updated_at that un-archiving bumps.
-class UnarchivedTaskManager implements TaskManagerTransport {
+class UnarchivedTodoist implements TodoistTransport {
   async get(): Promise<{ status: number; json: unknown }> {
     return {
       status: 200,
@@ -196,8 +196,8 @@ describe('ADP-6 / NWM-6 — a task manager is decisive in both directions', () =
       'mirror:todoist',
       new Baseline('true', false),
     );
-    const mirror = new TaskManagerMirrorAdapter(
-      new UnarchivedTaskManager(),
+    const mirror = new TodoistMirrorAdapter(
+      new UnarchivedTodoist(),
       MIRROR_TARGET,
     );
     const action = new ProjectLifecycleSyncAction(

@@ -107,11 +107,11 @@ namespace per application.**
 
 - **Vault.** `VaultAdapter` (the `VaultPort`), with the pure note codecs
   (`connectionsOf`, `parseConnectionsBlock`, `taskNoteCodec`) beside it.
-- **GitHub.** `CodeHostMirrorAdapter` (the `MirrorPort`, including the
-  origination and locking surfaces), `CodeHostTarget` and `CodeHostTransport`.
-- **Todoist.** `TaskManagerMirrorAdapter` (the `MirrorPort`, including the
-  origination surface, without the locking methods), `TaskManagerTarget`,
-  `TaskManagerTransport` and `TodoistTransport`.
+- **GitHub.** `GithubMirrorAdapter` (the `MirrorPort`, including the
+  origination and locking surfaces), `GithubTarget` and `GithubTransport`.
+- **Todoist.** `TodoistMirrorAdapter` (the `MirrorPort`, including the
+  origination surface, without the locking methods), `TodoistTarget`,
+  `TodoistTransport` and `createTodoistTransport`.
 - **Registry.** `SyncStateAdapter` (`RegistryPort`; the `syncState` container
   and the `coreBaselines` store), with the pure codecs (`coreStorageRecord`,
   `syncStateSchema`, `loadDataSafely`) beside it.

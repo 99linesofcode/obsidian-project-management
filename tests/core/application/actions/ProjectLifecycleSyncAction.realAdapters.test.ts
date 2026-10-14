@@ -27,16 +27,16 @@ import { Baseline } from '../../../../src/core/domain/Baseline.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import type { VaultPort } from '../../../../src/core/port/VaultPort.js';
-import { CodeHostMirrorAdapter } from '../../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
+import { GithubMirrorAdapter } from '../../../../src/infrastructure/github/GithubMirrorAdapter.js';
 import type {
-  CodeHostResponse,
-  CodeHostTransport,
-} from '../../../../src/infrastructure/github/CodeHostTransport.js';
-import { TaskManagerMirrorAdapter } from '../../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
+  GithubResponse,
+  GithubTransport,
+} from '../../../../src/infrastructure/github/GithubTransport.js';
+import { TodoistMirrorAdapter } from '../../../../src/infrastructure/todoist/TodoistMirrorAdapter.js';
 import type {
-  TaskManagerResponse,
-  TaskManagerTransport,
-} from '../../../../src/infrastructure/todoist/TaskManagerTransport.js';
+  TodoistResponse,
+  TodoistTransport,
+} from '../../../../src/infrastructure/todoist/TodoistTransport.js';
 import { SyncStateAdapter } from '../../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { connectionsOf } from '../../../../src/infrastructure/vault/connectionsOf.js';
 import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
@@ -178,7 +178,7 @@ interface FakeIssue {
   locked: boolean;
 }
 
-function ok(data: Record<string, unknown>): CodeHostResponse {
+function ok(data: Record<string, unknown>): GithubResponse {
   return { status: 200, json: { data } };
 }
 
@@ -190,7 +190,7 @@ interface FakeBoard {
   updatedAt: string;
 }
 
-class StatefulCodeHost implements CodeHostTransport {
+class StatefulGithub implements GithubTransport {
   board: FakeBoard | null;
   readonly issues = new Map<string, FakeIssue>();
   readonly calls: string[] = [];
@@ -243,7 +243,7 @@ class StatefulCodeHost implements CodeHostTransport {
     return issue;
   }
 
-  async post(body: string): Promise<CodeHostResponse> {
+  async post(body: string): Promise<GithubResponse> {
     const parsed = JSON.parse(body) as {
       query: string;
       variables?: Record<string, unknown>;
@@ -375,7 +375,7 @@ class StatefulCodeHost implements CodeHostTransport {
     );
   }
 
-  async get(path: string): Promise<CodeHostResponse> {
+  async get(path: string): Promise<GithubResponse> {
     this.calls.push(`get:${path}`);
     const issue = [...this.issues.values()].find((candidate) =>
       path.endsWith(`/issues/${candidate.number}`),
@@ -389,17 +389,17 @@ class StatefulCodeHost implements CodeHostTransport {
     };
   }
 
-  async patch(path: string, _body: string): Promise<CodeHostResponse> {
+  async patch(path: string, _body: string): Promise<GithubResponse> {
     this.calls.push(`patch:${path}`);
     return { status: 200, json: {} };
   }
 
-  async postPath(path: string, _body: string): Promise<CodeHostResponse> {
+  async postPath(path: string, _body: string): Promise<GithubResponse> {
     this.calls.push(`postPath:${path}`);
     return { status: 200, json: {} };
   }
 
-  async putPath(path: string, _body: string): Promise<CodeHostResponse> {
+  async putPath(path: string, _body: string): Promise<GithubResponse> {
     this.calls.push(`putPath:${path}`);
     return { status: 200, json: {} };
   }
@@ -411,7 +411,7 @@ interface FakeProject {
   is_archived: boolean;
 }
 
-class StatefulTaskManager implements TaskManagerTransport {
+class StatefulTodoist implements TodoistTransport {
   readonly projects = new Map<string, FakeProject>();
   readonly calls: string[] = [];
   readonly failArchiveFor = new Set<string>();
@@ -425,7 +425,7 @@ class StatefulTaskManager implements TaskManagerTransport {
     });
   }
 
-  async get(path: string): Promise<TaskManagerResponse> {
+  async get(path: string): Promise<TodoistResponse> {
     const project = /^\/projects\/([^/?]+)$/.exec(path);
     if (project !== null) {
       const found = this.projects.get(decodeURIComponent(project[1]!));
@@ -450,7 +450,7 @@ class StatefulTaskManager implements TaskManagerTransport {
     return { status: 404, json: {} };
   }
 
-  async post(path: string, body: string): Promise<TaskManagerResponse> {
+  async post(path: string, body: string): Promise<TodoistResponse> {
     const archive = /^\/projects\/([^/?]+)\/(archive|unarchive)$/.exec(path);
     if (archive !== null) {
       const id = archive[1]!;
@@ -485,22 +485,22 @@ class StatefulTaskManager implements TaskManagerTransport {
     return { status: 200, json: {} };
   }
 
-  async delete(_path: string): Promise<TaskManagerResponse> {
+  async delete(_path: string): Promise<TodoistResponse> {
     return { status: 200, json: {} };
   }
 }
 
 function realFactory(
-  codeHost: CodeHostTransport,
-  taskManager: TaskManagerTransport,
+  codeHost: GithubTransport,
+  taskManager: TodoistTransport,
 ): MirrorAdapterFactoryPort {
   return {
     create: (application, target) => {
       if (application === 'github') {
-        return new CodeHostMirrorAdapter(codeHost, target);
+        return new GithubMirrorAdapter(codeHost, target);
       }
       if (application === 'todoist') {
-        return new TaskManagerMirrorAdapter(taskManager, target);
+        return new TodoistMirrorAdapter(taskManager, target);
       }
       return null;
     },
@@ -508,23 +508,23 @@ function realFactory(
 }
 
 function codeHostOnlyFactory(
-  codeHost: CodeHostTransport,
+  codeHost: GithubTransport,
 ): MirrorAdapterFactoryPort {
   return {
     create: (application, target) =>
       application === 'github'
-        ? new CodeHostMirrorAdapter(codeHost, target)
+        ? new GithubMirrorAdapter(codeHost, target)
         : null,
   };
 }
 
 function taskManagerOnlyFactory(
-  taskManager: TaskManagerTransport,
+  taskManager: TodoistTransport,
 ): MirrorAdapterFactoryPort {
   return {
     create: (application, target) =>
       application === 'todoist'
-        ? new TaskManagerMirrorAdapter(taskManager, target)
+        ? new TodoistMirrorAdapter(taskManager, target)
         : null,
   };
 }
@@ -534,15 +534,15 @@ interface LifecycleSetup {
   port: VaultPort;
   registry: SyncStateAdapter;
   action: ProjectLifecycleSyncAction;
-  codeHost: StatefulCodeHost;
-  taskManager: StatefulTaskManager;
+  codeHost: StatefulGithub;
+  taskManager: StatefulTodoist;
 }
 
 async function setupLifecycle(options: {
   vaultArchived: boolean;
   home: string;
-  codeHost?: StatefulCodeHost;
-  taskManager?: StatefulTaskManager;
+  codeHost?: StatefulGithub;
+  taskManager?: StatefulTodoist;
 }): Promise<LifecycleSetup> {
   const appVault = new FakeAppVault();
   appVault.seed(
@@ -556,8 +556,8 @@ async function setupLifecycle(options: {
   const vault = vaultAdapter(appFor(appVault), {
     registeredApplications: new Set(['github', 'todoist']),
   });
-  const codeHost = options.codeHost ?? new StatefulCodeHost();
-  const taskManager = options.taskManager ?? new StatefulTaskManager();
+  const codeHost = options.codeHost ?? new StatefulGithub();
+  const taskManager = options.taskManager ?? new StatefulTodoist();
   const action = new ProjectLifecycleSyncAction(
     vault,
     registry,
@@ -609,8 +609,8 @@ function taskNote(status: string): string {
 
 describe('ProjectLifecycleSyncAction — archive and restore against the real adapters (NWM-15)', () => {
   it('archives the vault and the other real mirror when a mirror starts the archive', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: true });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { vault, registry, action, taskManager: tm } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
@@ -628,8 +628,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('archives both real mirrors when the vault starts the archive', async () => {
-    const codeHost = new StatefulCodeHost({ archived: false });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: false });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { registry, action, codeHost: ch, taskManager: tm } =
       await setupLifecycle({
         vaultArchived: true,
@@ -647,8 +647,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('restores the vault and the other real mirror when a mirror un-archives', async () => {
-    const codeHost = new StatefulCodeHost({ archived: false });
-    const taskManager = new StatefulTaskManager({ archived: true });
+    const codeHost = new StatefulGithub({ archived: false });
+    const taskManager = new StatefulTodoist({ archived: true });
     const { vault, registry, action, codeHost: ch, taskManager: tm } =
       await setupLifecycle({
         vaultArchived: true,
@@ -667,7 +667,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('lets a real code-host board win the archive rung on its closedAt when the mirror archived (NWM-6, ADP-3)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
+    const codeHost = new StatefulGithub({ archived: true });
     const { vault, registry, action, codeHost: ch } = await setupLifecycle({
       vaultArchived: false,
       home: GITHUB_ONLY_HOME,
@@ -684,7 +684,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('does not let a fresh generic last-modified win the archive rung without an archive-specific time (NWM-6, NWM-12)', async () => {
-    const codeHost = new StatefulCodeHost({
+    const codeHost = new StatefulGithub({
       archived: false,
       updatedAt: '2026-10-08T12:00:00Z',
     });
@@ -704,8 +704,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('falls to the vault tie-break when two mirrors disagree without a decisive timestamp (NWM-12)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: true });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { vault, registry, action, codeHost: ch, taskManager: tm } =
       await setupLifecycle({
         vaultArchived: false,
@@ -726,7 +726,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('leaves a missing mirror project unoriginated (ORG-3)', async () => {
-    const taskManager = new StatefulTaskManager({
+    const taskManager = new StatefulTodoist({
       id: 'unrelated',
       name: 'Unrelated',
     });
@@ -747,8 +747,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('records a failed mirror write and still archives the rest (NWM-2)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: true });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { vault, registry, action, taskManager: tm } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
@@ -768,8 +768,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('re-drives a stranded mirror on the next pass once its transport recovers (NWM-32)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: true });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { registry, action, taskManager: tm } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
@@ -789,7 +789,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('excludes a vanished mirror project without a tombstone or a vault change (NWM-15)', async () => {
-    const codeHost = new StatefulCodeHost({ board: 'absent' });
+    const codeHost = new StatefulGithub({ board: 'absent' });
     const { vault, registry, action, codeHost: ch } = await setupLifecycle({
       vaultArchived: false,
       home: GITHUB_ONLY_HOME,
@@ -807,11 +807,11 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('renames a drifted mirror project and archives it in the same pass (NWM-31, NWM-15)', async () => {
-    const codeHost = new StatefulCodeHost({
+    const codeHost = new StatefulGithub({
       boardTitle: 'Old Name',
       archived: true,
     });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { vault, registry, action, codeHost: ch, taskManager: tm } =
       await setupLifecycle({
         vaultArchived: false,
@@ -830,8 +830,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('writes and advances nothing once the archive has fanned out (NWM-24)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: true });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { registry, action } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
@@ -848,8 +848,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('renames a drifted code-host board and a drifted task-manager project (NWM-31)', async () => {
-    const codeHost = new StatefulCodeHost({ boardTitle: 'Old Name' });
-    const taskManager = new StatefulTaskManager({ name: 'Old Name' });
+    const codeHost = new StatefulGithub({ boardTitle: 'Old Name' });
+    const taskManager = new StatefulTodoist({ name: 'Old Name' });
     const { registry, action, codeHost: ch, taskManager: tm } =
       await setupLifecycle({
         vaultArchived: false,
@@ -866,8 +866,8 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('relocates the entity on archive and back on restore (NWM-15)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
-    const taskManager = new StatefulTaskManager({ archived: false });
+    const codeHost = new StatefulGithub({ archived: true });
+    const taskManager = new StatefulTodoist({ archived: false });
     const { registry, action } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
@@ -889,7 +889,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   });
 
   it('never tombstones a record relocated under Archief/ (DEL-4, I13)', async () => {
-    const codeHost = new StatefulCodeHost({ archived: true });
+    const codeHost = new StatefulGithub({ archived: true });
     const { vault, port, registry, action } = await setupLifecycle({
       vaultArchived: false,
       home: GITHUB_ONLY_HOME,
@@ -927,7 +927,7 @@ interface LocksSetup {
   vault: FakeAppVault;
   registry: SyncStateAdapter;
   action: ReconcileProjectTaskLocksAction;
-  codeHost: StatefulCodeHost;
+  codeHost: StatefulGithub;
   issue: FakeIssue;
 }
 
@@ -940,7 +940,7 @@ async function setupLocks(options: {
   appVault.seed(TASK_PATH, taskNote(options.status), MTIME);
   const registry = new SyncStateAdapter(memoryStorage());
   await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
-  const codeHost = new StatefulCodeHost();
+  const codeHost = new StatefulGithub();
   const issue = codeHost.addIssue({
     url: ISSUE_URL,
     nodeId: 'I_42',
@@ -1006,7 +1006,7 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
     const registry = new SyncStateAdapter(memoryStorage());
     await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
     await registry.setMirrorItem(PROJECT, 'b', 'task-1', { entityId: 'e1' });
-    const taskManager = new StatefulTaskManager();
+    const taskManager = new StatefulTodoist();
     const vault = vaultAdapter(appFor(appVault), {
       registeredApplications: new Set(['todoist']),
     });

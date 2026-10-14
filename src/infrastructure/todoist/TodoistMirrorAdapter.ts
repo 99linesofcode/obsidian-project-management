@@ -6,10 +6,10 @@ import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
-  TaskManagerResponse,
-  TaskManagerTransport,
-} from './TaskManagerTransport.js';
-import { TaskManagerTarget } from './TaskManagerTarget.js';
+  TodoistResponse,
+  TodoistTransport,
+} from './TodoistTransport.js';
+import { TodoistTarget } from './TodoistTarget.js';
 
 const COMPLETED_SINCE = '1970-01-01T00:00:00Z';
 
@@ -31,23 +31,23 @@ interface RawSection {
   name: string;
 }
 
-export class TaskManagerMirrorAdapter implements MirrorPort {
+export class TodoistMirrorAdapter implements MirrorPort {
   private readonly rawTarget: string;
 
   constructor(
-    private readonly transport: TaskManagerTransport,
+    private readonly transport: TodoistTransport,
     target = '',
     private readonly now: () => Date = () => new Date(),
   ) {
     this.rawTarget = target;
   }
 
-  private get target(): TaskManagerTarget {
-    return TaskManagerTarget.parse(this.rawTarget);
+  private get target(): TodoistTarget {
+    return TodoistTarget.parse(this.rawTarget);
   }
 
   async readProject(target: string): Promise<CanonicalProject | null> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const response = await this.transport.get(
       `/projects/${connection.projectId}`,
     );
@@ -58,7 +58,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
   }
 
   async projectTime(target: string): Promise<string | null> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const response = await this.transport.get(
       `/projects/${connection.projectId}`,
     );
@@ -90,7 +90,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     target: string,
     name: string,
   ): Promise<string> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const response = await this.transport.get(
       `/projects/${connection.projectId}`,
     );
@@ -124,7 +124,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const action = archived ? 'archive' : 'unarchive';
     await this.postOk(
       `/projects/${connection.projectId}/${action}`,
@@ -134,7 +134,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
   }
 
   async renameProject(target: string, name: string): Promise<void> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     await this.postOk(
       `/projects/${connection.projectId}`,
       { name },
@@ -143,7 +143,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const sections = await this.sections(connection.projectId);
     const tasks = await this.listTasks(connection.projectId);
     return tasks
@@ -170,7 +170,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     target: string,
     task: CanonicalTask,
   ): Promise<CanonicalTask> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const sectionId =
       task.status === ''
         ? null
@@ -248,7 +248,7 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
   }
 
   async capture(target: string): Promise<CanonicalTask[]> {
-    const connection = TaskManagerTarget.parse(target);
+    const connection = TodoistTarget.parse(target);
     const sections = await this.sections(connection.projectId);
     const tasks = dedupeById([
       ...(await this.listTasks(connection.projectId)),
@@ -474,7 +474,7 @@ function extractList(json: unknown): Record<string, unknown>[] {
 }
 
 function requireRecord(
-  response: TaskManagerResponse,
+  response: TodoistResponse,
   context: string,
 ): Record<string, unknown> {
   ensureSuccess(response);
@@ -484,7 +484,7 @@ function requireRecord(
   return response.json;
 }
 
-function ensureSuccess(response: TaskManagerResponse): void {
+function ensureSuccess(response: TodoistResponse): void {
   if (response.status < 200 || response.status >= 300) {
     throw new Error(
       `task manager: request failed with status ${response.status}`,

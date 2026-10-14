@@ -7,10 +7,10 @@ import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
 import type {
-  CodeHostResponse,
-  CodeHostTransport,
-} from './CodeHostTransport.js';
-import { CodeHostTarget, type StatusOption } from './CodeHostTarget.js';
+  GithubResponse,
+  GithubTransport,
+} from './GithubTransport.js';
+import { GithubTarget, type StatusOption } from './GithubTarget.js';
 
 const REPO_QUERY = `
   query RepoNodeId($owner: String!, $name: String!) {
@@ -330,20 +330,20 @@ interface BoardSnapshot {
   cards: Map<string, RawCard>;
 }
 
-export class CodeHostMirrorAdapter implements MirrorPort {
+export class GithubMirrorAdapter implements MirrorPort {
   private readonly rawTarget: string;
   private readonly boards = new Map<string, Promise<BoardIdentity | null>>();
 
   constructor(
-    private readonly transport: CodeHostTransport,
+    private readonly transport: GithubTransport,
     target = '',
     private readonly boardIdentity?: () => Promise<ProjectIdentityDataTransferObject | null>,
   ) {
     this.rawTarget = target;
   }
 
-  private get target(): CodeHostTarget {
-    return CodeHostTarget.parse(this.rawTarget);
+  private get target(): GithubTarget {
+    return GithubTarget.parse(this.rawTarget);
   }
 
   private board(target: string): Promise<BoardIdentity | null> {
@@ -472,7 +472,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async readProject(target: string): Promise<CanonicalProject | null> {
-    const connection = CodeHostTarget.parse(target);
+    const connection = GithubTarget.parse(target);
     const board = await this.board(connection.target);
     if (board === null) {
       return null;
@@ -513,7 +513,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async setArchived(target: string, archived: boolean): Promise<void> {
-    const connection = CodeHostTarget.parse(target);
+    const connection = GithubTarget.parse(target);
     const board = await this.requireBoard(connection.target);
     await this.graphql(SET_PROJECT_CLOSED_MUTATION, {
       projectId: board.projectNodeId,
@@ -522,7 +522,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async renameProject(target: string, name: string): Promise<void> {
-    const connection = CodeHostTarget.parse(target);
+    const connection = GithubTarget.parse(target);
     const board = await this.requireBoard(connection.target);
     await this.graphql(RENAME_PROJECT_MUTATION, {
       projectId: board.projectNodeId,
@@ -541,7 +541,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async projectTime(target: string): Promise<string | null> {
-    const connection = CodeHostTarget.parse(target);
+    const connection = GithubTarget.parse(target);
     const board = await this.board(connection.target);
     if (board === null) {
       return null;
@@ -561,7 +561,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     name: string,
     statusOptions: readonly string[],
   ): Promise<ProjectAddressing | null> {
-    const connection = CodeHostTarget.parse(target);
+    const connection = GithubTarget.parse(target);
     const repoUrl =
       connection.target === ''
         ? await this.viewerRepoUrl(name)
@@ -646,7 +646,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async readTasks(target: string): Promise<CanonicalTask[]> {
-    const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
+    const snapshot = await this.boardSnapshot(GithubTarget.parse(target));
     return snapshot.issues
       .filter((issue) => hasTypeLabel(issue.labels))
       .map((issue) =>
@@ -667,7 +667,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     target: string,
     task: CanonicalTask,
   ): Promise<CanonicalTask> {
-    const connection = CodeHostTarget.parse(target);
+    const connection = GithubTarget.parse(target);
     const repo = repoParts(connection.target);
     const repositoryId = await this.repoNodeId(repo);
     const labelIds = await this.labelIds(repo, task.labels);
@@ -748,7 +748,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   async capture(target: string): Promise<CanonicalTask[]> {
-    const snapshot = await this.boardSnapshot(CodeHostTarget.parse(target));
+    const snapshot = await this.boardSnapshot(GithubTarget.parse(target));
     return snapshot.issues
       .filter((issue) => hasTypeLabel(issue.labels))
       .map((issue) =>
@@ -860,7 +860,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   private async boardItem(
-    connection: CodeHostTarget,
+    connection: GithubTarget,
     url: string,
   ): Promise<{ itemId: string } | null> {
     const snapshot = await this.boardSnapshot(connection);
@@ -869,7 +869,7 @@ export class CodeHostMirrorAdapter implements MirrorPort {
   }
 
   private async boardSnapshot(
-    connection: CodeHostTarget,
+    connection: GithubTarget,
   ): Promise<BoardSnapshot> {
     const repo = repoParts(connection.target);
     const board = await this.requireBoard(connection.target);
@@ -1225,7 +1225,7 @@ function pathSegments(url: string): string[] {
     .filter((segment) => segment.length > 0);
 }
 
-function ensureSuccess(response: CodeHostResponse): void {
+function ensureSuccess(response: GithubResponse): void {
   if (response.status !== 200) {
     throw new Error(
       `code host: REST request failed with status ${response.status}`,

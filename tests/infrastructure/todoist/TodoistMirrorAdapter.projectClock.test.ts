@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
+import { TodoistMirrorAdapter } from '../../../src/infrastructure/todoist/TodoistMirrorAdapter.js';
+import type { TodoistTransport } from '../../../src/infrastructure/todoist/TodoistTransport.js';
 
 // The port surface the archive fact's decisive time is read through. S22
 // renames it from an archive-specific `archivedTime` to the project's own
@@ -12,7 +12,7 @@ interface ProjectClockPort {
 
 const TARGET = 'P1';
 
-class FakeTransport implements TaskManagerTransport {
+class FakeTransport implements TodoistTransport {
   readonly calls: Array<{ method: string; path: string }> = [];
   private readonly responses: Array<{ status: number; json: unknown }>;
 
@@ -48,7 +48,7 @@ class FakeTransport implements TaskManagerTransport {
 // distinct resources. The queue-based fake cannot express that: it hands out
 // the next response whatever the path, so a clock that read a task would still
 // receive the project's response and pass for the wrong reason.
-class RoutingTransport implements TaskManagerTransport {
+class RoutingTransport implements TodoistTransport {
   readonly calls: string[] = [];
   private readonly resources: ReadonlyMap<
     string,
@@ -80,12 +80,12 @@ class RoutingTransport implements TaskManagerTransport {
 }
 
 function adapterWith(responses: Array<{ status: number; json: unknown }>): {
-  adapter: TaskManagerMirrorAdapter;
+  adapter: TodoistMirrorAdapter;
   transport: FakeTransport;
 } {
   const transport = new FakeTransport(responses);
   return {
-    adapter: new TaskManagerMirrorAdapter(transport, TARGET),
+    adapter: new TodoistMirrorAdapter(transport, TARGET),
     transport,
   };
 }
@@ -141,7 +141,7 @@ describe('ADP-6 — the task manager reports the project clock from the project 
         ],
       ]),
     );
-    const adapter = new TaskManagerMirrorAdapter(transport, TARGET);
+    const adapter = new TodoistMirrorAdapter(transport, TARGET);
     const port = adapter as unknown as ProjectClockPort;
 
     expect(await port.projectTime?.(TARGET)).toBe('2026-10-08T10:00:00Z');

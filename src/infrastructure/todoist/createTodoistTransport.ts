@@ -1,17 +1,17 @@
 import { requestUrl } from 'obsidian';
 import type {
-  TaskManagerResponse,
-  TaskManagerTransport,
-} from './TaskManagerTransport.js';
+  TodoistResponse,
+  TodoistTransport,
+} from './TodoistTransport.js';
 
 const BASE_URL = 'https://api.todoist.com/api/v1';
 
-export function createTodoistTransport(token: string): TaskManagerTransport {
+export function createTodoistTransport(token: string): TodoistTransport {
   const request = async (
     method: string,
     path: string,
     body?: string,
-  ): Promise<TaskManagerResponse> => {
+  ): Promise<TodoistResponse> => {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     };

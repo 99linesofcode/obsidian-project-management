@@ -47,7 +47,7 @@ describe('the provider isolation matrix', () => {
     expect(
       lintExitCode(
         'src/main.ts',
-        "import './infrastructure/github/CodeHostMirrorAdapter.js';\n",
+        "import './infrastructure/github/GithubMirrorAdapter.js';\n",
       ),
     ).toBe(0);
   });
