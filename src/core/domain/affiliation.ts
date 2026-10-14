@@ -65,11 +65,5 @@ export function taskLinkFromAffiliation(
   affiliation: string[],
   projectName: string,
 ): string | null {
-  for (const link of affiliation) {
-    const target = stripLink(link);
-    if (!isProjectAffiliationEntry(target, projectName)) {
-      return target;
-    }
-  }
-  return null;
+  return affiliationTargets(affiliation, projectName)[0] ?? null;
 }
