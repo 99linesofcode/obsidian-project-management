@@ -184,6 +184,10 @@ export class ConformanceMirrorAdapter implements MirrorPort {
     return true;
   }
 
+  taskHandlesAreUrls(): boolean {
+    return false;
+  }
+
   fetchComplete(): boolean {
     return true;
   }
