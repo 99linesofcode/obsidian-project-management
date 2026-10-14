@@ -5,7 +5,7 @@ import type { MirrorPort } from '../../../port/MirrorPort.js';
 import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/paths.js';
-import { typeFromLabels } from '../../../domain/note.js';
+import { slugify, typeFromLabels } from '../../../domain/note.js';
 import { effectiveConnectionTarget } from '../../services/connectionTarget.js';
 import type { CreateTaskNoteAction } from '../create-task-note/CreateTaskNoteAction.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
@@ -20,6 +20,16 @@ interface AdoptTaskInput {
   slug: string;
   projectName: string;
   syncedAt: string;
+}
+
+interface LinkCandidate {
+  slug: string;
+  path: string;
+}
+
+interface LinkCandidates {
+  read(): Promise<LinkCandidate[]>;
+  invalidate(): void;
 }
 
 // The capture-adoption orchestration: for a code-host task it starts
@@ -38,6 +48,13 @@ export class CaptureTasksAction {
     const connections = await this.vault.readConnections(project);
     const captured: string[] = [];
     const errors: unknown[] = [];
+    let candidates: LinkCandidate[] | null = null;
+    const linkCandidates: LinkCandidates = {
+      read: async () => (candidates ??= await this.readLinkCandidates(project)),
+      invalidate: () => {
+        candidates = null;
+      },
+    };
     for (const connection of connections) {
       const target = await effectiveConnectionTarget(
         this.registry,
@@ -63,6 +80,7 @@ export class CaptureTasksAction {
           target,
           adapter,
           syncedAt,
+          linkCandidates,
         );
         captured.push(...result.captured);
         errors.push(...result.errors);
@@ -79,6 +97,7 @@ export class CaptureTasksAction {
     target: string,
     adapter: MirrorPort,
     syncedAt: string,
+    linkCandidates: LinkCandidates,
   ): Promise<CaptureTasksResult> {
     if (adapter.capture === undefined) {
       return { captured: [], errors: [] };
@@ -99,13 +118,41 @@ export class CaptureTasksAction {
       if ((await this.registry.findTombstone(task.handle)) !== null) {
         continue;
       }
+      const slug = slugify(task.title);
+      const matches =
+        task.handle === ''
+          ? []
+          : (await linkCandidates.read()).filter((note) => note.slug === slug);
+      if (matches.length > 1) {
+        errors.push(ambiguousTitleError(project, task, matches.length));
+        continue;
+      }
       try {
-        await this.adopt({
-          task,
-          slug: connection.slug,
-          projectName: project,
-          syncedAt,
-        });
+        const note = matches[0];
+        if (note === undefined) {
+          await this.adopt({
+            task,
+            slug: connection.slug,
+            projectName: project,
+            syncedAt,
+          });
+          linkCandidates.invalidate();
+        } else if (
+          (await this.registry.resolveMirrorHandle(
+            connection.slug,
+            note.path,
+          )) !== null
+        ) {
+          errors.push(linkedNoteError(project, task, note.path));
+          continue;
+        } else {
+          await this.registry.recordMirrorHandle(
+            project,
+            connection.slug,
+            note.path,
+            task.handle,
+          );
+        }
       } catch (error) {
         errors.push(error);
         break;
@@ -114,6 +161,18 @@ export class CaptureTasksAction {
       adopted.add(task.handle);
     }
     return { captured, errors };
+  }
+
+  private async readLinkCandidates(project: string): Promise<LinkCandidate[]> {
+    const paths = await this.vault.listNotesInFolder(`Projecten/${project}`);
+    const candidates: LinkCandidate[] = [];
+    for (const path of paths) {
+      const note = await this.vault.readTask(path);
+      if (note !== null) {
+        candidates.push({ slug: slugify(note.title), path });
+      }
+    }
+    return candidates;
   }
 
   private async adopt(input: AdoptTaskInput): Promise<void> {
@@ -179,4 +238,24 @@ function capturedKind(task: CanonicalTask): string {
     return explicit;
   }
   return task.parent !== null ? 'task' : 'slice';
+}
+
+function ambiguousTitleError(
+  project: string,
+  task: CanonicalTask,
+  matches: number,
+): Error {
+  return new Error(
+    `cannot capture ${task.handle}: ${matches} notes in project "${project}" share the title "${task.title}"`,
+  );
+}
+
+function linkedNoteError(
+  project: string,
+  task: CanonicalTask,
+  notePath: string,
+): Error {
+  return new Error(
+    `cannot capture ${task.handle}: ${notePath} in project "${project}" is already linked to another task`,
+  );
 }

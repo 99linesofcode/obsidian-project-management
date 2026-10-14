@@ -144,7 +144,7 @@ sequenceDiagram
   SP->>Lock: invoke({ project, frozen, wasFrozen })
   SP->>SP: renames, cascade, checklist, mirror to-do
   alt not frozen
-    SP->>SP: task capture (kind by label or position)
+    SP->>SP: task capture (link on title match, else adopt; kind by label or position)
     SP->>TF: invoke(project)
     TF->>M: merge each canonical field, fan out
   end
@@ -345,16 +345,21 @@ canonical DTOs and the pure core.
 - **The task-capture surface** (`MirrorPort.capture` + `CaptureTasksAction`). For
   each declared connection, the core action reads the tasks the adapter's capture
   gate exposes — a code host exposes only type-labelled issues, a task manager
-  exposes every task — and adopts every task the vault does not already hold as a
-  task note. The whole listing is scanned each pass and the adopted mirror items
-  are skipped, so the pass is idempotent without a cursor; a handle with a
-  tombstone is skipped too, so a deleted note's mirror is never re-adopted
-  (DEL-2, I16). The action routes by the captured task's handle — a url-addressed
-  issue through `CreateTaskNoteAction`, an id-addressed task-manager item
-  rendered by `CapturedTaskNoteMapper` and written through `VaultPort` +
-  `RegistryPort`. A captured task-manager task carries a kind: an explicit type
-  label is kept, and an unlabelled one takes the kind its position implies — a
-  root item is a `slice`, a subtask a `task`.
+  exposes every task. The whole listing is scanned each pass and the adopted
+  mirror items are skipped, so the pass is idempotent without a cursor; a handle
+  with a tombstone is skipped too, so a deleted note's mirror is never re-adopted
+  (DEL-2, I16). Each remaining task is then matched against the project's notes
+  by its **normalised** title — the slug the vault derives a note's title and
+  filename from (CAP-4): exactly one matching note → the task is **linked** to
+  it, recording the handle on the existing note and writing no note; no match →
+  the task is adopted as a new note; more than one match → nothing is written
+  and the task is logged, so neither a duplicate nor a wrong link is made and the
+  task is retried next pass. The action routes by the captured task's handle — a
+  url-addressed issue through `CreateTaskNoteAction`, an id-addressed
+  task-manager item rendered by `CapturedTaskNoteMapper` and written through
+  `VaultPort` + `RegistryPort`. A captured task-manager task carries a kind: an
+  explicit type label is kept, and an unlabelled one takes the kind its position
+  implies — a root item is a `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
   (home-note migration, project-name reconciliation, connection re-keying,
   connection origination, rename recovery, vault consistency and the deletion
@@ -648,11 +653,15 @@ Date of Last Update: 2026-10-13
   `MirrorPort.resolveOrCreateProject`, serves the code host's board and the task
   manager's project alike; no declared connection means nothing fans out.
 - **Capture** — adopting remote-born **tasks** into the vault. It enumerates the
-  remote's tracked tasks and adopts each the vault does not already hold by its
+  remote's tracked tasks and handles each the vault does not already hold by its
   mirror handle, so the first run adopts the back-catalogue and a second pass is
-  idempotent. A project is never captured — it is declared (origination). A
-  captured task-manager task carries a kind — an explicit type label kept, else
-  `slice` for a root item and `task` for a subtask.
+  idempotent. A task whose **normalised** title (the slug the vault derives a
+  note's title and filename from) matches exactly one existing note is **linked**
+  to that note — its handle recorded, no note written; no match adopts a new
+  note; more than one match writes nothing and is logged, retried next pass. A
+  project is never captured — it is declared (origination). A captured
+  task-manager task carries a kind — an explicit type label kept, else `slice`
+  for a root item and `task` for a subtask.
 - **Project rename** — reconciling a project note's declared name with the
   folder it sits in. The name is a top-level `project:` property; the folder and
   the home-note filename derive from it. A note with no property adopts the

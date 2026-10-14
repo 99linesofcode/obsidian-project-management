@@ -4,6 +4,8 @@ import { CreateTaskNoteAction } from '../../../../../src/core/application/action
 import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { ProjectIdentityDataTransferObject } from '../../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
+import { typeFromLabels } from '../../../../../src/core/domain/note.js';
+import { parseTaskNote } from '../../../../../src/infrastructure/vault/taskNoteCodec.js';
 import type { MirrorPort } from '../../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../../src/core/port/MirrorAdapterFactoryPort.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
@@ -44,6 +46,32 @@ class FakeVault extends FakeVaultBase {
     }
     this.notes.set(path, content);
     this.created.push({ path, content });
+  }
+
+  override async listNotesInFolder(folder: string): Promise<string[]> {
+    const prefix = folder.endsWith('/') ? folder : `${folder}/`;
+    return [...this.notes.keys()].filter((path) => path.startsWith(prefix));
+  }
+
+  override async readTask(handle: string): Promise<CanonicalTask | null> {
+    const content = this.notes.get(handle);
+    if (content === undefined) {
+      return null;
+    }
+    const note = parseTaskNote(content, handle);
+    if (typeFromLabels(note.labels) === '') {
+      return null;
+    }
+    return new CanonicalTask({
+      handle,
+      entityId: handle,
+      title: note.title,
+      body: note.body,
+      status: note.status,
+      completed: note.completed,
+      parent: note.parent,
+      labels: note.labels,
+    });
   }
 }
 
