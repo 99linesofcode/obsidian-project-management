@@ -15,7 +15,13 @@ import { ConnectionValidationService } from '../../core/application/services/Con
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
 import { slugify, typeFromLabels } from '../../core/domain/note.js';
 import { connectionsOf } from './connectionsOf.js';
-import { fieldValue, folderOf, parseTaskNote, writeIntoNote } from './taskNoteCodec.js';
+import {
+  fieldValue,
+  folderOf,
+  parseTaskNote,
+  writeIntoNote,
+  type TaskNote,
+} from './taskNoteCodec.js';
 
 export type EventRegistrar = (eventRef: EventRef) => void;
 
@@ -139,43 +145,24 @@ export class VaultAdapter implements VaultPort {
     handle: string,
     field: CanonicalField,
   ): Promise<OriginObservation> {
-    const file = this.app.vault.getAbstractFileByPath(handle);
-    if (!(file instanceof TFile)) {
-      return new OriginObservation({
-        current: null,
-        currentCompleted: false,
-        fieldTime: null,
-        trustworthy: true,
-      });
-    }
-
-    const note = parseTaskNote(await this.app.vault.read(file), handle);
-    if (typeFromLabels(note.labels) === '') {
-      return new OriginObservation({
-        current: null,
-        currentCompleted: false,
-        fieldTime: null,
-        trustworthy: true,
-      });
+    const read = await this.readTaskNote(handle);
+    if (read === null) {
+      return absentOriginObservation();
     }
     return new OriginObservation({
-      current: fieldValue(note, field),
-      currentCompleted: note.completed,
-      fieldTime: new Date(file.stat.mtime).toISOString(),
+      current: fieldValue(read.note, field),
+      currentCompleted: read.note.completed,
+      fieldTime: new Date(read.mtime).toISOString(),
       trustworthy: true,
     });
   }
 
   async readTask(handle: string): Promise<CanonicalTask | null> {
-    const file = this.app.vault.getAbstractFileByPath(handle);
-    if (!(file instanceof TFile)) {
+    const read = await this.readTaskNote(handle);
+    if (read === null) {
       return null;
     }
-
-    const note = parseTaskNote(await this.app.vault.read(file), handle);
-    if (typeFromLabels(note.labels) === '') {
-      return null;
-    }
+    const { note } = read;
     return new CanonicalTask({
       handle,
       entityId: handle,
@@ -237,12 +224,7 @@ export class VaultAdapter implements VaultPort {
   async observeProject(project: string): Promise<OriginObservation> {
     const path = await this.findHomeNotePath(project);
     if (path === null) {
-      return new OriginObservation({
-        current: null,
-        currentCompleted: false,
-        fieldTime: null,
-        trustworthy: true,
-      });
+      return absentOriginObservation();
     }
 
     return new OriginObservation({
@@ -260,6 +242,20 @@ export class VaultAdapter implements VaultPort {
     const from = archived ? 'Projecten' : 'Archief';
     const to = archived ? 'Archief' : 'Projecten';
     await this.moveFolder(`${from}/${project}`, `${to}/${project}`);
+  }
+
+  private async readTaskNote(
+    handle: string,
+  ): Promise<{ note: TaskNote; mtime: number } | null> {
+    const file = this.app.vault.getAbstractFileByPath(handle);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+    const note = parseTaskNote(await this.app.vault.read(file), handle);
+    if (typeFromLabels(note.labels) === '') {
+      return null;
+    }
+    return { note, mtime: file.stat.mtime };
   }
 
   private async changeTime(path: string): Promise<string | null> {
@@ -313,4 +309,13 @@ export class VaultAdapter implements VaultPort {
       folder === null ? `${slug}.md` : `${folder}/${slug}.md`,
     );
   }
+}
+
+function absentOriginObservation(): OriginObservation {
+  return new OriginObservation({
+    current: null,
+    currentCompleted: false,
+    fieldTime: null,
+    trustworthy: true,
+  });
 }
