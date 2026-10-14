@@ -1,4 +1,5 @@
 import { isRecord } from '../../core/domain/isRecord.js';
+import { stringOrEmpty } from '../../core/domain/strings.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
 import type { PortState } from '../../core/port/data/PortState.js';
 import type { TombstoneRecord } from '../../core/port/data/TombstoneRecord.js';
@@ -13,10 +14,6 @@ export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
 export const IDENTITIES_KEY = 'identities';
 export const TOMBSTONES_KEY = 'tombstones';
-
-export function str(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
 
 export function stringOrNull(value: unknown): string | null {
   return value === null || typeof value === 'string' ? value : null;
@@ -132,7 +129,7 @@ export function mapMirrorItem(raw: unknown): MirrorItem | null {
   if (!isRecord(raw)) {
     return null;
   }
-  return { entityId: str(raw.entityId) };
+  return { entityId: stringOrEmpty(raw.entityId) };
 }
 
 export function tombstonesList(container: Record<string, unknown>): unknown[] {
@@ -154,9 +151,9 @@ export function mapTombstone(raw: unknown): TombstoneRecord | null {
   if (!isRecord(raw)) {
     return null;
   }
-  const entityId = str(raw.entityId);
-  const notePath = str(raw.notePath);
-  const deletedAt = str(raw.deletedAt);
+  const entityId = stringOrEmpty(raw.entityId);
+  const notePath = stringOrEmpty(raw.notePath);
+  const deletedAt = stringOrEmpty(raw.deletedAt);
   if (typeof raw.handle === 'string' && raw.handle !== '') {
     return { entityId, notePath, deletedAt, handle: raw.handle };
   }

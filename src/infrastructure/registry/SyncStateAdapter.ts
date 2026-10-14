@@ -5,13 +5,14 @@ import {
   projectFromNotePath,
   projectPathWithName,
 } from '../../core/domain/paths.js';
+import { stringOrEmpty, stringOrNull } from '../../core/domain/strings.js';
 import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
 import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
 import type { PortState } from '../../core/port/data/PortState.js';
 import type { TombstoneRecord } from '../../core/port/data/TombstoneRecord.js';
 import type { RegistryPort } from '../../core/port/RegistryPort.js';
-import { ensureRecord, readPath, stringOrNull } from './coreStorageRecord.js';
+import { ensureRecord, readPath } from './coreStorageRecord.js';
 import {
   SYNC_STATE_KEY,
   TOMBSTONES_KEY,
@@ -33,7 +34,6 @@ import {
   portsMap,
   projectNode,
   readProjectsMap,
-  str,
   tombstonesList,
 } from './syncStateSchema.js';
 
@@ -91,7 +91,7 @@ function buildIndexes(container: Record<string, unknown>): Indexes {
       if (!isRecord(raw)) {
         continue;
       }
-      const notePath = str(raw.notePath);
+      const notePath = stringOrEmpty(raw.notePath);
       indexes.byNotePath.set(notePath, id);
       indexes.byEntityPath.set(id, notePath);
       indexes.byEntityProject.set(id, projectName);
@@ -104,7 +104,7 @@ function buildIndexes(container: Record<string, unknown>): Indexes {
         if (!isRecord(rawItem)) {
           continue;
         }
-        const entityId = str(rawItem.entityId);
+        const entityId = stringOrEmpty(rawItem.entityId);
         let handles = indexes.byHandle.get(portId);
         if (handles === undefined) {
           handles = new Map();
@@ -394,7 +394,7 @@ export class SyncStateAdapter implements RegistryPort {
       return null;
     }
     const raw = entityMap(node)[id];
-    return isRecord(raw) ? { id, notePath: str(raw.notePath) } : null;
+    return isRecord(raw) ? { id, notePath: stringOrEmpty(raw.notePath) } : null;
   }
 
   async findByNotePath(notePath: string): Promise<EntityRecord | null> {
@@ -469,7 +469,7 @@ export class SyncStateAdapter implements RegistryPort {
         .filter(([, raw]) => isRecord(raw))
         .map(([id, raw]) => ({
           id,
-          notePath: str((raw as Record<string, unknown>).notePath),
+          notePath: stringOrEmpty((raw as Record<string, unknown>).notePath),
         }));
     });
   }
@@ -679,7 +679,7 @@ export class SyncStateAdapter implements RegistryPort {
       if (port !== null) {
         const raw = itemsMap(port)[handle];
         if (isRecord(raw)) {
-          const entityId = str(raw.entityId);
+          const entityId = stringOrEmpty(raw.entityId);
           dropItem(container, this.indexes!, {
             project: projectName,
             portId,

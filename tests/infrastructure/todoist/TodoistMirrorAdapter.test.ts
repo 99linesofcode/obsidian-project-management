@@ -5,8 +5,8 @@ import { CanonicalTask } from '../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { OriginObservation } from '../../../src/core/domain/OriginObservation.js';
 import { MirrorSyncAction } from '../../../src/core/application/actions/MirrorSyncAction.js';
-import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
+import { TodoistMirrorAdapter } from '../../../src/infrastructure/todoist/TodoistMirrorAdapter.js';
+import type { TodoistTransport } from '../../../src/infrastructure/todoist/TodoistTransport.js';
 import { SyncStateAdapter } from '../../../src/infrastructure/registry/SyncStateAdapter.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
@@ -20,7 +20,7 @@ interface RecordedCall {
   body: string;
 }
 
-class FakeTransport implements TaskManagerTransport {
+class FakeTransport implements TodoistTransport {
   readonly calls: RecordedCall[] = [];
   private readonly responses: Array<{ status: number; json: unknown }>;
 
@@ -84,17 +84,17 @@ function adapterWith(
   responses: Array<{ status: number; json: unknown }>,
   now: () => Date = () => new Date(),
 ): {
-  adapter: TaskManagerMirrorAdapter;
+  adapter: TodoistMirrorAdapter;
   transport: FakeTransport;
 } {
   const transport = new FakeTransport(responses);
   return {
-    adapter: new TaskManagerMirrorAdapter(transport, target(), now),
+    adapter: new TodoistMirrorAdapter(transport, target(), now),
     transport,
   };
 }
 
-describe('TaskManagerMirrorAdapter — the canonical read (F01 ACM-5)', () => {
+describe('TodoistMirrorAdapter — the canonical read (F01 ACM-5)', () => {
   it('maps the task and its section onto the canonical task', async () => {
     const { adapter } = adapterWith([
       { status: 200, json: taskNode() },
@@ -155,7 +155,7 @@ describe('TaskManagerMirrorAdapter — the canonical read (F01 ACM-5)', () => {
   });
 });
 
-describe('TaskManagerMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
+describe('TodoistMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
   it('writes a title through the task content', async () => {
     const { adapter, transport } = adapterWith([
       { status: 200, json: taskNode({ content: 'New title' }) },
@@ -300,7 +300,7 @@ describe('TaskManagerMirrorAdapter — the canonical writes (F01 ACM-5)', () => 
   });
 });
 
-describe('TaskManagerMirrorAdapter — the remaining surface', () => {
+describe('TodoistMirrorAdapter — the remaining surface', () => {
   it('deletes the task', async () => {
     const { adapter, transport } = adapterWith([{ status: 204, json: null }]);
 
@@ -464,7 +464,7 @@ class FieldVault extends FakeVaultBase {
   override async trashNote(): Promise<void> {}
 }
 
-class RoutingTransport implements TaskManagerTransport {
+class RoutingTransport implements TodoistTransport {
   readonly calls: RecordedCall[] = [];
 
   async get(path: string): Promise<{ status: number; json: unknown }> {
@@ -513,7 +513,7 @@ function memoryStorage() {
 describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)', () => {
   it('reconciles a vault Status change onto the named section', async () => {
     const transport = new RoutingTransport();
-    const adapter = new TaskManagerMirrorAdapter(transport, target());
+    const adapter = new TodoistMirrorAdapter(transport, target());
 
     const vault = new FieldVault();
     vault.values.set('title', 'Fix the bug');
@@ -570,7 +570,7 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
   });
 });
 
-describe('TaskManagerMirrorAdapter — createTask', () => {
+describe('TodoistMirrorAdapter — createTask', () => {
   it('creates a task in its section and returns the canonical task', async () => {
     const { adapter, transport } = adapterWith([
       { status: 200, json: [sectionNode({ id: 'S1', name: 'Building' })] },

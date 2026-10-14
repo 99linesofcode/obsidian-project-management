@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TaskManagerMirrorAdapter } from '../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TaskManagerTransport } from '../../../src/infrastructure/todoist/TaskManagerTransport.js';
+import { TodoistMirrorAdapter } from '../../../src/infrastructure/todoist/TodoistMirrorAdapter.js';
+import type { TodoistTransport } from '../../../src/infrastructure/todoist/TodoistTransport.js';
 
-class FakeTransport implements TaskManagerTransport {
+class FakeTransport implements TodoistTransport {
   readonly requests: Array<{ method: string; path: string }> = [];
   readonly projects: Array<{ id: string; name: string }> = [];
   readonly missing = new Set<string>();
@@ -40,11 +40,11 @@ class FakeTransport implements TaskManagerTransport {
   }
 }
 
-describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
+describe('TodoistMirrorAdapter — resolveOrCreateProject', () => {
   it('creates the project by name when the target is empty and it is absent', async () => {
     const transport = new FakeTransport();
 
-    const addressing = await new TaskManagerMirrorAdapter(
+    const addressing = await new TodoistMirrorAdapter(
       transport,
     ).resolveOrCreateProject('', 'Widgets', []);
 
@@ -57,7 +57,7 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
     const transport = new FakeTransport();
     transport.projects.push({ id: 'P-1', name: 'Widgets' });
 
-    const addressing = await new TaskManagerMirrorAdapter(
+    const addressing = await new TodoistMirrorAdapter(
       transport,
     ).resolveOrCreateProject('', 'Widgets', []);
 
@@ -70,7 +70,7 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
     const transport = new FakeTransport();
     transport.projects.push({ id: 'P-9', name: 'Other' });
 
-    const addressing = await new TaskManagerMirrorAdapter(
+    const addressing = await new TodoistMirrorAdapter(
       transport,
     ).resolveOrCreateProject('P-9', 'Widgets', []);
 
@@ -83,7 +83,7 @@ describe('TaskManagerMirrorAdapter — resolveOrCreateProject', () => {
     const transport = new FakeTransport();
     transport.missing.add('P-gone');
 
-    const addressing = await new TaskManagerMirrorAdapter(
+    const addressing = await new TodoistMirrorAdapter(
       transport,
     ).resolveOrCreateProject('P-gone', 'Widgets', []);
 

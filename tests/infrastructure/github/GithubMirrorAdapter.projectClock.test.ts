@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
-import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
+import { GithubMirrorAdapter } from '../../../src/infrastructure/github/GithubMirrorAdapter.js';
+import type { GithubTransport } from '../../../src/infrastructure/github/GithubTransport.js';
 
 // The port surface the archive fact's decisive time is read through. S22
 // renames it from an archive-specific `archivedTime` to the project's own
@@ -12,7 +12,7 @@ interface ProjectClockPort {
 
 const REPO_URL = 'https://github.com/acme/widgets';
 
-class FakeTransport implements CodeHostTransport {
+class FakeTransport implements GithubTransport {
   readonly bodies: string[] = [];
   private readonly responses: Array<{ status: number; json: unknown }>;
   private readonly derivation: Array<{ status: number; json: unknown }>;
@@ -111,9 +111,9 @@ function projectContent(
 
 function adapterWith(
   responses: Array<{ status: number; json: unknown }>,
-): { adapter: CodeHostMirrorAdapter; transport: FakeTransport } {
+): { adapter: GithubMirrorAdapter; transport: FakeTransport } {
   const transport = new FakeTransport(responses);
-  return { adapter: new CodeHostMirrorAdapter(transport, REPO_URL), transport };
+  return { adapter: new GithubMirrorAdapter(transport, REPO_URL), transport };
 }
 
 describe('ADP-3 / NWM-6 — the code host reports closedAt through the project clock', () => {

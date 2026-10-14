@@ -32,10 +32,10 @@ import { MirrorSyncAction } from './core/application/actions/MirrorSyncAction.js
 import { ProjectLifecycleSyncAction } from './core/application/actions/ProjectLifecycleSyncAction.js';
 import type { MirrorPort } from './core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from './core/port/MirrorAdapterFactoryPort.js';
-import { CodeHostMirrorAdapter } from './infrastructure/github/CodeHostMirrorAdapter.js';
+import { GithubMirrorAdapter } from './infrastructure/github/GithubMirrorAdapter.js';
 import type { ProjectIdentityDataTransferObject } from './core/port/data/ProjectIdentityDataTransferObject.js';
-import type { CodeHostTransport } from './infrastructure/github/CodeHostTransport.js';
-import { TaskManagerMirrorAdapter } from './infrastructure/todoist/TaskManagerMirrorAdapter.js';
+import type { GithubTransport } from './infrastructure/github/GithubTransport.js';
+import { TodoistMirrorAdapter } from './infrastructure/todoist/TodoistMirrorAdapter.js';
 import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
@@ -63,7 +63,7 @@ async function request(
   return { status: response.status, json: response.json };
 }
 
-function createCodeHostTransport(token: string): CodeHostTransport {
+function createGithubTransport(token: string): GithubTransport {
   return {
     post: (body) => request(token, 'POST', '/graphql', body),
     get: (path) => request(token, 'GET', path),
@@ -148,40 +148,40 @@ function composePlugin(
   seedArtifacts: SeedVaultArtifactsAction;
   tokenSettings: readonly TokenSettingRow[];
 } {
-  const codeHostToken: TokenSettingRow = {
+  const githubToken: TokenSettingRow = {
     key: 'github-token',
     label: 'GitHub token',
     description: 'Personal access token used to talk to the GitHub API.',
   };
-  const taskManagerToken: TokenSettingRow = {
+  const todoistToken: TokenSettingRow = {
     key: 'todoist-token',
     label: 'Todoist token',
     description: 'Personal API token used to talk to the Todoist API.',
   };
-  const codeHostTransport = transportFromSecret(
+  const githubTransport = transportFromSecret(
     secrets,
-    codeHostToken.key,
-    createCodeHostTransport,
+    githubToken.key,
+    createGithubTransport,
   );
-  const taskManagerTransport = transportFromSecret(
+  const todoistTransport = transportFromSecret(
     secrets,
-    taskManagerToken.key,
+    todoistToken.key,
     createTodoistTransport,
   );
   const providers: ProviderTable = {
     github: {
       mirror: (target, boardIdentity) =>
-        new CodeHostMirrorAdapter(
-          codeHostTransport,
+        new GithubMirrorAdapter(
+          githubTransport,
           target,
           boardIdentity,
         ),
-      token: codeHostToken,
+      token: githubToken,
     },
     todoist: {
       mirror: (target) =>
-        new TaskManagerMirrorAdapter(taskManagerTransport, target),
-      token: taskManagerToken,
+        new TodoistMirrorAdapter(todoistTransport, target),
+      token: todoistToken,
     },
   };
   const tokenSettings = Object.values(providers).map(

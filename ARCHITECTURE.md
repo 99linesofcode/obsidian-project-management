@@ -172,7 +172,7 @@ core's need, never the tool's API it wraps. An adapter implements the port from
 its own module; the composition root wires it.
 
 - **The mirror port.** **`MirrorPort`** — the external tool as one collaborator,
-  implemented by `CodeHostMirrorAdapter` and `TaskManagerMirrorAdapter`. The
+  implemented by `GithubMirrorAdapter` and `TodoistMirrorAdapter`. The
   required surface is the project (read/create/rename, set the archived
   state), the task (`title`, `body`, `subtasks`, `completion`, `Status`,
   `label` — one generic write entry, `applyField`, dispatches a canonical field

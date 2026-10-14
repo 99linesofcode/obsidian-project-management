@@ -6,10 +6,10 @@ import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { ProjectAddressing } from '../../../../src/core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../../../src/core/port/MirrorPort.js';
-import { CodeHostMirrorAdapter } from '../../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
-import type { CodeHostTransport } from '../../../../src/infrastructure/github/CodeHostTransport.js';
-import { TaskManagerMirrorAdapter } from '../../../../src/infrastructure/todoist/TaskManagerMirrorAdapter.js';
-import type { TaskManagerTransport } from '../../../../src/infrastructure/todoist/TaskManagerTransport.js';
+import { GithubMirrorAdapter } from '../../../../src/infrastructure/github/GithubMirrorAdapter.js';
+import type { GithubTransport } from '../../../../src/infrastructure/github/GithubTransport.js';
+import { TodoistMirrorAdapter } from '../../../../src/infrastructure/todoist/TodoistMirrorAdapter.js';
+import type { TodoistTransport } from '../../../../src/infrastructure/todoist/TodoistTransport.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -121,7 +121,7 @@ function issueNode(): Record<string, unknown> {
   };
 }
 
-class RecordingCodeHostTransport implements CodeHostTransport {
+class RecordingGithubTransport implements GithubTransport {
   readonly bodies: string[] = [];
   readonly paths: string[] = [];
 
@@ -231,7 +231,7 @@ class RecordingCodeHostTransport implements CodeHostTransport {
   }
 }
 
-class RecordingTaskManagerTransport implements TaskManagerTransport {
+class RecordingTodoistTransport implements TodoistTransport {
   readonly calls: Array<{ method: string; path: string; body: string }> = [];
 
   constructor(private readonly parentHandle: string | null) {}
@@ -297,8 +297,8 @@ async function registerParent(
 
 describe('TDO-5 / ADP-3 — a type:todo is untracked on the code host', () => {
   it('creates no issue for a type:todo note', async () => {
-    const transport = new RecordingCodeHostTransport();
-    const adapter = new CodeHostMirrorAdapter(transport, REPO_URL);
+    const transport = new RecordingGithubTransport();
+    const adapter = new GithubMirrorAdapter(transport, REPO_URL);
     const vault = new TodoVault(todoTask(PARENT_STEM), [
       connection('gh-main', 'github', REPO_URL),
     ]);
@@ -314,8 +314,8 @@ describe('TDO-5 / ADP-3 — a type:todo is untracked on the code host', () => {
 
 describe('TDO-5 / ADP-6 — a type:todo materialises as a task-manager subtask', () => {
   it('creates a subtask under the parent handle, carrying type:todo', async () => {
-    const transport = new RecordingTaskManagerTransport(PARENT_HANDLE);
-    const adapter = new TaskManagerMirrorAdapter(transport, 'P1');
+    const transport = new RecordingTodoistTransport(PARENT_HANDLE);
+    const adapter = new TodoistMirrorAdapter(transport, 'P1');
     const vault = new TodoVault(todoTask(PARENT_STEM), [
       connection('todoist-main', 'todoist', 'P1'),
     ]);
@@ -336,8 +336,8 @@ describe('TDO-5 / ADP-6 — a type:todo materialises as a task-manager subtask',
 
 describe('SUB-3 — the parent relation is identity, not text', () => {
   it('settles a parent relation the origin and the mirror name alike (TDO-5, SUB-3)', async () => {
-    const transport = new RecordingTaskManagerTransport(PARENT_HANDLE);
-    const adapter = new TaskManagerMirrorAdapter(transport, 'P1');
+    const transport = new RecordingTodoistTransport(PARENT_HANDLE);
+    const adapter = new TodoistMirrorAdapter(transport, 'P1');
     const vault = new TodoVault(todoTask(PARENT_STEM), [
       connection('todoist-main', 'todoist', 'P1'),
     ]);
@@ -360,8 +360,8 @@ describe('SUB-3 — the parent relation is identity, not text', () => {
   });
 
   it('reports a delta when the origin and the mirror name a different parent', async () => {
-    const transport = new RecordingTaskManagerTransport(OTHER_HANDLE);
-    const adapter = new TaskManagerMirrorAdapter(transport, 'P1');
+    const transport = new RecordingTodoistTransport(OTHER_HANDLE);
+    const adapter = new TodoistMirrorAdapter(transport, 'P1');
     const vault = new TodoVault(todoTask(PARENT_STEM), [
       connection('todoist-main', 'todoist', 'P1'),
     ]);

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CodeHostMirrorAdapter } from '../../../src/infrastructure/github/CodeHostMirrorAdapter.js';
-import type { CodeHostTransport } from '../../../src/infrastructure/github/CodeHostTransport.js';
+import { GithubMirrorAdapter } from '../../../src/infrastructure/github/GithubMirrorAdapter.js';
+import type { GithubTransport } from '../../../src/infrastructure/github/GithubTransport.js';
 
 const REPO_URL = 'https://github.com/acme/widgets';
 
-class FakeTransport implements CodeHostTransport {
+class FakeTransport implements GithubTransport {
   readonly bodies: string[] = [];
   private readonly routes: Array<[string, unknown]>;
 
@@ -62,7 +62,7 @@ const linkBoard = {
   linkProjectV2ToRepository: { repository: { id: 'R_1' } },
 };
 
-describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
+describe('GithubMirrorAdapter — resolveOrCreateProject', () => {
   it('creates a board under the repo, named for the project, when the target carries one and none exists', async () => {
     const transport = new FakeTransport([
       ['RepoBoards', repoBoards([])],
@@ -74,7 +74,7 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       ['ProjectFields', fieldsFor('PVT_new')],
     ]);
 
-    const addressing = await new CodeHostMirrorAdapter(
+    const addressing = await new GithubMirrorAdapter(
       transport,
     ).resolveOrCreateProject(REPO_URL, 'widgets', ['Todo', 'Done']);
 
@@ -93,7 +93,7 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       ['ProjectFields', fieldsFor('PVT_1')],
     ]);
 
-    const addressing = await new CodeHostMirrorAdapter(
+    const addressing = await new GithubMirrorAdapter(
       transport,
     ).resolveOrCreateProject(REPO_URL, 'widgets', ['Todo']);
 
@@ -115,7 +115,7 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       ['ProjectFields', fieldsFor('PVT_new')],
     ]);
 
-    const addressing = await new CodeHostMirrorAdapter(
+    const addressing = await new GithubMirrorAdapter(
       transport,
     ).resolveOrCreateProject('', 'widgets', ['Todo']);
 
@@ -129,7 +129,7 @@ describe('CodeHostMirrorAdapter — resolveOrCreateProject', () => {
       ['RepoNodeId', { repository: null }],
     ]);
 
-    const addressing = await new CodeHostMirrorAdapter(
+    const addressing = await new GithubMirrorAdapter(
       transport,
     ).resolveOrCreateProject('', 'widgets', ['Todo']);
 
