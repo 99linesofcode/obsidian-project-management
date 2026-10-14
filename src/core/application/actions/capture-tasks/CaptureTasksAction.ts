@@ -130,12 +130,15 @@ export class CaptureTasksAction {
       try {
         const note = matches[0];
         if (note === undefined) {
-          await this.adopt({
-            task,
-            slug: connection.slug,
-            projectName: project,
-            syncedAt,
-          });
+          await this.adopt(
+            {
+              task,
+              slug: connection.slug,
+              projectName: project,
+              syncedAt,
+            },
+            adapter.taskHandlesAreUrls?.() ?? false,
+          );
           linkCandidates.invalidate();
         } else if (
           (await this.registry.resolveMirrorHandle(
@@ -175,11 +178,14 @@ export class CaptureTasksAction {
     return candidates;
   }
 
-  private async adopt(input: AdoptTaskInput): Promise<void> {
+  private async adopt(
+    input: AdoptTaskInput,
+    handlesAreUrls: boolean,
+  ): Promise<void> {
     if (input.task.handle === '') {
       throw new Error('cannot adopt a task with an empty handle');
     }
-    if (isCodeHostHandle(input.task.handle)) {
+    if (handlesAreUrls) {
       await this.adoptCodeHostTask(input);
       return;
     }
@@ -220,13 +226,6 @@ export class CaptureTasksAction {
       { entityId: id },
     );
   }
-}
-
-// A captured task's handle decides the adoption shape: a code host's issue is
-// addressed by its url and becomes a task note; a task manager's item carries
-// an opaque id and becomes a draft note.
-function isCodeHostHandle(handle: string): boolean {
-  return handle.startsWith('http://') || handle.startsWith('https://');
 }
 
 // The kind a task-manager capture carries: its explicit type label when it has

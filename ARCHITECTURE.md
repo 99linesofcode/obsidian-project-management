@@ -139,7 +139,12 @@ sequenceDiagram
   alt project folder gone
     Life->>M: delete the remote project on every connection
   else
-    Life->>M: resolve mirror project, merge archived, fan out
+    Life->>M: resolve each connection's mirror project
+    alt remote project absent
+      Life->>Life: leave the connection unoriginated
+    else
+      Life->>M: merge archived, fan out
+    end
   end
   SP->>Lock: invoke({ project, frozen, wasFrozen })
   SP->>SP: renames, cascade, checklist, mirror to-do
@@ -181,7 +186,8 @@ its own module; the composition root wires it.
   fact's decisive time), `fieldTime?` (trustworthy per-field timestamps),
   `fetchComplete?` (verified-complete fetch), `materializesTodo?` (whether a
   `type:todo` becomes a standalone item — a code host does not, a task manager
-  does) and `lockTask?`/`unlockTask?`
+  does), `taskHandlesAreUrls?` (whether a captured task's handle is a url the
+  note carries or an opaque id) and `lockTask?`/`unlockTask?`
   (task locking).
   A caller checks presence
   (`adapter.lockTask !== undefined`), never a capability string or a null-gated
@@ -354,10 +360,11 @@ canonical DTOs and the pure core.
   it, recording the handle on the existing note and writing no note; no match →
   the task is adopted as a new note; more than one match → nothing is written
   and the task is logged, so neither a duplicate nor a wrong link is made and the
-  task is retried next pass. The action routes by the captured task's handle — a
-  url-addressed issue through `CreateTaskNoteAction`, an id-addressed
-  task-manager item rendered by `CapturedTaskNoteMapper` and written through
-  `VaultPort` + `RegistryPort`. A captured task-manager task carries a kind: an
+  task is retried next pass. The adoption shape follows the adapter's
+  declaration (`MirrorPort.taskHandlesAreUrls?`) — a url handle is routed
+  through `CreateTaskNoteAction`, an opaque id is rendered by
+  `CapturedTaskNoteMapper` and written through `VaultPort` + `RegistryPort`. A
+  captured task-manager task carries a kind: an
   explicit type label is kept, and an unlabelled one takes the kind its position
   implies — a root item is a `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps

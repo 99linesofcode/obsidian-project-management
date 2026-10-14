@@ -126,10 +126,18 @@ function connection(
   return new ConnectionDataTransferObject({ slug, application, target });
 }
 
-function registered(capture: {
-  capture: (target: string) => Promise<CanonicalTask[]>;
-}): MirrorPort {
-  return capture as unknown as MirrorPort;
+function registered(
+  capture: {
+    capture: (target: string) => Promise<CanonicalTask[]>;
+  },
+  taskHandlesAreUrls: boolean | undefined = undefined,
+): MirrorPort {
+  return {
+    ...capture,
+    ...(taskHandlesAreUrls === undefined
+      ? {}
+      : { taskHandlesAreUrls: () => taskHandlesAreUrls }),
+  } as unknown as MirrorPort;
 }
 
 function harness(
@@ -464,12 +472,15 @@ describe('the captured task decides the adoption shape', () => {
     const syncState = new FakeSyncState();
     const factory: MirrorAdapterFactoryPort = {
       create: (application) =>
-        registered({
-          capture: async () =>
-            application === 'github'
-              ? [labelledTask(url, 'Issue task', ['type:task'])]
-              : [task('td-1')],
-        }),
+        registered(
+          {
+            capture: async () =>
+              application === 'github'
+                ? [labelledTask(url, 'Issue task', ['type:task'])]
+                : [task('td-1')],
+          },
+          application === 'github',
+        ),
     };
     const action = new CaptureTasksAction(
       vault,

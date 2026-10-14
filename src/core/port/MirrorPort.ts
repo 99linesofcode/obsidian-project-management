@@ -52,6 +52,13 @@ export interface MirrorPort {
   // materializing todos.
   materializesTodo?(): boolean;
 
+  // The core's need: whether a captured task's handle is a url the note can
+  // carry, or an opaque id. A code host's handle is the issue's url, so an
+  // adopted capture becomes a task note carrying it; a task manager's handle is
+  // an opaque id, so the capture becomes a draft note. An adapter that omits the
+  // method is treated as a task manager — the handle is an opaque id.
+  taskHandlesAreUrls?(): boolean;
+
   // The core's need: read a mirror field's decisive time. Providing this method
   // asserts the times it returns are trustworthy; an adapter whose per-field
   // times are not decisive (or that cannot report one) omits it.

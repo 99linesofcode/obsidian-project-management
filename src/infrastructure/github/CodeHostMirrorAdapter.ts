@@ -760,6 +760,10 @@ export class CodeHostMirrorAdapter implements MirrorPort {
     return false;
   }
 
+  taskHandlesAreUrls(): boolean {
+    return true;
+  }
+
   fetchComplete(): boolean {
     return true;
   }

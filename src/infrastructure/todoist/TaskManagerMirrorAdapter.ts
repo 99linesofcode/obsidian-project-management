@@ -263,6 +263,10 @@ export class TaskManagerMirrorAdapter implements MirrorPort {
     return true;
   }
 
+  taskHandlesAreUrls(): boolean {
+    return false;
+  }
+
   fetchComplete(): boolean {
     return true;
   }

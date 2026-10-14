@@ -90,10 +90,18 @@ function task(handle: string, title: string): CanonicalTask {
   });
 }
 
-function registered(capture: {
-  capture: (target: string) => Promise<CanonicalTask[]>;
-}): MirrorPort {
-  return capture as unknown as MirrorPort;
+function registered(
+  capture: {
+    capture: (target: string) => Promise<CanonicalTask[]>;
+  },
+  taskHandlesAreUrls: boolean | undefined = undefined,
+): MirrorPort {
+  return {
+    ...capture,
+    ...(taskHandlesAreUrls === undefined
+      ? {}
+      : { taskHandlesAreUrls: () => taskHandlesAreUrls }),
+  } as unknown as MirrorPort;
 }
 
 function homeNote(connections: string): string {
@@ -129,7 +137,8 @@ function harness(
   });
   const createTaskNote = new CreateTaskNoteAction(port, syncState, '');
   const factory: MirrorAdapterFactoryPort = {
-    create: () => registered({ capture: async () => tasks }),
+    create: (application) =>
+      registered({ capture: async () => tasks }, application === 'github'),
   };
   return {
     action: new CaptureTasksAction(
