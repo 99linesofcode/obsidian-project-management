@@ -80,10 +80,20 @@ export class MirrorSyncAction {
 
     const outcomes: MirrorFieldOutcome[] = [];
     for (const notePath of notePaths) {
-      const mirrors = await this.resolveMirrors(scoped, notePath, project);
-      for (const field of MERGED_FIELDS) {
-        outcomes.push(await this.syncField(notePath, field, mirrors, project));
-      }
+      outcomes.push(...(await this.syncEntity(notePath, scoped, project)));
+    }
+    return outcomes;
+  }
+
+  private async syncEntity(
+    notePath: string,
+    scoped: readonly ScopedMirror[],
+    project: string,
+  ): Promise<MirrorFieldOutcome[]> {
+    const mirrors = await this.resolveMirrors(scoped, notePath, project);
+    const outcomes: MirrorFieldOutcome[] = [];
+    for (const field of MERGED_FIELDS) {
+      outcomes.push(await this.syncField(notePath, field, mirrors, project));
     }
     return outcomes;
   }

@@ -516,6 +516,19 @@ export class GithubMirrorAdapter implements MirrorPort {
     await this.graphql(LINK_BOARD_MUTATION, { projectId, repositoryId });
   }
 
+  private addressing(
+    projectHandle: string,
+    status: StatusField,
+    effectiveTarget: string,
+  ): ProjectAddressing {
+    return new ProjectAddressing({
+      projectHandle,
+      statusFieldHandle: status.id,
+      statusOptions: status.options,
+      effectiveTarget,
+    });
+  }
+
   async setArchived(target: string, archived: boolean): Promise<void> {
     const connection = GithubTarget.parse(target);
     const board = await this.requireBoard(connection.target);
@@ -581,24 +594,14 @@ export class GithubMirrorAdapter implements MirrorPort {
     if (existing !== null) {
       await this.linkBoard(existing, repositoryId);
       const status = await this.ensureStatusField(existing, statusOptions);
-      return new ProjectAddressing({
-        projectHandle: existing,
-        statusFieldHandle: status.id,
-        statusOptions: status.options,
-        effectiveTarget: repoUrl,
-      });
+      return this.addressing(existing, status, repoUrl);
     }
     const { projectId, status } = await this.provisionBoard(
       name,
       repositoryId,
       statusOptions,
     );
-    return new ProjectAddressing({
-      projectHandle: projectId,
-      statusFieldHandle: status.id,
-      statusOptions: status.options,
-      effectiveTarget: repoUrl,
-    });
+    return this.addressing(projectId, status, repoUrl);
   }
 
   // An empty connection target names the remote project by the vault project's

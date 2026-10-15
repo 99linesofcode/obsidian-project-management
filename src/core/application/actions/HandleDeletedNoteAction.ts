@@ -1,15 +1,12 @@
 import { CanonicalFieldWrite } from '../../port/data/CanonicalFieldWrite.js';
+import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
   projectName: string;
-  connections: ReadonlyArray<{
-    slug: string;
-    application: string;
-    target: string;
-  }>;
+  connections: readonly ConnectionDataTransferObject[];
 }
 
 // Tracks a deleted vault note as a change: records a tombstone for every mirror
