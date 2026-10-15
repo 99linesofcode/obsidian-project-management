@@ -93,62 +93,76 @@ export class SyncChecklistAction {
     let relinked = false;
 
     for (const item of items) {
-      if (item.linkPath === undefined) {
-        continue;
-      }
-      const note = await this.vault.getNoteByPath(item.linkPath);
-
-      if (!note) {
-        const existing = await this.findTodoForMissingLink(
-          input,
-          item,
-          item.linkPath,
-        );
-        if (existing !== null) {
-          item.linkPath = existing;
-          relinked = true;
-          continue;
-        }
-        const path = await this.createTodo(
-          input,
-          item,
-          item.linkPath,
-          template,
-          taskLink,
-        );
-        if (path !== item.linkPath) {
-          item.linkPath = path;
-          relinked = true;
-        }
-        continue;
-      }
-
-      const parsed = ToDoNoteParser.parse(note.content);
-      if (!parsed) {
-        continue;
-      }
-
-      if (isDrifted(slugify(item.text), stemOf(item.linkPath))) {
-        const newPath = await freePath(
-          this.vault,
-          todoPath(input.projectName, item.text),
-        );
-        await this.vault.renameNote(item.linkPath, newPath);
-        item.linkPath = newPath;
+      if (await this.mirrorLinkedItem(input, taskLink, template, item)) {
         relinked = true;
       }
+    }
 
-      if (item.checked && parsed.status !== 'completed') {
-        await this.vault.writeNote(
-          item.linkPath,
-          withToDoStatus(note.content, 'completed', input.syncedAt),
-        );
-      } else if (!item.checked && parsed.status === 'completed') {
-        await this.vault.writeNote(
-          item.linkPath,
-          withToDoStatus(note.content, 'open', null),
-        );
+    return relinked;
+  }
+
+  private async mirrorLinkedItem(
+    input: SyncChecklistInput,
+    taskLink: string,
+    template: string | null,
+    item: ChecklistItem,
+  ): Promise<boolean> {
+    if (item.linkPath === undefined) {
+      return false;
+    }
+
+    const note = await this.vault.getNoteByPath(item.linkPath);
+
+    if (!note) {
+      const existing = await this.findTodoForMissingLink(
+        input,
+        item,
+        item.linkPath,
+      );
+      if (existing !== null) {
+        item.linkPath = existing;
+        return true;
       }
+      const path = await this.createTodo(
+        input,
+        item,
+        item.linkPath,
+        template,
+        taskLink,
+      );
+      if (path !== item.linkPath) {
+        item.linkPath = path;
+        return true;
+      }
+      return false;
+    }
+
+    const parsed = ToDoNoteParser.parse(note.content);
+    if (!parsed) {
+      return false;
+    }
+
+    let relinked = false;
+    if (isDrifted(slugify(item.text), stemOf(item.linkPath))) {
+      const newPath = await freePath(
+        this.vault,
+        todoPath(input.projectName, item.text),
+      );
+      await this.vault.renameNote(item.linkPath, newPath);
+      item.linkPath = newPath;
+      relinked = true;
+    }
+
+    if (item.checked && parsed.status !== 'completed') {
+      await this.vault.writeNote(
+        item.linkPath,
+        withToDoStatus(note.content, 'completed', input.syncedAt),
+      );
+    } else if (!item.checked && parsed.status === 'completed') {
+      await this.vault.writeNote(
+        item.linkPath,
+        withToDoStatus(note.content, 'open', null),
+      );
     }
 
     return relinked;
