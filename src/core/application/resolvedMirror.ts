@@ -1,4 +1,4 @@
-import type { MirrorPort } from '../../port/MirrorPort.js';
+import type { MirrorPort } from '../port/MirrorPort.js';
 
 export interface ResolvedMirror {
   slug: string;
