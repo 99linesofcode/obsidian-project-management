@@ -36,7 +36,7 @@ obsidian-project-management/
 │   │   └── port/        # the collaborator and factory ports
 │   ├── infrastructure/  # driven adapters, one namespace per vendor:
 │   │                    # vault/ (the single VaultAdapter + note codecs),
-│   │                    # github/ (mirror adapter + transport),
+│   │                    # github/ (mirror adapter, transport, wire vocabulary),
 │   │                    # todoist/ (mirror adapter + transport),
 │   │                    # registry/ (the data.json-backed registry),
 │   │                    # fake/ (in-memory conformance test double)
@@ -424,7 +424,9 @@ canonical DTOs and the pure core.
   itself**, so capture has nothing left to re-adopt. It reports
   `materializesTodo` false: a `type:todo` is untracked here — its parent's body
   carries the checklist line. The composition root
-  registers it under the application id `github`.
+  registers it under the application id `github`. Its GraphQL documents
+  (`githubDocuments`), wire shapes and parsers (`githubWire`) and issue-to-task
+  mapper (`githubTaskMapper`) are lowercase modules beside it.
 - **The Todoist mirror adapter** (`infrastructure/todoist/`) implements the
   `MirrorPort` surface for the task manager: title as the task content, body as
   the task description, Status as the project section, completion as the task's
@@ -436,7 +438,7 @@ canonical DTOs and the pure core.
 - **The registry adapter** (`infrastructure/registry/`) persists the core's
   memory in `data.json`: `SyncStateAdapter` (the `syncState` container and the
   `coreBaselines` store), with the pure codecs (`coreStorageRecord`,
-  `syncStateSchema`, `loadDataSafely`) beside it.
+  `syncStateSchema`, `syncStateIndex`, `loadDataSafely`) beside it.
 - **The vault adapter** (`infrastructure/vault/`) implements `VaultPort`:
   `VaultAdapter`, with the pure note codecs (`connectionsOf`,
   `parseConnectionsBlock`, the task-note codec) beside
