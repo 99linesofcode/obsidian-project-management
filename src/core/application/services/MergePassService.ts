@@ -33,10 +33,6 @@ export interface MergeSides {
   observations: readonly SideObservation[];
 }
 
-// The variable half of a merge pass — how a side is observed, how the reconciled
-// verdict reaches the mirrors, how it reaches the origin, and the baseline the
-// advanced sides record. Each action brings its own; the driver owns everything
-// between them.
 export interface MergePlan {
   observeSide(
     mirror: ResolvedMirror,
@@ -54,13 +50,6 @@ export interface MergePassOutcome {
   failed: readonly string[];
 }
 
-// The spine both merge actions run: scope a declared connection to its effective
-// target and adapter, read every side's baseline, observe the sides, merge the
-// one field through the ladder, fan the verdict out, apply it to the origin, and
-// persist each advanced side's baseline. The action supplies the variable half —
-// the observation, the fan-out, the origin write and the baseline it records —
-// so the field merge and the archive merge are each their own merge over this
-// driver.
 export class MergePassService {
   constructor(
     private readonly registry: RegistryPort,

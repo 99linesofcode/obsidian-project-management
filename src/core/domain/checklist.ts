@@ -1,8 +1,5 @@
 import type { ChecklistItem } from './ChecklistItem.js';
 
-// The markdown checklist core: parse and render the task-list lines of a note
-// body. Pure, no I/O. WHY it lives in the core: it is neutral note arithmetic
-// the vault must not own; note-facing callers import it from here.
 interface ClassifiedLine {
   line: string;
   item: ChecklistItem | null;
@@ -12,17 +9,12 @@ const CHECKLIST_LINE = /^([ \t]*)- \[([ xX])\](?: (.*))?$/;
 const WIKILINK = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/;
 const FENCE = /^\s*(`{3,}|~{3,})/;
 
-// Parses a markdown body into its checklist items, in document order. Lines
-// inside fenced code blocks and non-checklist lines are not items; the
-// renderers below preserve them verbatim.
 export function parseChecklist(body: string): ChecklistItem[] {
   return classifyLines(body)
     .map((entry) => entry.item)
     .filter((item): item is ChecklistItem => item !== null);
 }
 
-// Re-renders the body, replacing each checklist line with the matching item in
-// order. Every other line — including fenced code — is preserved verbatim.
 export function renderChecklist(body: string, items: ChecklistItem[]): string {
   const out: string[] = [];
   let index = 0;
@@ -40,8 +32,6 @@ export function renderChecklist(body: string, items: ChecklistItem[]): string {
   return [...out, ...items.slice(index).map(renderItem)].join('\n');
 }
 
-// Splits the body into lines, pairing each checklist line with its parsed item.
-// Fence state is tracked here so no function below parses fenced content.
 function classifyLines(body: string): ClassifiedLine[] {
   const classified: ClassifiedLine[] = [];
   let fence: string | null = null;
@@ -89,8 +79,6 @@ function parseChecklistLine(line: string): ChecklistItem | null {
   return item;
 }
 
-// A wikilink's display becomes the item text; the path becomes its linkPath.
-// Text around the link is kept, with the link replaced by its display.
 function extractWikilink(
   text: string,
 ): { text: string; linkPath: string } | null {
@@ -107,7 +95,6 @@ function extractWikilink(
   return { text: stripped, linkPath };
 }
 
-// One level per two columns; a tab counts as two columns.
 function indentDepth(indent: string): number {
   let columns = 0;
   for (const char of indent) {

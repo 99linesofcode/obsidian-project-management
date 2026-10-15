@@ -34,10 +34,6 @@ const MERGED_FIELDS: readonly CanonicalField[] = [
   'label',
 ];
 
-// The value space a field's canonical value lives in, per side. Most fields
-// carry the same raw value everywhere; `subtasks` carries the parent's
-// identity, which each side renders in its own space — the origin a wikilink
-// stem, the mirror a handle.
 interface FieldCodec {
   originCurrent(raw: string | null): Promise<string | null>;
   mirrorCurrent(slug: string, raw: string | null): Promise<string | null>;
@@ -60,10 +56,6 @@ export interface MirrorFieldOutcome {
   failed: readonly string[];
 }
 
-// Reconciles every task field of a project's entities across the vault origin
-// and each connection's mirror: resolves each connection's handle, merges the
-// canonical fields through the ladder, writes the winner to the side that is
-// behind, and advances each side's baseline only after its write resolved.
 export class MirrorSyncAction {
   private readonly mergePass: MergePassService;
 
@@ -297,9 +289,6 @@ export class MirrorSyncAction {
     };
   }
 
-  // The `subtasks` codec: the canonical value is the parent's identity — its
-  // note path — so the origin's wikilink stem and the mirror's handle, two
-  // renderings of one relation, are compared and settled by identity.
   private parentCodec(project: string): FieldCodec {
     return {
       originCurrent: (raw) => this.originParentIdentity(project, raw),

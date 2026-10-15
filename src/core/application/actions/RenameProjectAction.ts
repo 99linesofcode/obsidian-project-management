@@ -18,13 +18,6 @@ export interface RenameProjectInput {
   connections: readonly ConnectionDataTransferObject[];
 }
 
-// Reconciles a project note's declared name with the name the registry recorded
-// (the recorded key) and with the folder it sits in. A note with no `project`
-// property adopts the folder segment once. When the property differs from the
-// recorded key the project is renamed — the home note and the rest of the
-// folder within the project's current root — and the registry's project node is
-// re-keyed to the new name. When the property equals the recorded key but the
-// folder differs, the folder is renamed back and reported.
 export class RenameProjectAction {
   constructor(
     private readonly vault: VaultPort,

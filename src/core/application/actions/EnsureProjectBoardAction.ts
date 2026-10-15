@@ -9,12 +9,6 @@ export interface EnsureProjectBoardInput {
   setup: ProjectSetupSurface;
 }
 
-// A declared connection resolves-or-creates its remote project by name (or the
-// connection's explicit target) and records its addressing. The action always
-// resolves: the adapter decides whether the remote project still exists (adopt
-// it) or is gone (re-create it), so a removed remote is rebuilt. A null
-// addressing means the remote cannot be originated (a code host with no
-// repository to resolve); the connection is left unoriginated.
 export class EnsureProjectBoardAction {
   constructor(
     private readonly syncState: RegistryPort,

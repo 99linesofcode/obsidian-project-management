@@ -35,9 +35,6 @@ export interface SyncProjectDependencies {
   ensureProjectBoard?: EnsureProjectBoardAction | undefined;
 }
 
-// The pass for one project: it drives the vault-maintenance steps and the
-// reconciliation actions in order, isolating each step's failure so one broken
-// step never starves the rest.
 export class SyncProjectAction {
   private stepErrors: unknown[] = [];
 

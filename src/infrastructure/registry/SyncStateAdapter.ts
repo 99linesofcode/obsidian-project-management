@@ -374,9 +374,7 @@ export class SyncStateAdapter implements RegistryPort {
     this.lastBackupAt = now;
     try {
       await this.storage.backup?.();
-    } catch {
-      // Best-effort: a failed backup must never block a registry write.
-    }
+    } catch {}
   }
 
   async getEntity(id: string): Promise<EntityRecord | null> {
@@ -948,8 +946,6 @@ export class SyncStateAdapter implements RegistryPort {
   private mapIdentity(
     raw: Record<string, unknown>,
   ): ProjectIdentityDataTransferObject {
-    // The stored keys are neutral now; the old provider-shaped keys are read as
-    // a fallback so registries written before the rename still load.
     const text = (...candidates: unknown[]): string =>
       candidates.find((value): value is string => typeof value === 'string') ??
       '';
@@ -1013,9 +1009,6 @@ function moveProjectBaseline(
   delete baselines[fromProject];
 }
 
-// A registry written before the archive field was named `archived` stored its
-// project archive baselines under the old `lifecycle` key; read them as a
-// fallback so an upgrade does not reset a settled archive.
 function readBaselineEntry(
   data: Record<string, unknown>,
   entityId: string,

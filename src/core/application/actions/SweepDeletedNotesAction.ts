@@ -9,10 +9,6 @@ export interface SweepDeletedNotesInput {
   connections: readonly ConnectionDataTransferObject[];
 }
 
-// The deletion sweep: a tracked note whose file is gone (and is not under
-// `Archief/`) is a change — its tombstone is recorded and the delete is handed
-// to the deletion handler. Once every connection's mirror has settled, the
-// tombstone and the registry record are pruned. One failure logs and continues.
 export class SweepDeletedNotesAction {
   constructor(
     private readonly vault: VaultPort,

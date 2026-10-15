@@ -495,8 +495,6 @@ export class GithubMirrorAdapter implements MirrorPort {
     });
   }
 
-  // Find-or-create the board titled with the project name, link it to the repo,
-  // and ensure its Status field — the one board-provisioning ladder.
   private async provisionBoard(
     name: string,
     repositoryId: string,
@@ -604,9 +602,6 @@ export class GithubMirrorAdapter implements MirrorPort {
     return this.addressing(projectId, status, repoUrl);
   }
 
-  // An empty connection target names the remote project by the vault project's
-  // name alone (ORG-2): the repository is the one of that name under the
-  // authenticated user. The plugin never creates a repository.
   private async viewerRepoUrl(name: string): Promise<string> {
     const owner = await this.viewerLogin();
     return `https://github.com/${owner}/${name}`;
