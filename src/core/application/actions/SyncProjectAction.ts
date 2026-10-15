@@ -50,7 +50,7 @@ export class SyncProjectAction {
     }
 
     await this.migrate(project, note);
-    await this.renameProject(project, note);
+    await this.reconcileProjectName(project, note);
     await this.rekey(project, note.connections);
     await this.ensureBoards(project, note);
 
@@ -90,7 +90,7 @@ export class SyncProjectAction {
     );
   }
 
-  private async renameProject(
+  private async reconcileProjectName(
     project: string,
     note: ProjectNoteDataTransferObject,
   ): Promise<void> {
