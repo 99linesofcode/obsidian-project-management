@@ -30,10 +30,6 @@ export interface ProjectLifecycleOutcome {
   failed: readonly string[];
 }
 
-// Reconciles a project's archived state across the vault origin and N mirrors:
-// reads each connection's already-originated mirror project, merges the archive
-// fact through the ladder, fans the verdict out to every side, and locks or
-// unlocks the tracked issues that the archive transition calls for.
 export class ProjectLifecycleSyncAction {
   private readonly mergePass: MergePassService;
 

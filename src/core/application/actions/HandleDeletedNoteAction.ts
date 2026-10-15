@@ -9,10 +9,6 @@ export interface HandleDeletedNoteInput {
   connections: readonly ConnectionDataTransferObject[];
 }
 
-// Tracks a deleted vault note as a change: records a tombstone for every mirror
-// handle the note still owed a delete to, fans the delete out to each
-// connection, and keeps the registry record — the tombstone and the record are
-// pruned once every side has settled.
 export class HandleDeletedNoteAction {
   constructor(
     private readonly syncState: RegistryPort,
@@ -69,8 +65,6 @@ export class HandleDeletedNoteAction {
       return;
     }
 
-    // Completion precedes the delete: the item is gone afterwards, so a
-    // completion write against it would fail and the delete would never settle.
     await adapter.applyField(
       new CanonicalFieldWrite({
         handle,

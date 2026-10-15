@@ -10,11 +10,6 @@ export interface MirrorTodoStatusInput {
   syncedAt: string;
 }
 
-// UC: when a to-do note changes, its parent task note's checkbox follows. The
-// project and task come from the to-do's path and affiliation; the checklist
-// line is located by its link path. Like the checklist sync, it settles: once
-// both sides agree there is nothing to write, so the two directions converge
-// instead of ping-ponging.
 export class MirrorTodoStatusAction {
   constructor(private readonly vault: VaultPort) {}
 

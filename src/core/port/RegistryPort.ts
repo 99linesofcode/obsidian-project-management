@@ -6,12 +6,6 @@ import type { PortState } from './data/PortState.js';
 import type { ProjectIdentityDataTransferObject } from './data/ProjectIdentityDataTransferObject.js';
 import type { TombstoneRecord } from './data/TombstoneRecord.js';
 
-// The registry as the core's sync state: the tracked entities and their mirror
-// items, the note-path↔handle and mirror-project mappings, the per-connection
-// identity and port bookkeeping, and the side baselines. One collaborator, one
-// surface of registry primitives — the handle and mirror-project resolution
-// compose the raw registry reads here, never in a use case, and the adapter
-// starts no use case.
 export interface RegistryPort {
   getEntity(id: string): Promise<EntityRecord | null>;
   findByNotePath(notePath: string): Promise<EntityRecord | null>;
@@ -19,23 +13,10 @@ export interface RegistryPort {
   removeEntity(id: string): Promise<void>;
   listEntities(projectName: string): Promise<EntityRecord[]>;
 
-  // The core's need: a project rename re-keys the project node and its
-  // per-connection state (identities, baselines) rather than relocating them,
-  // so the registry keeps the project under the name the note now declares.
   rekeyProject(fromProject: string, toProject: string): Promise<void>;
-  // The core's need: telling a property edit from a folder renamed directly
-  // asks whether the registry already files the project under the declared
-  // name.
   hasProject(projectName: string): Promise<boolean>;
-  // The core's need: the recorded key — the name the plugin last knew — may be
-  // neither the declared property nor the current folder after a half-finished
-  // rename, so the rename finds it by the project's connections.
   listProjects(): Promise<string[]>;
 
-  // The core's need: track a deleted note as a change — the entity's absence
-  // with its delete time and the mirror handle it still owes a delete to. A
-  // tombstone stops capture re-adopting the handle, and removing the entity
-  // prunes the tombstones that belong to it.
   recordTombstone(record: TombstoneRecord): Promise<void>;
   findTombstoneByNotePath(notePath: string): Promise<TombstoneRecord | null>;
   findTombstone(handle: string): Promise<TombstoneRecord | null>;
@@ -63,10 +44,6 @@ export interface RegistryPort {
     connectionSlug: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>>;
 
-  // The core's need: map a vault entity to the handle its mirror item carries,
-  // remember a handle once the mirror item exists, and enumerate the handles a
-  // connection already holds for a project. The core never sees a provider's
-  // identifier shape — the adapter owns that.
   resolveMirrorHandle(
     connection: string,
     notePath: string,
@@ -75,9 +52,6 @@ export interface RegistryPort {
     project: string,
     connection: string,
   ): Promise<readonly { handle: string; notePath: string }[]>;
-  // Records the handle for the entity, replacing any handle already recorded
-  // for it on this connection. A placeholder recorded before creation is
-  // replaced by the real handle once the mirror item exists.
   recordMirrorHandle(
     project: string,
     connection: string,
@@ -85,9 +59,6 @@ export interface RegistryPort {
     handle: string,
   ): Promise<void>;
 
-  // The core's need to resolve and record the handle a connection's
-  // application uses for the mirror project — the project-level peer of the
-  // mirror-handle mapping. Designed for the core, not the provider's API.
   resolveMirrorProject(
     project: string,
     connection: string,

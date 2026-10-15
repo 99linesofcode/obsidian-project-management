@@ -1,5 +1,3 @@
-// Splits a note into its YAML frontmatter (as a flat key/value map) and body.
-// Returns null when the note has no frontmatter block.
 export interface SplitFrontmatter {
   fields: Map<string, string>;
   body: string;
@@ -25,9 +23,6 @@ export function splitFrontmatter(content: string): SplitFrontmatter | null {
   return { fields, body: lines.slice(i + 1).join('\n') };
 }
 
-// Whether the frontmatter block declares the named key at its top level. The
-// flat splitter trims indentation, so a connection's nested `project:` reads as
-// top-level there; this scans the block's raw lines instead.
 export function hasTopLevelFrontmatterField(
   content: string,
   key: string,
@@ -48,8 +43,6 @@ export function hasTopLevelFrontmatterField(
   return false;
 }
 
-// Replaces a note's body, keeping its frontmatter block verbatim. A note with
-// no frontmatter block is replaced entirely by the new body.
 export function withBody(content: string, body: string): string {
   const lines = content.split('\n');
   if (lines[0] !== '---') {
@@ -62,9 +55,6 @@ export function withBody(content: string, body: string): string {
   return [...lines.slice(0, closing + 1), ...body.split('\n')].join('\n');
 }
 
-// Fills sync-owned fields into a frontmatter block: a field the block declares
-// (even empty) gets its value in place; a missing one is appended before the
-// closing delimiter. The values' insertion order is the append order.
 export function fillFrontmatterFields(
   lines: string[],
   values: Map<string, string>,
@@ -88,16 +78,10 @@ export function fillFrontmatterFields(
   return filled;
 }
 
-// An empty value renders as a bare key — the field is present but null.
 function frontmatterLine(key: string, value: string): string {
   return value === '' ? `${key}:` : `${key}: ${value}`;
 }
 
-// Rewrites the named frontmatter fields in place, preserving the body and every
-// other field. A null value renders as a bare key. A field the block does not
-// declare is left absent unless appendMissing is set, in which case it is
-// appended before the closing delimiter. A note with no frontmatter block is
-// returned unchanged.
 export function rewriteFrontmatterFields(
   content: string,
   values: Map<string, string | null>,
@@ -140,7 +124,6 @@ export function rewriteFrontmatterFields(
   return lines.join('\n');
 }
 
-// Resolves a template's {{date}}/{{time}} placeholders to the sync stamp.
 export function replaceTimestampPlaceholders(
   template: string,
   syncedAt: string,
@@ -150,12 +133,6 @@ export function replaceTimestampPlaceholders(
     .replaceAll('{{time}}', syncedAt.slice(11, 16));
 }
 
-// Sanitises a title into a filename slug: lowercase, spaces to dashes, strip
-// everything outside [a-z0-9-], collapse runs of dashes, trim the ends.
-//
-// WHY this lives in the core: it is a pure string transform the reconciliation
-// arithmetic needs (title comparison is slug-based), and the vault module that
-// owns note naming must not be a dependency of core.
 export function slugify(title: string): string {
   return title
     .toLowerCase()
@@ -165,15 +142,11 @@ export function slugify(title: string): string {
     .replace(/^-|-$/g, '');
 }
 
-// A note's filename stem: its basename without the .md extension.
 export function stemOf(path: string): string {
   const basename = path.split('/').pop() ?? '';
   return basename.replace(/\.md$/, '');
 }
 
-// The comparison stem of a note: its filename stem with a legacy leading
-// `<remoteId>-` ordinal prefix stripped and lowercased. Filenames carry zero
-// identity weight, so the prefix is presentation, not identity.
 export function normalizedStem(path: string): string {
   return stemOf(path).replace(/^\d+-/, '').toLowerCase();
 }
@@ -209,15 +182,18 @@ export function labelsFromSequence(value: string | null): string[] {
   if (trimmed === '') {
     return [];
   }
+  return parsedLabelSequence(trimmed) ?? commaSplit(trimmed);
+}
+
+function parsedLabelSequence(value: string): string[] | null {
   try {
-    const parsed: unknown = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((item): item is string => typeof item === 'string');
-    }
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : null;
   } catch {
-    // The legacy unquoted form is not JSON — fall through to the comma split.
+    return null;
   }
-  return commaSplit(trimmed);
 }
 
 export function labelsFromNote(content: string): string[] {

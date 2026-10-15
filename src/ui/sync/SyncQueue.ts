@@ -38,9 +38,7 @@ export class SyncQueue {
           if (errors.length > 0) {
             this.onErrors?.(project, errors);
           }
-        } catch {
-          // A failed run must not poison the queue: the next item still runs.
-        }
+        } catch {}
       }
     } finally {
       this.draining = false;

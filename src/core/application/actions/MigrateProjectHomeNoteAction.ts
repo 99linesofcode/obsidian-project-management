@@ -7,12 +7,6 @@ export interface MigrateProjectHomeNoteInput {
   locationArchived: boolean;
 }
 
-// Renames a discovered home note to the _<project>.md convention. Guard rails:
-// only a recognised legacy form is touched (`_home.md` or exactly
-// `<project>.md`) — a folder-renamed note whose basename drifted is left
-// alone — and a pre-existing file at the target is never clobbered. Archived
-// projects migrate too, so the note lands under Archief/. Returns the note's
-// path after the migration (unchanged when nothing moved).
 export class MigrateProjectHomeNoteAction {
   constructor(private readonly vault: VaultPort) {}
 
@@ -25,8 +19,6 @@ export class MigrateProjectHomeNoteAction {
     if (basename !== '_home.md' && basename !== `${input.projectName}.md`) {
       return input.notePath;
     }
-    // A pre-existing file at the target belongs to the user; leave both in
-    // place rather than clobbering it.
     if ((await this.vault.getNoteByPath(target)) !== null) {
       return input.notePath;
     }

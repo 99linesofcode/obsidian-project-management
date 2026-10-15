@@ -12,8 +12,6 @@ export interface ParsedToDoNote {
   affiliation: string[];
 }
 
-// Reads a to-do note back into its frontmatter fields. Returns null when the
-// note has no frontmatter or no status — i.e. it is not a to-do note.
 export const ToDoNoteParser = {
   parse(content: string): ParsedToDoNote | null {
     const split = splitFrontmatter(content);
@@ -32,15 +30,10 @@ export const ToDoNoteParser = {
   },
 };
 
-// Whether a note carries the `type:todo` label, in either the flow or the block
-// form.
 export function isToDoNote(content: string): boolean {
   return typeFromLabels(labelsFromNote(content)) === 'todo';
 }
 
-// Rewrites the frontmatter status and completed lines of a to-do note,
-// preserving the body and every other frontmatter field. Mirrors withStatus
-// for task notes. A null stamp empties the completed field.
 export function withToDoStatus(
   content: string,
   status: string,

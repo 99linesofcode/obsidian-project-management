@@ -5,12 +5,6 @@ import type { CanonicalTask } from './data/CanonicalTask.js';
 import type { ConnectionDataTransferObject } from './data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from './data/ProjectNoteDataTransferObject.js';
 
-// The vault as the core's origin: read, write, enumerate and watch notes;
-// observe and write a task note's canonical fields; read a project's declared
-// connections and task-note paths; observe and apply a project's archived
-// state. One collaborator, one surface of vault primitives — the
-// capture-adoption orchestration lives in the action that drives this port,
-// never in the adapter.
 export interface VaultPort {
   getNoteByPath(path: string): Promise<{ content: string } | null>;
   createNote(path: string, content: string): Promise<void>;
@@ -25,8 +19,6 @@ export interface VaultPort {
   onNoteRenamed(cb: (oldPath: string, newPath: string) => void): void;
 
   observe(handle: string, field: CanonicalField): Promise<OriginObservation>;
-  // The core's need: read the whole origin task to create its missing mirror
-  // item. Null when the handle names no task note.
   readTask(handle: string): Promise<CanonicalTask | null>;
   applyField(write: CanonicalFieldWrite): Promise<void>;
 

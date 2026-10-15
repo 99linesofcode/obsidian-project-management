@@ -10,22 +10,6 @@ export interface CompleteTaskCascadeInput {
   syncedAt: string;
 }
 
-// The dt-13 cascade — a task-status change is ONE fact with N vault
-// projections. When the task note's status is the done lane the action:
-//   1. checks the task note's own checklist lines (so the linked to-dos
-//      complete and the checklist sync never reads them as reopened);
-//   2. completes every still-open to-do note the task owns;
-//   3. checks the task's own line in a parent slice's checklist (the marker
-//      representing the task, when the task is nested).
-//
-// Reopen is asymmetric BY DECISION: the parent slice line mirrors the status,
-// but the to-dos are never auto-reopened. The close cascade is a convenience
-// sweep over still-open to-dos; reopen is a deliberate act whose per-to-do
-// scope the user controls, so the asymmetry needs no new state and cannot
-// clobber an independently-completed to-do.
-//
-// Every write is gated: an already-checked line and an already-completed to-do
-// are no-ops, so the cascade settles and the double-sync invariance holds.
 export class CompleteTaskCascadeAction {
   constructor(
     private readonly vault: VaultPort,
@@ -59,13 +43,6 @@ export class CompleteTaskCascadeAction {
     );
   }
 
-  // The task's own checklist lines are the source of truth for its to-dos, so
-  // they follow the status: a done task checks every linked line. The to-do
-  // completion below rides the same fact, and the checklist sync's echo settles
-  // because line and note agree. A reopen leaves the lines alone — the to-dos
-  // stay completed (the asymmetric rule), so unchecking them would be reverted.
-  // Returns the linked to-do paths so the completion below touches exactly the
-  // task's own to-dos (an affiliated-but-unlinked note is not one of them).
   private async checkOwnChecklistLines(
     input: CompleteTaskCascadeInput,
     content: string,
@@ -96,10 +73,6 @@ export class CompleteTaskCascadeAction {
     return linked;
   }
 
-  // Every linked to-do that is still open completes; an already-completed one is
-  // left untouched, so a second pass writes nothing. The to-do's task-manager twin is
-  // not touched here — the existing vault -> task-manager projection settles it on
-  // the next chain pass.
   private async completeToDos(
     input: CompleteTaskCascadeInput,
     linked: string[],
@@ -120,10 +93,6 @@ export class CompleteTaskCascadeAction {
     }
   }
 
-  // The task's own line in a parent slice's checklist mirrors the status in
-  // BOTH directions: the line is the task's representation, so it must not
-  // read as done while the task is open. A task with no parent slice (no
-  // affiliation beyond the project) has no line to follow.
   private async mirrorParentSliceLine(
     input: CompleteTaskCascadeInput,
     affiliation: string[],

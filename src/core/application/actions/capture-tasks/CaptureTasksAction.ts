@@ -32,10 +32,6 @@ interface LinkCandidates {
   invalidate(): void;
 }
 
-// The capture-adoption orchestration: for a code-host task it starts
-// `CreateTaskNoteAction`; for a task-manager task it renders the draft note
-// (the pure mapper) and writes it through `VaultPort` + `RegistryPort`.
-// The driven adapters stay raw I/O — no adapter starts a use case.
 export class CaptureTasksAction {
   constructor(
     private readonly vault: VaultPort,
@@ -228,9 +224,6 @@ export class CaptureTasksAction {
   }
 }
 
-// The kind a task-manager capture carries: its explicit type label when it has
-// one, otherwise the kind its position implies — a root item is a slice, a
-// subtask is a task.
 function capturedKind(task: CanonicalTask): string {
   const explicit = typeFromLabels(task.labels);
   if (explicit !== '') {
