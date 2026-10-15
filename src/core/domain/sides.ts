@@ -2,6 +2,8 @@ import type { Baseline } from './Baseline.js';
 import type { OriginObservation } from './OriginObservation.js';
 import { SideObservation } from './SideObservation.js';
 
+export const ORIGIN_SIDE = 'origin';
+
 export function mirrorSideKey(slug: string): string {
   return `mirror:${slug}`;
 }

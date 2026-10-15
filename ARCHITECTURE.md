@@ -59,8 +59,9 @@ timers — belong to `ui/` and make no business decisions. Persistence is owned
 by the registry adapter; nothing else touches `data.json`.
 
 **The core.** `core/` is the module's hexagon. `application/` holds the use
-cases (`actions/`), the application shapes (`data/`) and the connection-validation
-service (`services/`); `domain/` holds the neutral note arithmetic, the merge
+cases (`actions/`), the application shapes (`data/`) and the shared services
+(`services/` — connection validation and the merge-pass driver); `domain/` holds
+the neutral note arithmetic, the merge
 vocabulary (`mergeField` and its shapes — `Delta`, `MergeResult`,
 `SideObservation`, `Baseline`, `OriginObservation`) and the domain error
 (`errors/`); `port/` holds the ports and the canonical DTOs they carry
@@ -129,6 +130,7 @@ sequenceDiagram
   participant Life as ProjectLifecycleSyncAction
   participant Lock as ReconcileProjectTaskLocksAction
   participant TF as MirrorSyncAction
+  participant MP as MergePassService
   participant M as MirrorPort
 
   Sched->>Q: enqueue(project) per project note
@@ -143,7 +145,9 @@ sequenceDiagram
     alt remote project absent
       Life->>Life: leave the connection unoriginated
     else
-      Life->>M: merge archived, fan out
+      Life->>MP: reconcile(archived)
+      MP->>M: observe, fan out
+      MP->>V: apply to the origin
     end
   end
   SP->>Lock: invoke({ project, frozen, wasFrozen })
@@ -151,7 +155,9 @@ sequenceDiagram
   alt not frozen
     SP->>SP: task capture (link on title match, else adopt; kind by label or position)
     SP->>TF: invoke(project)
-    TF->>M: merge each canonical field, fan out
+    TF->>MP: reconcile(each canonical field)
+    MP->>M: observe, fan out
+    MP->>V: apply to the origin
   end
   SP->>SP: deletion sweep (record tombstones, reconcile, prune)
 ```
@@ -268,6 +274,14 @@ canonical DTOs and the pure core.
   completion over a stale open → origin tie-break); delete proof (a
   verified-complete fetch plus a synced baseline); the origin's absence as a
   delete delta; the origin's edit time trusted by default. No I/O, no clocks.
+- **The merge-pass driver** (`MergePassService`). The spine both merge actions
+  run: scope a declared connection to its effective target and adapter, read
+  every side's baseline, observe the sides, merge the one field through the pure
+  ladder, fan the verdict out to the mirrors, apply it to the origin, and persist
+  each advanced side's baseline. The variable half — how a side is observed, how
+  the verdict reaches the mirrors, how it reaches the origin — is the plan the
+  action supplies (`MergePlan`), so the field merge and the archive merge are each
+  their own merge over the shared driver. It reads and writes no provider shape.
 - **The provider table.** The composition root holds one plain `providers`
   table — a value mapping an application id to its mirror factory,
   project-origination surface and token setting. It derives the
@@ -279,8 +293,8 @@ canonical DTOs and the pure core.
 - **The mirror-sync action** (`MirrorSyncAction`). Given a project, it reads each
   declared connection with its slug, builds the connection's mirror adapter
   through the factory (scoped by the connection's target), resolves the entity to
-  that connection's own handle through `RegistryPort`, and runs the pure
-  `mergeField` once per (entity, canonical value field). For each field it
+  that connection's own handle through `RegistryPort`, and runs one merge pass per
+  (entity, canonical value field) through the shared driver. For each field it
   collects the origin side through `VaultPort` and each mirror's observation
   against its own baseline, fans the reconciled value out through the one generic
   write entry, writes the reconciled value back to the origin (or trashes the
@@ -312,8 +326,8 @@ canonical DTOs and the pure core.
   connection whose remote project is absent is left unoriginated, because
   origination is the chain's single step (ORG-3) — then reads the origin's
   archived state through `VaultPort` and each mirror's through `MirrorPort`, runs
-  the same pure `mergeField` ladder over the archived fact, and fans the
-  reconciled freeze out to the origin and every capable mirror. Any side can
+  the same merge pass over the archived fact through the shared driver, and fans
+  the reconciled freeze out to the origin and every capable mirror. Any side can
   start the freeze or the unfreeze; the reconciled freeze is the pass's `frozen`
   verdict, which gates the task-field pass. A mirror project whose name drifted
   is renamed through `MirrorPort.renameProject`. The fan-out also re-drives every

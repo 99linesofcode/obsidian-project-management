@@ -50,7 +50,8 @@ no machine id.
 ### The cast
 
 **The core (`src/core/`) names no provider.** It owns the canonical DTOs, the
-one pure N-way merge, the mirror-sync action and the project lifecycle action.
+one pure N-way merge, the merge-pass driver both merge actions share, the
+mirror-sync action and the project lifecycle action.
 
 - **The mirror port.** `MirrorPort` — the external tool as one collaborator.
   The required surface is the project (`readProject`,
@@ -91,6 +92,12 @@ one pure N-way merge, the mirror-sync action and the project lifecycle action.
   co-located with the action.
 - **The pure merge.** `mergeField(origin, mirrors)` — no I/O, no clock, no
   randomness (see [§3](#3-the-decision-ladder)).
+- **The merge-pass driver.** `MergePassService` — the spine both merge actions
+  run: scope a connection to its effective target and adapter, read the
+  baselines, observe the sides, merge the one field, fan the verdict out, apply
+  it to the origin, and persist the advanced baselines. Each action supplies only
+  the observation, the fan-out and the origin write, so the field merge and the
+  archive merge are each their own merge over the driver.
 - **The provider table.** The composition root holds one plain `providers`
   table mapping an application id to its mirror factory and token setting; it
   derives the mirror-adapter
@@ -254,7 +261,7 @@ deltas and the superseded deltas.
 
 ```mermaid
 sequenceDiagram
-  participant Caller as MirrorSyncAction or ProjectLifecycleSyncAction
+  participant Caller as MergePassService
   participant MF as mergeField
   participant D as Delta
 
@@ -286,12 +293,14 @@ connection through `MirrorAdapterFactoryPort` — addressed by the connection's
 **effective target** ([§2.6](#26-origination-ensureprojectboardaction)), the
 identity's resolved target when origination recorded one, else the declared
 target; a connection with neither is skipped — resolves each note to that
-connection's own handle through `RegistryPort`, and runs the pure `mergeField`
-once per (note, canonical field) over the six merged fields — `title`, `body`,
-`subtasks`, `completion`, `Status`, `label`. For each field it observes each
-mirror against its own baseline, calls `mergeField`, fans the reconciled value
-out through the one generic write entry, applies the same value to the origin,
-and persists each advanced side's `Baseline`. A mirror write that throws is
+connection's own handle through `RegistryPort`, and runs one merge pass per
+(note, canonical field) over the six merged fields — `title`, `body`,
+`subtasks`, `completion`, `Status`, `label`. Each pass runs over
+`MergePassService`: the action observes each mirror against its own baseline,
+then the driver calls `mergeField`, the action fans the reconciled value out
+through the one generic write entry and applies the same value to the origin,
+and the driver persists each advanced side's `Baseline`. A mirror write that
+throws is
 recorded among the field outcome's `failed` sides and fan-out continues to the
 remaining mirrors, so one failing connection never abandons the rest.
 
@@ -304,6 +313,7 @@ sequenceDiagram
   participant O as VaultPort
   participant R as MirrorPort
   participant MF as mergeField
+  participant MP as MergePassService
 
   A->>PS: readConnections(project)
   A->>PS: listEntities(project)
@@ -322,17 +332,16 @@ sequenceDiagram
       end
     end
     loop each merged field
-      A->>R: tasks.readTask(handle)
-      A->>R: timestamps.fieldTime(handle, field)
-      A->>R: completeFetch.fetchComplete()
-      A->>MF: mergeField(origin, observations)
+      A->>MP: reconcile(notePath, field, origin, mirrors, plan)
+      MP->>R: observe each side
+      MP->>MF: mergeField(origin, observations)
       alt outcome value
         A->>R: readTask then applyField when it differs
       else outcome delete
         A->>R: readTask then deleteTask when it exists
       end
       A->>O: applyField or trash when the origin differs
-      A->>H: writeBaseline per advanced side
+      MP->>H: writeBaseline per advanced side
     end
   end
 ```
@@ -372,9 +381,10 @@ declared target — reads each connection's already-originated mirror project
 through `RegistryPort` (a connection whose remote project is absent is left
 unoriginated — origination is the chain step, ORG-3), renames a mirror project
 whose name drifted from the vault project through `MirrorPort.renameProject`,
-reads the origin's archived state through `VaultPort`, runs the same `mergeField`
-ladder over the archived fact, and fans the reconciled freeze out to the origin
-and every capable mirror. Any side can start the freeze or the unfreeze; the
+reads the origin's archived state through `VaultPort`, runs the same merge pass
+over the archived fact through `MergePassService`, and fans the reconciled
+freeze out to the origin and every capable mirror. Any side can start the freeze
+or the unfreeze; the
 reconciled freeze is the pass's `frozen` verdict, which gates the task-field
 pass. Its per-side baselines live under the `archived` field in the same baseline
 store.
@@ -383,30 +393,33 @@ store.
 sequenceDiagram
   participant A as ProjectLifecycleSyncAction
   participant PS as VaultPort
-  participant MP as RegistryPort
+  participant H as RegistryPort
   participant R as MirrorPort
   participant O as VaultPort
   participant MF as mergeField
+  participant MP as MergePassService
 
   A->>PS: readConnections(project)
   loop each connection
-    A->>MP: resolveMirrorProject(project, slug)
+    A->>H: resolveMirrorProject(project, slug)
     alt recorded
       A->>R: renameProject when the name drifted
     else readProject returns a project
-      A->>MP: recordMirrorProject(target)
+      A->>H: recordMirrorProject(target)
     else absent
       A-->>A: leave the connection unoriginated
     end
   end
   A->>O: observeProject(project)
-  A->>MF: mergeField(origin, mirror observations)
+  A->>MP: reconcile(project, archived, origin, mirrors, plan)
+  MP->>R: observe each side
+  MP->>MF: mergeField(origin, observations)
   A->>R: setArchived when the mirror differs
   A->>O: applyProjectArchived when the origin differs
   A-->>A: outcome { frozen, wasFrozen }
 ```
 
-`wasFrozen` is `pass.origin.baseline?.value === 'true'`; `frozen` is
+`wasFrozen` is `origin.baseline?.value === 'true'`; `frozen` is
 `result.value === 'true'`. Each side's archive fact carries its own project
 clock: the vault's is the home note's change time (`ctime`), the code host's is
 the board's `closedAt` (null while open), the task manager's is the project's
@@ -885,8 +898,8 @@ layers, and each layer owns one surface of the system.
 
 - The wiring and construction order: `src/main.ts` (`onload`, `composePlugin`,
   `composeCoreActions`, `mirrorAdapterFactory`).
-- The core: `src/core/` — the pure engine (`mergeField`, `MirrorSyncAction`,
-  `ProjectLifecycleSyncAction`), the
+- The core: `src/core/` — the pure engine (`mergeField`, `MergePassService`,
+  `MirrorSyncAction`, `ProjectLifecycleSyncAction`), the
   ports and their payloads under `src/core/port/` (`port/data/`), the
   application shapes under `src/core/application/data/`, and every use
   case under `src/core/application/actions/`.

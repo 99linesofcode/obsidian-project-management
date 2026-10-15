@@ -6,18 +6,22 @@ import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDat
 import type { MergeResult } from '../../domain/MergeResult.js';
 import { OriginObservation } from '../../domain/OriginObservation.js';
 import { SideObservation } from '../../domain/SideObservation.js';
-import { mergeField } from '../../domain/mergeField.js';
 import { labelSequence, stemOf, typeFromLabels } from '../../domain/note.js';
-import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
+import {
+  mirrorSideKey,
+  originSideObservation,
+  ORIGIN_SIDE,
+} from '../../domain/sides.js';
 import { mirrorTrustsTimestamps } from './mirrorTrustsTimestamps.js';
-import type { ResolvedMirror } from './resolvedMirror.js';
-import { effectiveConnectionTarget } from '../services/connectionTarget.js';
+import type { ResolvedMirror } from '../resolvedMirror.js';
+import {
+  MergePassService,
+  type ScopedMirror,
+} from '../services/MergePassService.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
-
-const ORIGIN_SIDE = 'origin';
 
 const PENDING_CREATION_PREFIX = 'pendingCreation:';
 
@@ -29,12 +33,6 @@ const MERGED_FIELDS: readonly CanonicalField[] = [
   'Status',
   'label',
 ];
-
-interface ScopedMirror {
-  connection: ConnectionDataTransferObject;
-  target: string;
-  adapter: MirrorPort;
-}
 
 // The value space a field's canonical value lives in, per side. Most fields
 // carry the same raw value everywhere; `subtasks` carries the parent's
@@ -67,11 +65,15 @@ export interface MirrorFieldOutcome {
 // canonical fields through the ladder, writes the winner to the side that is
 // behind, and advances each side's baseline only after its write resolved.
 export class MirrorSyncAction {
+  private readonly mergePass: MergePassService;
+
   constructor(
     private readonly vault: VaultPort,
     private readonly registry: RegistryPort,
-    private readonly mirrorAdapters: MirrorAdapterFactoryPort,
-  ) {}
+    mirrorAdapters: MirrorAdapterFactoryPort,
+  ) {
+    this.mergePass = new MergePassService(registry, mirrorAdapters);
+  }
 
   async invoke(project: string): Promise<MirrorFieldOutcome[]> {
     const connections = await this.vault.readConnections(project);
@@ -104,22 +106,9 @@ export class MirrorSyncAction {
   ): Promise<ScopedMirror[]> {
     const scoped: ScopedMirror[] = [];
     for (const connection of connections) {
-      const target = await effectiveConnectionTarget(
-        this.registry,
-        project,
-        connection,
-      );
-      if (target === null) {
-        continue;
-      }
-      const adapter = this.mirrorAdapters.create(
-        connection.application,
-        target,
-        connection.slug,
-        project,
-      );
-      if (adapter !== null) {
-        scoped.push({ connection, target, adapter });
+      const mirror = await this.mergePass.scopeConnection(project, connection);
+      if (mirror !== null) {
+        scoped.push(mirror);
       }
     }
     return scoped;
@@ -274,34 +263,38 @@ export class MirrorSyncAction {
         trustworthy: observed.trustworthy,
       }),
     );
-    const baselines = await this.readMirrorBaselines(notePath, field, mirrors);
-    const observations: SideObservation[] = [];
-    for (const mirror of mirrors) {
-      observations.push(await observeMirror(mirror, field, baselines, codec));
-    }
 
-    const result = mergeField(origin, observations);
-    const fanout = await fanOut(mirrors, field, result, codec);
-    const originResult = await applyToOrigin(
-      this.vault,
+    const pass = await this.mergePass.reconcile(
       notePath,
       field,
-      originCurrent,
-      result,
-      codec,
+      origin,
+      mirrors,
+      {
+        observeSide: (mirror, baselines) =>
+          observeMirror(mirror, field, baselines, codec),
+        fanOut: ({ mirrors: sides }, result) =>
+          fanOut(sides, field, result, codec),
+        applyOrigin: (result) =>
+          applyToOrigin(
+            this.vault,
+            notePath,
+            field,
+            originCurrent,
+            result,
+            codec,
+          ),
+        baselineFor: (result) =>
+          new Baseline(result.value, completedValue(field, result.value)),
+      },
     );
 
-    const advanced = [...fanout.advanced];
-    const failed = [...fanout.failed];
-    if (originResult.advanced) {
-      advanced.push(ORIGIN_SIDE);
-    }
-    if (originResult.failed) {
-      failed.push(ORIGIN_SIDE);
-    }
-
-    await this.persistAdvanced(notePath, field, advanced, result);
-    return { field, result, written: fanout.written, advanced, failed };
+    return {
+      field,
+      result: pass.result,
+      written: pass.written,
+      advanced: pass.advanced,
+      failed: pass.failed,
+    };
   }
 
   // The `subtasks` codec: the canonical value is the parent's identity — its
@@ -386,41 +379,6 @@ export class MirrorSyncAction {
     }
     const entity = await this.registry.getEntity(item.entityId);
     return entity?.notePath ?? null;
-  }
-
-  private async readMirrorBaselines(
-    notePath: string,
-    field: CanonicalField,
-    mirrors: readonly ResolvedMirror[],
-  ): Promise<Map<string, Baseline>> {
-    const baselines = new Map<string, Baseline>();
-    for (const mirror of mirrors) {
-      const baseline = await this.registry.readBaseline(
-        notePath,
-        field,
-        mirror.side,
-      );
-      if (baseline !== null) {
-        baselines.set(mirror.side, baseline);
-      }
-    }
-    return baselines;
-  }
-
-  private async persistAdvanced(
-    notePath: string,
-    field: CanonicalField,
-    advanced: readonly string[],
-    result: MergeResult,
-  ): Promise<void> {
-    for (const side of advanced) {
-      await this.registry.writeBaseline(
-        notePath,
-        field,
-        side,
-        new Baseline(result.value, completedValue(field, result.value)),
-      );
-    }
   }
 }
 

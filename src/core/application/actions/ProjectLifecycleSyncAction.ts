@@ -2,26 +2,23 @@ import { Baseline } from '../../domain/Baseline.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { MergeResult } from '../../domain/MergeResult.js';
 import { SideObservation } from '../../domain/SideObservation.js';
-import { mergeField } from '../../domain/mergeField.js';
-import { mirrorSideKey, originSideObservation } from '../../domain/sides.js';
+import {
+  mirrorSideKey,
+  originSideObservation,
+  ORIGIN_SIDE,
+} from '../../domain/sides.js';
 import { mirrorTrustsArchiveTime } from './mirrorTrustsTimestamps.js';
-import type { ResolvedMirror } from './resolvedMirror.js';
-import { effectiveConnectionTarget } from '../services/connectionTarget.js';
+import type { ResolvedMirror } from '../resolvedMirror.js';
+import { MergePassService } from '../services/MergePassService.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
-const ORIGIN_SIDE = 'origin';
 const ARCHIVED_FIELD = 'archived';
 
 interface ResolvedProject {
   handle: string;
-}
-
-interface ObservedMirror {
-  mirror: ResolvedMirror;
-  observation: SideObservation;
 }
 
 export interface ProjectLifecycleOutcome {
@@ -38,11 +35,15 @@ export interface ProjectLifecycleOutcome {
 // fact through the ladder, fans the verdict out to every side, and locks or
 // unlocks the tracked issues that the archive transition calls for.
 export class ProjectLifecycleSyncAction {
+  private readonly mergePass: MergePassService;
+
   constructor(
     private readonly vault: VaultPort,
     private readonly registry: RegistryPort,
-    private readonly mirrorAdapters: MirrorAdapterFactoryPort,
-  ) {}
+    mirrorAdapters: MirrorAdapterFactoryPort,
+  ) {
+    this.mergePass = new MergePassService(registry, mirrorAdapters);
+  }
 
   async invoke(project: string): Promise<ProjectLifecycleOutcome> {
     const connections = await this.vault.readConnections(project);
@@ -52,33 +53,28 @@ export class ProjectLifecycleSyncAction {
       await this.registry.readBaseline(project, ARCHIVED_FIELD, ORIGIN_SIDE),
       await this.vault.observeProject(project),
     );
-    const baselines = await this.readMirrorBaselines(project, mirrors);
-    const observed = await this.observeMirrors(mirrors, baselines);
 
-    const result = mergeField(
+    const pass = await this.mergePass.reconcile(
+      project,
+      ARCHIVED_FIELD,
       origin,
-      observed.map((entry) => entry.observation),
+      mirrors,
+      {
+        observeSide: (mirror, baselines) => observeMirror(mirror, baselines),
+        fanOut: ({ mirrors: sides, observations }, result) =>
+          fanOut(sides, observations, result),
+        applyOrigin: (result) => this.applyToOrigin(project, origin, result),
+        baselineFor: (result) => new Baseline(result.value, false),
+      },
     );
-    const fanout = await fanOut(mirrors, observed, result);
-    const originResult = await this.applyToOrigin(project, origin, result);
 
-    const advanced = [...fanout.advanced];
-    const failed = [...fanout.failed];
-    if (originResult.advanced) {
-      advanced.push(ORIGIN_SIDE);
-    }
-    if (originResult.failed) {
-      failed.push(ORIGIN_SIDE);
-    }
-
-    await this.persistAdvanced(project, advanced, result);
     return {
-      frozen: result.value === 'true',
+      frozen: pass.result.value === 'true',
       wasFrozen: origin.baseline?.value === 'true',
-      result,
-      written: fanout.written,
-      advanced,
-      failed,
+      result: pass.result,
+      written: pass.written,
+      advanced: pass.advanced,
+      failed: pass.failed,
     };
   }
 
@@ -104,48 +100,21 @@ export class ProjectLifecycleSyncAction {
     }
   }
 
-  private async observeMirrors(
-    mirrors: readonly ResolvedMirror[],
-    baselines: ReadonlyMap<string, Baseline>,
-  ): Promise<ObservedMirror[]> {
-    const observed: ObservedMirror[] = [];
-    for (const mirror of mirrors) {
-      const observation = await observeMirror(mirror, baselines);
-      if (observation !== null) {
-        observed.push({ mirror, observation });
-      }
-    }
-    return observed;
-  }
-
   private async scopeMirrors(
     connections: readonly ConnectionDataTransferObject[],
     project: string,
   ): Promise<ResolvedMirror[]> {
     const mirrors: ResolvedMirror[] = [];
     for (const connection of connections) {
-      const target = await effectiveConnectionTarget(
-        this.registry,
-        project,
-        connection,
-      );
-      if (target === null) {
-        continue;
-      }
-      const adapter = this.mirrorAdapters.create(
-        connection.application,
-        target,
-        connection.slug,
-        project,
-      );
-      if (adapter === null) {
+      const scoped = await this.mergePass.scopeConnection(project, connection);
+      if (scoped === null) {
         continue;
       }
       try {
         const resolved = await this.resolveProject(
-          connection,
-          target,
-          adapter,
+          scoped.connection,
+          scoped.target,
+          scoped.adapter,
           project,
         );
         if (resolved === null) {
@@ -155,7 +124,7 @@ export class ProjectLifecycleSyncAction {
           slug: connection.slug,
           side: mirrorSideKey(connection.slug),
           handle: resolved.handle,
-          adapter,
+          adapter: scoped.adapter,
         });
       } catch (error) {
         console.error(
@@ -214,39 +183,6 @@ export class ProjectLifecycleSyncAction {
       handle,
     );
   }
-
-  private async readMirrorBaselines(
-    project: string,
-    mirrors: readonly ResolvedMirror[],
-  ): Promise<Map<string, Baseline>> {
-    const baselines = new Map<string, Baseline>();
-    for (const mirror of mirrors) {
-      const baseline = await this.registry.readBaseline(
-        project,
-        ARCHIVED_FIELD,
-        mirror.side,
-      );
-      if (baseline !== null) {
-        baselines.set(mirror.side, baseline);
-      }
-    }
-    return baselines;
-  }
-
-  private async persistAdvanced(
-    project: string,
-    advanced: readonly string[],
-    result: MergeResult,
-  ): Promise<void> {
-    for (const side of advanced) {
-      await this.registry.writeBaseline(
-        project,
-        ARCHIVED_FIELD,
-        side,
-        new Baseline(result.value, false),
-      );
-    }
-  }
 }
 
 async function relocateEntities(
@@ -296,14 +232,14 @@ async function observeMirror(
 
 async function fanOut(
   mirrors: readonly ResolvedMirror[],
-  observed: readonly ObservedMirror[],
+  observations: readonly SideObservation[],
   result: MergeResult,
 ): Promise<{ written: string[]; advanced: string[]; failed: string[] }> {
   const written: string[] = [];
   const advanced: string[] = [];
   const failed: string[] = [];
   const observedBySide = new Map(
-    observed.map((entry) => [entry.mirror.side, entry.observation]),
+    observations.map((observation) => [observation.side, observation]),
   );
 
   const archived = result.value === 'true';
