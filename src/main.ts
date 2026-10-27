@@ -16,7 +16,6 @@ import { SyncQueue } from './ui/sync/SyncQueue.js';
 import type { RegistryPort } from './core/port/RegistryPort.js';
 import { CreateTaskNoteAction } from './core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import { CaptureTasksAction } from './core/application/actions/capture-tasks/CaptureTasksAction.js';
-import { CompleteTaskCascadeAction } from './core/application/actions/CompleteTaskCascadeAction.js';
 import { DetectNoteRenamesAction } from './core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from './core/application/actions/EnsureProjectBoardAction.js';
 import { HandleDeletedNoteAction } from './core/application/actions/HandleDeletedNoteAction.js';
@@ -204,10 +203,6 @@ function composePlugin(
     syncState,
     mirrorAdapters,
   );
-  const completeTaskCascade = new CompleteTaskCascadeAction(
-    vault,
-    plugin.settings.doneOptionName,
-  );
 
   const syncChecklist = new SyncChecklistAction(
     vault,
@@ -245,7 +240,6 @@ function composePlugin(
     migrateHomeNote,
     renameProject,
     detectNoteRenames,
-    completeTaskCascade,
     syncChecklist,
     mirrorTodoStatus,
     sweepDeletedNotes,

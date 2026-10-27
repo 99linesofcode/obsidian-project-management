@@ -151,7 +151,7 @@ sequenceDiagram
     end
   end
   SP->>Lock: invoke({ project, frozen, wasFrozen })
-  SP->>SP: renames, cascade, checklist, mirror to-do
+  SP->>SP: renames, checklist, mirror to-do
   alt not frozen
     SP->>SP: task capture (link on title match, else adopt; kind by label or position)
     SP->>TF: invoke(project)

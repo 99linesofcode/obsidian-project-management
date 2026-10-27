@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncProjectAction } from '../../../../src/core/application/actions/SyncProjectAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
-import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
 import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
@@ -98,9 +97,6 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
     detectNoteRenames: {
       execute: async () => {},
     } as unknown as DetectNoteRenamesAction,
-    completeTaskCascade: {
-      execute: async () => {},
-    } as unknown as CompleteTaskCascadeAction,
     syncChecklist: {
       execute: async () => {},
     } as unknown as SyncChecklistAction,

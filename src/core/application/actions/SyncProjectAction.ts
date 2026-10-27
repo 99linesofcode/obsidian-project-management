@@ -4,7 +4,6 @@ import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteD
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
-import type { CompleteTaskCascadeAction } from './CompleteTaskCascadeAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
@@ -27,7 +26,6 @@ export interface SyncProjectDependencies {
   migrateHomeNote: MigrateProjectHomeNoteAction;
   renameProject: RenameProjectAction;
   detectNoteRenames: DetectNoteRenamesAction;
-  completeTaskCascade: CompleteTaskCascadeAction;
   syncChecklist: SyncChecklistAction;
   mirrorTodoStatus: MirrorTodoStatusAction;
   sweepDeletedNotes: SweepDeletedNotesAction;
@@ -166,13 +164,6 @@ export class SyncProjectAction {
     syncedAt: string,
   ): Promise<void> {
     for (const notePath of await this.listNotes(project, 'taken')) {
-      await this.step(`cascade ${notePath}`, () =>
-        this.deps.completeTaskCascade.execute({
-          notePath,
-          projectName: project,
-          syncedAt,
-        }),
-      );
       await this.step(`checklist ${notePath}`, () =>
         this.deps.syncChecklist.execute({
           notePath,
