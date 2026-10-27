@@ -1,3 +1,12 @@
+## [0.32.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.0...0.32.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **cascade:** stop the done state from completing a task ([#198](https://github.com/99linesofcode/obsidian-project-management/issues/198)) ([694f6cd](https://github.com/99linesofcode/obsidian-project-management/commit/694f6cd21fd3779921582171c664826a3a1533a3))
+
+
+
 # [0.32.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.31.0...0.32.0) (2026-10-27)
 
 
@@ -49,16 +58,6 @@
 * **rename:** a note with no project property adopts the folder segment, once (PLC-4) ([80e5422](https://github.com/99linesofcode/obsidian-project-management/commit/80e5422f0d400a2b32ee98bca5330d4146ea4bc0))
 * **rename:** a project note names itself from its project property (PLC-1) ([5641f0e](https://github.com/99linesofcode/obsidian-project-management/commit/5641f0ece99f5bc33873214dbea94e0b402203ee))
 * **rename:** a property change renames the project and re-keys the registry (PLC-2) ([5c732d1](https://github.com/99linesofcode/obsidian-project-management/commit/5c732d176b067504f8cd2cf6ec5dc7709a054338))
-
-
-
-## [0.28.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.1...0.28.2) (2026-10-13)
-
-
-### Bug Fixes
-
-* **lifecycle:** address the locks action by the connection's effective target (ORG-2) ([b7ea321](https://github.com/99linesofcode/obsidian-project-management/commit/b7ea3217190b128ff48229da6983f37ed9c02543))
-* **lifecycle:** originate an archived project's connections (ORG-3, SHELL-2) ([1098537](https://github.com/99linesofcode/obsidian-project-management/commit/109853770f5553104488af710f80ca908cda84b5))
 
 
 
