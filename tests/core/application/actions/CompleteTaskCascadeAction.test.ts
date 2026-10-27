@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
-import { Baseline } from '../../../../src/core/domain/Baseline.js';
 import { ToDoNoteParser } from '../../../../src/core/domain/ToDoNoteParser.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
-import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 // Fakes at the vault port: a path-keyed note store recording every write, so
 // the cascade's gates (an already-done to-do, an already-checked line) are
@@ -99,17 +97,7 @@ function sliceNote(lineChecked: boolean): string {
 }
 
 function makeAction(vault: FakeVault) {
-  // ST-2 added the registry dependency. These COM-1 cases exercise a task
-  // already settled in the done lane, so the baseline says done: the state
-  // edge is a no-op and the cascade's to-do/slice behaviour is unchanged.
-  const registry = new FakeSyncState();
-  void registry.writeBaseline(
-    taskPath,
-    'Status',
-    'origin',
-    new Baseline(doneLane, false),
-  );
-  return new CompleteTaskCascadeAction(vault, doneLane, registry);
+  return new CompleteTaskCascadeAction(vault, doneLane);
 }
 
 const input = { notePath: taskPath, projectName, syncedAt };
