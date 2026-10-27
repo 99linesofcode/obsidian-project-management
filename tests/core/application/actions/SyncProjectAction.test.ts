@@ -5,7 +5,6 @@ import { EnsureProjectBoardAction } from '../../../../src/core/application/actio
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
-import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
@@ -148,11 +147,6 @@ function harness(options: HarnessOptions = {}) {
       events.push('renames');
     },
   } as unknown as DetectNoteRenamesAction;
-  const cascade = {
-    execute: async (input: { notePath: string }) => {
-      events.push(`cascade:${input.notePath}`);
-    },
-  } as unknown as CompleteTaskCascadeAction;
   const checklist = {
     execute: async (input: { notePath: string }) => {
       events.push(`checklist:${input.notePath}`);
@@ -232,7 +226,6 @@ function harness(options: HarnessOptions = {}) {
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames: renames,
-    completeTaskCascade: cascade,
     syncChecklist: checklist,
     mirrorTodoStatus: mirrorStatus,
     sweepDeletedNotes: new SweepDeletedNotesAction(
@@ -263,7 +256,6 @@ describe('the multi-adapter pass', () => {
       'lifecycle',
       'taskLocks:false:false',
       'renames',
-      `cascade:${todo}`,
       `checklist:${todo}`,
       `mirror:${todo}`,
       'capture:Acme Widgets',
@@ -549,9 +541,6 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       detectNoteRenames: {
         execute: async () => {},
       } as unknown as DetectNoteRenamesAction,
-      completeTaskCascade: {
-        execute: async () => {},
-      } as unknown as CompleteTaskCascadeAction,
       syncChecklist: {
         execute: async () => {},
       } as unknown as SyncChecklistAction,

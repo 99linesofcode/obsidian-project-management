@@ -150,8 +150,7 @@ namespace per application.**
   `HandleDeletedNoteAction`,
   `MigrateProjectHomeNoteAction`,
   `RekeyRenamedConnectionsAction`, `EnsureProjectBoardAction`,
-  `CompleteTaskCascadeAction`, `SyncChecklistAction`, `MirrorTodoStatusAction`
-  and `CreateTaskNoteAction`.
+  `SyncChecklistAction`, `MirrorTodoStatusAction` and `CreateTaskNoteAction`.
 
 ### The provider table
 
@@ -224,7 +223,6 @@ sequenceDiagram
 sequenceDiagram
   participant SP as SyncProjectAction
   participant Chk as SyncChecklistAction
-  participant Cas as CompleteTaskCascadeAction
   participant Mir as MirrorTodoStatusAction
   participant TC as CaptureTasksAction
   participant TF as MirrorSyncAction
@@ -232,7 +230,6 @@ sequenceDiagram
 
   SP->>SP: vaultConsistency(project, syncedAt)
   loop each taken note
-    SP->>Cas: execute(notePath, projectName, syncedAt)
     SP->>Chk: execute(notePath, projectName, syncedAt)
   end
   loop each taken note
@@ -657,33 +654,32 @@ sequenceDiagram
   end
 ```
 
-### 2.13 Completion and the cascade
+### 2.13 Completion and the checklist
 
-Done is one fact with one stamp. The invariant is `status === doneLane` if and
-only if `completedAt !== null`. `CompleteTaskCascadeAction` is the vault-side
-projection: when a task's status is the done lane it checks the task note's own
-checklist lines, completes every still-open to-do the task owns, and checks the
-task's own line in a parent slice's checklist. Reopen is asymmetric: the parent
-slice line mirrors the status in both directions, but the to-dos are never
-auto-reopened. The core's `completion` field carries the same fact to the
-mirrors through `MirrorSyncAction`.
+State is the lane; completion is a separate fact; neither is ever inferred from
+the other. A task's `status` is its board position; its `completion` is
+done-ness, reconciled on its own ladder by `MirrorSyncAction` and fanned out to
+every side. No pass completes a task from its lane, and no pass ticks a checklist
+line from a task's completion.
+
+`SyncChecklistAction` owns the line↔to-do relationship per note: a checked box
+sets the linked note's completion with the sync stamp and leaves its `status`
+untouched; a cleared box clears the completion. `MirrorTodoStatusAction` drives
+the reverse — it ticks the parent's line to match the to-do's own completion.
 
 ```mermaid
 sequenceDiagram
   participant V as Vault note
-  participant Cas as CompleteTaskCascadeAction
   participant Chk as SyncChecklistAction
   participant MS as MirrorSyncAction
   participant R as MirrorPort
 
-  Note over V,R: invariant status doneLane iff completedAt not null
-  alt done in the vault
-    Cas->>V: check own checklist lines
-    Cas->>V: complete open to-dos
-    Cas->>V: mirror parent slice line
-    MS->>R: applyField(completion, true) and applyField(Status, lane)
-  else done on a mirror
-    MS->>V: origin applyField(completion, true)
+  Note over V,R: state is the lane; completion is a separate fact
+  alt completion changes in the vault
+    Chk->>V: a ticked box sets the linked note completion, status untouched
+    MS->>R: applyField(completion) and applyField(Status), each on its ladder
+  else completion changes on a mirror
+    MS->>V: origin applyField(completion)
     MS->>R: fan the reconciled value to the other mirrors
   end
 ```
@@ -907,8 +903,8 @@ layers, and each layer owns one surface of the system.
   `src/core/application/actions/` holds the origination step
   (`EnsureProjectBoardAction`), the chain (`SyncProjectAction`,
   `DetectNoteRenamesAction`,
-  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`), the cascade
-  (`CompleteTaskCascadeAction`) and the checklist/to-do actions.
+  `SweepDeletedNotesAction`, `HandleDeletedNoteAction`) and the checklist/to-do
+  actions.
 - The capture and lifecycle actions:
   `src/core/application/actions/capture-tasks/CaptureTasksAction.ts`,
   `ReconcileProjectTaskLocksAction.ts`.

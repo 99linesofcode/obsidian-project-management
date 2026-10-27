@@ -52,7 +52,7 @@ export class MirrorTodoStatusAction {
       return;
     }
 
-    const checked = parsed.status === 'completed';
+    const checked = parsed.completed !== null;
     if (item.checked === checked) {
       return;
     }

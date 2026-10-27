@@ -4,7 +4,6 @@ import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/a
 import { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
-import type { CompleteTaskCascadeAction } from '../../../../src/core/application/actions/CompleteTaskCascadeAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
@@ -126,9 +125,6 @@ function harness(options: {
   const detectNoteRenames = {
     execute: async () => {},
   } as unknown as DetectNoteRenamesAction;
-  const cascade = {
-    execute: async () => {},
-  } as unknown as CompleteTaskCascadeAction;
   const checklist = {
     execute: async () => {},
   } as unknown as SyncChecklistAction;
@@ -149,7 +145,6 @@ function harness(options: {
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames,
-    completeTaskCascade: cascade,
     syncChecklist: checklist,
     mirrorTodoStatus,
     sweepDeletedNotes: new SweepDeletedNotesAction(

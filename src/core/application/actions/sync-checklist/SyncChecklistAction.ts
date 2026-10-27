@@ -2,6 +2,7 @@ import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
 import type { ChecklistItem } from '../../../domain/ChecklistItem.js';
 import { freePath } from '../../../domain/paths.js';
 import {
+  rewriteFrontmatterFields,
   slugify,
   splitFrontmatter,
   stemOf,
@@ -9,11 +10,7 @@ import {
 } from '../../../domain/note.js';
 import { taskLinkFromAffiliation } from '../../../domain/affiliation.js';
 import { TaskNoteMapper } from '../create-task-note/TaskNoteMapper.js';
-import {
-  isToDoNote,
-  ToDoNoteParser,
-  withToDoStatus,
-} from '../../../domain/ToDoNoteParser.js';
+import { isToDoNote, ToDoNoteParser } from '../../../domain/ToDoNoteParser.js';
 import { readTemplate } from '../templates.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 
@@ -153,15 +150,15 @@ export class SyncChecklistAction {
       relinked = true;
     }
 
-    if (item.checked && parsed.status !== 'completed') {
+    if (item.checked && parsed.completed === null) {
       await this.vault.writeNote(
         item.linkPath,
-        withToDoStatus(note.content, 'completed', input.syncedAt),
+        withCompletion(note.content, input.syncedAt),
       );
-    } else if (!item.checked && parsed.status === 'completed') {
+    } else if (!item.checked && parsed.completed !== null) {
       await this.vault.writeNote(
         item.linkPath,
-        withToDoStatus(note.content, 'open', null),
+        withCompletion(note.content, null),
       );
     }
 
@@ -249,6 +246,14 @@ export class SyncChecklistAction {
 
 function isDrifted(slug: string, stem: string): boolean {
   return slug !== stem && slug !== stem.replace(/-\d+$/, '');
+}
+
+function withCompletion(content: string, completedAt: string | null): string {
+  return rewriteFrontmatterFields(
+    content,
+    new Map([['completed', completedAt]]),
+    true,
+  );
 }
 
 function takenFolder(projectName: string): string {

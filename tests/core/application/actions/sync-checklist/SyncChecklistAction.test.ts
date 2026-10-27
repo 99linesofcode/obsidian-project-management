@@ -227,19 +227,32 @@ describe('TDO-3 — checklist state mirrors to the ToDo', () => {
     await action.execute({ notePath: taskPath, projectName, syncedAt });
 
     const parsed = ToDoNoteParser.parse(vault.notes.get(todoPath)!);
-    expect(parsed?.status).toBe('completed');
+    expect(parsed?.status).toBe('open');
     expect(parsed?.completed).toBe(syncedAt);
     expect(vault.written.map((entry) => entry.path)).toEqual([todoPath]);
   });
 
-  it('reopens a completed ToDo when its item is unchecked', async () => {
+  it('clears a completed ToDo completion when its item is unchecked, leaving its status untouched', async () => {
     vault.notes.set(taskPath, taskNote(`- [ ] [[${todoPath}|Fix the bug]]`));
-    vault.notes.set(todoPath, todoContent(taskLink, 'completed'));
+    vault.notes.set(
+      todoPath,
+      [
+        '---',
+        'categories: [taken]',
+        'labels: [type:todo]',
+        'status: completed',
+        'completed: 2026-09-01T09:00:00Z',
+        `affiliation: ["[[_Acme Widgets]]", "[[${taskLink}]]"]`,
+        `synced: ${syncedAt}`,
+        '---',
+        '',
+      ].join('\n'),
+    );
 
     await action.execute({ notePath: taskPath, projectName, syncedAt });
 
     const parsed = ToDoNoteParser.parse(vault.notes.get(todoPath)!);
-    expect(parsed?.status).toBe('open');
+    expect(parsed?.status).toBe('completed');
     expect(parsed?.completed).toBeNull();
   });
 

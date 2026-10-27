@@ -1,7 +1,6 @@
 import { parseAffiliation } from './affiliation.js';
 import {
   labelsFromNote,
-  rewriteFrontmatterFields,
   splitFrontmatter,
   typeFromLabels,
 } from './note.js';
@@ -32,18 +31,4 @@ export const ToDoNoteParser = {
 
 export function isToDoNote(content: string): boolean {
   return typeFromLabels(labelsFromNote(content)) === 'todo';
-}
-
-export function withToDoStatus(
-  content: string,
-  status: string,
-  completedAt: string | null,
-): string {
-  return rewriteFrontmatterFields(
-    content,
-    new Map([
-      ['status', status],
-      ['completed', completedAt],
-    ]),
-  );
 }

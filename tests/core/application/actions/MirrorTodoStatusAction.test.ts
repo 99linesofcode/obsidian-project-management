@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
-import { splitFrontmatter } from '../../../../src/core/domain/note.js';
+import {
+  rewriteFrontmatterFields,
+  splitFrontmatter,
+} from '../../../../src/core/domain/note.js';
 import { TaskNoteMapper } from '../../../../src/core/application/actions/create-task-note/TaskNoteMapper.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 
@@ -74,7 +77,7 @@ function bodyOf(content: string): string {
 }
 
 function toDoNote(status: 'open' | 'completed'): string {
-  return TaskNoteMapper.map(
+  const content = TaskNoteMapper.map(
     { type: 'todo', title: 'Fix the bug', body: '', createdAt: null },
     {
       projectName,
@@ -83,6 +86,11 @@ function toDoNote(status: 'open' | 'completed'): string {
       parentLink: taskLink,
     },
   ).content;
+  return rewriteFrontmatterFields(
+    content,
+    new Map([['completed', status === 'completed' ? syncedAt : null]]),
+    true,
+  );
 }
 
 function blockLabelToDoNote(status: 'open' | 'completed'): string {
@@ -91,6 +99,7 @@ function blockLabelToDoNote(status: 'open' | 'completed'): string {
     'labels:',
     '  - type:todo',
     `status: ${status}`,
+    `completed: ${status === 'completed' ? syncedAt : ''}`,
     `affiliation: ["[[${projectName}]]", "[[${taskLink}]]"]`,
     `synced: ${syncedAt}`,
     '---',
