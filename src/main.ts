@@ -207,6 +207,7 @@ function composePlugin(
   const completeTaskCascade = new CompleteTaskCascadeAction(
     vault,
     plugin.settings.doneOptionName,
+    syncState,
   );
 
   const syncChecklist = new SyncChecklistAction(

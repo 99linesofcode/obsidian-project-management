@@ -23,6 +23,10 @@ export function splitFrontmatter(content: string): SplitFrontmatter | null {
   return { fields, body: lines.slice(i + 1).join('\n') };
 }
 
+export function isCompleted(fields: ReadonlyMap<string, string>): boolean {
+  return (fields.get('completed') ?? '') !== '';
+}
+
 export function hasTopLevelFrontmatterField(
   content: string,
   key: string,
