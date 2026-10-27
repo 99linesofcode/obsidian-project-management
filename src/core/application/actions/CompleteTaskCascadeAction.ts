@@ -1,16 +1,7 @@
 import { parseAffiliation, taskLinkFromAffiliation } from '../../domain/affiliation.js';
 import { parseChecklist, renderChecklist } from '../../domain/checklist.js';
-import {
-  isCompleted,
-  splitFrontmatter,
-  stemOf,
-  withBody,
-  type SplitFrontmatter,
-} from '../../domain/note.js';
-import { ORIGIN_SIDE } from '../../domain/sides.js';
+import { splitFrontmatter, stemOf, withBody } from '../../domain/note.js';
 import { ToDoNoteParser, withToDoStatus } from '../../domain/ToDoNoteParser.js';
-import { CanonicalFieldWrite } from '../../port/data/CanonicalFieldWrite.js';
-import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
 export interface CompleteTaskCascadeInput {
@@ -23,7 +14,6 @@ export class CompleteTaskCascadeAction {
   constructor(
     private readonly vault: VaultPort,
     private readonly doneOptionName: string,
-    private readonly registry: RegistryPort,
   ) {}
 
   async execute(input: CompleteTaskCascadeInput): Promise<void> {
@@ -50,40 +40,6 @@ export class CompleteTaskCascadeAction {
       parseAffiliation(split.fields.get('affiliation')),
       taskStem,
       done,
-    );
-
-    // Run last: a failure in the completion write (a registry read or an
-    // applyField) must not skip the note's to-do and slice cascade work above.
-    await this.syncCompletion(input.notePath, split, done);
-  }
-
-  private async syncCompletion(
-    notePath: string,
-    split: SplitFrontmatter,
-    done: boolean,
-  ): Promise<void> {
-    if (this.doneOptionName === '') {
-      return;
-    }
-    const baseline = await this.registry.readBaseline(
-      notePath,
-      'Status',
-      ORIGIN_SIDE,
-    );
-    const wasDone = baseline?.value === this.doneOptionName;
-    if (done === wasDone) {
-      return;
-    }
-    const hasCompleted = isCompleted(split.fields);
-    if (done === hasCompleted) {
-      return;
-    }
-    await this.vault.applyField(
-      new CanonicalFieldWrite({
-        handle: notePath,
-        field: 'completion',
-        value: done ? 'true' : 'false',
-      }),
     );
   }
 
