@@ -6,8 +6,10 @@ import {
   taskLinkFromAffiliation,
 } from '../../core/domain/affiliation.js';
 import {
+  isCompleted,
   labelSequence,
   labelsFromNote,
+  splitFrontmatter,
   typeFromLabels,
   withBody,
 } from '../../core/domain/note.js';
@@ -23,13 +25,14 @@ export interface TaskNote {
 }
 
 export function parseTaskNote(content: string, handle: string): TaskNote {
-  const fields = frontmatterFields(content);
+  const split = splitFrontmatter(content);
+  const fields = split?.fields ?? new Map<string, string>();
   const labels = labelsFromNote(content);
   return {
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',
-    body: bodyOf(content),
-    completed: (fields.get('completed') ?? '') !== '',
+    body: split?.body ?? content,
+    completed: isCompleted(fields),
     parent: parentFromAffiliation(fields.get('affiliation'), handle, labels),
     labels,
   };
@@ -79,34 +82,6 @@ export function writeIntoNote(
 export function folderOf(path: string): string | null {
   const slash = path.lastIndexOf('/');
   return slash === -1 ? null : path.slice(0, slash);
-}
-
-function frontmatterFields(content: string): Map<string, string> {
-  const lines = content.split('\n');
-  const fields = new Map<string, string>();
-  if (lines[0] !== '---') {
-    return fields;
-  }
-  for (let i = 1; i < lines.length && lines[i] !== '---'; i++) {
-    const line = lines[i]!;
-    const colon = line.indexOf(':');
-    if (colon > 0) {
-      fields.set(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
-    }
-  }
-  return fields;
-}
-
-function bodyOf(content: string): string {
-  const lines = content.split('\n');
-  if (lines[0] !== '---') {
-    return content;
-  }
-  const closing = lines.indexOf('---', 1);
-  if (closing === -1) {
-    return content;
-  }
-  return lines.slice(closing + 1).join('\n');
 }
 
 function titleFromPath(handle: string): string {
@@ -178,7 +153,7 @@ function withLabels(content: string, value: string | null): string {
 }
 
 function withParent(content: string, parent: string | null): string {
-  const raw = frontmatterFields(content).get('affiliation');
+  const raw = splitFrontmatter(content)?.fields.get('affiliation');
   if (raw === undefined) {
     return content;
   }
