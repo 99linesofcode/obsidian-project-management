@@ -1,3 +1,17 @@
+# [0.32.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.31.0...0.32.0) (2026-10-27)
+
+
+### Bug Fixes
+
+* **deps:** bump vite from 8.3.0 to 8.3.4 ([#196](https://github.com/99linesofcode/obsidian-project-management/issues/196)) ([a376895](https://github.com/99linesofcode/obsidian-project-management/commit/a3768958a95c390ea55d31c15b5edcf547a03e6c))
+
+
+### Features
+
+* **cascade:** moving a task to the done state completes it ([#197](https://github.com/99linesofcode/obsidian-project-management/issues/197)) ([f7fea62](https://github.com/99linesofcode/obsidian-project-management/commit/f7fea62afb889c8b8ce5756395c69c53611f012f))
+
+
+
 # [0.31.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.30.0...0.31.0) (2026-10-14)
 
 
@@ -45,18 +59,6 @@
 
 * **lifecycle:** address the locks action by the connection's effective target (ORG-2) ([b7ea321](https://github.com/99linesofcode/obsidian-project-management/commit/b7ea3217190b128ff48229da6983f37ed9c02543))
 * **lifecycle:** originate an archived project's connections (ORG-3, SHELL-2) ([1098537](https://github.com/99linesofcode/obsidian-project-management/commit/109853770f5553104488af710f80ca908cda84b5))
-
-
-
-## [0.28.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.28.0...0.28.1) (2026-10-13)
-
-
-### Bug Fixes
-
-* **adapters:** drop the task manager's non-decisive archive-time surface ([68f19a3](https://github.com/99linesofcode/obsidian-project-management/commit/68f19a3494fc6398c4fb305e0d836113b63cd00b))
-* **lifecycle:** let a code host report the archive fact's decisive time ([adec0e6](https://github.com/99linesofcode/obsidian-project-management/commit/adec0e64c1474f608dbf06dd40c9dd4de2798004))
-* **lifecycle:** onboard a created mirror without observing it ([da14920](https://github.com/99linesofcode/obsidian-project-management/commit/da14920ec3b79e13a87860236159435b67186200))
-* **lifecycle:** re-drive an out-of-sync mirror whatever the merge label ([34e6b9a](https://github.com/99linesofcode/obsidian-project-management/commit/34e6b9a8535ee9261ea470938fe03a2ff4b83b25))
 
 
 
