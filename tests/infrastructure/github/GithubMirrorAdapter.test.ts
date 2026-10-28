@@ -640,6 +640,31 @@ describe('GithubMirrorAdapter — the remaining surface', () => {
   });
 });
 
+// LBL-10 — the label crosses every boundary verbatim. No adapter translates,
+// strips or re-renders the prefix; the vault's own string goes out untouched.
+// The sequence mixes the canonical unspaced kind, a spaced kind and a non-kind
+// `type:`-prefixed label so any future normalisation at the boundary reddens.
+describe('LBL-10 — the label crosses to the code host verbatim', () => {
+  it('writes the vault label sequence unmodified, with no translation', async () => {
+    const { adapter, transport } = adapterWith([{ status: 200, json: [] }]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: ISSUE_URL,
+        field: 'label',
+        value: '["type:bug","type: slice","type:something","priority:high"]',
+      }),
+    );
+
+    expect(transport.paths[0]).toBe('/repos/acme/widgets/issues/42/labels');
+    expect(transport.bodies[0]).toBe(
+      JSON.stringify({
+        labels: ['type:bug', 'type: slice', 'type:something', 'priority:high'],
+      }),
+    );
+  });
+});
+
 describe('GithubMirrorAdapter — the archive fact\'s decisive time (ADP-3)', () => {
   it('reports the board ProjectV2.closedAt as the archive decisive time', async () => {
     const { adapter } = adapterWith([
