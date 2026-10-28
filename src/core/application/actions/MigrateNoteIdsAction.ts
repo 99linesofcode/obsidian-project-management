@@ -1,4 +1,5 @@
 import { noteId, stampNoteId } from '../../domain/noteIdentity.js';
+import { rewriteFrontmatterFields } from '../../domain/note.js';
 import { resolveHomeNotePath } from '../../domain/paths.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
@@ -22,7 +23,7 @@ export class MigrateNoteIdsAction {
       for (const path of await this.vault.listNotesInFolder(
         `${root}/${input.projectName}`,
       )) {
-        await this.stampMissingId(path);
+        await this.migrateNote(path);
       }
     }
   }
@@ -32,7 +33,7 @@ export class MigrateNoteIdsAction {
     if (homePath === null) {
       return;
     }
-    await this.stampMissingId(homePath);
+    await this.migrateNote(homePath);
     const note = await this.vault.getNoteByPath(homePath);
     const projectId = note === null ? null : noteId(note.content);
     if (projectId !== null) {
@@ -50,15 +51,26 @@ export class MigrateNoteIdsAction {
     return resolveHomeNotePath(paths, projectName);
   }
 
-  private async stampMissingId(path: string): Promise<void> {
+  private async migrateNote(path: string): Promise<void> {
     const note = await this.vault.getNoteByPath(path);
-    if (note === null || noteId(note.content) !== null) {
+    if (note === null) {
       return;
     }
-    const record = await this.syncState.findByNotePath(path);
-    await this.vault.writeNote(
-      path,
-      stampNoteId(note.content, record?.id ?? crypto.randomUUID()),
+    const withoutName = rewriteFrontmatterFields(
+      note.content,
+      new Map([['name', null]]),
     );
+    const id = noteId(withoutName);
+    const migrated =
+      id === null
+        ? stampNoteId(
+            withoutName,
+            (await this.syncState.findByNotePath(path))?.id ??
+              crypto.randomUUID(),
+          )
+        : withoutName;
+    if (migrated !== note.content) {
+      await this.vault.writeNote(path, migrated);
+    }
   }
 }

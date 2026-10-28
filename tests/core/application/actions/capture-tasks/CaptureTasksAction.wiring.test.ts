@@ -171,7 +171,7 @@ describe('CaptureTasksAction — the vault wiring (CAP-2)', () => {
 
     expect(h.vault.created).toHaveLength(1);
     expect(h.vault.created[0]!.path).toBe(
-      'Projecten/Acme Widgets/taken/fix-the-bug.md',
+      'Projecten/Acme Widgets/taken/Fix the Bug.md',
     );
     const record = h.syncState.setCalls[0]!;
     expect(h.syncState.handleOf(record.id, 'github')).toBe(url);
@@ -187,7 +187,7 @@ describe('CaptureTasksAction — the vault wiring (CAP-2)', () => {
 
     expect(h.vault.created).toHaveLength(1);
     const { path, content } = h.vault.created[0]!;
-    expect(path).toBe('Projecten/Acme Widgets/taken/buy-milk.md');
+    expect(path).toBe('Projecten/Acme Widgets/taken/Buy Milk.md');
     expect(content).toContain('status: Building');
     expect(content).not.toContain('url:');
     const record = h.syncState.setCalls[0]!;

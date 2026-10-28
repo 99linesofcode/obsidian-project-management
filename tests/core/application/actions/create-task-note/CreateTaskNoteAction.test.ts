@@ -79,8 +79,8 @@ function input() {
   };
 }
 
-describe('LBL-1 — a note filename is a human-readable slug', () => {
-  it('creates a slug-named note carrying the kind label and status, no url', async () => {
+describe('LBL-1 — a note filename is the rendered title', () => {
+  it('creates a title-named note carrying the kind label and status, no url', async () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
@@ -89,7 +89,7 @@ describe('LBL-1 — a note filename is a human-readable slug', () => {
 
     expect(vault.created).toHaveLength(1);
     const { path, content } = vault.created[0]!;
-    expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
+    expect(path).toBe('Projecten/Acme Widgets/taken/Fix the Bug!.md');
     const fields = splitFrontmatter(content)?.fields;
     expect(fields?.get('type')).toBeUndefined();
     expect(fields?.get('labels')).toContain('type:task');

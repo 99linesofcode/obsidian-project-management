@@ -6,8 +6,8 @@ import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/paths.js';
 import {
-  slugify,
-  topLevelFrontmatterField,
+  comparisonForm,
+  stemOf,
   typeFromLabels,
 } from '../../../domain/note.js';
 import { noteId, stampNoteId } from '../../../domain/noteIdentity.js';
@@ -29,7 +29,7 @@ interface AdoptTaskInput {
 }
 
 interface LinkCandidate {
-  slug: string;
+  linkKey: string;
   path: string;
   id: string;
 }
@@ -125,11 +125,13 @@ export class CaptureTasksAction {
       if ((await this.registry.findTombstone(task.handle)) !== null) {
         continue;
       }
-      const slug = slugify(task.title);
+      const linkKey = comparisonForm(task.title);
       const matches =
         task.handle === ''
           ? []
-          : (await linkCandidates.read()).filter((note) => note.slug === slug);
+          : (await linkCandidates.read()).filter(
+              (note) => note.linkKey === linkKey,
+            );
       if (matches.length > 1) {
         errors.push(
           ambiguousTitleError(project.projectName, task, matches.length),
@@ -188,12 +190,8 @@ export class CaptureTasksAction {
       if (note === null) {
         continue;
       }
-      const declared = topLevelFrontmatterField(note.content, 'name');
-      if (declared === null || declared === '') {
-        continue;
-      }
       candidates.push({
-        slug: slugify(declared),
+        linkKey: comparisonForm(stemOf(path)),
         path,
         id: noteId(note.content) ?? path,
       });

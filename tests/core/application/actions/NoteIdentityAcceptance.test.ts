@@ -99,7 +99,7 @@ class FakeVault implements VaultPort {
 const PROJECT_NAME = 'Acme Widgets';
 const PROJECT_ID = 'project-uuid-1';
 const SYNCED_AT = '2026-10-28T12:00:00Z';
-const CREATED_PATH = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+const CREATED_PATH = 'Projecten/Acme Widgets/taken/Fix the bug.md';
 const MOVED_PATH = 'Projecten/Acme Widgets/taken/renamed-elsewhere.md';
 
 const githubConnection = {

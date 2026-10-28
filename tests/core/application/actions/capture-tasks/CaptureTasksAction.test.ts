@@ -4,7 +4,10 @@ import { CreateTaskNoteAction } from '../../../../../src/core/application/action
 import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
 import { ConnectionDataTransferObject } from '../../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import { ProjectIdentityDataTransferObject } from '../../../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
-import { typeFromLabels } from '../../../../../src/core/domain/note.js';
+import {
+  renderFilename,
+  typeFromLabels,
+} from '../../../../../src/core/domain/note.js';
 import { parseTaskNote } from '../../../../../src/infrastructure/vault/taskNoteCodec.js';
 import type { MirrorPort } from '../../../../../src/core/port/MirrorPort.js';
 import type { MirrorAdapterFactoryPort } from '../../../../../src/core/port/MirrorAdapterFactoryPort.js';
@@ -168,9 +171,11 @@ function harness(
 
 function noteAt(
   vault: FakeVault,
-  slug: string,
+  title: string,
 ): { path: string; content: string } {
-  return vault.created.find((note) => note.path.endsWith(`/${slug}.md`))!;
+  return vault.created.find((note) =>
+    note.path.endsWith(`/${renderFilename(title)}`),
+  )!;
 }
 
 describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
@@ -189,7 +194,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
     expect(first.captured).toEqual(['A']);
     expect(second.captured).toEqual([]);
     expect(h.vault.created.map((note) => note.path)).toEqual([
-      'Projecten/Acme/taken/a.md',
+      'Projecten/Acme/taken/A.md',
     ]);
   });
 
@@ -208,8 +213,8 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
 
     expect(result.captured).toEqual(['N']);
     expect(h.vault.created.map((note) => note.path)).toEqual([
-      'Projecten/Acme/taken/a.md',
-      'Projecten/Acme/taken/n.md',
+      'Projecten/Acme/taken/A.md',
+      'Projecten/Acme/taken/N.md',
     ]);
   });
 
@@ -234,7 +239,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
 
   it('does not lose the remaining tasks when one adoption fails (CAP-2)', async () => {
     const h = harness([task('A'), task('B'), task('C')]);
-    h.vault.failOn = 'b';
+    h.vault.failOn = 'B';
 
     const first = await h.action.invoke(
       { projectId: 'Acme', projectName: 'Acme' },
@@ -250,9 +255,9 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
     expect(first.errors).toHaveLength(1);
     expect(second.captured).toEqual(['B', 'C']);
     expect(h.vault.created.map((note) => note.path)).toEqual([
-      'Projecten/Acme/taken/a.md',
-      'Projecten/Acme/taken/b.md',
-      'Projecten/Acme/taken/c.md',
+      'Projecten/Acme/taken/A.md',
+      'Projecten/Acme/taken/B.md',
+      'Projecten/Acme/taken/C.md',
     ]);
   });
 
@@ -305,8 +310,8 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
 
     expect(result.captured).toEqual(['A', 'B']);
     expect(vault.created.map((note) => note.path)).toEqual([
-      'Projecten/Acme/taken/a.md',
-      'Projecten/Acme/taken/b.md',
+      'Projecten/Acme/taken/A.md',
+      'Projecten/Acme/taken/B.md',
     ]);
   });
 
@@ -342,7 +347,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
     expect(result.captured).toEqual(['B']);
     expect(result.errors).toHaveLength(1);
     expect(vault.created.map((note) => note.path)).toEqual([
-      'Projecten/Acme/taken/b.md',
+      'Projecten/Acme/taken/B.md',
     ]);
   });
 
@@ -354,7 +359,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       SYNCED_AT,
     );
 
-    expect(noteAt(h.vault, 'a').content).toContain('labels: [type:slice]');
+    expect(noteAt(h.vault, 'A').content).toContain('labels: [type:slice]');
   });
 
   it('captures an unlabelled subtask as a type:task note (CAP-2, LBL-7)', async () => {
@@ -365,7 +370,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       SYNCED_AT,
     );
 
-    expect(noteAt(h.vault, 'b').content).toContain('labels: [type:task]');
+    expect(noteAt(h.vault, 'B').content).toContain('labels: [type:task]');
   });
 
   it('keeps an explicit type label on a captured task-manager task (CAP-2, LBL-7)', async () => {
@@ -379,7 +384,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       SYNCED_AT,
     );
 
-    expect(noteAt(h.vault, 'c').content).toContain('labels: [type:bug]');
+    expect(noteAt(h.vault, 'C').content).toContain('labels: [type:bug]');
   });
 
   it('writes the note shape each capture gate dictates: the code host by label, the task manager typed by position (LBL-8)', async () => {
@@ -406,8 +411,8 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
 
     await action.invoke({ projectId: 'Acme', projectName: 'Acme' }, SYNCED_AT);
 
-    const issueNote = noteAt(vault, 'issue-task');
-    const remoteNote = noteAt(vault, 'remote-task');
+    const issueNote = noteAt(vault, 'Issue task');
+    const remoteNote = noteAt(vault, 'Remote task');
     expect(issueNote.content).toContain('labels: [type:task]');
     expect(issueNote.content).not.toMatch(/^type:/m);
     expect(remoteNote.content).toContain('labels: [type:slice]');
@@ -534,7 +539,7 @@ describe('the captured task decides the adoption shape', () => {
 
     await action.invoke({ projectId: 'Acme', projectName: 'Acme' }, SYNCED_AT);
 
-    expect(noteAt(vault, 'issue-task').content).toContain('created:');
+    expect(noteAt(vault, 'Issue task').content).toContain('created:');
     expect(noteAt(vault, 'td-1').content).not.toContain('created:');
   });
 });

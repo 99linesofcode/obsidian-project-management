@@ -1,8 +1,8 @@
 import { projectAffiliationLink } from '../../../domain/affiliation.js';
 import {
   fillFrontmatterFields,
+  renderFilename,
   replaceTimestampPlaceholders,
-  slugify,
 } from '../../../domain/note.js';
 
 export interface TaskNoteSource {
@@ -28,7 +28,6 @@ export const TaskNoteMapper = {
   map(task: TaskNoteSource, context: TaskNoteContext): RenderedTaskNote {
     const content = [
       '---',
-      `name: ${task.title}`,
       'categories: [taken]',
       `labels: ${labelsValue(task)}`,
       `status: ${context.statusName}`,
@@ -56,7 +55,7 @@ export const TaskNoteMapper = {
 };
 
 function taskNotePath(task: TaskNoteSource, context: TaskNoteContext): string {
-  return `Projecten/${context.projectName}/taken/${slugify(task.title)}.md`;
+  return `Projecten/${context.projectName}/taken/${renderFilename(task.title)}`;
 }
 
 function labelsValue(task: TaskNoteSource): string {
@@ -83,7 +82,6 @@ function managedValues(
   context: TaskNoteContext,
 ): Map<string, string> {
   return new Map([
-    ['name', task.title],
     ['labels', labelsValue(task)],
     ['status', context.statusName],
     ['affiliation', affiliationValue(context)],

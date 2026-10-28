@@ -208,7 +208,7 @@ describe('MirrorSyncAction — a project pass end to end (F02 NWM-1, NWM-3)', ()
     const mergedValue = (field: string) =>
       records.find((record) => record.field === field)!.result.value;
 
-    expect(mergedValue('title')).toBe('fix the bug');
+    expect(mergedValue('title')).toBe('fix-the-bug');
     expect(mergedValue('body')).toBe('Mirror body');
     expect(mergedValue('subtasks')).toBeNull();
     expect(mergedValue('completion')).toBe('false');

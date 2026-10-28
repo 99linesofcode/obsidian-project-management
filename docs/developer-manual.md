@@ -922,11 +922,9 @@ from the home note rather than the first project-root note (the same predicate
 the id migration uses), and the retirement of `RenameProjectAction` and the
 `name:`-property identity (PLC-1..4).
 
-One S31 delta item is deliberately not built: FN-1, the filename rendering from
-`name:`, recorded in the spec as OQ-6. No other discrepancy is known. The
-scheduler's pre-tick project capture was the last fully-recorded discrepancy; it
-is deleted with the origination model, so the scheduler is pure delivery
-mechanics again.
+No discrepancy is known. The scheduler's pre-tick project capture was the last
+fully-recorded discrepancy; it is deleted with the origination model, so the
+scheduler is pure delivery mechanics again.
 
 ---
 

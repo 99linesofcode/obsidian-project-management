@@ -12,7 +12,7 @@ import {
 } from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
-import { hasTypeLabel, slugify } from '../../core/domain/note.js';
+import { hasTypeLabel, renderFilename } from '../../core/domain/note.js';
 import { connectionsOf } from './connectionsOf.js';
 import {
   fieldValue,
@@ -320,14 +320,11 @@ export class VaultAdapter implements VaultPort {
     if (title === null) {
       return;
     }
-    const slug = slugify(title);
-    if (slug === '') {
-      throw new Error(`origin note has no usable title: ${file.path}`);
-    }
+    const filename = renderFilename(title);
     const folder = folderOf(file.path);
     await this.app.fileManager.renameFile(
       file,
-      folder === null ? `${slug}.md` : `${folder}/${slug}.md`,
+      folder === null ? filename : `${folder}/${filename}`,
     );
   }
 }

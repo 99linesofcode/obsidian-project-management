@@ -11,7 +11,7 @@ describe('CapturedTaskNoteMapper — a captured task-manager task carries a kind
       { syncedAt, statusName: 'Unshaped' },
     );
 
-    expect(note.path).toBe('Projecten/Acme Widgets/taken/buy-milk.md');
+    expect(note.path).toBe('Projecten/Acme Widgets/taken/Buy Milk!.md');
     expect(note.content).toContain('categories: [taken]');
     expect(note.content).toContain('labels: [type:slice]');
     expect(note.content).not.toMatch(/^type:/m);

@@ -370,8 +370,9 @@ canonical DTOs and the pure core.
   mirror items are skipped, so the pass is idempotent without a cursor; a handle
   with a tombstone is skipped too, so a deleted note's mirror is never re-adopted
   (DEL-2, I16). Each remaining task is then matched against the project's notes
-  by its **normalised** title — the slug the vault derives a note's title and
-  filename from (CAP-4): exactly one matching note → the task is **linked** to
+  by the **comparison form** of the note's filename — case-folded,
+  whitespace-collapsed, a leading ordinal and a trailing collision suffix
+  stripped (CAP-4): exactly one matching note → the task is **linked** to
   it, recording the handle on the existing note and writing no note; no match →
   the task is adopted as a new note; more than one match → nothing is written
   and the task is logged, so neither a duplicate nor a wrong link is made and the
@@ -417,8 +418,8 @@ canonical DTOs and the pure core.
   nothing is stranded; there is no rename reconciliation to perform — the
   retired `RenameProjectAction`, the folder-drift warning and the property
   comparison are gone. The name is what origination titles the remote project
-  with and what the mirror rename compares against (NWM-31); the `name:`
-  frontmatter field is a title and nothing else.
+  with and what the mirror rename compares against (NWM-31); the note's
+  filename is its title and nothing else.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -474,7 +475,7 @@ canonical DTOs and the pure core.
   `connections.vault.id` (`{ tool: vault, id: <uuid> }`); the registry keys the
   same uuid. The vault's own entry never makes a note a project — discovery
   ignores it, and a note is a project only when it carries a registered mirror
-  connection (ORG-1, DISC-1, DISC-4). A `name:` frontmatter field is a title and
+  connection (ORG-1, DISC-1, DISC-4). The note's filename is its title and
   carries no identity weight.
 - **`data.json`** — the plugin's data file. It holds three containers:
   - **`syncState`** (schema version 4) — the per-mirror registry: `projects.<projectId>.entities`
@@ -697,10 +698,10 @@ Date of Last Update: 2026-10-13
 - **Capture** — adopting remote-born **tasks** into the vault. It enumerates the
   remote's tracked tasks and handles each the vault does not already hold by its
   mirror handle, so the first run adopts the back-catalogue and a second pass is
-  idempotent. A task whose **normalised** title (the slug the vault derives a
-  note's title and filename from) matches exactly one existing note is **linked**
-  to that note — its handle recorded, no note written; no match adopts a new
-  note; more than one match writes nothing and is logged, retried next pass. A
+  idempotent. A task whose title matches the **comparison form** of exactly one
+  existing note's filename is **linked** to that note — its handle recorded, no
+  note written; no match adopts a new note; more than one match writes nothing
+  and is logged, retried next pass. A
   project is never captured — it is declared (origination). A captured
   task-manager task carries a kind — an explicit type label kept, else `slice`
   for a root item and `task` for a subtask.
