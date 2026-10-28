@@ -161,37 +161,17 @@ export function hasTypeLabel(labels: readonly string[]): boolean {
   return typeFromLabels(labels) !== '';
 }
 
-export interface TypeLabelResolution {
-  kind: string;
-  hasExtraTypeLabels: boolean;
-}
-
 export function typeFromLabels(labels: readonly string[]): string {
-  return resolveTypeLabel(labels).kind;
-}
-
-export function resolveTypeLabel(
-  labels: readonly string[],
-): TypeLabelResolution {
-  let kind = '';
-  let extraTypeLabels = 0;
-
   for (const label of labels) {
     if (!label.startsWith('type:')) {
       continue;
     }
-    const candidate = label.slice('type:'.length).trim();
-    if (!WORK_ITEM_KINDS.has(candidate)) {
-      continue;
-    }
-    if (kind === '') {
-      kind = candidate;
-    } else {
-      extraTypeLabels += 1;
+    const kind = label.slice('type:'.length).trim();
+    if (WORK_ITEM_KINDS.has(kind)) {
+      return kind;
     }
   }
-
-  return { kind, hasExtraTypeLabels: extraTypeLabels > 0 };
+  return '';
 }
 
 export function labelSequence(labels: readonly string[]): string {
