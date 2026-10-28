@@ -17,20 +17,27 @@ export function projectNameFromPath(path: string): string | null {
   return segments[1] ?? null;
 }
 
-export function archivedFromPath(path: string): boolean {
-  return path.startsWith('Archief/');
+export function projectNameFromFolder(folder: string): string | null {
+  const segments = folder.split('/');
+  if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
+    return null;
+  }
+  return segments[1] ?? null;
 }
 
-export function projectPathWithName(path: string, projectName: string): string {
+export function projectFolderFromNotePath(path: string): string | null {
   const segments = path.split('/');
   if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
-    return path;
+    return null;
   }
-  if (segments.length < 2) {
-    return path;
+  if (segments.length < 2 || segments[1] === '') {
+    return null;
   }
-  segments[1] = projectName;
-  return segments.join('/');
+  return `${segments[0]}/${segments[1]}`;
+}
+
+export function archivedFromPath(path: string): boolean {
+  return path.startsWith('Archief/');
 }
 
 export function projectHomeStem(projectName: string): string {
@@ -43,17 +50,6 @@ export function projectHomePath(
 ): string {
   const root = archived ? 'Archief' : 'Projecten';
   return `${root}/${projectName}/${projectHomeStem(projectName)}.md`;
-}
-
-export function chooseHomeNotePath(
-  paths: readonly string[],
-  projectName: string,
-): string | null {
-  const conventionalStem = `${projectHomeStem(projectName)}.md`;
-  const conventional = paths.find(
-    (path) => path.split('/').pop() === conventionalStem,
-  );
-  return conventional ?? paths[0] ?? null;
 }
 
 export function folderChainForPath(path: string): string[] {

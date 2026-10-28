@@ -14,13 +14,10 @@ export function projectNoteFromCache(
   if (Object.keys(frontmatter.connections).length === 0) {
     return null;
   }
-  const folderName = projectNameFromPath(path);
-  if (folderName === null) {
+  const projectName = projectNameFromPath(path);
+  if (projectName === null) {
     return null;
   }
-  const declared = frontmatter.name;
-  const projectName =
-    typeof declared === 'string' && declared !== '' ? declared : folderName;
   const { connections, errors } = connectionValidator.validate(
     frontmatter.connections,
   );
@@ -28,9 +25,18 @@ export function projectNoteFromCache(
     return null;
   }
   return {
+    id: vaultId(frontmatter.connections),
     path,
     projectName,
     connections,
     connectionErrors: errors,
   };
+}
+
+function vaultId(connections: Record<string, unknown>): string {
+  const vault = connections.vault;
+  if (!isRecord(vault) || typeof vault.id !== 'string') {
+    return '';
+  }
+  return vault.id;
 }

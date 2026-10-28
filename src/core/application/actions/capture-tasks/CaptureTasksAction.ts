@@ -5,8 +5,13 @@ import type { MirrorPort } from '../../../port/MirrorPort.js';
 import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/paths.js';
-import { slugify, topLevelFrontmatterField, typeFromLabels } from '../../../domain/note.js';
+import {
+  slugify,
+  topLevelFrontmatterField,
+  typeFromLabels,
+} from '../../../domain/note.js';
 import { effectiveConnectionTarget } from '../../services/connectionTarget.js';
+import type { ProjectReferenceDataTransferObject } from '../../data/ProjectReferenceDataTransferObject.js';
 import type { CreateTaskNoteAction } from '../create-task-note/CreateTaskNoteAction.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
 
@@ -18,8 +23,7 @@ export interface CaptureTasksResult {
 interface AdoptTaskInput {
   task: CanonicalTask;
   slug: string;
-  projectName: string;
-  projectId: string;
+  project: ProjectReferenceDataTransferObject;
   syncedAt: string;
 }
 
@@ -42,16 +46,16 @@ export class CaptureTasksAction {
   ) {}
 
   async invoke(
-    project: string,
+    project: ProjectReferenceDataTransferObject,
     syncedAt: string,
-    projectId = '',
   ): Promise<CaptureTasksResult> {
-    const connections = await this.vault.readConnections(project);
+    const connections = await this.vault.readConnections(project.projectId);
     const captured: string[] = [];
     const errors: unknown[] = [];
     let candidates: LinkCandidate[] | null = null;
     const linkCandidates: LinkCandidates = {
-      read: async () => (candidates ??= await this.readLinkCandidates(project)),
+      read: async () =>
+        (candidates ??= await this.readLinkCandidates(project.projectName)),
       invalidate: () => {
         candidates = null;
       },
@@ -59,7 +63,7 @@ export class CaptureTasksAction {
     for (const connection of connections) {
       const target = await effectiveConnectionTarget(
         this.registry,
-        project,
+        project.projectId,
         connection,
       );
       if (target === null) {
@@ -69,7 +73,7 @@ export class CaptureTasksAction {
         connection.application,
         target,
         connection.slug,
-        project,
+        project.projectId,
       );
       if (adapter === null || adapter.capture === undefined) {
         continue;
@@ -82,7 +86,6 @@ export class CaptureTasksAction {
           adapter,
           syncedAt,
           linkCandidates,
-          projectId,
         );
         captured.push(...result.captured);
         errors.push(...result.errors);
@@ -94,22 +97,21 @@ export class CaptureTasksAction {
   }
 
   private async captureConnection(
-    project: string,
+    project: ProjectReferenceDataTransferObject,
     connection: ConnectionDataTransferObject,
     target: string,
     adapter: MirrorPort,
     syncedAt: string,
     linkCandidates: LinkCandidates,
-    projectId: string,
   ): Promise<CaptureTasksResult> {
     if (adapter.capture === undefined) {
       return { captured: [], errors: [] };
     }
     const tasks = await adapter.capture(target);
     const adopted = new Set(
-      (await this.registry.listMirrorItems(project, connection.slug)).map(
-        ({ handle }) => handle,
-      ),
+      (
+        await this.registry.listMirrorItems(project.projectId, connection.slug)
+      ).map(({ handle }) => handle),
     );
 
     const captured: string[] = [];
@@ -127,7 +129,9 @@ export class CaptureTasksAction {
           ? []
           : (await linkCandidates.read()).filter((note) => note.slug === slug);
       if (matches.length > 1) {
-        errors.push(ambiguousTitleError(project, task, matches.length));
+        errors.push(
+          ambiguousTitleError(project.projectName, task, matches.length),
+        );
         continue;
       }
       try {
@@ -137,8 +141,7 @@ export class CaptureTasksAction {
             {
               task,
               slug: connection.slug,
-              projectName: project,
-              projectId,
+              project,
               syncedAt,
             },
             adapter.taskHandlesAreUrls?.() ?? false,
@@ -150,11 +153,11 @@ export class CaptureTasksAction {
             note.path,
           )) !== null
         ) {
-          errors.push(linkedNoteError(project, task, note.path));
+          errors.push(linkedNoteError(project.projectName, task, note.path));
           continue;
         } else {
           await this.registry.recordMirrorHandle(
-            project,
+            project.projectId,
             connection.slug,
             note.path,
             task.handle,
@@ -170,8 +173,12 @@ export class CaptureTasksAction {
     return { captured, errors };
   }
 
-  private async readLinkCandidates(project: string): Promise<LinkCandidate[]> {
-    const paths = await this.vault.listNotesInFolder(`Projecten/${project}`);
+  private async readLinkCandidates(
+    projectName: string,
+  ): Promise<LinkCandidate[]> {
+    const paths = await this.vault.listNotesInFolder(
+      `Projecten/${projectName}`,
+    );
     const candidates: LinkCandidate[] = [];
     for (const path of paths) {
       const note = await this.vault.getNoteByPath(path);
@@ -207,8 +214,8 @@ export class CaptureTasksAction {
       title: input.task.title,
       body: input.task.body,
       type: typeFromLabels([...input.task.labels]),
-      projectName: input.projectName,
-      projectId: input.projectId,
+      projectName: input.project.projectName,
+      projectId: input.project.projectId,
       connectionSlug: input.slug,
       syncedAt: input.syncedAt,
       statusName: input.task.status,
@@ -219,7 +226,7 @@ export class CaptureTasksAction {
     const rendered = CapturedTaskNoteMapper.map(
       {
         title: input.task.title,
-        projectName: input.projectName,
+        projectName: input.project.projectName,
         sliceLink: null,
         kind: capturedKind(input.task),
       },
@@ -228,9 +235,13 @@ export class CaptureTasksAction {
     const path = await freePath(this.vault, rendered.path);
     await this.vault.createNote(path, rendered.content);
     const id = crypto.randomUUID();
-    await this.registry.setEntity({ id, notePath: path, projectId: input.projectId });
+    await this.registry.setEntity({
+      id,
+      notePath: path,
+      projectId: input.project.projectId,
+    });
     await this.registry.setMirrorItem(
-      input.projectName,
+      input.project.projectId,
       input.slug,
       input.task.handle,
       { entityId: id },
@@ -247,21 +258,21 @@ function capturedKind(task: CanonicalTask): string {
 }
 
 function ambiguousTitleError(
-  project: string,
+  projectName: string,
   task: CanonicalTask,
   matches: number,
 ): Error {
   return new Error(
-    `cannot capture ${task.handle}: ${matches} notes in project "${project}" share the title "${task.title}"`,
+    `cannot capture ${task.handle}: ${matches} notes in project "${projectName}" share the title "${task.title}"`,
   );
 }
 
 function linkedNoteError(
-  project: string,
+  projectName: string,
   task: CanonicalTask,
   notePath: string,
 ): Error {
   return new Error(
-    `cannot capture ${task.handle}: ${notePath} in project "${project}" is already linked to another task`,
+    `cannot capture ${task.handle}: ${notePath} in project "${projectName}" is already linked to another task`,
   );
 }

@@ -5,6 +5,7 @@ import type { EntityRecord } from '../../port/data/EntityRecord.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
+  projectId: string;
   projectName: string;
   connections: readonly ConnectionDataTransferObject[];
 }
@@ -20,7 +21,7 @@ export class SweepDeletedNotesAction {
     const prefix = `Projecten/${input.projectName}/`;
     let noteIds: readonly { id: string; path: string }[] | null = null;
 
-    for (const record of await this.syncState.listEntities(input.projectName)) {
+    for (const record of await this.syncState.listEntities(input.projectId)) {
       if (!record.notePath.startsWith(prefix)) {
         continue;
       }
@@ -134,6 +135,7 @@ export class SweepDeletedNotesAction {
     try {
       await this.handleDeletedNote.execute({
         notePath,
+        projectId: input.projectId,
         projectName: input.projectName,
         connections: input.connections,
       });

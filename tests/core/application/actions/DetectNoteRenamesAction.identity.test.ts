@@ -59,7 +59,7 @@ describe('IDN-3 — a note moved between project folders keeps its record', () =
     });
     h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     const record = await h.syncState.get('uuid-1');
     expect(record?.notePath).toBe(newPath);
@@ -77,7 +77,7 @@ describe('IDN-3 — a note moved between project folders keeps its record', () =
     });
     h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     expect((await h.syncState.get('uuid-1'))?.notePath).toBe(newPath);
   });
@@ -104,7 +104,7 @@ describe('DUP-1 — two notes carrying one id: the first wins, the other is repo
       reports.push(args);
     });
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     expect((await h.syncState.get('uuid-1'))?.notePath).toBe(firstPath);
     expect(reports.flat().join(' ')).toContain('uuid-1');

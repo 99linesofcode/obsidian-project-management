@@ -170,11 +170,14 @@ export function stemOf(path: string): string {
   return basename.replace(/\.md$/, '');
 }
 
-export function normalizedStem(path: string): string {
-  return slugify(stemOf(path).replace(/^\d+-/, ''));
-}
-
-const WORK_ITEM_KINDS = new Set(['slice', 'pitch', 'task', 'chore', 'bug', 'todo']);
+const WORK_ITEM_KINDS = new Set([
+  'slice',
+  'pitch',
+  'task',
+  'chore',
+  'bug',
+  'todo',
+]);
 
 export function hasTypeLabel(labels: readonly string[]): boolean {
   return typeFromLabels(labels) !== '';

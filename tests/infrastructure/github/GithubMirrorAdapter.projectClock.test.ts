@@ -109,9 +109,10 @@ function projectContent(
   };
 }
 
-function adapterWith(
-  responses: Array<{ status: number; json: unknown }>,
-): { adapter: GithubMirrorAdapter; transport: FakeTransport } {
+function adapterWith(responses: Array<{ status: number; json: unknown }>): {
+  adapter: GithubMirrorAdapter;
+  transport: FakeTransport;
+} {
   const transport = new FakeTransport(responses);
   return { adapter: new GithubMirrorAdapter(transport, REPO_URL), transport };
 }

@@ -1,4 +1,4 @@
-import { archivedFromPath } from '../../domain/paths.js';
+import { archivedFromPath, projectNameFromFolder } from '../../domain/paths.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
@@ -6,7 +6,6 @@ import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPo
 import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
-import type { MigrateNameAction } from './MigrateNameAction.js';
 import type { MigrateNoteIdsAction } from './MigrateNoteIdsAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
 import type { MirrorSyncAction } from './MirrorSyncAction.js';
@@ -14,7 +13,6 @@ import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
 import type { ProjectLifecycleSyncAction } from './ProjectLifecycleSyncAction.js';
 import type { ReconcileProjectTaskLocksAction } from './ReconcileProjectTaskLocksAction.js';
 import type { RekeyRenamedConnectionsAction } from './RekeyRenamedConnectionsAction.js';
-import type { RenameProjectAction } from './RenameProjectAction.js';
 import type { SweepDeletedNotesAction } from './SweepDeletedNotesAction.js';
 import type { SyncChecklistAction } from './sync-checklist/SyncChecklistAction.js';
 
@@ -25,10 +23,8 @@ export interface SyncProjectDependencies {
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
   taskFields: MirrorSyncAction;
-  migrateName: MigrateNameAction;
   migrateNoteIds: MigrateNoteIdsAction;
   migrateHomeNote: MigrateProjectHomeNoteAction;
-  renameProject: RenameProjectAction;
   detectNoteRenames: DetectNoteRenamesAction;
   syncChecklist: SyncChecklistAction;
   mirrorTodoStatus: MirrorTodoStatusAction;
@@ -42,88 +38,69 @@ export class SyncProjectAction {
 
   constructor(private readonly deps: SyncProjectDependencies) {}
 
-  async execute(project: string): Promise<unknown[]> {
+  async execute(folderPath: string): Promise<unknown[]> {
     this.stepErrors = [];
     const syncedAt = new Date().toISOString();
-
-    await this.step('migrate note ids', () =>
-      this.deps.migrateNoteIds.execute({ projectName: project }),
-    );
-
-    await this.migrateName(project);
-
-    const note = await this.resolveProject(project);
-    if (note === null) {
+    const projectName = projectNameFromFolder(folderPath);
+    if (projectName === null) {
       return this.stepErrors;
     }
 
-    await this.migrate(project, note);
-    await this.reconcileProjectName(project, note);
-    await this.rekey(project, note.connections);
-    await this.ensureBoards(project, note);
-
-    const { frozen, wasFrozen } = await this.reconcileLifecycle(project, note);
-
-    await this.step('task locks', () =>
-      this.deps.taskLocks.invoke({ project, frozen, wasFrozen }),
+    await this.step('migrate note ids', () =>
+      this.deps.migrateNoteIds.execute({ projectName }),
     );
 
-    await this.renames(project, syncedAt);
-    await this.vaultConsistency(project, syncedAt);
+    const note = await this.resolveProject(folderPath);
+    if (note === null) {
+      return this.stepErrors;
+    }
+    const projectId = await this.resolveProjectId(note.path);
+
+    await this.migrateHomeNote(note);
+    await this.rekey(projectId, note.connections);
+    await this.ensureBoards(projectId, projectName, note.connections);
+
+    const { frozen, wasFrozen } = await this.reconcileLifecycle(
+      projectId,
+      projectName,
+      note,
+    );
+
+    await this.step('task locks', () =>
+      this.deps.taskLocks.invoke({ projectId, frozen, wasFrozen }),
+    );
+
+    await this.renames(projectId, syncedAt);
+    await this.vaultConsistency(projectId, projectName, syncedAt);
 
     if (!frozen) {
-      const projectId = await this.resolveProjectId(note.path);
       await this.step('task capture', () =>
-        this.deps.taskCapture.invoke(project, syncedAt, projectId),
+        this.deps.taskCapture.invoke({ projectId, projectName }, syncedAt),
       );
       await this.step('task fields', () =>
-        this.deps.taskFields.invoke(project),
+        this.deps.taskFields.invoke(projectId),
       );
     }
 
-    await this.deletions(project, note.connections);
+    await this.deletions(projectId, projectName, note.connections);
 
     return this.stepErrors;
   }
 
-  private async migrateName(project: string): Promise<void> {
-    await this.step('migrate name', () =>
-      this.deps.migrateName.execute({ projectName: project }),
-    );
-  }
-
-  private async migrate(
-    project: string,
+  private async migrateHomeNote(
     note: ProjectNoteDataTransferObject,
   ): Promise<void> {
     await this.step('migrate home note', () =>
       this.deps.migrateHomeNote.execute({
-        projectName: project,
+        projectName: note.projectName,
         notePath: note.path,
         locationArchived: archivedFromPath(note.path),
       }),
     );
   }
 
-  private async reconcileProjectName(
-    project: string,
-    note: ProjectNoteDataTransferObject,
-  ): Promise<void> {
-    await this.step('rename project', async () => {
-      const warnings = await this.deps.renameProject.execute({
-        projectName: project,
-        notePath: note.path,
-        locationArchived: archivedFromPath(note.path),
-        connections: note.connections,
-      });
-      for (const warning of warnings) {
-        console.warn(warning);
-      }
-    });
-  }
-
   private async rekey(
-    project: string,
+    projectId: string,
     connections: readonly ConnectionDataTransferObject[],
   ): Promise<void> {
     await this.step('rekey connections', async () => {
@@ -131,10 +108,7 @@ export class SyncProjectAction {
       if (rekey === undefined) {
         return;
       }
-      const warnings = await rekey.execute({
-        projectName: project,
-        connections,
-      });
+      const warnings = await rekey.execute({ projectId, connections });
       for (const warning of warnings) {
         console.warn(warning);
       }
@@ -142,26 +116,28 @@ export class SyncProjectAction {
   }
 
   private async ensureBoards(
-    project: string,
-    note: ProjectNoteDataTransferObject,
+    projectId: string,
+    projectName: string,
+    connections: readonly ConnectionDataTransferObject[],
   ): Promise<void> {
     const ensureBoard = this.deps.ensureProjectBoard;
     if (ensureBoard === undefined) {
       return;
     }
-    for (const connection of note.connections) {
+    for (const connection of connections) {
       const setup = this.deps.mirrorAdapters.create(
         connection.application,
         connection.target,
         connection.slug,
-        project,
+        projectId,
       );
       if (setup === null) {
         continue;
       }
       await this.step(`ensure board ${connection.slug}`, () =>
         ensureBoard.execute({
-          projectName: project,
+          projectId,
+          projectName,
           connectionSlug: connection.slug,
           target: connection.target,
           setup,
@@ -170,27 +146,28 @@ export class SyncProjectAction {
     }
   }
 
-  private async renames(project: string, syncedAt: string): Promise<void> {
+  private async renames(projectId: string, syncedAt: string): Promise<void> {
     await this.step('renames', () =>
-      this.deps.detectNoteRenames.execute({ projectName: project, syncedAt }),
+      this.deps.detectNoteRenames.execute({ projectId, syncedAt }),
     );
   }
 
   private async vaultConsistency(
-    project: string,
+    projectId: string,
+    projectName: string,
     syncedAt: string,
   ): Promise<void> {
-    for (const notePath of await this.listNotes(project, 'taken')) {
+    for (const notePath of await this.listNotes(projectId)) {
       await this.step(`checklist ${notePath}`, () =>
         this.deps.syncChecklist.execute({
           notePath,
-          projectName: project,
+          projectName,
           syncedAt,
         }),
       );
     }
 
-    for (const todoPath of await this.listNotes(project, 'taken')) {
+    for (const todoPath of await this.listNotes(projectId)) {
       await this.step(`mirror ${todoPath}`, () =>
         this.deps.mirrorTodoStatus.execute({ todoPath, syncedAt }),
       );
@@ -198,22 +175,24 @@ export class SyncProjectAction {
   }
 
   private async deletions(
-    project: string,
+    projectId: string,
+    projectName: string,
     connections: readonly ConnectionDataTransferObject[],
   ): Promise<void> {
     await this.step('deletions', () =>
       this.deps.sweepDeletedNotes.execute({
-        projectName: project,
+        projectId,
+        projectName,
         connections,
       }),
     );
   }
 
   private async resolveProject(
-    project: string,
+    folderPath: string,
   ): Promise<ProjectNoteDataTransferObject | null> {
     const notes = await this.deps.vault.findProjectNotes();
-    return notes.find((note) => note.projectName === project) ?? null;
+    return notes.find((note) => note.path.startsWith(`${folderPath}/`)) ?? null;
   }
 
   private async resolveProjectId(notePath: string): Promise<string> {
@@ -222,30 +201,26 @@ export class SyncProjectAction {
   }
 
   private async reconcileLifecycle(
-    project: string,
+    projectId: string,
+    projectName: string,
     note: ProjectNoteDataTransferObject,
   ): Promise<{ frozen: boolean; wasFrozen: boolean }> {
     try {
-      return await this.deps.lifecycle.invoke(project);
+      return await this.deps.lifecycle.invoke({ projectId, projectName });
     } catch (error) {
       console.error(
-        `SyncProjectAction: lifecycle failed for ${project}`,
+        `SyncProjectAction: lifecycle failed for ${projectName}`,
         error,
       );
       return { frozen: archivedFromPath(note.path), wasFrozen: false };
     }
   }
 
-  private async listNotes(
-    project: string,
-    folder: string,
-  ): Promise<readonly string[]> {
+  private async listNotes(projectId: string): Promise<readonly string[]> {
     try {
-      return await this.deps.vault.listNotesInFolder(
-        `Projecten/${project}/${folder}`,
-      );
+      return await this.deps.vault.listEntities(projectId);
     } catch (error) {
-      console.error(`SyncProjectAction: list ${folder} failed`, error);
+      console.error('SyncProjectAction: list taken failed', error);
       this.stepErrors.push(error);
       return [];
     }

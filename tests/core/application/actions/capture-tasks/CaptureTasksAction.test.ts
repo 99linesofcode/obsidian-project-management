@@ -159,12 +159,7 @@ function harness(
     create: () => registered({ capture: async () => listing.tasks }),
   };
   return {
-    action: new CaptureTasksAction(
-      vault,
-      factory,
-      syncState,
-      createTaskNote,
-    ),
+    action: new CaptureTasksAction(vault, factory, syncState, createTaskNote),
     vault,
     syncState,
     listing,
@@ -182,8 +177,14 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
   it('adopts a mirror-born task exactly once (CAP-2)', async () => {
     const h = harness([task('A')]);
 
-    const first = await h.action.invoke('Acme', SYNCED_AT);
-    const second = await h.action.invoke('Acme', SYNCED_AT);
+    const first = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
+    const second = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(first.captured).toEqual(['A']);
     expect(second.captured).toEqual([]);
@@ -194,10 +195,16 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
 
   it('adopts a task ordered before a previously adopted one (CAP-2)', async () => {
     const h = harness([task('A')]);
-    await h.action.invoke('Acme', SYNCED_AT);
+    await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
     h.listing.tasks = [task('N'), task('A')];
 
-    const result = await h.action.invoke('Acme', SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual(['N']);
     expect(h.vault.created.map((note) => note.path)).toEqual([
@@ -216,7 +223,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       { acme: { handle: 'A' } },
     );
 
-    const result = await h.action.invoke('Acme', SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual([]);
     expect(h.vault.created).toEqual([]);
@@ -226,9 +236,15 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
     const h = harness([task('A'), task('B'), task('C')]);
     h.vault.failOn = 'b';
 
-    const first = await h.action.invoke('Acme', SYNCED_AT);
+    const first = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
     h.vault.failOn = null;
-    const second = await h.action.invoke('Acme', SYNCED_AT);
+    const second = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(first.captured).toEqual(['A']);
     expect(first.errors).toHaveLength(1);
@@ -253,7 +269,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       new CreateTaskNoteAction(vault, syncState, ''),
     );
 
-    const result = await action.invoke('Acme', SYNCED_AT);
+    const result = await action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual([]);
     expect(result.errors).toEqual([]);
@@ -279,7 +298,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       new CreateTaskNoteAction(vault, syncState, ''),
     );
 
-    const result = await action.invoke('Acme', SYNCED_AT);
+    const result = await action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual(['A', 'B']);
     expect(vault.created.map((note) => note.path)).toEqual([
@@ -312,7 +334,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       new CreateTaskNoteAction(vault, syncState, ''),
     );
 
-    const result = await action.invoke('Acme', SYNCED_AT);
+    const result = await action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual(['B']);
     expect(result.errors).toHaveLength(1);
@@ -324,7 +349,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
   it('captures an unlabelled root task-manager task as a type:slice note (CAP-2, LBL-7)', async () => {
     const h = harness([task('A')], [connection('todoist', 'T1', 'td')]);
 
-    await h.action.invoke('Acme', SYNCED_AT);
+    await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(noteAt(h.vault, 'a').content).toContain('labels: [type:slice]');
   });
@@ -332,7 +360,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
   it('captures an unlabelled subtask as a type:task note (CAP-2, LBL-7)', async () => {
     const h = harness([subtask('B', 'A')], [connection('todoist', 'T1', 'td')]);
 
-    await h.action.invoke('Acme', SYNCED_AT);
+    await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(noteAt(h.vault, 'b').content).toContain('labels: [type:task]');
   });
@@ -343,7 +374,10 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       [connection('todoist', 'T1', 'td')],
     );
 
-    await h.action.invoke('Acme', SYNCED_AT);
+    await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(noteAt(h.vault, 'c').content).toContain('labels: [type:bug]');
   });
@@ -370,7 +404,7 @@ describe('CaptureTasksAction — adopting tracked tasks (CAP-2)', () => {
       new CreateTaskNoteAction(vault, syncState, ''),
     );
 
-    await action.invoke('Acme', SYNCED_AT);
+    await action.invoke({ projectId: 'Acme', projectName: 'Acme' }, SYNCED_AT);
 
     const issueNote = noteAt(vault, 'issue-task');
     const remoteNote = noteAt(vault, 'remote-task');
@@ -394,7 +428,10 @@ describe('DEL-2 — capture never re-adopts a tombstoned handle (I16)', () => {
       handle: 'gh-1',
     });
 
-    const result = await h.action.invoke('Acme', SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual([]);
     expect(h.vault.created).toEqual([]);
@@ -409,7 +446,10 @@ describe('DEL-2 — capture never re-adopts a tombstoned handle (I16)', () => {
       handle: 'td-1',
     });
 
-    const result = await h.action.invoke('Acme', SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual([]);
     expect(h.vault.created).toEqual([]);
@@ -418,7 +458,10 @@ describe('DEL-2 — capture never re-adopts a tombstoned handle (I16)', () => {
   it('still adopts a handle with no tombstone', async () => {
     const h = harness([task('td-1')], [connection('todoist', 'P1', 'td')]);
 
-    const result = await h.action.invoke('Acme', SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: 'Acme', projectName: 'Acme' },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual(['td-1']);
   });
@@ -455,7 +498,7 @@ describe('ORG-2 — the resolved addressing is effective downstream', () => {
       new CreateTaskNoteAction(vault, syncState, ''),
     );
 
-    await action.invoke('Acme', SYNCED_AT);
+    await action.invoke({ projectId: 'Acme', projectName: 'Acme' }, SYNCED_AT);
 
     expect(targets).toEqual(['P-1']);
     expect(targets).not.toContain('');
@@ -489,7 +532,7 @@ describe('the captured task decides the adoption shape', () => {
       new CreateTaskNoteAction(vault, syncState, ''),
     );
 
-    await action.invoke('Acme', SYNCED_AT);
+    await action.invoke({ projectId: 'Acme', projectName: 'Acme' }, SYNCED_AT);
 
     expect(noteAt(vault, 'issue-task').content).toContain('created:');
     expect(noteAt(vault, 'td-1').content).not.toContain('created:');

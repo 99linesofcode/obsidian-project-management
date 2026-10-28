@@ -14,7 +14,9 @@ class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -69,6 +71,7 @@ function input() {
     body: 'The bug happens when the widget is resized.',
     type: 'task',
     projectName: 'Acme Widgets',
+    projectId: 'Acme Widgets',
     connectionSlug: 'github',
     syncedAt: '2026-09-18T12:00:00Z',
     statusName: 'Building',

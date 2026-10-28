@@ -75,6 +75,7 @@ function projectNote(
   archived: boolean,
 ): ProjectNoteDataTransferObject {
   return {
+    id: projectName,
     path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     connections: [
@@ -124,7 +125,11 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
 
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(queue.enqueued).toEqual(['Acme Widgets', 'Other', 'Old Project']);
+    expect(queue.enqueued).toEqual([
+      'Projecten/Acme Widgets',
+      'Projecten/Other',
+      'Archief/Old Project',
+    ]);
   });
 
   it('derives the project from a note change, ignoring paths outside the vault projects', async () => {
@@ -133,13 +138,13 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
         name: 'a task note change',
         fire: (v: FakeVault) =>
           v.fireNoteChanged('Projecten/Acme Widgets/taken/42-fix-the-bug.md'),
-        expected: ['Acme Widgets'],
+        expected: ['Projecten/Acme Widgets'],
       },
       {
         name: 'a home-note change with a drifted filename',
         fire: (v: FakeVault) =>
           v.fireNoteChanged('Projecten/New Name/Old Name.md'),
-        expected: ['New Name'],
+        expected: ['Projecten/New Name'],
       },
       {
         name: 'a path outside Projecten',
@@ -183,7 +188,7 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
       fire(vault);
       await vi.advanceTimersByTimeAsync(2000);
 
-      expect(queue.enqueued).toEqual(['Acme Widgets']);
+      expect(queue.enqueued).toEqual(['Projecten/Acme Widgets']);
     }
   });
 
@@ -214,6 +219,6 @@ describe('PRB-1 — quiet means cheap, never blind', () => {
     );
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(queue.enqueued).toEqual(['Acme Widgets']);
+    expect(queue.enqueued).toEqual(['Projecten/Acme Widgets']);
   });
 });

@@ -5,6 +5,7 @@ import type { RegistryPort } from '../../port/RegistryPort.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
+  projectId: string;
   projectName: string;
   connections: readonly ConnectionDataTransferObject[];
 }
@@ -39,7 +40,7 @@ export class HandleDeletedNoteAction {
           handle: found.handle,
         });
         recorded = true;
-        await this.deleteMirror(input.projectName, connection, found.handle);
+        await this.deleteMirror(input.projectId, connection, found.handle);
       } catch (error) {
         console.error(
           `HandleDeletedNoteAction: mirror delete of ${found.handle} failed; will retry`,
@@ -58,7 +59,7 @@ export class HandleDeletedNoteAction {
   }
 
   private async deleteMirror(
-    projectName: string,
+    projectId: string,
     connection: HandleDeletedNoteInput['connections'][number],
     handle: string,
   ): Promise<void> {
@@ -66,7 +67,7 @@ export class HandleDeletedNoteAction {
       connection.application,
       connection.target,
       connection.slug,
-      projectName,
+      projectId,
     );
     if (adapter === null) {
       return;
@@ -80,6 +81,6 @@ export class HandleDeletedNoteAction {
       }),
     );
     await adapter.deleteTask(handle);
-    await this.syncState.removeMirrorItem(projectName, connection.slug, handle);
+    await this.syncState.removeMirrorItem(projectId, connection.slug, handle);
   }
 }

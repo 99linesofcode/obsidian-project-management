@@ -21,6 +21,7 @@ describe('DISC-1 — the project note is read from the cache', () => {
       connectionValidator,
     );
     expect(active).toEqual({
+      id: '',
       path: 'Projecten/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
       connections: [
@@ -42,6 +43,7 @@ describe('DISC-1 — the project note is read from the cache', () => {
       connectionValidator,
     );
     expect(archived).toEqual({
+      id: '',
       path: 'Archief/Acme Widgets/_home.md',
       projectName: 'Acme Widgets',
       connections: [

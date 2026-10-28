@@ -2,7 +2,7 @@ import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDat
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
 export interface RekeyRenamedConnectionsInput {
-  projectName: string;
+  projectId: string;
   connections: readonly ConnectionDataTransferObject[];
 }
 
@@ -10,7 +10,7 @@ export class RekeyRenamedConnectionsAction {
   constructor(private readonly syncState: RegistryPort) {}
 
   async execute(input: RekeyRenamedConnectionsInput): Promise<unknown[]> {
-    const ports = await this.syncState.listPortStates(input.projectName);
+    const ports = await this.syncState.listPortStates(input.projectId);
     const matched = new Set<string>();
     const warnings: unknown[] = [];
     for (const connection of input.connections) {
@@ -22,7 +22,7 @@ export class RekeyRenamedConnectionsAction {
       );
       if (existing !== undefined) {
         await this.syncState.rekeyPortState(
-          input.projectName,
+          input.projectId,
           existing.slug,
           connection.slug,
         );
@@ -34,7 +34,7 @@ export class RekeyRenamedConnectionsAction {
       if (!matched.has(port.slug)) {
         warnings.push(
           new Error(
-            `connection "${port.slug}" in project "${input.projectName}" no longer has a matching connection; its sync state is left in place`,
+            `connection "${port.slug}" in project "${input.projectId}" no longer has a matching connection; its sync state is left in place`,
           ),
         );
       }

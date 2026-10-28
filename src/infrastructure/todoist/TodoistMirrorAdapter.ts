@@ -1,19 +1,13 @@
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import { isRecord } from '../../core/domain/isRecord.js';
-import {
-  hasTypeLabel,
-  labelsFromSequence,
-} from '../../core/domain/note.js';
+import { hasTypeLabel, labelsFromSequence } from '../../core/domain/note.js';
 import { stringOrEmpty, stringOrNull } from '../../core/domain/strings.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import { CanonicalProject } from '../../core/port/data/CanonicalProject.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import { ProjectAddressing } from '../../core/port/data/ProjectAddressing.js';
 import type { MirrorPort } from '../../core/port/MirrorPort.js';
-import type {
-  TodoistResponse,
-  TodoistTransport,
-} from './TodoistTransport.js';
+import type { TodoistResponse, TodoistTransport } from './TodoistTransport.js';
 import { TodoistTarget } from './TodoistTarget.js';
 
 const COMPLETED_SINCE = '1970-01-01T00:00:00Z';
@@ -256,11 +250,7 @@ export class TodoistMirrorAdapter implements MirrorPort {
       case 'label': {
         const labels = labelsFromSequence(write.value);
         await this.ensureKindLabels(labels);
-        await this.postOk(
-          `/tasks/${write.handle}`,
-          { labels },
-          'write labels',
-        );
+        await this.postOk(`/tasks/${write.handle}`, { labels }, 'write labels');
         return;
       }
     }

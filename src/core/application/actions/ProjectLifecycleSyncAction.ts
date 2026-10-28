@@ -9,6 +9,7 @@ import {
 } from '../../domain/sides.js';
 import { mirrorTrustsArchiveTime } from './mirrorTrustsTimestamps.js';
 import type { ResolvedMirror } from '../resolvedMirror.js';
+import type { ProjectReferenceDataTransferObject } from '../data/ProjectReferenceDataTransferObject.js';
 import { MergePassService } from '../services/MergePassService.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { MirrorPort } from '../../port/MirrorPort.js';
@@ -41,17 +42,23 @@ export class ProjectLifecycleSyncAction {
     this.mergePass = new MergePassService(registry, mirrorAdapters);
   }
 
-  async invoke(project: string): Promise<ProjectLifecycleOutcome> {
-    const connections = await this.vault.readConnections(project);
+  async invoke(
+    project: ProjectReferenceDataTransferObject,
+  ): Promise<ProjectLifecycleOutcome> {
+    const connections = await this.vault.readConnections(project.projectId);
     const mirrors = await this.scopeMirrors(connections, project);
     const origin = originSideObservation(
       ORIGIN_SIDE,
-      await this.registry.readBaseline(project, ARCHIVED_FIELD, ORIGIN_SIDE),
-      await this.vault.observeProject(project),
+      await this.registry.readBaseline(
+        project.projectId,
+        ARCHIVED_FIELD,
+        ORIGIN_SIDE,
+      ),
+      await this.vault.observeProject(project.projectId),
     );
 
     const pass = await this.mergePass.reconcile(
-      project,
+      project.projectId,
       ARCHIVED_FIELD,
       origin,
       mirrors,
@@ -59,7 +66,8 @@ export class ProjectLifecycleSyncAction {
         observeSide: (mirror, baselines) => observeMirror(mirror, baselines),
         fanOut: ({ mirrors: sides, observations }, result) =>
           fanOut(sides, observations, result),
-        applyOrigin: (result) => this.applyToOrigin(project, origin, result),
+        applyOrigin: (result) =>
+          this.applyToOrigin(project.projectId, origin, result),
         baselineFor: (result) => new Baseline(result.value, false),
       },
     );
@@ -75,7 +83,7 @@ export class ProjectLifecycleSyncAction {
   }
 
   private async applyToOrigin(
-    project: string,
+    projectId: string,
     origin: SideObservation,
     result: MergeResult,
   ): Promise<{ advanced: boolean; failed: boolean }> {
@@ -88,8 +96,8 @@ export class ProjectLifecycleSyncAction {
 
     const archived = result.value === 'true';
     try {
-      await this.vault.applyProjectArchived(project, archived);
-      await relocateEntities(this.registry, project, archived);
+      await this.vault.applyProjectArchived(projectId, archived);
+      await relocateEntities(this.registry, projectId, archived);
       return { advanced: true, failed: false };
     } catch {
       return { advanced: false, failed: true };
@@ -98,11 +106,14 @@ export class ProjectLifecycleSyncAction {
 
   private async scopeMirrors(
     connections: readonly ConnectionDataTransferObject[],
-    project: string,
+    project: ProjectReferenceDataTransferObject,
   ): Promise<ResolvedMirror[]> {
     const mirrors: ResolvedMirror[] = [];
     for (const connection of connections) {
-      const scoped = await this.mergePass.scopeConnection(project, connection);
+      const scoped = await this.mergePass.scopeConnection(
+        project.projectId,
+        connection,
+      );
       if (scoped === null) {
         continue;
       }
@@ -136,14 +147,14 @@ export class ProjectLifecycleSyncAction {
     connection: ConnectionDataTransferObject,
     target: string,
     adapter: MirrorPort,
-    project: string,
+    project: ProjectReferenceDataTransferObject,
   ): Promise<ResolvedProject | null> {
     const recorded = await this.registry.resolveMirrorProject(
-      project,
+      project.projectId,
       connection.slug,
     );
     if (recorded !== null) {
-      await this.renameIfDrifted(adapter, recorded, project);
+      await this.renameIfDrifted(adapter, recorded, project.projectName);
       return { handle: recorded };
     }
 
@@ -151,29 +162,29 @@ export class ProjectLifecycleSyncAction {
     if (existing === null) {
       return null;
     }
-    await this.renameIfDrifted(adapter, target, project);
-    await this.record(connection, project, target);
+    await this.renameIfDrifted(adapter, target, project.projectName);
+    await this.record(connection, project.projectId, target);
     return { handle: target };
   }
 
   private async renameIfDrifted(
     adapter: MirrorPort,
     handle: string,
-    project: string,
+    projectName: string,
   ): Promise<void> {
     const mirror = await adapter.readProject(handle);
-    if (mirror !== null && mirror.name !== project) {
-      await adapter.renameProject(handle, project);
+    if (mirror !== null && mirror.name !== projectName) {
+      await adapter.renameProject(handle, projectName);
     }
   }
 
   private async record(
     connection: ConnectionDataTransferObject,
-    project: string,
+    projectId: string,
     handle: string,
   ): Promise<void> {
     await this.registry.recordMirrorProject(
-      project,
+      projectId,
       connection.slug,
       connection.application,
       handle,
@@ -183,19 +194,18 @@ export class ProjectLifecycleSyncAction {
 
 async function relocateEntities(
   registry: RegistryPort,
-  project: string,
+  projectId: string,
   archived: boolean,
 ): Promise<void> {
   const from = archived ? 'Projecten' : 'Archief';
   const to = archived ? 'Archief' : 'Projecten';
-  const fromPrefix = `${from}/${project}/`;
-  const toPrefix = `${to}/${project}/`;
 
-  for (const record of await registry.listEntities(project)) {
-    if (record.notePath.startsWith(fromPrefix)) {
+  for (const record of await registry.listEntities(projectId)) {
+    if (record.notePath.startsWith(`${from}/`)) {
+      const rest = record.notePath.slice(`${from}/`.length);
       await registry.setEntity({
         ...record,
-        notePath: `${toPrefix}${record.notePath.slice(fromPrefix.length)}`,
+        notePath: `${to}/${rest}`,
       });
     }
   }

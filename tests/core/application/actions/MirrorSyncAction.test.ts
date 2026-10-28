@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it, vi } from 'vitest';
 
 const { TFile } = vi.hoisted(() => {
@@ -42,6 +43,9 @@ const HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  conformance:',
   '    tool: conformance',
   '    project: board-1',
@@ -183,7 +187,11 @@ async function setup() {
 
   const { storage, snapshot } = fakeStorage();
   const registry = new SyncStateAdapter(storage);
-  await registry.setEntity({ id: TASK_PATH, notePath: TASK_PATH });
+  await registry.setEntity({
+    id: TASK_PATH,
+    notePath: TASK_PATH,
+    projectId: projectFromNotePath(TASK_PATH),
+  });
   await registry.setMirrorItem(PROJECT, 'conformance', TASK_PATH, {
     entityId: TASK_PATH,
   });
@@ -369,7 +377,11 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
       vault.values.set(field, value);
     }
     const registry = new SyncStateAdapter(fakeStorage().storage);
-    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setEntity({
+      id: ENTITY,
+      notePath: ENTITY,
+      projectId: projectFromNotePath(ENTITY),
+    });
     for (const slug of ['alpha', 'beta', 'gamma']) {
       await registry.setMirrorItem(PROJECT, slug, ENTITY, { entityId: ENTITY });
     }
@@ -420,7 +432,11 @@ describe('MirrorSyncAction — a failed mirror write (F02)', () => {
       vault.values.set(field, field === 'Status' ? 'Done' : value);
     }
     const registry = new SyncStateAdapter(fakeStorage().storage);
-    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setEntity({
+      id: ENTITY,
+      notePath: ENTITY,
+      projectId: projectFromNotePath(ENTITY),
+    });
     for (const slug of ['boom', 'alpha']) {
       await registry.setMirrorItem(PROJECT, slug, ENTITY, { entityId: ENTITY });
     }

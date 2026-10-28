@@ -66,6 +66,9 @@ const HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  conformance:',
   '    tool: conformance',
   '    project: board-1',
@@ -115,6 +118,7 @@ describe('VaultAdapter — the project source', () => {
 
   it('enumerates the project task notes', async () => {
     const notes = new FakeAppVault();
+    notes.seed('Projecten/Acme/_Acme.md', HOME);
     notes.seed('Projecten/Acme/taken/fix.md', '');
     notes.seed('Projecten/Acme/taken/ship.md', '');
     notes.seed('Projecten/Acme/todos/other.md', '');

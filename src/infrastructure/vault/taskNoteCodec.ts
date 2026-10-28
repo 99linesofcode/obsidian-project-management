@@ -38,7 +38,10 @@ export function parseTaskNote(content: string, handle: string): TaskNote {
   };
 }
 
-export function fieldValue(note: TaskNote, field: CanonicalField): string | null {
+export function fieldValue(
+  note: TaskNote,
+  field: CanonicalField,
+): string | null {
   switch (field) {
     case 'title':
       return note.title;
@@ -142,10 +145,7 @@ function withLabels(content: string, value: string | null): string {
     return lines.join('\n');
   }
   let removed = 1;
-  while (
-    index + removed < closing &&
-    /^\s*-\s/.test(lines[index + removed]!)
-  ) {
+  while (index + removed < closing && /^\s*-\s/.test(lines[index + removed]!)) {
     removed++;
   }
   lines.splice(index, removed, renderLine('labels', value));

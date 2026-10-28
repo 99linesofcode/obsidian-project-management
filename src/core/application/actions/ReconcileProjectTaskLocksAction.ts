@@ -6,7 +6,7 @@ import type { VaultPort } from '../../port/VaultPort.js';
 import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 
 export interface ReconcileProjectTaskLocksInput {
-  project: string;
+  projectId: string;
   frozen: boolean;
   wasFrozen: boolean;
 }
@@ -23,11 +23,11 @@ export class ReconcileProjectTaskLocksAction {
     if (input.frozen === input.wasFrozen) {
       return;
     }
-    const connections = await this.vault.readConnections(input.project);
+    const connections = await this.vault.readConnections(input.projectId);
     for (const connection of connections) {
       const target = await effectiveConnectionTarget(
         this.registry,
-        input.project,
+        input.projectId,
         connection,
       );
       if (target === null) {
@@ -37,7 +37,7 @@ export class ReconcileProjectTaskLocksAction {
         connection.application,
         target,
         connection.slug,
-        input.project,
+        input.projectId,
       );
       if (
         adapter === null ||
@@ -56,7 +56,7 @@ export class ReconcileProjectTaskLocksAction {
     input: ReconcileProjectTaskLocksInput,
   ): Promise<void> {
     const tracked = await this.registry.listMirrorHandles(
-      input.project,
+      input.projectId,
       connection.slug,
     );
     for (const { handle, notePath } of tracked) {

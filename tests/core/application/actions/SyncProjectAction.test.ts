@@ -3,7 +3,6 @@ import { SyncProjectAction } from '../../../../src/core/application/actions/Sync
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
-import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
 import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
@@ -23,7 +22,6 @@ import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
-import { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 
 class FakeVault extends FakeVaultBase {
@@ -55,7 +53,20 @@ class FakeVault extends FakeVaultBase {
   override async readNoteIds(): Promise<
     readonly { id: string; path: string }[]
   > {
-    return [];
+    return this.projectNotes.map((note) => ({
+      id: note.id,
+      path: note.path,
+    }));
+  }
+  override async listEntities(projectId: string): Promise<readonly string[]> {
+    const note = this.projectNotes.find(
+      (candidate) => candidate.id === projectId,
+    );
+    if (note === undefined) {
+      return [];
+    }
+    const folder = note.path.split('/').slice(0, 2).join('/');
+    return this.folders.get(`${folder}/taken`) ?? [];
   }
   override async trashNote(): Promise<void> {}
   override async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
@@ -110,6 +121,7 @@ function projectNote(
   ],
 ): ProjectNoteDataTransferObject {
   return {
+    id: projectName,
     path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     connections,
@@ -213,8 +225,8 @@ function harness(options: HarnessOptions = {}) {
     },
   } as unknown as ReconcileProjectTaskLocksAction;
   const taskCapture = {
-    invoke: async (project: string) => {
-      events.push(`capture:${project}`);
+    invoke: async (project: { projectName: string }) => {
+      events.push(`capture:${project.projectName}`);
     },
   } as unknown as CaptureTasksAction;
   const taskFields = {
@@ -230,12 +242,10 @@ function harness(options: HarnessOptions = {}) {
     taskLocks,
     taskCapture,
     taskFields,
-    migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
     migrateNoteIds: {
       execute: async () => {},
     } as unknown as MigrateNoteIdsAction,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
-    renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames: renames,
     syncChecklist: checklist,
     mirrorTodoStatus: mirrorStatus,
@@ -261,7 +271,7 @@ describe('the multi-adapter pass', () => {
     const todo = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
     const h = harness({ taken: [todo] });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([
       'lifecycle',
@@ -277,7 +287,7 @@ describe('the multi-adapter pass', () => {
   it('no-ops a stale work item whose pm-note is gone', async () => {
     const h = harness({ projectNotes: [] });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([]);
   });
@@ -285,7 +295,7 @@ describe('the multi-adapter pass', () => {
   it('isolates a failing step: a failing step never starves the rest', async () => {
     const h = harness({ failRenames: true });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([
       'lifecycle',
@@ -297,12 +307,15 @@ describe('the multi-adapter pass', () => {
 
   it('freezes a project when the folder is archived or the lifecycle pass reports it frozen', async () => {
     for (const options of [
-      { projectNotes: [projectNote('Acme Widgets', true)] },
-      { frozen: true },
+      {
+        folder: 'Archief/Acme Widgets',
+        projectNotes: [projectNote('Acme Widgets', true)],
+      },
+      { folder: 'Projecten/Acme Widgets', frozen: true },
     ]) {
       const h = harness(options);
 
-      await h.action.execute('Acme Widgets');
+      await h.action.execute(options.folder);
 
       expect(h.events).toEqual([
         'lifecycle',
@@ -315,7 +328,7 @@ describe('the multi-adapter pass', () => {
   it('ensures the board for an active project before reconciliation', async () => {
     const h = harness({ ensureBoard: true });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events.slice(0, 2)).toEqual([
       'ensureBoard:Acme Widgets/github',
@@ -334,7 +347,7 @@ describe('the multi-adapter pass', () => {
       ensureBoard: true,
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Archief/Acme Widgets');
 
     expect(h.events).toContain('ensureBoard:Acme Widgets/todoist');
   });
@@ -342,7 +355,7 @@ describe('the multi-adapter pass', () => {
   it('migrates a legacy-named home note', async () => {
     const h = harness();
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.vault.renames).toEqual([
       {
@@ -364,7 +377,9 @@ describe('the lifecycle fallback', () => {
         failLifecycle: true,
       });
 
-      await h.action.execute('Acme Widgets');
+      await h.action.execute(
+        archived ? 'Archief/Acme Widgets' : 'Projecten/Acme Widgets',
+      );
 
       expect(h.events).toContain(verdict);
     }
@@ -377,7 +392,7 @@ describe('the deletion sweep', () => {
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toContain(
       'delete:Projecten/Acme Widgets/taken/42-gone.md',
@@ -393,7 +408,7 @@ describe('the deletion sweep', () => {
       'content',
     );
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).not.toContain(
       'delete:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
@@ -405,7 +420,7 @@ describe('the deletion sweep', () => {
       statuses: [status('Archief/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).not.toContain(
       'delete:Archief/Acme Widgets/taken/42-gone.md',
@@ -417,7 +432,7 @@ describe('the deletion sweep', () => {
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.deletedConnections).toEqual(['github', 'todoist']);
   });
@@ -440,7 +455,7 @@ describe('SHELL-2 — every declared connection is resolved-or-created', () => {
       ensureBoard: true,
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toContain('ensureBoard:Acme Widgets/github');
     expect(h.events).toContain('ensureBoard:Acme Widgets/linear');
@@ -459,7 +474,7 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toContain(
       'delete:Projecten/Acme Widgets/taken/42-gone.md',
@@ -481,7 +496,7 @@ describe('SHELL-2 — the chain runs its origination step before reconciliation'
       ensureBoard: true,
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([
       'ensureBoard:Acme Widgets/github',
@@ -498,7 +513,7 @@ describe('ORG-4 — no declared connection, no fan-out', () => {
   it('fans out nothing when the project declares no connections', async () => {
     const h = harness({ connections: [], ensureBoard: true });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events.filter((event) => event.startsWith('ensureBoard'))).toEqual(
       [],
@@ -547,12 +562,10 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       taskFields: {
         invoke: async () => {},
       } as unknown as MirrorSyncAction,
-      migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
       migrateNoteIds: {
         execute: async () => {},
       } as unknown as MigrateNoteIdsAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
-      renameProject: new RenameProjectAction(vault, syncState),
       detectNoteRenames: {
         execute: async () => {},
       } as unknown as DetectNoteRenamesAction,
@@ -568,7 +581,7 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       ensureProjectBoard: new EnsureProjectBoardAction(syncState, []),
     });
 
-    await action.execute('Acme Widgets');
+    await action.execute('Archief/Acme Widgets');
 
     expect(
       await syncState.getIdentity('Acme Widgets', 'todoist'),

@@ -8,7 +8,6 @@ import { OriginObservation } from '../../core/domain/OriginObservation.js';
 import type { VaultPort } from '../../core/port/VaultPort.js';
 import {
   archivedFromPath,
-  chooseHomeNotePath,
   folderChainForPath,
 } from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
@@ -211,9 +210,9 @@ export class VaultAdapter implements VaultPort {
   }
 
   async readConnections(
-    project: string,
+    projectId: string,
   ): Promise<readonly ConnectionDataTransferObject[]> {
-    const path = await this.findHomeNotePath(project);
+    const path = await this.findHomeNotePath(projectId);
     if (path === null) {
       return [];
     }
@@ -221,22 +220,17 @@ export class VaultAdapter implements VaultPort {
     if (note === null) {
       return [];
     }
-    return Object.entries(connectionsOf(note.content)).map(
-      ([slug, connection]) =>
-        new ConnectionDataTransferObject({
-          slug,
-          application: connection.tool,
-          target: connection.project ?? '',
-        }),
-    );
+    return this.connectionValidator.validate(connectionsOf(note.content))
+      .connections;
   }
 
-  async listEntities(project: string): Promise<readonly string[]> {
-    return this.listNotesInFolder(`Projecten/${project}/taken`);
+  async listEntities(projectId: string): Promise<readonly string[]> {
+    const folder = await this.projectFolder(projectId);
+    return folder === null ? [] : this.listNotesInFolder(`${folder}/taken`);
   }
 
-  async observeProject(project: string): Promise<OriginObservation> {
-    const path = await this.findHomeNotePath(project);
+  async observeProject(projectId: string): Promise<OriginObservation> {
+    const path = await this.findHomeNotePath(projectId);
     if (path === null) {
       return absentOriginObservation();
     }
@@ -250,12 +244,17 @@ export class VaultAdapter implements VaultPort {
   }
 
   async applyProjectArchived(
-    project: string,
+    projectId: string,
     archived: boolean,
   ): Promise<void> {
+    const folder = await this.projectFolder(projectId);
+    if (folder === null) {
+      return;
+    }
     const from = archived ? 'Projecten' : 'Archief';
     const to = archived ? 'Archief' : 'Projecten';
-    await this.moveFolder(`${from}/${project}`, `${to}/${project}`);
+    const name = folder.split('/').pop() ?? '';
+    await this.moveFolder(`${from}/${name}`, `${to}/${name}`);
   }
 
   private async readTaskNote(
@@ -280,17 +279,20 @@ export class VaultAdapter implements VaultPort {
     return new Date(file.stat.ctime).toISOString();
   }
 
-  private async findHomeNotePath(project: string): Promise<string | null> {
-    const notes = (await this.findProjectNotes()).filter(
-      (note) => note.projectName === project,
-    );
-    return chooseHomeNotePath(
-      notes.map((note) => note.path),
-      project,
-    );
+  private async findHomeNotePath(projectId: string): Promise<string | null> {
+    const ids = await this.readNoteIds();
+    return ids.find((note) => note.id === projectId)?.path ?? null;
   }
 
-  private async moveFolder(fromPrefix: string, toPrefix: string): Promise<void> {
+  private async projectFolder(projectId: string): Promise<string | null> {
+    const path = await this.findHomeNotePath(projectId);
+    return path === null ? null : folderOf(path);
+  }
+
+  private async moveFolder(
+    fromPrefix: string,
+    toPrefix: string,
+  ): Promise<void> {
     const from = fromPrefix.endsWith('/') ? fromPrefix : `${fromPrefix}/`;
     const to = toPrefix.endsWith('/') ? toPrefix : `${toPrefix}/`;
     const files = this.app.vault

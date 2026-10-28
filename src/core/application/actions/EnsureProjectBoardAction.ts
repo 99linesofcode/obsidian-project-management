@@ -3,6 +3,7 @@ import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { ProjectSetupSurface } from '../../port/MirrorPort.js';
 
 export interface EnsureProjectBoardInput {
+  projectId: string;
   projectName: string;
   connectionSlug: string;
   target: string;
@@ -25,7 +26,7 @@ export class EnsureProjectBoardAction {
       return;
     }
     await this.syncState.setIdentity(
-      input.projectName,
+      input.projectId,
       input.connectionSlug,
       new ProjectIdentityDataTransferObject({
         target: addressing.effectiveTarget || input.target,

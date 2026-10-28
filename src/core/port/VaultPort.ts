@@ -24,10 +24,10 @@ export interface VaultPort {
   applyField(write: CanonicalFieldWrite): Promise<void>;
 
   readConnections(
-    project: string,
+    projectId: string,
   ): Promise<readonly ConnectionDataTransferObject[]>;
-  listEntities(project: string): Promise<readonly string[]>;
+  listEntities(projectId: string): Promise<readonly string[]>;
 
-  observeProject(project: string): Promise<OriginObservation>;
-  applyProjectArchived(project: string, archived: boolean): Promise<void>;
+  observeProject(projectId: string): Promise<OriginObservation>;
+  applyProjectArchived(projectId: string, archived: boolean): Promise<void>;
 }

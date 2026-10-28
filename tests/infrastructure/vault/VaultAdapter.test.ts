@@ -45,7 +45,9 @@ function setup() {
   const vault = new FakeVault();
   const app = { vault } as unknown as App;
   const registered: EventRef[] = [];
-  const adapter = vaultAdapter(app, { registerEvent: (ref) => registered.push(ref) });
+  const adapter = vaultAdapter(app, {
+    registerEvent: (ref) => registered.push(ref),
+  });
   const changed: string[] = [];
   const renamed: Array<{ oldPath: string; newPath: string }> = [];
   adapter.onNoteChanged((path) => changed.push(path));
@@ -148,10 +150,22 @@ describe('VaultAdapter.observeProject', () => {
     const homePath = 'Projecten/Acme Widgets/_Acme Widgets.md';
     const mtime = 1758196800000;
     const ctime = 1758200400000;
+    const homeContent = [
+      '---',
+      'connections:',
+      '  vault:',
+      '    tool: vault',
+      '    id: Acme Widgets',
+      '  a:',
+      '    tool: conformance',
+      '    project: board',
+      '---',
+    ].join('\n');
     const vault = {
       getMarkdownFiles: () => [new TFile(homePath, 'md', { mtime, ctime })],
       getAbstractFileByPath: (path: string) =>
         path === homePath ? new TFile(path, 'md', { mtime, ctime }) : null,
+      read: async () => homeContent,
       metadataCache: {
         getFileCache: () => ({
           frontmatter: {
@@ -186,6 +200,24 @@ class MoveVault {
     this.files = paths.map(
       (path) => new TFile(path, path.split('.').pop() ?? ''),
     );
+  }
+
+  getMarkdownFiles(): TFileInstance[] {
+    return this.files.filter((file) => file.extension === 'md');
+  }
+
+  async read(file: TFileInstance): Promise<string> {
+    if (file.path !== 'Projecten/Acme Widgets/_home.md') {
+      return '';
+    }
+    return [
+      '---',
+      'connections:',
+      '  vault:',
+      '    tool: vault',
+      '    id: Acme Widgets',
+      '---',
+    ].join('\n');
   }
 
   getFiles(): TFileInstance[] {
@@ -244,6 +276,7 @@ describe('VaultAdapter.applyProjectArchived', () => {
 
   it('creates the destination folder chain before renaming', async () => {
     const { vault, adapter } = moveSetup([
+      'Projecten/Acme Widgets/_home.md',
       'Projecten/Acme Widgets/taken/42-fix-the-bug.md',
     ]);
 

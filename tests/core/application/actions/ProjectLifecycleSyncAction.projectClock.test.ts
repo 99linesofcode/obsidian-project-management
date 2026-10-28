@@ -158,11 +158,18 @@ describe('NWM-6 amended — the port surface is the project clock, not an archiv
       new Baseline('false', false),
     );
     const mirror = new ProjectClockMirror();
-    const action = new ProjectLifecycleSyncAction(new LifecycleVault(), registry, {
-      create: () => mirror,
-    });
+    const action = new ProjectLifecycleSyncAction(
+      new LifecycleVault(),
+      registry,
+      {
+        create: () => mirror,
+      },
+    );
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.result.rung).toBe(1);
     expect(record.result.winner).toBe('mirror:todoist');
@@ -206,7 +213,10 @@ describe('ADP-6 / NWM-6 — a task manager is decisive in both directions', () =
       { create: () => mirror },
     );
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.result.rung).toBe(1);
     expect(record.result.winner).toBe('mirror:todoist');

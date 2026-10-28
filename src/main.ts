@@ -37,10 +37,8 @@ import type { GithubTransport } from './infrastructure/github/GithubTransport.js
 import { TodoistMirrorAdapter } from './infrastructure/todoist/TodoistMirrorAdapter.js';
 import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
-import { MigrateNameAction } from './core/application/actions/MigrateNameAction.js';
 import { MigrateNoteIdsAction } from './core/application/actions/MigrateNoteIdsAction.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
-import { RenameProjectAction } from './core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
 
 async function request(
@@ -121,13 +119,13 @@ function mirrorAdapterFactory(
   providers: ProviderTable,
 ): MirrorAdapterFactoryPort {
   return {
-    create: (application, target, connectionSlug, projectName) => {
+    create: (application, target, connectionSlug, projectId) => {
       const provider = providerFor(providers, application);
       if (provider === null) {
         return null;
       }
       return provider.mirror(target, () =>
-        syncState.getIdentity(projectName, connectionSlug),
+        syncState.getIdentity(projectId, connectionSlug),
       );
     },
   };
@@ -172,16 +170,11 @@ function composePlugin(
   const providers: ProviderTable = {
     github: {
       mirror: (target, boardIdentity) =>
-        new GithubMirrorAdapter(
-          githubTransport,
-          target,
-          boardIdentity,
-        ),
+        new GithubMirrorAdapter(githubTransport, target, boardIdentity),
       token: githubToken,
     },
     todoist: {
-      mirror: (target) =>
-        new TodoistMirrorAdapter(todoistTransport, target),
+      mirror: (target) => new TodoistMirrorAdapter(todoistTransport, target),
       token: todoistToken,
     },
   };
@@ -226,7 +219,6 @@ function composePlugin(
     mirrorAdapters,
   );
   const migrateHomeNote = new MigrateProjectHomeNoteAction(vault);
-  const renameProject = new RenameProjectAction(vault, syncState);
   const sweepDeletedNotes = new SweepDeletedNotesAction(
     vault,
     syncState,
@@ -239,10 +231,8 @@ function composePlugin(
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,
     taskFields: core.taskFields,
-    migrateName: new MigrateNameAction(vault),
     migrateNoteIds: new MigrateNoteIdsAction(vault),
     migrateHomeNote,
-    renameProject,
     detectNoteRenames,
     syncChecklist,
     mirrorTodoStatus,

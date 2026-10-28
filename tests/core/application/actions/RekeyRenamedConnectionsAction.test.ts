@@ -14,7 +14,7 @@ describe('DISC-2 — a renamed connection re-keys its registry port', () => {
     const action = new RekeyRenamedConnectionsAction(syncState);
 
     const warnings = await action.execute({
-      projectName: 'Acme Widgets',
+      projectId: 'Acme Widgets',
       connections: [
         { slug: 'todoist-work', application: 'todoist', target: 'P1' },
       ],
@@ -43,7 +43,7 @@ describe('DISC-2 — a renamed connection re-keys its registry port', () => {
     const action = new RekeyRenamedConnectionsAction(syncState);
 
     const warnings = await action.execute({
-      projectName: 'Acme Widgets',
+      projectId: 'Acme Widgets',
       connections: [
         {
           slug: 'github',

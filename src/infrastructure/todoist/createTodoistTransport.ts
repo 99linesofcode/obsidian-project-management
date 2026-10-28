@@ -1,8 +1,5 @@
 import { requestUrl } from 'obsidian';
-import type {
-  TodoistResponse,
-  TodoistTransport,
-} from './TodoistTransport.js';
+import type { TodoistResponse, TodoistTransport } from './TodoistTransport.js';
 
 const BASE_URL = 'https://api.todoist.com/api/v1';
 

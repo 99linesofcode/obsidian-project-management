@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
@@ -142,7 +143,11 @@ describe('MirrorSyncAction — the real adapter wiring (F02 NWM-2)', () => {
     notes.seed(NOTE_PATH, '---\ntype: task\n---');
 
     const syncState = new SyncStateAdapter(memoryStorage().storage);
-    await syncState.setEntity({ id: ENTITY_ID, notePath: NOTE_PATH });
+    await syncState.setEntity({
+      id: ENTITY_ID,
+      notePath: NOTE_PATH,
+      projectId: projectFromNotePath(NOTE_PATH),
+    });
     await syncState.setMirrorItem(PROJECT, 'gh-main', HANDLE, {
       entityId: ENTITY_ID,
     });

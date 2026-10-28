@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { RegistryPort } from '../../src/core/port/RegistryPort.js';
+import { projectFromNotePath } from '../../src/core/domain/paths.js';
 
 export interface SyncStateConformanceHarness {
   create(): RegistryPort;
@@ -17,7 +18,7 @@ const PENDING = 'pendingCreation:e1';
 const TD = 'T1';
 
 function entity(id: string, notePath: string): EntityRecord {
-  return { id, notePath };
+  return { id, notePath, projectId: projectFromNotePath(notePath) };
 }
 
 export function runSyncStateConformance(

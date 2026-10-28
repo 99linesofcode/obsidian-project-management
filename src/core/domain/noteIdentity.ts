@@ -9,7 +9,9 @@ export function noteId(content: string): string | null {
     return null;
   }
 
-  const connections = block.findIndex((line) => line.trimEnd() === CONNECTIONS_LINE);
+  const connections = block.findIndex(
+    (line) => line.trimEnd() === CONNECTIONS_LINE,
+  );
   if (connections === -1) {
     return null;
   }
@@ -56,7 +58,8 @@ export function stampNoteId(content: string, id: string): string {
   const closing = lines.indexOf('---', 1);
   const entry = [`  ${VAULT_ENTRY}`, '    tool: vault', `    id: ${id}`];
   const connections = lines.findIndex(
-    (line, index) => index > 0 && index < closing && line.trimEnd() === CONNECTIONS_LINE,
+    (line, index) =>
+      index > 0 && index < closing && line.trimEnd() === CONNECTIONS_LINE,
   );
 
   if (connections === -1) {

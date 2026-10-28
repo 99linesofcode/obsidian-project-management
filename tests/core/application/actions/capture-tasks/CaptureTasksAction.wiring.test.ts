@@ -109,6 +109,9 @@ function homeNote(connections: string): string {
     '---',
     'type: project',
     'connections:',
+    '  vault:',
+    '    tool: vault',
+    `    id: ${PROJECT}`,
     connections,
     '---',
   ].join('\n');
@@ -123,10 +126,7 @@ function harness(
   syncState: FakeSyncState;
 } {
   const vault = new FakeAppVault();
-  vault.seed(
-    `Projecten/${PROJECT}/_${PROJECT}.md`,
-    homeNote(connectionBlock),
-  );
+  vault.seed(`Projecten/${PROJECT}/_${PROJECT}.md`, homeNote(connectionBlock));
   const syncState = new FakeSyncState();
   const app = {
     vault,
@@ -141,12 +141,7 @@ function harness(
       registered({ capture: async () => tasks }, application === 'github'),
   };
   return {
-    action: new CaptureTasksAction(
-      port,
-      factory,
-      syncState,
-      createTaskNote,
-    ),
+    action: new CaptureTasksAction(port, factory, syncState, createTaskNote),
     vault,
     syncState,
   };
@@ -158,16 +153,21 @@ const GITHUB_BLOCK = [
   '    project: "https://github.com/acme/widgets"',
 ].join('\n');
 
-const TODOIST_BLOCK = ['  todoist:', '    tool: todoist', '    project: "T1"'].join(
-  '\n',
-);
+const TODOIST_BLOCK = [
+  '  todoist:',
+  '    tool: todoist',
+  '    project: "T1"',
+].join('\n');
 
 describe('CaptureTasksAction — the vault wiring (CAP-2)', () => {
   it('writes a code-host task as a task note carrying its url', async () => {
     const url = 'https://github.com/acme/widgets/issues/42';
     const h = harness(GITHUB_BLOCK, [task(url, 'Fix the Bug')]);
 
-    await h.action.invoke(PROJECT, SYNCED_AT);
+    await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(h.vault.created).toHaveLength(1);
     expect(h.vault.created[0]!.path).toBe(
@@ -180,7 +180,10 @@ describe('CaptureTasksAction — the vault wiring (CAP-2)', () => {
   it('writes a task-manager task as a draft note and stamps its mirror', async () => {
     const h = harness(TODOIST_BLOCK, [task('T1', 'Buy Milk')]);
 
-    await h.action.invoke(PROJECT, SYNCED_AT);
+    await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(h.vault.created).toHaveLength(1);
     const { path, content } = h.vault.created[0]!;
@@ -194,7 +197,10 @@ describe('CaptureTasksAction — the vault wiring (CAP-2)', () => {
   it('refuses a task whose handle is empty', async () => {
     const h = harness(TODOIST_BLOCK, [task('', 'Nameless')]);
 
-    const result = await h.action.invoke(PROJECT, SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual([]);
     expect(result.errors).toHaveLength(1);
@@ -212,7 +218,10 @@ describe('CaptureTasksAction — the vault wiring (CAP-2)', () => {
       { todoist: { handle: 'T1' } },
     );
 
-    const result = await h.action.invoke(PROJECT, SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual([]);
     expect(h.vault.created).toEqual([]);

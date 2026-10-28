@@ -15,10 +15,7 @@ export type SeedPathKey =
   | 'tasksBasePath';
 
 export type SeedArtifactKey =
-  | 'projectTemplate'
-  | 'taskTemplate'
-  | 'projectsBase'
-  | 'tasksBase';
+  'projectTemplate' | 'taskTemplate' | 'projectsBase' | 'tasksBase';
 
 export interface SeedArtifact {
   key: SeedArtifactKey;

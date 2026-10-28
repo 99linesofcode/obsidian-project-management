@@ -10,7 +10,7 @@ export interface CreateTaskNoteInput {
   body: string;
   type: string;
   projectName: string;
-  projectId?: string;
+  projectId: string;
   connectionSlug: string;
   syncedAt: string;
   statusName: string;
@@ -58,11 +58,11 @@ export class CreateTaskNoteAction {
     await this.syncState.setEntity({
       id,
       notePath: path,
-      ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+      projectId: input.projectId,
     });
     if (input.url !== '') {
       await this.syncState.setMirrorItem(
-        input.projectName,
+        input.projectId,
         input.connectionSlug,
         input.url,
         {

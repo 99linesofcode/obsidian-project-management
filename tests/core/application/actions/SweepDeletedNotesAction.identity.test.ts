@@ -60,6 +60,7 @@ describe('IDN-5 — a deletion is proved by the note id, never by the path alone
     ];
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
@@ -76,6 +77,7 @@ describe('IDN-5 — a deletion is proved by the note id, never by the path alone
     h.vault.noteIds = [];
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
@@ -102,6 +104,7 @@ describe('DEL-1 — a restored note clears its own tombstone', () => {
     h.vault.noteIds = [{ id: 'entity-1', path: oldPath }];
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });

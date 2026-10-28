@@ -11,11 +11,7 @@ export interface RegistryPort {
   findByNotePath(notePath: string): Promise<EntityRecord | null>;
   setEntity(record: EntityRecord): Promise<void>;
   removeEntity(id: string): Promise<void>;
-  listEntities(projectName: string): Promise<EntityRecord[]>;
-
-  rekeyProject(fromProject: string, toProject: string): Promise<void>;
-  hasProject(projectName: string): Promise<boolean>;
-  listProjects(): Promise<string[]>;
+  listEntities(projectId: string): Promise<EntityRecord[]>;
 
   recordTombstone(record: TombstoneRecord): Promise<void>;
   removeTombstone(notePath: string): Promise<void>;
@@ -30,18 +26,18 @@ export interface RegistryPort {
     entityId: string,
   ): Promise<{ handle: string; item: MirrorItem } | null>;
   setMirrorItem(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
     handle: string,
     item: MirrorItem,
   ): Promise<void>;
   removeMirrorItem(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
     handle: string,
   ): Promise<void>;
   listMirrorItems(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>>;
 
@@ -50,50 +46,50 @@ export interface RegistryPort {
     notePath: string,
   ): Promise<string | null>;
   listMirrorHandles(
-    project: string,
+    projectId: string,
     connection: string,
   ): Promise<readonly { handle: string; notePath: string }[]>;
   recordMirrorHandle(
-    project: string,
+    projectId: string,
     connection: string,
     notePath: string,
     handle: string,
   ): Promise<void>;
 
   resolveMirrorProject(
-    project: string,
+    projectId: string,
     connection: string,
   ): Promise<string | null>;
   recordMirrorProject(
-    project: string,
+    projectId: string,
     connection: string,
     application: string,
     handle: string,
   ): Promise<void>;
 
   getIdentity(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
   ): Promise<ProjectIdentityDataTransferObject | null>;
   setIdentity(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
     identity: ProjectIdentityDataTransferObject,
   ): Promise<void>;
   getPortState(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
   ): Promise<PortState | null>;
   setPortState(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
     state: PortState,
   ): Promise<void>;
   listPortStates(
-    projectName: string,
+    projectId: string,
   ): Promise<Array<{ slug: string; state: PortState }>>;
   rekeyPortState(
-    projectName: string,
+    projectId: string,
     fromSlug: string,
     toSlug: string,
   ): Promise<void>;

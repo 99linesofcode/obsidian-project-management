@@ -1,8 +1,4 @@
 import type { ProjectIdentityDataTransferObject } from '../../src/core/port/data/ProjectIdentityDataTransferObject.js';
-import {
-  projectFromNotePath,
-  projectPathWithName,
-} from '../../src/core/domain/paths.js';
 import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { MirrorItem } from '../../src/core/port/data/MirrorItem.js';
@@ -190,94 +186,10 @@ export class FakeSyncState implements RegistryPort {
     return this.handleTombstones.get(handle) ?? null;
   }
 
-  async listEntities(projectName: string): Promise<EntityRecord[]> {
+  async listEntities(projectId: string): Promise<EntityRecord[]> {
     return [...this.records.values()].filter(
-      (record) => projectFromNotePath(record.notePath) === projectName,
+      (record) => record.projectId === projectId,
     );
-  }
-
-  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
-    if (fromProject === toProject) {
-      return;
-    }
-    const fromPrefix = `${fromProject}\u0000`;
-    const toPrefix = `${toProject}\u0000`;
-    for (const [key, state] of [...this.portStates]) {
-      if (key.startsWith(fromPrefix)) {
-        this.portStates.delete(key);
-        this.portStates.set(
-          `${toPrefix}${key.slice(fromPrefix.length)}`,
-          state,
-        );
-      }
-    }
-    for (const [key, identity] of [...this.identitiesBySlug]) {
-      if (key.startsWith(fromPrefix)) {
-        this.identitiesBySlug.delete(key);
-        this.identitiesBySlug.set(
-          `${toPrefix}${key.slice(fromPrefix.length)}`,
-          identity,
-        );
-      }
-    }
-    const identity = this.identities.get(fromProject);
-    if (identity !== undefined) {
-      this.identities.delete(fromProject);
-      this.identities.set(toProject, identity);
-    }
-    for (const [id, record] of [...this.records]) {
-      if (projectFromNotePath(record.notePath) === fromProject) {
-        this.records.set(id, {
-          ...record,
-          notePath: projectPathWithName(record.notePath, toProject),
-        });
-      }
-    }
-    const todoist = this.todoistProjects.get(fromProject);
-    if (todoist !== undefined) {
-      this.todoistProjects.delete(fromProject);
-      this.todoistProjects.set(toProject, todoist);
-    }
-  }
-
-  async hasProject(projectName: string): Promise<boolean> {
-    const prefix = `${projectName}\u0000`;
-    for (const key of this.portStates.keys()) {
-      if (key.startsWith(prefix)) {
-        return true;
-      }
-    }
-    for (const key of this.identitiesBySlug.keys()) {
-      if (key.startsWith(prefix)) {
-        return true;
-      }
-    }
-    if (this.identities.has(projectName)) {
-      return true;
-    }
-    return [...this.records.values()].some(
-      (record) => projectFromNotePath(record.notePath) === projectName,
-    );
-  }
-
-  async listProjects(): Promise<string[]> {
-    const names = new Set<string>();
-    for (const key of this.portStates.keys()) {
-      names.add(key.split('\u0000')[0]!);
-    }
-    for (const key of this.identitiesBySlug.keys()) {
-      names.add(key.split('\u0000')[0]!);
-    }
-    for (const name of this.identities.keys()) {
-      names.add(name);
-    }
-    for (const record of this.records.values()) {
-      const name = projectFromNotePath(record.notePath);
-      if (name !== '') {
-        names.add(name);
-      }
-    }
-    return [...names].sort();
   }
 
   async findMirrorItem(
@@ -317,16 +229,13 @@ export class FakeSyncState implements RegistryPort {
   }
 
   async listMirrorItems(
-    projectName: string,
+    projectId: string,
     portId: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>> {
     const result: Array<{ handle: string; item: MirrorItem }> = [];
     for (const [handle, item] of this.items.get(portId) ?? []) {
       const record = this.records.get(item.entityId);
-      if (
-        record === undefined ||
-        projectFromNotePath(record.notePath) === projectName
-      ) {
+      if (record === undefined || record.projectId === projectId) {
         result.push({ handle, item });
       }
     }
@@ -374,7 +283,7 @@ export class FakeSyncState implements RegistryPort {
     const entity = await this.findByNotePath(notePath);
     const entityId = entity?.id ?? crypto.randomUUID();
     if (entity === null) {
-      await this.setEntity({ id: entityId, notePath });
+      await this.setEntity({ id: entityId, notePath, projectId: project });
     }
     const existing = await this.findMirrorItemByEntity(connection, entityId);
     if (existing !== null && existing.handle !== handle) {

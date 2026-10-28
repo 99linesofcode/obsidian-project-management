@@ -1,4 +1,5 @@
 import { Component } from 'obsidian';
+import { projectFolderFromNotePath } from '../../core/domain/paths.js';
 import type { VaultPort } from '../../core/port/VaultPort.js';
 import type { SyncQueue } from './SyncQueue.js';
 
@@ -30,51 +31,46 @@ export class SyncScheduler extends Component {
     );
 
     this.vault.onNoteChanged((path) => {
-      const projectName = this.projectNameFromPath(path);
-      if (projectName) {
-        this.schedule(projectName);
-      }
+      this.scheduleProject(path);
     });
 
     this.vault.onNoteDeleted((path) => {
-      const projectName = this.projectNameFromPath(path);
-      if (projectName) {
-        this.schedule(projectName);
-      }
+      this.scheduleProject(path);
     });
 
     this.vault.onNoteRenamed((_oldPath, newPath) => {
-      const projectName = this.projectNameFromPath(newPath);
-      if (projectName) {
-        this.queue.enqueue(projectName);
+      const folder = projectFolderFromNotePath(newPath);
+      if (folder !== null) {
+        this.queue.enqueue(folder);
       }
     });
   }
 
   private async tick(): Promise<void> {
-    const notes = await this.vault.findProjectNotes();
-    for (const note of notes) {
-      this.queue.enqueue(note.projectName);
+    for (const note of await this.vault.findProjectNotes()) {
+      const folder = projectFolderFromNotePath(note.path);
+      if (folder !== null) {
+        this.queue.enqueue(folder);
+      }
     }
   }
 
-  private projectNameFromPath(path: string): string | null {
-    const segments = path.split('/');
-    if (segments[0] !== 'Projecten' || segments.length < 3) {
-      return null;
+  private scheduleProject(path: string): void {
+    const folder = projectFolderFromNotePath(path);
+    if (folder !== null) {
+      this.schedule(folder);
     }
-    return segments[1] ?? null;
   }
 
-  private schedule(projectName: string): void {
-    const existing = this.debounceTimers.get(projectName);
+  private schedule(folder: string): void {
+    const existing = this.debounceTimers.get(folder);
     if (existing !== undefined) {
       window.clearTimeout(existing);
     }
     const timer = window.setTimeout(() => {
-      this.debounceTimers.delete(projectName);
-      this.queue.enqueue(projectName);
+      this.debounceTimers.delete(folder);
+      this.queue.enqueue(folder);
     }, this.debounceMs);
-    this.debounceTimers.set(projectName, timer);
+    this.debounceTimers.set(folder, timer);
   }
 }

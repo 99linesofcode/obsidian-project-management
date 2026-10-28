@@ -78,11 +78,22 @@ class FakeAppVault {
   }
 }
 
-function setup(): { vault: FakeAppVault; adapter: ReturnType<typeof vaultAdapter> } {
+function setup(): {
+  vault: FakeAppVault;
+  adapter: ReturnType<typeof vaultAdapter>;
+} {
   const vault = new FakeAppVault();
   vault.seed(
     HOME_PATH,
-    ['---', 'type: project', '---'].join('\n'),
+    [
+      '---',
+      'type: project',
+      'connections:',
+      '  vault:',
+      '    tool: vault',
+      '    id: Acme',
+      '---',
+    ].join('\n'),
     MTIME,
     CTIME,
   );

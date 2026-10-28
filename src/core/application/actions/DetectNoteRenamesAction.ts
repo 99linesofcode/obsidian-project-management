@@ -2,7 +2,7 @@ import type { VaultPort } from '../../port/VaultPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
 export interface DetectNoteRenamesInput {
-  projectName: string;
+  projectId: string;
   syncedAt: string;
 }
 
@@ -13,11 +13,7 @@ export class DetectNoteRenamesAction {
   ) {}
 
   async execute(input: DetectNoteRenamesInput): Promise<void> {
-    const records = (
-      await this.syncState.listEntities(input.projectName)
-    ).filter((record) =>
-      record.notePath.startsWith(`Projecten/${input.projectName}/`),
-    );
+    const records = await this.syncState.listEntities(input.projectId);
 
     const noteIds = await this.vault.readNoteIds();
     const presentPaths = new Set(noteIds.map((note) => note.path));

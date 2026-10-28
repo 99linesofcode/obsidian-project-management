@@ -21,7 +21,9 @@ class FakeVault extends FakeVaultBase {
   renamed: Array<{ oldPath: string; newPath: string }> = [];
   trashed: string[] = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }

@@ -41,7 +41,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     });
     h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     const record = await h.syncState.get('uuid-1');
     expect(record?.notePath).toBe(newPath);
@@ -59,7 +59,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     });
     h.vault.noteIds = [{ id: 'todo-uuid', path: newTodo }];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     expect((await h.syncState.get('todo-uuid'))?.notePath).toBe(newTodo);
   });
@@ -69,7 +69,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: newPath }));
     h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     expect(h.syncState.setCalls).toEqual([]);
   });
@@ -81,7 +81,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
       { id: 'other-uuid', path: 'Projecten/Acme Widgets/taken/99-other.md' },
     ];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     expect(h.syncState.setCalls).toEqual([]);
   });
@@ -99,7 +99,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
       { id: 'uuid-b', path: newB },
     ];
 
-    await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
 
     expect((await h.syncState.get('uuid-a'))?.notePath).toBe(newA);
     expect((await h.syncState.get('uuid-b'))?.notePath).toBe(newB);

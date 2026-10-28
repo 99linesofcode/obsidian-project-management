@@ -84,7 +84,12 @@ describe('DEL-2 — a failed mirror delete is reported and retried, never droppe
     });
 
     await h.action
-      .execute({ notePath, projectName, connections: [...connections] })
+      .execute({
+        notePath,
+        projectId: projectName,
+        projectName,
+        connections: [...connections],
+      })
       .catch(() => undefined);
 
     expect(h.mirrorAdapters.tasks.deleted).toContain(todoistHandle);
@@ -96,11 +101,17 @@ describe('DEL-2 — a failed mirror delete is reported and retried, never droppe
     h.mirrorAdapters.tasks.failDelete.add(url);
 
     await h.action
-      .execute({ notePath, projectName, connections: [...connections] })
+      .execute({
+        notePath,
+        projectId: projectName,
+        projectName,
+        connections: [...connections],
+      })
       .catch(() => undefined);
     h.mirrorAdapters.tasks.failDelete.delete(url);
     await h.action.execute({
       notePath,
+      projectId: projectName,
       projectName,
       connections: [...connections],
     });

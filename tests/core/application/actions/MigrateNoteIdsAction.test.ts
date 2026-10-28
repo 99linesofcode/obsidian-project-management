@@ -5,12 +5,7 @@ import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 // MIG-1: a one-shot, idempotent pass stamps a minted id onto every note that
 // lacks one — the home note included, because a project home note has no ledger
 // record and would otherwise be unkeyable — and writes the per-mirror entries.
-// The observable is idempotence: run twice, the second run writes nothing. The
-// delta names no action; by the S14 migration's shape (a core Action at the top
-// of the chain, writing the vault note only) and `MigrateNameAction`'s
-// precedent, this suite imports `MigrateNoteIdsAction`. If the implementer
-// chooses another name, this import is the seam to align — the behaviour below
-// is what the delta pins.
+// The observable is idempotence: run twice, the second run writes nothing.
 class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   writes: Array<{ path: string; content: string }> = [];

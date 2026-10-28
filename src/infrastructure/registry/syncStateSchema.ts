@@ -6,7 +6,7 @@ import type { TombstoneRecord } from '../../core/port/data/TombstoneRecord.js';
 
 export const SYNC_STATE_KEY = 'syncState';
 
-export const VERSION = 3;
+export const VERSION = 4;
 
 export const ENTITIES_KEY = 'entities';
 export const PROJECTS_KEY = 'projects';

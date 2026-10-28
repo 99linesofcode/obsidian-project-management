@@ -5,6 +5,6 @@ export interface MirrorAdapterFactoryPort {
     application: string,
     target: string,
     connectionSlug: string,
-    projectName: string,
+    projectId: string,
   ): MirrorPort | null;
 }

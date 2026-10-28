@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import type { CanonicalField } from '../../../../src/core/domain/canonicalField.js';
 import { Baseline } from '../../../../src/core/domain/Baseline.js';
@@ -121,7 +122,11 @@ async function setup(
   statusBaseline: string | null,
 ): Promise<{ action: MirrorSyncAction; registry: SyncStateAdapter }> {
   const registry = new SyncStateAdapter(memoryStorage());
-  await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+  await registry.setEntity({
+    id: ENTITY,
+    notePath: ENTITY,
+    projectId: projectFromNotePath(ENTITY),
+  });
   await registry.setMirrorItem(PROJECT, 'conformance', HANDLE, {
     entityId: ENTITY,
   });

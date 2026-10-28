@@ -1,9 +1,5 @@
 import { parseAffiliation } from './affiliation.js';
-import {
-  labelsFromNote,
-  splitFrontmatter,
-  typeFromLabels,
-} from './note.js';
+import { labelsFromNote, splitFrontmatter, typeFromLabels } from './note.js';
 
 export interface ParsedToDoNote {
   status: string;
