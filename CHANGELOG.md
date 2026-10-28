@@ -1,3 +1,12 @@
+# [0.34.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.33.1...0.34.0) (2026-10-28)
+
+
+### Features
+
+* **notes:** every note declares its title in name, and a rename stops reading as a deletion ([#206](https://github.com/99linesofcode/obsidian-project-management/issues/206)) ([3fe8bbf](https://github.com/99linesofcode/obsidian-project-management/commit/3fe8bbf321f1357f80c6129cc07ba71afa617870)), closes [#180](https://github.com/99linesofcode/obsidian-project-management/issues/180)
+
+
+
 ## [0.33.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.33.0...0.33.1) (2026-10-28)
 
 
@@ -31,15 +40,6 @@
 ### Bug Fixes
 
 * **labels:** check the type-label invariant at every mirror, not only the vault ([#201](https://github.com/99linesofcode/obsidian-project-management/issues/201)) ([d688449](https://github.com/99linesofcode/obsidian-project-management/commit/d6884490add0fc40b516d2d3ad0e315214fcb783))
-
-
-
-## [0.32.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.1...0.32.2) (2026-10-28)
-
-
-### Bug Fixes
-
-* **labels:** one unspaced type label, and the at-most-one invariant ([#200](https://github.com/99linesofcode/obsidian-project-management/issues/200)) ([c5e990e](https://github.com/99linesofcode/obsidian-project-management/commit/c5e990e28f980a5be4eeb417afdf96efd65b5fd1))
 
 
 
