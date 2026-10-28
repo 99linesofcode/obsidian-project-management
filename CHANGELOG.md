@@ -1,3 +1,12 @@
+# [0.33.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.4...0.33.0) (2026-10-28)
+
+
+### Features
+
+* **labels:** the task manager gets real labels, and only the kinds it can materialise ([#203](https://github.com/99linesofcode/obsidian-project-management/issues/203)) ([51701f4](https://github.com/99linesofcode/obsidian-project-management/commit/51701f4d4efc47f223aeca71023c8e6cd079e8ec))
+
+
+
 ## [0.32.4](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.3...0.32.4) (2026-10-28)
 
 
@@ -31,20 +40,6 @@
 ### Bug Fixes
 
 * **cascade:** stop the done state from completing a task ([#198](https://github.com/99linesofcode/obsidian-project-management/issues/198)) ([694f6cd](https://github.com/99linesofcode/obsidian-project-management/commit/694f6cd21fd3779921582171c664826a3a1533a3))
-
-
-
-# [0.32.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.31.0...0.32.0) (2026-10-27)
-
-
-### Bug Fixes
-
-* **deps:** bump vite from 8.3.0 to 8.3.4 ([#196](https://github.com/99linesofcode/obsidian-project-management/issues/196)) ([a376895](https://github.com/99linesofcode/obsidian-project-management/commit/a3768958a95c390ea55d31c15b5edcf547a03e6c))
-
-
-### Features
-
-* **cascade:** moving a task to the done state completes it ([#197](https://github.com/99linesofcode/obsidian-project-management/issues/197)) ([f7fea62](https://github.com/99linesofcode/obsidian-project-management/commit/f7fea62afb889c8b8ce5756395c69c53611f012f))
 
 
 
