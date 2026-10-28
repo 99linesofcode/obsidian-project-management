@@ -13,7 +13,7 @@ import {
 } from '../../core/domain/paths.js';
 import { ConnectionValidationService } from '../../core/application/services/ConnectionValidationService.js';
 import { projectNoteFromCache } from '../../core/application/data/projectNoteFromCache.js';
-import { resolveTypeLabel, slugify } from '../../core/domain/note.js';
+import { hasTypeLabel, slugify } from '../../core/domain/note.js';
 import { connectionsOf } from './connectionsOf.js';
 import {
   fieldValue,
@@ -252,13 +252,7 @@ export class VaultAdapter implements VaultPort {
       return null;
     }
     const note = parseTaskNote(await this.app.vault.read(file), handle);
-    const { kind, hasExtraTypeLabels } = resolveTypeLabel(note.labels);
-    if (hasExtraTypeLabels) {
-      console.warn(
-        `note carries more than one kind label; using "${kind}" and ignoring the rest`,
-      );
-    }
-    if (kind === '') {
+    if (!hasTypeLabel(note.labels)) {
       return null;
     }
     return { note, mtime: file.stat.mtime };

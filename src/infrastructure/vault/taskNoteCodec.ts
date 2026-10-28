@@ -1,3 +1,4 @@
+import { warnOnExtraTypeLabels } from '../../core/application/typeLabelWarnings.js';
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import type { CanonicalFieldWrite } from '../../core/port/data/CanonicalFieldWrite.js';
 import {
@@ -28,6 +29,7 @@ export function parseTaskNote(content: string, handle: string): TaskNote {
   const split = splitFrontmatter(content);
   const fields = split?.fields ?? new Map<string, string>();
   const labels = labelsFromNote(content);
+  warnOnExtraTypeLabels(labels);
   return {
     title: titleFromPath(handle),
     status: fields.get('status') ?? '',

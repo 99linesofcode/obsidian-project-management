@@ -1,3 +1,4 @@
+import { warnOnExtraTypeLabels } from '../../core/application/typeLabelWarnings.js';
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import { CanonicalTask } from '../../core/port/data/CanonicalTask.js';
 import type { RawCard, RawIssue } from './githubWire.js';
@@ -6,6 +7,7 @@ export function toCanonicalTask(
   issue: RawIssue,
   card: RawCard | null,
 ): CanonicalTask {
+  warnOnExtraTypeLabels(issue.labels);
   return new CanonicalTask({
     handle: issue.url,
     entityId: issue.url,
