@@ -902,7 +902,7 @@ describe('TodoistMirrorAdapter — label provisioning (LBL-14, LBL-15)', () => {
     ['task', 'lime_green'],
     ['bug', 'berry_red'],
     ['chore', 'light_blue'],
-    ['todo', 'grey'],
+    ['todo', 'yellow'],
   ];
 
   it.each(KIND_PALETTE)(
