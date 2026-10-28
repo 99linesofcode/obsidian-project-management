@@ -31,6 +31,7 @@ class FakeVault extends FakeVaultBase {
     return this.modifiedTimes.get(path) ?? null;
   }
   projectNotes: ProjectNoteDataTransferObject[] = [];
+  noteIds = new Map<string, string>();
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
   renames: Array<{ from: string; to: string }> = [];
@@ -54,7 +55,7 @@ class FakeVault extends FakeVaultBase {
     readonly { id: string; path: string }[]
   > {
     return this.projectNotes.map((note) => ({
-      id: note.projectName,
+      id: this.noteIds.get(note.path) ?? note.projectName,
       path: note.path,
     }));
   }
@@ -130,6 +131,21 @@ function projectNote(
 
 function status(notePath: string): EntityRecord {
   return entityRecord({ id: 'entity-42', notePath });
+}
+
+function projectNoteAt(path: string): ProjectNoteDataTransferObject {
+  return {
+    path,
+    projectName: 'Acme Widgets',
+    connections: [
+      {
+        slug: 'github',
+        application: 'github',
+        target: 'https://github.com/acme/widgets',
+      },
+    ],
+    connectionErrors: [],
+  };
 }
 
 interface HarnessOptions {
@@ -362,6 +378,23 @@ describe('the multi-adapter pass', () => {
         to: 'Projecten/Acme Widgets/_Acme Widgets.md',
       },
     ]);
+  });
+});
+
+describe('I6 — the project is keyed by the home note, not a stray root note', () => {
+  it('keys the project to the home note id when a stray note enumerates first', async () => {
+    const stray = 'Projecten/Acme Widgets/AAA-stray.md';
+    const home = 'Projecten/Acme Widgets/_Acme Widgets.md';
+    const h = harness({
+      projectNotes: [projectNoteAt(stray), projectNoteAt(home)],
+    });
+    h.vault.noteIds.set(stray, 'stray-id');
+    h.vault.noteIds.set(home, 'home-id');
+
+    await h.action.execute('Projecten/Acme Widgets');
+
+    expect(h.events).toContain('reconcile:home-id');
+    expect(h.events).not.toContain('reconcile:stray-id');
   });
 });
 

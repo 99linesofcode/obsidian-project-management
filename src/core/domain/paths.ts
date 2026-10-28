@@ -1,3 +1,5 @@
+import { stemOf } from './note.js';
+
 export function projectFromNotePath(path: string): string {
   const segments = path.split('/');
   if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
@@ -50,6 +52,36 @@ export function projectHomePath(
 ): string {
   const root = archived ? 'Archief' : 'Projecten';
   return `${root}/${projectName}/${projectHomeStem(projectName)}.md`;
+}
+
+const LEGACY_HOME_STEM = '_home';
+
+export function resolveHomeNotePath(
+  paths: readonly string[],
+  projectName: string,
+): string | null {
+  const candidates = paths.filter(
+    (path) => projectNameFromPath(path) === projectName,
+  );
+
+  const conventional = candidates.find(
+    (path) => stemOf(path) === projectHomeStem(projectName),
+  );
+  if (conventional !== undefined) {
+    return conventional;
+  }
+
+  const legacy = candidates.find((path) => isLegacyHomeNote(path, projectName));
+  if (legacy !== undefined) {
+    return legacy;
+  }
+
+  return candidates.length === 1 ? candidates[0]! : null;
+}
+
+function isLegacyHomeNote(path: string, projectName: string): boolean {
+  const stem = stemOf(path);
+  return stem === LEGACY_HOME_STEM || stem === projectName;
 }
 
 export function folderChainForPath(path: string): string[] {

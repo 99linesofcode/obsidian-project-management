@@ -178,8 +178,9 @@ one-paragraph summary precedes each.
 `SyncScheduler.tick` enumerates the vault's project notes and enqueues each
 project folder; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` stamps a note id on every note that lacks
-one (the one-shot, idempotent id migration), resolves the home note from the
-folder, reads its id from `connections` and threads the work item
+one (the one-shot, idempotent id migration), resolves the home note — the
+`_<name>` stem, else a legacy `_home.md`/`<name>.md`, else the only note at the
+project root — reads its id from `connections` and threads the work item
 `{ projectId, projectName }` to every step (a stale work item no-ops). It migrates
 a legacy home note, re-keys a renamed connection, and resolves-or-creates each
 declared connection's remote project; the core actions
@@ -212,8 +213,8 @@ sequenceDiagram
   participant Lock as ReconcileProjectTaskLocksAction
 
   SP->>SP: migrate note ids (connections.vault.id)
-  SP->>SP: resolveProject from the folder (no-op when missing)
-  SP->>SP: read the project id from the home note
+  SP->>SP: resolve the home note (no-op when missing)
+  SP->>SP: read the project id from connections
   SP->>SP: migrate / rekey / ensureBoards
   SP->>Life: invoke({ projectId, projectName })
   Life-->>SP: { frozen, wasFrozen }
@@ -910,18 +911,22 @@ lane can no longer revert a completion.
 
 ## 5. Code-vs-brief discrepancies
 
-None currently. The S31 note-identity delta's full _Project identity_ re-key is
+The S31 note-identity delta's full _Project identity_ re-key is
 delivered: the note's own id at `connections.vault.id`, `readNoteIds`, id-based
 rename detection (IDN-3) and deletion proof (IDN-5, DEL-1), duplicate-id
 reporting (DUP-1), the id migration (MIG-1), the failed-delete report/retry
 (DEL-2), `EntityRecord.projectId`, the registry keyed by the project id, the
 project's name as the folder segment, the work item carrying `{ projectId,
-projectName }`, the vault resolving id → folder, and the retirement of
-`RenameProjectAction` and the `name:`-property identity (PLC-1..4).
+projectName }`, the vault resolving id → folder, the chain resolving the project
+from the home note rather than the first project-root note (the same predicate
+the id migration uses), and the retirement of `RenameProjectAction` and the
+`name:`-property identity (PLC-1..4).
 
-The scheduler's pre-tick project capture was the last fully-recorded
-discrepancy; it is deleted with the origination model, so the scheduler is pure
-delivery mechanics again.
+One S31 delta item is deliberately not built: FN-1, the filename rendering from
+`name:`, recorded in the spec as OQ-6. No other discrepancy is known. The
+scheduler's pre-tick project capture was the last fully-recorded discrepancy; it
+is deleted with the origination model, so the scheduler is pure delivery
+mechanics again.
 
 ---
 

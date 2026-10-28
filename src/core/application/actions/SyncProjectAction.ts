@@ -1,4 +1,8 @@
-import { archivedFromPath, projectNameFromFolder } from '../../domain/paths.js';
+import {
+  archivedFromPath,
+  projectNameFromFolder,
+  resolveHomeNotePath,
+} from '../../domain/paths.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from '../../port/data/ProjectNoteDataTransferObject.js';
 import type { VaultPort } from '../../port/VaultPort.js';
@@ -50,7 +54,7 @@ export class SyncProjectAction {
       this.deps.migrateNoteIds.execute({ projectName }),
     );
 
-    const note = await this.resolveProject(folderPath);
+    const note = await this.resolveProject(folderPath, projectName);
     if (note === null) {
       return this.stepErrors;
     }
@@ -190,9 +194,17 @@ export class SyncProjectAction {
 
   private async resolveProject(
     folderPath: string,
+    projectName: string,
   ): Promise<ProjectNoteDataTransferObject | null> {
     const notes = await this.deps.vault.findProjectNotes();
-    return notes.find((note) => note.path.startsWith(`${folderPath}/`)) ?? null;
+    const candidates = notes.filter((note) =>
+      note.path.startsWith(`${folderPath}/`),
+    );
+    const homePath = resolveHomeNotePath(
+      candidates.map((note) => note.path),
+      projectName,
+    );
+    return candidates.find((note) => note.path === homePath) ?? null;
   }
 
   private async resolveProjectId(notePath: string): Promise<string> {

@@ -392,10 +392,11 @@ canonical DTOs and the pure core.
   runs first: a one-shot, idempotent pass that stamps a minted id on every note
   lacking one (the home note included) at `connections.vault.id`, so a note's
   own identity always exists before any step reads it. The chain then resolves
-  the home note, reads its id from `connections`, and threads the work item
-  `{ projectId, projectName }` to every step: the registry keys by the id and
-  the vault resolves id → folder from the note's stored path, so `Projecten/`
-  and `Archief/` are both reachable. It runs the
+  the home note — its `_<name>` stem, else a legacy `_home.md`/`<name>.md`, else
+  the only note at the project root — reads its id from `connections`, and
+  threads the work item `{ projectId, projectName }` to every step: the registry
+  keys by the id and the vault resolves id → folder from the note's stored path,
+  so `Projecten/` and `Archief/` are both reachable. It runs the
   lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
   and the mirror-sync pass for task-field reconciliation. The sweep proves a
@@ -705,7 +706,9 @@ Date of Last Update: 2026-10-13
   for a root item and `task` for a subtask.
 - **Project identity** — the record that makes a project a project: an id (the
   home note's own uuid at `connections.vault.id`), a name (the folder segment it
-  was created under) and a path (where the home note lives). The registry keys
+  was created under) and a path (where the home note lives). The home note is
+  the project-root note whose stem is `_<name>`, else a legacy `_home.md` or
+  `<name>.md`, else the only note at the project root. The registry keys
   the project by its id; the vault resolves id → folder from the note's stored
   path. A folder rename changes the name and the path and never the id, so no
   reconciliation is needed.
