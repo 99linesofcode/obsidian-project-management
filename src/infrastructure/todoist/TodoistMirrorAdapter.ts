@@ -1,3 +1,4 @@
+import { warnOnExtraTypeLabels } from '../../core/application/typeLabelWarnings.js';
 import type { CanonicalField } from '../../core/domain/canonicalField.js';
 import { isRecord } from '../../core/domain/isRecord.js';
 import {
@@ -409,6 +410,7 @@ function toCanonicalProject(raw: Record<string, unknown>): CanonicalProject {
 }
 
 function toCanonicalTask(task: RawTask, status: string): CanonicalTask {
+  warnOnExtraTypeLabels(task.labels);
   return new CanonicalTask({
     handle: task.id,
     entityId: task.id,
