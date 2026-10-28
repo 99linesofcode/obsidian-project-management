@@ -1,3 +1,12 @@
+## [0.33.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.33.0...0.33.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **labels:** todo's palette colour is yellow, as the user named it ([#204](https://github.com/99linesofcode/obsidian-project-management/issues/204)) ([a019a94](https://github.com/99linesofcode/obsidian-project-management/commit/a019a94407e2103074493b2f4aa11f6bc433b431))
+
+
+
 # [0.33.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.4...0.33.0) (2026-10-28)
 
 
@@ -31,15 +40,6 @@
 ### Bug Fixes
 
 * **labels:** one unspaced type label, and the at-most-one invariant ([#200](https://github.com/99linesofcode/obsidian-project-management/issues/200)) ([c5e990e](https://github.com/99linesofcode/obsidian-project-management/commit/c5e990e28f980a5be4eeb417afdf96efd65b5fd1))
-
-
-
-## [0.32.1](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.0...0.32.1) (2026-10-27)
-
-
-### Bug Fixes
-
-* **cascade:** stop the done state from completing a task ([#198](https://github.com/99linesofcode/obsidian-project-management/issues/198)) ([694f6cd](https://github.com/99linesofcode/obsidian-project-management/commit/694f6cd21fd3779921582171c664826a3a1533a3))
 
 
 
