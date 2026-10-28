@@ -8,6 +8,7 @@ import type { ProjectLifecycleSyncAction } from '../../../../src/core/applicatio
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
+import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
 import type { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import type { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
@@ -92,6 +93,7 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
     taskLocks: { invoke: async () => {} } as unknown as ReconcileProjectTaskLocksAction,
     taskCapture: { invoke: async () => {} } as unknown as CaptureTasksAction,
     taskFields: { invoke: async () => {} } as unknown as MirrorSyncAction,
+    migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
     migrateHomeNote: migrate,
     renameProject: rename,
     detectNoteRenames: {

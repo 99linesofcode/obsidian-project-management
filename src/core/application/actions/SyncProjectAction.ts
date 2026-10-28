@@ -6,6 +6,7 @@ import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPo
 import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
+import type { MigrateNameAction } from './MigrateNameAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
 import type { MirrorSyncAction } from './MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
@@ -23,6 +24,7 @@ export interface SyncProjectDependencies {
   taskLocks: ReconcileProjectTaskLocksAction;
   taskCapture: CaptureTasksAction;
   taskFields: MirrorSyncAction;
+  migrateName: MigrateNameAction;
   migrateHomeNote: MigrateProjectHomeNoteAction;
   renameProject: RenameProjectAction;
   detectNoteRenames: DetectNoteRenamesAction;
@@ -41,6 +43,8 @@ export class SyncProjectAction {
   async execute(project: string): Promise<unknown[]> {
     this.stepErrors = [];
     const syncedAt = new Date().toISOString();
+
+    await this.migrateName(project);
 
     const note = await this.resolveProject(project);
     if (note === null) {
@@ -73,6 +77,12 @@ export class SyncProjectAction {
     await this.deletions(project, note.connections);
 
     return this.stepErrors;
+  }
+
+  private async migrateName(project: string): Promise<void> {
+    await this.step('migrate name', () =>
+      this.deps.migrateName.execute({ projectName: project }),
+    );
   }
 
   private async migrate(

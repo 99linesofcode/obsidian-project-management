@@ -28,6 +28,7 @@ export const TaskNoteMapper = {
   map(task: TaskNoteSource, context: TaskNoteContext): RenderedTaskNote {
     const content = [
       '---',
+      `name: ${task.title}`,
       'categories: [taken]',
       `labels: ${labelsValue(task)}`,
       `status: ${context.statusName}`,
@@ -82,6 +83,7 @@ function managedValues(
   context: TaskNoteContext,
 ): Map<string, string> {
   return new Map([
+    ['name', task.title],
     ['labels', labelsValue(task)],
     ['status', context.statusName],
     ['affiliation', affiliationValue(context)],

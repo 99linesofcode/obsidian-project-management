@@ -59,6 +59,7 @@ function settings(
 
 const TASK_TEMPLATE = [
   '---',
+  'name: {{title}}',
   'affiliation: []',
   'status:',
   'synced:',
@@ -72,6 +73,7 @@ const TASK_TEMPLATE = [
 
 const PROJECT_TEMPLATE = [
   '---',
+  'name: {{title}}',
   'affiliation: []',
   'created: {{date}}',
   'categories:',

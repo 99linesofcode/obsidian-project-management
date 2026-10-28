@@ -6,14 +6,18 @@ import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeVault extends FakeVaultBase {
   modifiedTimes = new Map<string, string>();
+  notes = new Map<string, string>();
 
   async modifiedTime(path: string): Promise<string | null> {
     return this.modifiedTimes.get(path) ?? null;
   }
   folders = new Map<string, string[]>();
 
-  override async getNoteByPath(): Promise<{ content: string } | null> {
-    return null;
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
+    const content = this.notes.get(path);
+    return content === undefined ? null : { content };
   }
   override async createNote(): Promise<void> {}
   override async writeNote(): Promise<void> {}
@@ -38,6 +42,10 @@ function harness() {
   return { action, vault, syncState };
 }
 
+function noteWithName(name: string): string {
+  return ['---', `name: ${name}`, '---', ''].join('\n');
+}
+
 const syncedAt = '2026-09-18T12:00:00Z';
 const oldPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const newPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
@@ -51,6 +59,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
       },
     });
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
+    h.vault.notes.set(newPath, noteWithName('Fix the Bug!'));
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
@@ -69,6 +78,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
       todoist: { handle: 'T9' },
     });
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newTodo]);
+    h.vault.notes.set(newTodo, noteWithName('Ship it'));
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
@@ -79,6 +89,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: newPath }));
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
+    h.vault.notes.set(newPath, noteWithName('Fix the Bug!'));
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
@@ -91,6 +102,10 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     h.vault.folders.set('Projecten/Acme Widgets/taken', [
       'Projecten/Acme Widgets/taken/99-other.md',
     ]);
+    h.vault.notes.set(
+      'Projecten/Acme Widgets/taken/99-other.md',
+      noteWithName('Other'),
+    );
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
@@ -106,6 +121,8 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     h.syncState.seed(entityRecord({ id: 'uuid-a', notePath: oldA }));
     h.syncState.seed(entityRecord({ id: 'uuid-b', notePath: oldB }));
     h.vault.folders.set('Projecten/Acme Widgets/taken', [newA, newB]);
+    h.vault.notes.set(newA, noteWithName('Fix the Bug!'));
+    h.vault.notes.set(newB, noteWithName('Ship it'));
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
