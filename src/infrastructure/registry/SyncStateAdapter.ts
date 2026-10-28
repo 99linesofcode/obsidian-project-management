@@ -623,25 +623,25 @@ export class SyncStateAdapter implements RegistryPort {
     });
   }
 
-  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
+  async rekeyProject(fromKey: string, toKey: string): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      if (fromProject === toProject) {
+      if (fromKey === toKey) {
         return;
       }
       const projects = readProjectsMap(container);
-      const fromNode = projectNode(projects, fromProject);
+      const fromNode = projectNode(projects, fromKey);
       if (fromNode === null) {
         return;
       }
-      const toNode = ensureProjectNode(ensureProjects(container), toProject);
+      const toNode = ensureProjectNode(ensureProjects(container), toKey);
       mergeProjectNode(toNode, fromNode);
-      delete projects[fromProject];
+      delete projects[fromKey];
       this.indexes = buildIndexes(container);
       await this.maybeBackup();
       const data = await this.storage.load();
-      moveBaselineNode(data, fromProject, toProject);
+      moveBaselineNode(data, fromKey, toKey);
       data[SYNC_STATE_KEY] = this.container;
       await this.storage.save(data);
     });
@@ -780,17 +780,17 @@ function mergeProjectNode(
 
 function moveBaselineNode(
   data: Record<string, unknown>,
-  fromProject: string,
-  toProject: string,
+  fromKey: string,
+  toKey: string,
 ): void {
   const baselines = data[CORE_BASELINES_KEY];
-  if (!isRecord(baselines) || !isRecord(baselines[fromProject])) {
+  if (!isRecord(baselines) || !isRecord(baselines[fromKey])) {
     return;
   }
-  const target = isRecord(baselines[toProject]) ? baselines[toProject] : {};
-  Object.assign(target, baselines[fromProject]);
-  baselines[toProject] = target;
-  delete baselines[fromProject];
+  const target = isRecord(baselines[toKey]) ? baselines[toKey] : {};
+  Object.assign(target, baselines[fromKey]);
+  baselines[toKey] = target;
+  delete baselines[fromKey];
 }
 
 function readBaselineEntry(

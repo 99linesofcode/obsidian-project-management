@@ -371,33 +371,33 @@ export class FakeSyncState implements RegistryPort {
     }
   }
 
-  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
-    if (fromProject === toProject) {
+  async rekeyProject(fromKey: string, toKey: string): Promise<void> {
+    if (fromKey === toKey) {
       return;
     }
     for (const record of [...this.records.values()]) {
-      if (record.projectId === fromProject) {
-        this.records.set(record.id, { ...record, projectId: toProject });
+      if (record.projectId === fromKey) {
+        this.records.set(record.id, { ...record, projectId: toKey });
       }
     }
     for (const [key, state] of [...this.portStates]) {
-      const suffix = key.slice(fromProject.length);
-      if (key.startsWith(`${fromProject}\u0000`)) {
+      const suffix = key.slice(fromKey.length);
+      if (key.startsWith(`${fromKey}\u0000`)) {
         this.portStates.delete(key);
-        this.portStates.set(`${toProject}${suffix}`, state);
+        this.portStates.set(`${toKey}${suffix}`, state);
       }
     }
     for (const [key, identity] of [...this.identitiesBySlug]) {
-      const suffix = key.slice(fromProject.length);
-      if (key.startsWith(`${fromProject}\u0000`)) {
+      const suffix = key.slice(fromKey.length);
+      if (key.startsWith(`${fromKey}\u0000`)) {
         this.identitiesBySlug.delete(key);
-        this.identitiesBySlug.set(`${toProject}${suffix}`, identity);
+        this.identitiesBySlug.set(`${toKey}${suffix}`, identity);
       }
     }
-    const identity = this.identities.get(fromProject);
+    const identity = this.identities.get(fromKey);
     if (identity !== undefined) {
-      this.identities.set(toProject, identity);
-      this.identities.delete(fromProject);
+      this.identities.set(toKey, identity);
+      this.identities.delete(fromKey);
     }
   }
 
