@@ -1,3 +1,12 @@
+## [0.32.3](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.2...0.32.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **labels:** check the type-label invariant at every mirror, not only the vault ([#201](https://github.com/99linesofcode/obsidian-project-management/issues/201)) ([d688449](https://github.com/99linesofcode/obsidian-project-management/commit/d6884490add0fc40b516d2d3ad0e315214fcb783))
+
+
+
 ## [0.32.2](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.1...0.32.2) (2026-10-28)
 
 
@@ -36,20 +45,6 @@
 ### Features
 
 * **capture:** link a remote task whose title already exists instead of duplicating ([38027dd](https://github.com/99linesofcode/obsidian-project-management/commit/38027dd7fd4116ff32ebc8d1b073922abdd38160))
-
-
-
-# [0.30.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.29.0...0.30.0) (2026-10-13)
-
-
-### Bug Fixes
-
-* **vault:** clock the archive fact from the home note's change time ([36403c8](https://github.com/99linesofcode/obsidian-project-management/commit/36403c8b15c6b98fda4ea746d37d39019b0307d3))
-
-
-### Features
-
-* **todoist:** report the project clock from the project's updated_at ([5dabcc6](https://github.com/99linesofcode/obsidian-project-management/commit/5dabcc64b8efecff9e16d0adeb270f83526c738d))
 
 
 
