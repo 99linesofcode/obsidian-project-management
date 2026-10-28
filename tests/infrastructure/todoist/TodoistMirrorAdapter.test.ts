@@ -608,3 +608,27 @@ describe('TodoistMirrorAdapter — createTask', () => {
     expect(created.entityId).toBe('uuid-1');
   });
 });
+
+// LBL-10 — the label crosses every boundary verbatim. No adapter translates,
+// strips or re-renders the prefix; the vault's own string goes out untouched.
+// The sequence mixes the canonical unspaced kind, a spaced kind and a non-kind
+// `type:`-prefixed label so any future normalisation at the boundary reddens.
+describe('LBL-10 — the label crosses to the task manager verbatim', () => {
+  it('writes the vault label sequence unmodified, with no translation', async () => {
+    const { adapter, transport } = adapterWith([{ status: 200, json: taskNode() }]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:bug","type: slice","type:something","priority:high"]',
+      }),
+    );
+
+    expect(transport.calls[0]!.body).toBe(
+      JSON.stringify({
+        labels: ['type:bug', 'type: slice', 'type:something', 'priority:high'],
+      }),
+    );
+  });
+});

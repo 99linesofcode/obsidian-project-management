@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveTypeLabel,
   splitFrontmatter,
   stemOf,
   typeFromLabels,
@@ -134,5 +135,54 @@ describe('LBL-9 — a ToDo is type:todo, never a todo: label', () => {
 
   it('does not treat a todo: label as a type label', () => {
     expect(typeFromLabels(['todo:true'])).toBe('');
+  });
+});
+
+describe('LBL-10/LBL-11 — one unspaced type:<kind> label is the kind', () => {
+  it('yields the kind from one unspaced type:<kind> label', () => {
+    expect(typeFromLabels(['type:bug'])).toBe('bug');
+  });
+
+  it('still resolves a spaced type: label to its kind (read tolerance)', () => {
+    expect(typeFromLabels(['type: bug'])).toBe('bug');
+  });
+
+  it('yields no kind for a non-kind type:-prefixed label', () => {
+    expect(typeFromLabels(['type:something'])).toBe('');
+  });
+});
+
+// LBL-12 — a note carries at most one type label. The rule is a detection:
+// `resolveTypeLabel` reports the first kind and whether further kind labels are
+// present. Where a violation is logged and what it does are open decision 2, so
+// this suite asserts the detection, not a log channel — and no `console` is
+// asserted here, because `note.ts` is a pure domain module (ARCHITECTURE.md:707–708).
+describe('LBL-12 — a note carries at most one type label', () => {
+  it('reports the first kind and flags the extra type labels', () => {
+    expect(resolveTypeLabel(['type:bug', 'type:slice'])).toEqual({
+      kind: 'bug',
+      hasExtraTypeLabels: true,
+    });
+  });
+
+  it('reports no extra type labels when only one kind label is present', () => {
+    expect(resolveTypeLabel(['type:bug'])).toEqual({
+      kind: 'bug',
+      hasExtraTypeLabels: false,
+    });
+  });
+
+  it('does not count a non-kind type: label as an extra type label', () => {
+    expect(resolveTypeLabel(['type:something', 'type:bug'])).toEqual({
+      kind: 'bug',
+      hasExtraTypeLabels: false,
+    });
+  });
+
+  it('yields no kind and no extra type labels for a non-kind type: label', () => {
+    expect(resolveTypeLabel(['type:something'])).toEqual({
+      kind: '',
+      hasExtraTypeLabels: false,
+    });
   });
 });
