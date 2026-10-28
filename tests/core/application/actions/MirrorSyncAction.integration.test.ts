@@ -75,7 +75,7 @@ class FakeNotes extends FakeVaultBase {
         new ConnectionDataTransferObject({
           slug,
           application: connection.tool,
-          target: connection.project,
+          target: connection.project ?? '',
         }),
     );
   }

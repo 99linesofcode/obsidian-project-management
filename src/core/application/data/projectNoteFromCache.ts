@@ -24,6 +24,9 @@ export function projectNoteFromCache(
   const { connections, errors } = connectionValidator.validate(
     frontmatter.connections,
   );
+  if (connections.length === 0) {
+    return null;
+  }
   return {
     path,
     projectName,

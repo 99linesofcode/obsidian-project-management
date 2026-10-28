@@ -14,7 +14,7 @@ import { entityRecord } from '../../../../helpers/records.js';
 const SYNCED_AT = '2026-10-08T12:00:00Z';
 const PROJECT = 'Acme';
 const EXISTING = `Projecten/${PROJECT}/taken/fix-the-bug.md`;
-const TYPED_NOTE = '---\nlabels: [type:task]\n---\n';
+const TYPED_NOTE = '---\nname: Fix the Bug\nlabels: [type:task]\n---\n';
 
 class FakeVault extends FakeVaultBase {
   readonly created: Array<{ path: string; content: string }> = [];
@@ -166,7 +166,10 @@ describe('CaptureTasksAction — capture links a task whose title already exists
   it('links a remote task whose normalised title matches one existing note, despite casing and punctuation (CAP-4, I16)', async () => {
     const notePath = `Projecten/${PROJECT}/taken/fix-the-login-bug.md`;
     const h = harness([task('td-1', 'Fix the Login Bug!')]);
-    h.vault.seed(notePath, TYPED_NOTE);
+    h.vault.seed(
+      notePath,
+      '---\nname: Fix the Login Bug!\nlabels: [type:task]\n---\n',
+    );
     h.syncState.seed(entityRecord({ id: 'entity-login', notePath }));
 
     await h.action.invoke(PROJECT, SYNCED_AT);

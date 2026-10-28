@@ -5,28 +5,13 @@ import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 class FakeVault extends FakeVaultBase {
-  modifiedTimes = new Map<string, string>();
-  notes = new Map<string, string>();
+  noteIds: ReadonlyArray<{ id: string; path: string }> = [];
 
-  async modifiedTime(path: string): Promise<string | null> {
-    return this.modifiedTimes.get(path) ?? null;
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return this.noteIds;
   }
-  folders = new Map<string, string[]>();
-
-  override async getNoteByPath(
-    path: string,
-  ): Promise<{ content: string } | null> {
-    const content = this.notes.get(path);
-    return content === undefined ? null : { content };
-  }
-  override async createNote(): Promise<void> {}
-  override async writeNote(): Promise<void> {}
-  override async renameNote(): Promise<void> {}
-  async moveFolder(): Promise<void> {}
-  override async listNotesInFolder(folder: string): Promise<string[]> {
-    return this.folders.get(folder) ?? [];
-  }
-  override async trashNote(): Promise<void> {}
   override async findProjectNotes(): Promise<never> {
     throw new Error('not used in this test');
   }
@@ -42,24 +27,19 @@ function harness() {
   return { action, vault, syncState };
 }
 
-function noteWithName(name: string): string {
-  return ['---', `name: ${name}`, '---', ''].join('\n');
-}
-
 const syncedAt = '2026-09-18T12:00:00Z';
 const oldPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const newPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
 
 describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
-  it('pairs a vanished-path record with a same-stem note, mirrors intact', async () => {
+  it('re-keys a vanished-path record to the note carrying the same id, mirrors intact', async () => {
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: oldPath }), {
       github: {
         handle: 'https://github.com/acme/widgets/issues/42',
       },
     });
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
-    h.vault.notes.set(newPath, noteWithName('Fix the Bug!'));
+    h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
@@ -77,8 +57,7 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     h.syncState.seed(entityRecord({ id: 'todo-uuid', notePath: oldTodo }), {
       todoist: { handle: 'T9' },
     });
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [newTodo]);
-    h.vault.notes.set(newTodo, noteWithName('Ship it'));
+    h.vault.noteIds = [{ id: 'todo-uuid', path: newTodo }];
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
@@ -88,31 +67,26 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
   it('leaves a record whose note still exists alone', async () => {
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: newPath }));
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [newPath]);
-    h.vault.notes.set(newPath, noteWithName('Fix the Bug!'));
+    h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
     expect(h.syncState.setCalls).toEqual([]);
   });
 
-  it('leaves a record whose note is gone and has no stem match alone', async () => {
+  it('leaves a record whose note is gone and whose id is nowhere alone', async () => {
     const h = harness();
     h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: oldPath }));
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [
-      'Projecten/Acme Widgets/taken/99-other.md',
-    ]);
-    h.vault.notes.set(
-      'Projecten/Acme Widgets/taken/99-other.md',
-      noteWithName('Other'),
-    );
+    h.vault.noteIds = [
+      { id: 'other-uuid', path: 'Projecten/Acme Widgets/taken/99-other.md' },
+    ];
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 
     expect(h.syncState.setCalls).toEqual([]);
   });
 
-  it('pairs each vanished record to its own same-stem note', async () => {
+  it('pairs each vanished record to its own id', async () => {
     const h = harness();
     const oldA = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
     const newA = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
@@ -120,9 +94,10 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     const newB = 'Projecten/Acme Widgets/taken/ship-it.md';
     h.syncState.seed(entityRecord({ id: 'uuid-a', notePath: oldA }));
     h.syncState.seed(entityRecord({ id: 'uuid-b', notePath: oldB }));
-    h.vault.folders.set('Projecten/Acme Widgets/taken', [newA, newB]);
-    h.vault.notes.set(newA, noteWithName('Fix the Bug!'));
-    h.vault.notes.set(newB, noteWithName('Ship it'));
+    h.vault.noteIds = [
+      { id: 'uuid-a', path: newA },
+      { id: 'uuid-b', path: newB },
+    ];
 
     await h.action.execute({ projectName: 'Acme Widgets', syncedAt });
 

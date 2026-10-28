@@ -4,6 +4,7 @@ import type { DetectNoteRenamesAction } from '../../../../src/core/application/a
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
 import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
+import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
@@ -50,6 +51,11 @@ class FakeVault extends FakeVaultBase {
   async moveFolder(): Promise<void> {}
   override async listNotesInFolder(folder: string): Promise<string[]> {
     return this.folders.get(folder) ?? [];
+  }
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return [];
   }
   override async trashNote(): Promise<void> {}
   override async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
@@ -225,6 +231,9 @@ function harness(options: HarnessOptions = {}) {
     taskCapture,
     taskFields,
     migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
+    migrateNoteIds: {
+      execute: async () => {},
+    } as unknown as MigrateNoteIdsAction,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames: renames,
@@ -539,6 +548,9 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
         invoke: async () => {},
       } as unknown as MirrorSyncAction,
       migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
+      migrateNoteIds: {
+        execute: async () => {},
+      } as unknown as MigrateNoteIdsAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
       renameProject: new RenameProjectAction(vault, syncState),
       detectNoteRenames: {

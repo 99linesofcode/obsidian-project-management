@@ -5,7 +5,7 @@ import type { MirrorPort } from '../../../port/MirrorPort.js';
 import type { RegistryPort } from '../../../port/RegistryPort.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import { freePath } from '../../../domain/paths.js';
-import { slugify, typeFromLabels } from '../../../domain/note.js';
+import { slugify, topLevelFrontmatterField, typeFromLabels } from '../../../domain/note.js';
 import { effectiveConnectionTarget } from '../../services/connectionTarget.js';
 import type { CreateTaskNoteAction } from '../create-task-note/CreateTaskNoteAction.js';
 import { CapturedTaskNoteMapper } from './CapturedTaskNoteMapper.js';
@@ -19,6 +19,7 @@ interface AdoptTaskInput {
   task: CanonicalTask;
   slug: string;
   projectName: string;
+  projectId: string;
   syncedAt: string;
 }
 
@@ -40,7 +41,11 @@ export class CaptureTasksAction {
     private readonly createTaskNote: CreateTaskNoteAction,
   ) {}
 
-  async invoke(project: string, syncedAt: string): Promise<CaptureTasksResult> {
+  async invoke(
+    project: string,
+    syncedAt: string,
+    projectId = '',
+  ): Promise<CaptureTasksResult> {
     const connections = await this.vault.readConnections(project);
     const captured: string[] = [];
     const errors: unknown[] = [];
@@ -77,6 +82,7 @@ export class CaptureTasksAction {
           adapter,
           syncedAt,
           linkCandidates,
+          projectId,
         );
         captured.push(...result.captured);
         errors.push(...result.errors);
@@ -94,6 +100,7 @@ export class CaptureTasksAction {
     adapter: MirrorPort,
     syncedAt: string,
     linkCandidates: LinkCandidates,
+    projectId: string,
   ): Promise<CaptureTasksResult> {
     if (adapter.capture === undefined) {
       return { captured: [], errors: [] };
@@ -131,6 +138,7 @@ export class CaptureTasksAction {
               task,
               slug: connection.slug,
               projectName: project,
+              projectId,
               syncedAt,
             },
             adapter.taskHandlesAreUrls?.() ?? false,
@@ -166,10 +174,15 @@ export class CaptureTasksAction {
     const paths = await this.vault.listNotesInFolder(`Projecten/${project}`);
     const candidates: LinkCandidate[] = [];
     for (const path of paths) {
-      const note = await this.vault.readTask(path);
-      if (note !== null) {
-        candidates.push({ slug: slugify(note.title), path });
+      const note = await this.vault.getNoteByPath(path);
+      if (note === null) {
+        continue;
       }
+      const declared = topLevelFrontmatterField(note.content, 'name');
+      if (declared === null || declared === '') {
+        continue;
+      }
+      candidates.push({ slug: slugify(declared), path });
     }
     return candidates;
   }
@@ -195,6 +208,7 @@ export class CaptureTasksAction {
       body: input.task.body,
       type: typeFromLabels([...input.task.labels]),
       projectName: input.projectName,
+      projectId: input.projectId,
       connectionSlug: input.slug,
       syncedAt: input.syncedAt,
       statusName: input.task.status,
@@ -214,7 +228,7 @@ export class CaptureTasksAction {
     const path = await freePath(this.vault, rendered.path);
     await this.vault.createNote(path, rendered.content);
     const id = crypto.randomUUID();
-    await this.registry.setEntity({ id, notePath: path });
+    await this.registry.setEntity({ id, notePath: path, projectId: input.projectId });
     await this.registry.setMirrorItem(
       input.projectName,
       input.slug,

@@ -12,6 +12,7 @@ export interface VaultPort {
   renameNote(oldPath: string, newPath: string): Promise<void>;
   trashNote(path: string): Promise<void>;
   listNotesInFolder(folder: string): Promise<string[]>;
+  readNoteIds(): Promise<readonly { id: string; path: string }[]>;
   findProjectNotes(): Promise<ProjectNoteDataTransferObject[]>;
 
   onNoteChanged(cb: (path: string) => void): void;

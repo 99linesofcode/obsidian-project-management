@@ -85,6 +85,20 @@ export class VaultAdapter implements VaultPort {
       .map((file) => file.path);
   }
 
+  async readNoteIds(): Promise<readonly { id: string; path: string }[]> {
+    const ids: Array<{ id: string; path: string }> = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!isProjectRooted(file.path)) {
+        continue;
+      }
+      const id = connectionsOf(await this.app.vault.read(file)).vault?.id;
+      if (id !== undefined && id !== '') {
+        ids.push({ id, path: file.path });
+      }
+    }
+    return ids;
+  }
+
   async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     const notes: ProjectNoteDataTransferObject[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
@@ -212,7 +226,7 @@ export class VaultAdapter implements VaultPort {
         new ConnectionDataTransferObject({
           slug,
           application: connection.tool,
-          target: connection.project,
+          target: connection.project ?? '',
         }),
     );
   }
@@ -309,6 +323,10 @@ export class VaultAdapter implements VaultPort {
       folder === null ? `${slug}.md` : `${folder}/${slug}.md`,
     );
   }
+}
+
+function isProjectRooted(path: string): boolean {
+  return path.startsWith('Projecten/') || path.startsWith('Archief/');
 }
 
 function absentOriginObservation(): OriginObservation {

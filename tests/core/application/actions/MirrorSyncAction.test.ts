@@ -169,7 +169,9 @@ async function setup() {
     metadataCache: vault.metadataCache,
   } as unknown as App;
 
-  const vaultPort = vaultAdapter(app);
+  const vaultPort = vaultAdapter(app, {
+    registeredApplications: new Set(['conformance']),
+  });
 
   const mirror = new ConformanceMirrorAdapter();
   mirror.seed(mirrorTask('Building', 'Mirror body'));

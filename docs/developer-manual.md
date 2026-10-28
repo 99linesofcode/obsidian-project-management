@@ -177,8 +177,9 @@ one-paragraph summary precedes each.
 
 `SyncScheduler.tick` enumerates the vault's project notes and enqueues each
 project name; `SyncQueue` runs them one
-at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
-item no-ops), then drives every step in order. It migrates a legacy home note,
+at a time. `SyncProjectAction.execute` stamps a note id on every note that lacks
+one (the one-shot, idempotent id migration), re-resolves the project (a stale
+work item no-ops), then drives every step in order. It migrates a legacy home note,
 re-keys a renamed connection, and resolves-or-creates each declared connection's
 remote project; the core actions
 reconcile the lifecycle into one freeze verdict, and
@@ -209,6 +210,7 @@ sequenceDiagram
   participant Life as ProjectLifecycleSyncAction
   participant Lock as ReconcileProjectTaskLocksAction
 
+  SP->>SP: migrate note ids (connections.vault.id)
   SP->>SP: resolveProject (no-op when missing)
   SP->>SP: migrate / rekey / ensureBoards
   SP->>Life: invoke(project)
@@ -698,8 +700,11 @@ sequenceDiagram
 ### 2.14 Deletion propagation (a delete is a tracked change)
 
 A delete is a change like any other. `SweepDeletedNotesAction` enumerates the
-project's tracked entities; for each whose note file is gone (and not under
-`Archief/`) it records a **tombstone** — the entity id, the note path, the
+project's tracked entities; a record is proved gone only when no note carries its
+id (IDN-5) — a record whose note path is gone but whose id lives at another path
+has merely moved, and a note whose id is back at its path clears its own
+tombstone (DEL-1). For each proven-gone note (and not under `Archief/`) the sweep
+records a **tombstone** — the entity id, the note path, the
 delete time and the mirror handle the note still owed a delete to — and hands
 the delete to `HandleDeletedNoteAction`. That action finds the registry record
 by note path, resolves each connection's mirror item through `RegistryPort`,
@@ -709,7 +714,9 @@ builds the connection's adapter through `MirrorAdapterFactoryPort`, applies
 issue itself**, so nothing survives for capture to re-adopt. The completion write
 precedes the delete because the item is gone afterwards (a post-delete write
 would 404 and the delete would never settle); the action then drops the settled
-mirror item. It keeps the registry record: the tombstone and the record are
+mirror item. A failed mirror delete is reported and the remaining connections'
+deletes still run, so the failed one is retried on a later pass (DEL-2). It keeps
+the registry record: the tombstone and the record are
 pruned only once every connection's mirror item is gone, on a later sweep pass.
 
 The tombstone stops resurrection: capture skips a handle it finds tombstoned, so
@@ -750,11 +757,13 @@ tick.
 
 A live rename event bypasses the debounce and enqueues the project immediately,
 but the recovery itself is the same as an offline rename:
-`DetectNoteRenamesAction` lists the current notes and the records, groups the
-untracked notes by a recovery stem (the filename stem with a legacy ordinal
-prefix stripped and lowercased, via `normalizedStem`), and moves each vanished
-record's `notePath` to the same-stem note. The uuid and the mirrors are
-untouched.
+`DetectNoteRenamesAction` reads every note's own id (`VaultPort.readNoteIds`)
+across `Projecten/` and `Archief/`, and moves each vanished record's `notePath`
+to the note carrying the same id (IDN-3). A move between project folders — or
+into `Archief/` — is a rename, not a deletion, so the record keeps its note and
+its mirrors. Two notes carrying one id are a data fault: the first wins and the
+other is reported through the sync's warning channel (DUP-1). The uuid and the
+mirrors are untouched.
 
 ```mermaid
 sequenceDiagram
@@ -892,7 +901,21 @@ lane can no longer revert a completion.
 
 ## 5. Code-vs-brief discrepancies
 
-None currently. The scheduler's pre-tick project capture was the last recorded
+The S31 note-identity delta's full *Project identity* re-key is delivered
+partially. Shipped: the note's own id at `connections.vault.id`, `readNoteIds`,
+id-based rename detection (IDN-3) and deletion proof (IDN-5, DEL-1), duplicate-id
+reporting (DUP-1), the id migration (MIG-1), the failed-delete report/retry
+(DEL-2), `EntityRecord.projectId`, the project id threaded to capture, and the
+discovery marker restated (the vault entry never makes a note a project).
+
+Not yet shipped, and deferred to a later slice: keying the registry by the
+project id (it is still keyed by the project name), making the project's name
+the folder segment (it is still the note's `name:` property, PLC-1..4), and
+retiring `RenameProjectAction`. Those change behaviour whose tests the S31
+acceptance suite does not cover, and they were left out to keep the slice
+bounded.
+
+The scheduler's pre-tick project capture was the last fully-recorded
 discrepancy; it is deleted with the origination model, so the scheduler is pure
 delivery mechanics again.
 

@@ -201,7 +201,8 @@ its own module; the composition root wires it.
   task, capture, timestamp, locking and origination surfaces were separate
   facet ports; the tool is one collaborator, so it is one port.
 - **The vault port.** **`VaultPort`** — the vault as one collaborator: read a
-  note by path, create/write/rename/trash a note, list a folder's notes and
+  note by path, create/write/rename/trash a note, list a folder's notes, read
+  every note's own id (`readNoteIds`, across `Projecten/` and `Archief/`), and
   enumerate the project notes, subscribe to note change/delete/rename events;
   observe a task note's field as a canonical value plus its edit time (trusted
   by default), read the whole task, apply a canonical field write; read a
@@ -224,8 +225,8 @@ their mirror items, the note-path↔handle and mirror-project mappings, the
 per-connection identity and port state, the deleted-note tombstones, and the
 side baselines. Implementer:
 `SyncStateAdapter`, which also composes the handle and mirror-project
-resolution. Its records `EntityRecord`, `MirrorItem`, `PortState` and
-`TombstoneRecord` live in
+resolution. Its records `EntityRecord` (which carries the owning project's
+`projectId`), `MirrorItem`, `PortState` and `TombstoneRecord` live in
 `src/core/port/data/`; the baselines stay in the `coreBaselines` store.
 The baseline store, mirror handle, mirror project, identity store, tracked
 entity and connection state were separate facet ports served by thin wrapper
@@ -382,18 +383,25 @@ canonical DTOs and the pure core.
   explicit type label is kept, and an unlabelled one takes the kind its position
   implies — a root item is a `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
-  (home-note migration, project-name reconciliation, connection re-keying,
+  (note-id migration, home-note migration, project-name reconciliation,
+  connection re-keying,
   connection origination, rename recovery, vault consistency and the deletion
   sweep) and the core actions
   directly (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
-  every step wrapped so one failure logs and skips that step. It runs the
+  every step wrapped so one failure logs and skips that step. `MigrateNoteIdsAction`
+  runs first: a one-shot, idempotent pass that stamps a minted id on every note
+  lacking one (the home note included) at `connections.vault.id`, so a note's
+  own identity always exists before any step reads it. It runs the
   lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
-  and the mirror-sync pass for task-field reconciliation. The sweep enumerates
-  the project's connections directly, records a tombstone for each tracked note
-  whose file is gone (not under `Archief/`), hands the delete to
-  `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
+  and the mirror-sync pass for task-field reconciliation. The sweep proves a
+  record gone by its id — a record whose note path is gone but whose id lives at
+  another path is a rename, and a note whose id reappears clears its tombstone
+  (DEL-1) — records a tombstone for each proven-gone note (not under
+  `Archief/`), hands the delete to
+  `HandleDeletedNoteAction` (a failed mirror delete is reported and retried,
+  DEL-2), and prunes the tombstone and the record once every
   side has settled.
 - **The project rename** (`RenameProjectAction` + `RegistryPort.rekeyProject`).
   A project note names itself from a top-level `project:` frontmatter key; the
@@ -459,8 +467,11 @@ canonical DTOs and the pure core.
   declare their connections in a non-empty `connections` map, and carry their
   name in a top-level `project:` property; every task
   note lives under `taken/`, a to-do among them carrying the `type:todo`
-  label. Identity is a vault-owned uuid held in the registry — filenames and
-  frontmatter carry no machine id.
+  label. Every note carries its own id in its `connections` map at
+  `connections.vault.id` (`{ tool: vault, id: <uuid> }`); the registry keys the
+  same uuid. The vault's own entry never makes a note a project — discovery
+  ignores it, and a note is a project only when it carries a registered mirror
+  connection (ORG-1, DISC-1, DISC-4).
 - **`data.json`** — the plugin's data file. It holds three containers:
   - **`syncState`** (schema version 3) — the per-mirror registry: `projects.<name>.entities`
     (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`

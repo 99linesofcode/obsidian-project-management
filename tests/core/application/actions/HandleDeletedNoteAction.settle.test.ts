@@ -24,6 +24,11 @@ class GoneNoteVault extends FakeVaultBase {
   override async getNoteByPath(): Promise<null> {
     return null;
   }
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return [];
+  }
 }
 
 // A mirror that hard-deletes the item: a completion write after the delete hits
