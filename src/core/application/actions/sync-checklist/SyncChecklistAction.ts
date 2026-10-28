@@ -8,6 +8,7 @@ import {
   stemOf,
   withBody,
 } from '../../../domain/note.js';
+import { stampNoteId } from '../../../domain/noteIdentity.js';
 import { taskLinkFromAffiliation } from '../../../domain/affiliation.js';
 import { TaskNoteMapper } from '../create-task-note/TaskNoteMapper.js';
 import { isToDoNote, ToDoNoteParser } from '../../../domain/ToDoNoteParser.js';
@@ -204,7 +205,10 @@ export class SyncChecklistAction {
         parentLink: taskLink,
       },
     );
-    await this.vault.createNote(path, note.content);
+    await this.vault.createNote(
+      path,
+      stampNoteId(note.content, crypto.randomUUID()),
+    );
     return path;
   }
 

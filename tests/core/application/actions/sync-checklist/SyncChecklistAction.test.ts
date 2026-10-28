@@ -4,6 +4,7 @@ import {
   splitFrontmatter,
   typeFromLabels,
 } from '../../../../../src/core/domain/note.js';
+import { noteId } from '../../../../../src/core/domain/noteIdentity.js';
 import { ToDoNoteParser } from '../../../../../src/core/domain/ToDoNoteParser.js';
 import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
 import { parseTaskNote } from '../../../../../src/infrastructure/vault/taskNoteCodec.js';
@@ -185,6 +186,14 @@ describe('TDO-3 — an unlinked checklist line promotes a ToDo under taken/', ()
       `- [ ] [[${todoPath}|Fix the bug]]`,
     );
     expect(vault.written.map((entry) => entry.path)).toEqual([taskPath]);
+  });
+
+  it('stamps the created ToDo with its own id', async () => {
+    vault.notes.set(taskPath, taskNote('- [ ] Fix the bug'));
+
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    expect(noteId(vault.notes.get(todoPath) ?? '')).toBeTruthy();
   });
 
   it('suffixes the slug until the taken/ path is free', async () => {
