@@ -1,3 +1,12 @@
+## [0.32.4](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.3...0.32.4) (2026-10-28)
+
+
+### Reverts
+
+* **labels:** drop the type-label warning, keep the rule as an expectation ([#202](https://github.com/99linesofcode/obsidian-project-management/issues/202)) ([93b24d9](https://github.com/99linesofcode/obsidian-project-management/commit/93b24d90dd3e92a1e0ecbfc2d82c24ec3ed6964b))
+
+
+
 ## [0.32.3](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.2...0.32.3) (2026-10-28)
 
 
@@ -36,15 +45,6 @@
 ### Features
 
 * **cascade:** moving a task to the done state completes it ([#197](https://github.com/99linesofcode/obsidian-project-management/issues/197)) ([f7fea62](https://github.com/99linesofcode/obsidian-project-management/commit/f7fea62afb889c8b8ce5756395c69c53611f012f))
-
-
-
-# [0.31.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.30.0...0.31.0) (2026-10-14)
-
-
-### Features
-
-* **capture:** link a remote task whose title already exists instead of duplicating ([38027dd](https://github.com/99linesofcode/obsidian-project-management/commit/38027dd7fd4116ff32ebc8d1b073922abdd38160))
 
 
 
