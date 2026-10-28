@@ -10,6 +10,7 @@ export interface CreateTaskNoteInput {
   body: string;
   type: string;
   projectName: string;
+  projectId?: string;
   connectionSlug: string;
   syncedAt: string;
   statusName: string;
@@ -54,7 +55,11 @@ export class CreateTaskNoteAction {
     const path = await freePath(this.vault, base);
 
     await this.vault.createNote(path, content);
-    await this.syncState.setEntity({ id, notePath: path });
+    await this.syncState.setEntity({
+      id,
+      notePath: path,
+      ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+    });
     if (input.url !== '') {
       await this.syncState.setMirrorItem(
         input.projectName,

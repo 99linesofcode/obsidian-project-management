@@ -9,6 +9,7 @@ import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/appli
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
 import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
+import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import type { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
@@ -58,6 +59,12 @@ class RecordingVault extends FakeVaultBase {
   override async listNotesInFolder(): Promise<string[]> {
     return [];
   }
+
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return [];
+  }
 }
 
 function harness(projectNote: ProjectNoteDataTransferObject): {
@@ -94,6 +101,9 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
     taskCapture: { invoke: async () => {} } as unknown as CaptureTasksAction,
     taskFields: { invoke: async () => {} } as unknown as MirrorSyncAction,
     migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
+    migrateNoteIds: {
+      execute: async () => {},
+    } as unknown as MigrateNoteIdsAction,
     migrateHomeNote: migrate,
     renameProject: rename,
     detectNoteRenames: {

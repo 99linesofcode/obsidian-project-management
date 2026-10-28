@@ -31,14 +31,21 @@ export class HandleDeletedNoteAction {
       if (found === null) {
         continue;
       }
-      await this.syncState.recordTombstone({
-        entityId: record.id,
-        notePath: input.notePath,
-        deletedAt,
-        handle: found.handle,
-      });
-      recorded = true;
-      await this.deleteMirror(input.projectName, connection, found.handle);
+      try {
+        await this.syncState.recordTombstone({
+          entityId: record.id,
+          notePath: input.notePath,
+          deletedAt,
+          handle: found.handle,
+        });
+        recorded = true;
+        await this.deleteMirror(input.projectName, connection, found.handle);
+      } catch (error) {
+        console.error(
+          `HandleDeletedNoteAction: mirror delete of ${found.handle} failed; will retry`,
+          error,
+        );
+      }
     }
 
     if (!recorded) {

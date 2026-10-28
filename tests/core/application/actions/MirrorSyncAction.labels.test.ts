@@ -115,7 +115,12 @@ function setup(): { vault: FakeVault; adapter: VaultAdapter } {
     vault,
     metadataCache: vault.metadataCache,
   } as unknown as App;
-  return { vault, adapter: vaultAdapter(app) };
+  return {
+    vault,
+    adapter: vaultAdapter(app, {
+      registeredApplications: new Set(['conformance']),
+    }),
+  };
 }
 
 function mirrorTask(labels: readonly string[]): CanonicalTask {

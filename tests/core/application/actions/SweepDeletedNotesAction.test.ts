@@ -19,12 +19,19 @@ const todoistConnection = {
 
 class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
+  noteIds: ReadonlyArray<{ id: string; path: string }> = [];
 
   override async getNoteByPath(
     path: string,
   ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
+  }
+
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return this.noteIds;
   }
 }
 

@@ -1,8 +1,3 @@
-import {
-  normalizedStem,
-  slugify,
-  topLevelFrontmatterField,
-} from '../../domain/note.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 
@@ -18,77 +13,43 @@ export class DetectNoteRenamesAction {
   ) {}
 
   async execute(input: DetectNoteRenamesInput): Promise<void> {
-    const currentPaths: string[] = await this.vault.listNotesInFolder(
-      `Projecten/${input.projectName}/taken`,
-    );
-    const currentSet = new Set(currentPaths);
-
     const records = (
       await this.syncState.listEntities(input.projectName)
     ).filter((record) =>
       record.notePath.startsWith(`Projecten/${input.projectName}/`),
     );
-    const trackedPaths = new Set(records.map((record) => record.notePath));
 
-    const untrackedByKey = new Map<string, string[]>();
-    for (const path of [...currentPaths].sort()) {
-      if (trackedPaths.has(path)) {
-        continue;
-      }
-      for (const key of await this.recoveryKeys(path)) {
-        const list = untrackedByKey.get(key) ?? [];
-        list.push(path);
-        untrackedByKey.set(key, list);
-      }
-    }
+    const noteIds = await this.vault.readNoteIds();
+    const presentPaths = new Set(noteIds.map((note) => note.path));
+    const pathsById = groupPathsById(noteIds);
 
     for (const record of records) {
-      if (currentSet.has(record.notePath)) {
+      if (presentPaths.has(record.notePath)) {
         continue;
       }
-      const newPath = takeUntracked(
-        untrackedByKey,
-        normalizedStem(record.notePath),
-      );
-      if (newPath === undefined) {
+      const candidates = pathsById.get(record.id) ?? [];
+      const [first, ...duplicates] = candidates;
+      if (first === undefined) {
         continue;
       }
-      await this.syncState.setEntity({ ...record, notePath: newPath });
+      if (duplicates.length > 0) {
+        console.warn(
+          `DetectNoteRenamesAction: id ${record.id} is carried by ${candidates.join(', ')}; keeping ${first}`,
+        );
+      }
+      await this.syncState.setEntity({ ...record, notePath: first });
     }
-  }
-
-  private async recoveryKeys(path: string): Promise<string[]> {
-    const keys = new Set<string>([normalizedStem(path)]);
-    const declared = await this.declaredName(path);
-    if (declared !== null) {
-      keys.add(slugify(declared));
-    }
-    return [...keys];
-  }
-
-  private async declaredName(path: string): Promise<string | null> {
-    const note = await this.vault.getNoteByPath(path);
-    if (note === null) {
-      return null;
-    }
-    const declared = topLevelFrontmatterField(note.content, 'name');
-    return declared === null || declared === '' ? null : declared;
   }
 }
 
-function takeUntracked(
-  untrackedByKey: Map<string, string[]>,
-  key: string,
-): string | undefined {
-  const path = untrackedByKey.get(key)?.shift();
-  if (path === undefined) {
-    return undefined;
+function groupPathsById(
+  noteIds: readonly { id: string; path: string }[],
+): Map<string, string[]> {
+  const pathsById = new Map<string, string[]>();
+  for (const { id, path } of noteIds) {
+    const paths = pathsById.get(id) ?? [];
+    paths.push(path);
+    pathsById.set(id, paths);
   }
-  for (const candidates of untrackedByKey.values()) {
-    const index = candidates.indexOf(path);
-    if (index !== -1) {
-      candidates.splice(index, 1);
-    }
-  }
-  return path;
+  return pathsById;
 }

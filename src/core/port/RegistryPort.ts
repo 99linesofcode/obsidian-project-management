@@ -18,6 +18,7 @@ export interface RegistryPort {
   listProjects(): Promise<string[]>;
 
   recordTombstone(record: TombstoneRecord): Promise<void>;
+  removeTombstone(notePath: string): Promise<void>;
   findTombstoneByNotePath(notePath: string): Promise<TombstoneRecord | null>;
   findTombstone(handle: string): Promise<TombstoneRecord | null>;
   findMirrorItem(

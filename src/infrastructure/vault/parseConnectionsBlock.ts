@@ -33,7 +33,7 @@ export function parseConnectionsBlock(
       }
       const slug = unquote(trimmed.slice(0, -1).trim());
       currentSlug = slug;
-      connections[slug] = { tool: '', project: '' };
+      connections[slug] = { tool: '' };
       continue;
     }
     if (currentSlug === null) {
@@ -49,6 +49,8 @@ export function parseConnectionsBlock(
       connections[currentSlug]!.tool = value;
     } else if (key === 'project') {
       connections[currentSlug]!.project = value;
+    } else if (key === 'id') {
+      connections[currentSlug]!.id = value;
     }
   }
   return connections;

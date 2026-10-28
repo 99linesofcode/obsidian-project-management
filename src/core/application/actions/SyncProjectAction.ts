@@ -7,6 +7,7 @@ import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
 import type { MigrateNameAction } from './MigrateNameAction.js';
+import type { MigrateNoteIdsAction } from './MigrateNoteIdsAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
 import type { MirrorSyncAction } from './MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from './MirrorTodoStatusAction.js';
@@ -25,6 +26,7 @@ export interface SyncProjectDependencies {
   taskCapture: CaptureTasksAction;
   taskFields: MirrorSyncAction;
   migrateName: MigrateNameAction;
+  migrateNoteIds: MigrateNoteIdsAction;
   migrateHomeNote: MigrateProjectHomeNoteAction;
   renameProject: RenameProjectAction;
   detectNoteRenames: DetectNoteRenamesAction;
@@ -43,6 +45,10 @@ export class SyncProjectAction {
   async execute(project: string): Promise<unknown[]> {
     this.stepErrors = [];
     const syncedAt = new Date().toISOString();
+
+    await this.step('migrate note ids', () =>
+      this.deps.migrateNoteIds.execute({ projectName: project }),
+    );
 
     await this.migrateName(project);
 
@@ -66,8 +72,9 @@ export class SyncProjectAction {
     await this.vaultConsistency(project, syncedAt);
 
     if (!frozen) {
+      const projectId = await this.resolveProjectId(note.path);
       await this.step('task capture', () =>
-        this.deps.taskCapture.invoke(project, syncedAt),
+        this.deps.taskCapture.invoke(project, syncedAt, projectId),
       );
       await this.step('task fields', () =>
         this.deps.taskFields.invoke(project),
@@ -207,6 +214,11 @@ export class SyncProjectAction {
   ): Promise<ProjectNoteDataTransferObject | null> {
     const notes = await this.deps.vault.findProjectNotes();
     return notes.find((note) => note.projectName === project) ?? null;
+  }
+
+  private async resolveProjectId(notePath: string): Promise<string> {
+    const ids = await this.deps.vault.readNoteIds();
+    return ids.find((note) => note.path === notePath)?.id ?? '';
   }
 
   private async reconcileLifecycle(

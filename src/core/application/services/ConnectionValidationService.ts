@@ -17,6 +17,9 @@ export class ConnectionValidationService {
     }
 
     for (const [slug, entry] of Object.entries(raw)) {
+      if (isVaultEntry(entry)) {
+        continue;
+      }
       const result = this.validateEntry(slug, entry);
       if (result instanceof Error) {
         errors.push(result);
@@ -54,4 +57,8 @@ export class ConnectionValidationService {
     }
     return new ConnectionDataTransferObject({ slug, application, target });
   }
+}
+
+function isVaultEntry(entry: unknown): boolean {
+  return isRecord(entry) && entry.tool === 'vault';
 }

@@ -178,6 +178,14 @@ export class FakeSyncState implements RegistryPort {
     return this.tombstones.get(notePath) ?? null;
   }
 
+  async removeTombstone(notePath: string): Promise<void> {
+    const record = this.tombstones.get(notePath);
+    this.tombstones.delete(notePath);
+    if (record?.handle !== undefined) {
+      this.handleTombstones.delete(record.handle);
+    }
+  }
+
   async findTombstone(handle: string): Promise<TombstoneRecord | null> {
     return this.handleTombstones.get(handle) ?? null;
   }
