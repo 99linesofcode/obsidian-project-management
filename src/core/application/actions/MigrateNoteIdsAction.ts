@@ -1,5 +1,6 @@
 import { noteId, stampNoteId } from '../../domain/noteIdentity.js';
-import { projectNameFromPath } from '../../domain/paths.js';
+import { stemOf } from '../../domain/note.js';
+import { projectHomeStem, projectNameFromPath } from '../../domain/paths.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
 import type { VaultPort } from '../../port/VaultPort.js';
 
@@ -41,11 +42,12 @@ export class MigrateNoteIdsAction {
   }
 
   private async homeNotePath(projectName: string): Promise<string | null> {
+    const homeStem = projectHomeStem(projectName);
     for (const root of ROOTS) {
       for (const path of await this.vault.listNotesInFolder(
         `${root}/${projectName}`,
       )) {
-        if (projectNameFromPath(path) !== null) {
+        if (projectNameFromPath(path) !== null && stemOf(path) === homeStem) {
           return path;
         }
       }

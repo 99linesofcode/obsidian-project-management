@@ -113,4 +113,50 @@ describe('MIG-1 — the id migration is a one-shot, idempotent pass', () => {
     ]);
     expect(await h.syncState.listEntities(home)).toEqual([]);
   });
+
+  it('stamps a note that holds a ledger record with that record id', async () => {
+    const h = harness({
+      [home]: note(['name: Acme Widgets']),
+      [taken]: note(['name: Fix the Bug']),
+    });
+    h.syncState.seed(
+      entityRecord({
+        id: 'entity-1',
+        notePath: taken,
+        projectId: 'Acme Widgets',
+      }),
+    );
+
+    await h.action.execute({ projectName: 'Acme Widgets' });
+
+    expect(stampedId(h.vault.notes.get(taken) ?? '')).toBe('entity-1');
+  });
+
+  it('keys the project to the home note, not a stray note at the project root', async () => {
+    const stray = 'Projecten/Acme Widgets/AAA-stray.md';
+    const h = harness({
+      [stray]: note(['name: Stray']),
+      [home]: note(['name: Acme Widgets']),
+      [taken]: note(['name: Fix the Bug']),
+    });
+    h.syncState.seed(
+      entityRecord({
+        id: 'entity-1',
+        notePath: taken,
+        projectId: 'Acme Widgets',
+      }),
+    );
+
+    await h.action.execute({ projectName: 'Acme Widgets' });
+
+    const homeId = stampedId(h.vault.notes.get(home) ?? '');
+    const strayId = stampedId(h.vault.notes.get(stray) ?? '');
+    expect(homeId).toBeTruthy();
+    expect(strayId).toBeTruthy();
+    expect(strayId).not.toBe(homeId);
+    expect((await h.syncState.listEntities(homeId!)).map((r) => r.id)).toEqual([
+      'entity-1',
+    ]);
+    expect(await h.syncState.listEntities(strayId!)).toEqual([]);
+  });
 });
