@@ -18,6 +18,15 @@ import { TodoistTarget } from './TodoistTarget.js';
 
 const COMPLETED_SINCE = '1970-01-01T00:00:00Z';
 
+const KIND_PALETTE: Readonly<Record<string, string>> = {
+  slice: 'grape',
+  pitch: 'orange',
+  task: 'lime_green',
+  bug: 'berry_red',
+  chore: 'light_blue',
+  todo: 'grey',
+};
+
 interface RawTask {
   id: string;
   projectId: string;
@@ -36,8 +45,16 @@ interface RawSection {
   name: string;
 }
 
+interface RawLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export class TodoistMirrorAdapter implements MirrorPort {
   private readonly rawTarget: string;
+  private labelsCache: RawLabel[] | null = null;
+  private sharedLabels: ReadonlySet<string> | null = null;
 
   constructor(
     private readonly transport: TodoistTransport,
@@ -180,11 +197,13 @@ export class TodoistMirrorAdapter implements MirrorPort {
       task.status === ''
         ? null
         : await this.sectionIdFor(connection.projectId, task.status);
+    const labels = [...task.labels];
+    await this.ensureKindLabels(labels);
     const body: Record<string, unknown> = {
       content: task.title,
       description: task.body,
       project_id: connection.projectId,
-      labels: [...task.labels],
+      labels,
     };
     if (sectionId !== null) {
       body.section_id = sectionId;
@@ -234,13 +253,16 @@ export class TodoistMirrorAdapter implements MirrorPort {
       case 'subtasks':
         await this.writeParent(write);
         return;
-      case 'label':
+      case 'label': {
+        const labels = labelsFromSequence(write.value);
+        await this.ensureKindLabels(labels);
         await this.postOk(
           `/tasks/${write.handle}`,
-          { labels: labelsFromSequence(write.value) },
+          { labels },
           'write labels',
         );
         return;
+      }
     }
   }
 
@@ -314,6 +336,72 @@ export class TodoistMirrorAdapter implements MirrorPort {
     );
   }
 
+  private async ensureKindLabels(labels: readonly string[]): Promise<void> {
+    for (const label of labels) {
+      const colour = KIND_PALETTE[kindOf(label)];
+      if (colour !== undefined) {
+        await this.ensureLabel(label, colour);
+      }
+    }
+  }
+
+  private async ensureLabel(name: string, colour: string): Promise<void> {
+    const existing = await this.findLabel(name);
+    if (existing === null) {
+      await this.createLabel(name, colour);
+      return;
+    }
+    if (normaliseIdentifier(existing.color) === normaliseIdentifier(colour)) {
+      return;
+    }
+    if (await this.isSharedLabel(name)) {
+      return;
+    }
+    await this.recolourLabel(existing, colour);
+  }
+
+  private async createLabel(name: string, colour: string): Promise<void> {
+    await this.postOk('/labels', { name, color: colour }, 'create label');
+    this.labelsCache?.push({ id: '', name, color: colour });
+  }
+
+  private async recolourLabel(label: RawLabel, colour: string): Promise<void> {
+    await this.postOk(
+      `/labels/${label.id}`,
+      { color: colour },
+      'recolour label',
+    );
+    label.color = colour;
+  }
+
+  private async isSharedLabel(name: string): Promise<boolean> {
+    return (await this.sharedLabelNames()).has(normaliseIdentifier(name));
+  }
+
+  private async sharedLabelNames(): Promise<ReadonlySet<string>> {
+    if (this.sharedLabels === null) {
+      const names = await this.getStringList('/labels/shared');
+      this.sharedLabels = new Set(names.map(normaliseIdentifier));
+    }
+    return this.sharedLabels;
+  }
+
+  private async findLabel(name: string): Promise<RawLabel | null> {
+    const normalised = normaliseIdentifier(name);
+    const labels = await this.accountLabels();
+    return (
+      labels.find((label) => normaliseIdentifier(label.name) === normalised) ??
+      null
+    );
+  }
+
+  private async accountLabels(): Promise<RawLabel[]> {
+    if (this.labelsCache === null) {
+      this.labelsCache = (await this.getList('/labels')).map(parseLabel);
+    }
+    return this.labelsCache;
+  }
+
   private async setCompleted(
     handle: string,
     completed: boolean,
@@ -364,7 +452,21 @@ export class TodoistMirrorAdapter implements MirrorPort {
   }
 
   private async getList(path: string): Promise<Record<string, unknown>[]> {
-    const items: Record<string, unknown>[] = [];
+    return this.getItems(path, isRecord);
+  }
+
+  private async getStringList(path: string): Promise<string[]> {
+    return this.getItems(
+      path,
+      (item): item is string => typeof item === 'string',
+    );
+  }
+
+  private async getItems<T>(
+    path: string,
+    keep: (item: unknown) => item is T,
+  ): Promise<T[]> {
+    const items: T[] = [];
     let cursor: string | null = null;
     do {
       const separator = path.includes('?') ? '&' : '?';
@@ -374,7 +476,7 @@ export class TodoistMirrorAdapter implements MirrorPort {
           : `${path}${separator}cursor=${encodeURIComponent(cursor)}`;
       const response = await this.transport.get(pagePath);
       ensureSuccess(response);
-      items.push(...extractList(response.json));
+      items.push(...extractItems(response.json).filter(keep));
       cursor =
         isRecord(response.json) && typeof response.json.next_cursor === 'string'
           ? response.json.next_cursor
@@ -451,6 +553,22 @@ function parseSection(raw: Record<string, unknown>): RawSection {
   };
 }
 
+function parseLabel(raw: Record<string, unknown>): RawLabel {
+  return {
+    id: stringOrEmpty(raw.id),
+    name: stringOrEmpty(raw.name),
+    color: stringOrEmpty(raw.color),
+  };
+}
+
+function kindOf(label: string): string {
+  return label.startsWith('type:') ? label.slice('type:'.length).trim() : '';
+}
+
+function normaliseIdentifier(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 function sectionName(
   sections: readonly RawSection[],
   sectionId: string | null,
@@ -461,14 +579,14 @@ function sectionName(
   return sections.find((section) => section.id === sectionId)?.name ?? '';
 }
 
-function extractList(json: unknown): Record<string, unknown>[] {
+function extractItems(json: unknown): unknown[] {
   if (Array.isArray(json)) {
-    return json.filter(isRecord);
+    return json;
   }
   if (isRecord(json)) {
     const list = json.results ?? json.items;
     if (Array.isArray(list)) {
-      return list.filter(isRecord);
+      return list;
     }
   }
   throw new Error('task manager: unexpected list response shape');

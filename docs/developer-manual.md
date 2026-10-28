@@ -301,6 +301,16 @@ throws is
 recorded among the field outcome's `failed` sides and fan-out continues to the
 remaining mirrors, so one failing connection never abandons the rest.
 
+On the task manager the `label` write is preceded by provisioning. Before a
+kind label reaches the task — on the `label` field and in `createTask` — the
+adapter ensures a **personal** label of that name exists at the kind-label
+palette colour: it reads the account's labels once per pass (memoised for the
+adapter instance) and creates the label when absent, or recolours it when it
+exists off-palette. A label a collaborator owns — its name present in the
+account's shared label collection — is left at the owner's colour, and the label
+is still applied; the ensure never fails the write for it. The palette is the
+task manager's alone; the code host creates a label by the name it is handed.
+
 ```mermaid
 sequenceDiagram
   participant A as MirrorSyncAction
@@ -334,6 +344,7 @@ sequenceDiagram
       MP->>MF: mergeField(origin, observations)
       alt outcome value
         A->>R: readTask then applyField when it differs
+        Note over R: a task-manager label write ensures the<br/>kind label first (palette; shared label skipped)
       else outcome delete
         A->>R: readTask then deleteTask when it exists
       end

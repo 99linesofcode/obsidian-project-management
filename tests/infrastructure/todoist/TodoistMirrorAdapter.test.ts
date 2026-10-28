@@ -283,6 +283,8 @@ describe('TodoistMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
 
   it('writes the label set onto the task', async () => {
     const { adapter, transport } = adapterWith([
+      { status: 200, json: [] },
+      { status: 200, json: {} },
       { status: 200, json: taskNode() },
     ]);
 
@@ -294,7 +296,8 @@ describe('TodoistMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
       }),
     );
 
-    expect(transport.calls[0]!.body).toBe(
+    const write = transport.calls.find((call) => call.path === '/tasks/T1')!;
+    expect(write.body).toBe(
       JSON.stringify({ labels: ['type: task', 'bug'] }),
     );
   });
@@ -571,14 +574,56 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
 });
 
 describe('TodoistMirrorAdapter — createTask', () => {
+  // A routing fake, not the positional queue: deleting the create-path
+  // provisioning must redden the sequence assertion below on its own terms,
+  // rather than only shifting the queue into an unrelated shape error.
+  class CreateTransport implements TodoistTransport {
+    readonly calls: RecordedCall[] = [];
+
+    async get(path: string): Promise<{ status: number; json: unknown }> {
+      this.calls.push({ method: 'GET', path, body: '' });
+      if (path.startsWith('/sections?')) {
+        return {
+          status: 200,
+          json: [sectionNode({ id: 'S1', name: 'Building' })],
+        };
+      }
+      if (path === '/labels') {
+        return { status: 200, json: [] };
+      }
+      throw new Error(`unexpected GET ${path}`);
+    }
+
+    async post(
+      path: string,
+      body: string,
+    ): Promise<{ status: number; json: unknown }> {
+      this.calls.push({ method: 'POST', path, body });
+      if (path === '/labels') {
+        return { status: 200, json: {} };
+      }
+      if (path === '/tasks') {
+        return {
+          status: 200,
+          json: taskNode({
+            id: 'T9',
+            content: 'New task',
+            description: 'Body',
+          }),
+        };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    }
+
+    async delete(path: string): Promise<{ status: number; json: unknown }> {
+      this.calls.push({ method: 'DELETE', path, body: '' });
+      throw new Error(`unexpected DELETE ${path}`);
+    }
+  }
+
   it('creates a task in its section and returns the canonical task', async () => {
-    const { adapter, transport } = adapterWith([
-      { status: 200, json: [sectionNode({ id: 'S1', name: 'Building' })] },
-      {
-        status: 200,
-        json: taskNode({ id: 'T9', content: 'New task', description: 'Body' }),
-      },
-    ]);
+    const transport = new CreateTransport();
+    const adapter = new TodoistMirrorAdapter(transport, target());
 
     const created = await adapter.createTask(
       target(),
@@ -594,8 +639,8 @@ describe('TodoistMirrorAdapter — createTask', () => {
       }),
     );
 
-    expect(transport.calls[1]!.path).toBe('/tasks');
-    expect(transport.calls[1]!.body).toBe(
+    const create = transport.calls.find((call) => call.path === '/tasks')!;
+    expect(create.body).toBe(
       JSON.stringify({
         content: 'New task',
         description: 'Body',
@@ -604,6 +649,24 @@ describe('TodoistMirrorAdapter — createTask', () => {
         section_id: 'S1',
       }),
     );
+
+    // LBL-14 — the create path provisions the kind label too, before the task
+    // body goes out: the account's labels are looked up (`GET /labels`) and the
+    // absent kind label created (`POST /labels`). Removing the ensure from
+    // `createTask` leaves only the sections read and the task write, so this
+    // sequence assertion reddens.
+    expect(
+      transport.calls.map((call) => `${call.method} ${call.path}`),
+    ).toEqual([
+      'GET /sections?project_id=P1',
+      'GET /labels',
+      'POST /labels',
+      'POST /tasks',
+    ]);
+    expect(JSON.parse(transport.calls[2]!.body)).toMatchObject({
+      name: 'type: task',
+      color: 'lime_green',
+    });
     expect(created.handle).toBe('T9');
     expect(created.entityId).toBe('uuid-1');
   });
@@ -615,7 +678,13 @@ describe('TodoistMirrorAdapter — createTask', () => {
 // `type:`-prefixed label so any future normalisation at the boundary reddens.
 describe('LBL-10 — the label crosses to the task manager verbatim', () => {
   it('writes the vault label sequence unmodified, with no translation', async () => {
-    const { adapter, transport } = adapterWith([{ status: 200, json: taskNode() }]);
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [] },
+      { status: 200, json: {} },
+      { status: 200, json: [] },
+      { status: 200, json: {} },
+      { status: 200, json: taskNode() },
+    ]);
 
     await adapter.applyField(
       new CanonicalFieldWrite({
@@ -625,10 +694,245 @@ describe('LBL-10 — the label crosses to the task manager verbatim', () => {
       }),
     );
 
-    expect(transport.calls[0]!.body).toBe(
+    const write = transport.calls.find((call) => call.path === '/tasks/T1')!;
+    expect(write.body).toBe(
       JSON.stringify({
         labels: ['type:bug', 'type: slice', 'type:something', 'priority:high'],
       }),
     );
   });
+});
+
+// S29 — LBL-14 (provision and recolour before applying) and LBL-15 (the kind
+// palette). These pin the requests the adapter makes, as the suite does
+// elsewhere: the account's labels are looked up (`GET /labels`) first, a create
+// (`POST /labels`) or recolour (`POST /labels/{id}`) follows only when the
+// lookup says it is needed, and the label write lands last.
+//
+// Gaps the spec leaves undetermined; these tests assume the obvious reading and
+// must be revisited when the implementation pins them:
+//   - the wire field that marks a label as collaborator-owned / shared. Verified
+//     against the Todoist API v1 reference the adapter's BASE_URL follows
+//     (developer.todoist.com/api/v1): a label from `GET /labels` is
+//     `LabelRestView` — `id`, `name`, `color`, `order`, `is_favorite` only, with
+//     no `is_shared` (`is_shared` is a *project* field: "Whether the project is
+//     shared with other users"). Shared labels are a separate endpoint,
+//     `GET /labels/shared`, which returns names (`PaginatedList[str]`), not a
+//     per-label ownership flag. The fixtures' `is_shared: true` therefore
+//     mirrors the implementation's guess, not the wire; the shared-label no-op
+//     is not reachable from the documented `GET /labels` response.
+//   - the create body beyond `name` and `color` is not pinned, so the create
+//     assertion matches those two fields rather than the whole body.
+//   - the update body is only required to carry the palette colour.
+describe('TodoistMirrorAdapter — label provisioning (LBL-14, LBL-15)', () => {
+  const kindLabel = (
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    id: 'L1',
+    name: 'type:task',
+    color: 'lime_green',
+    ...overrides,
+  });
+
+  it('creates an absent kind label as personal at the palette colour, then applies it (LBL-14)', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [] },
+      { status: 200, json: kindLabel({ id: 'L9' }) },
+      { status: 200, json: taskNode() },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:task"]',
+      }),
+    );
+
+    expect(
+      transport.calls.map((call) => `${call.method} ${call.path}`),
+    ).toEqual(['GET /labels', 'POST /labels', 'POST /tasks/T1']);
+    expect(JSON.parse(transport.calls[1]!.body)).toMatchObject({
+      name: 'type:task',
+      color: 'lime_green',
+    });
+  });
+
+  it('does not recreate a kind label that already exists (LBL-14)', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [kindLabel()] },
+      { status: 200, json: taskNode() },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:task"]',
+      }),
+    );
+
+    expect(
+      transport.calls.filter(
+        (call) => call.method === 'POST' && call.path === '/labels',
+      ),
+    ).toEqual([]);
+    expect(transport.calls[0]).toEqual({
+      method: 'GET',
+      path: '/labels',
+      body: '',
+    });
+    expect(transport.calls.at(-1)!.path).toBe('/tasks/T1');
+  });
+
+  it('recolours an existing off-palette kind label to the palette colour (LBL-14, LBL-15)', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [kindLabel({ color: 'charcoal' })] },
+      { status: 200, json: [] },
+      { status: 200, json: kindLabel() },
+      { status: 200, json: taskNode() },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:task"]',
+      }),
+    );
+
+    expect(
+      transport.calls.map((call) => `${call.method} ${call.path}`),
+    ).toEqual([
+      'GET /labels',
+      'GET /labels/shared',
+      'POST /labels/L1',
+      'POST /tasks/T1',
+    ]);
+    expect(JSON.parse(transport.calls[2]!.body)).toMatchObject({
+      color: 'lime_green',
+    });
+  });
+
+  it('makes no create or update when the kind label is already the palette colour (LBL-14)', async () => {
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [kindLabel()] },
+      { status: 200, json: taskNode() },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:task"]',
+      }),
+    );
+
+    expect(
+      transport.calls.map((call) => `${call.method} ${call.path}`),
+    ).toEqual(['GET /labels', 'POST /tasks/T1']);
+  });
+
+  it('skips the recolour of a collaborator-owned shared label and still writes it (LBL-14)', async () => {
+    // The shared signal is the label's name appearing in the account's shared
+    // collection (`GET /labels/shared`), not a per-label ownership field: a
+    // label from `GET /labels` is `id, name, color, order, is_favorite` only.
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [kindLabel({ id: 'L7', color: 'charcoal' })] },
+      { status: 200, json: ['type:task'] },
+      { status: 200, json: taskNode() },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:task"]',
+      }),
+    );
+
+    expect(
+      transport.calls.filter(
+        (call) => call.method === 'POST' && call.path === '/labels/L7',
+      ),
+    ).toEqual([]);
+    expect(
+      transport.calls.map((call) => `${call.method} ${call.path}`),
+    ).toEqual(['GET /labels', 'GET /labels/shared', 'POST /tasks/T1']);
+    expect(transport.calls.at(-1)!.body).toBe(
+      JSON.stringify({ labels: ['type:task'] }),
+    );
+  });
+
+  it('recolours an off-palette kind label that is not shared (LBL-14, LBL-15)', async () => {
+    // The same shape as the shared case, but the shared collection omits the
+    // label: the recolour must happen. The two branches are told apart by the
+    // real signal (`GET /labels/shared`), not by a per-label guess.
+    const { adapter, transport } = adapterWith([
+      { status: 200, json: [kindLabel({ id: 'L1', color: 'charcoal' })] },
+      { status: 200, json: [] },
+      { status: 200, json: kindLabel() },
+      { status: 200, json: taskNode() },
+    ]);
+
+    await adapter.applyField(
+      new CanonicalFieldWrite({
+        handle: 'T1',
+        field: 'label',
+        value: '["type:task"]',
+      }),
+    );
+
+    expect(
+      transport.calls.map((call) => `${call.method} ${call.path}`),
+    ).toEqual([
+      'GET /labels',
+      'GET /labels/shared',
+      'POST /labels/L1',
+      'POST /tasks/T1',
+    ]);
+    expect(JSON.parse(transport.calls[2]!.body)).toMatchObject({
+      color: 'lime_green',
+    });
+  });
+
+  const KIND_PALETTE: Array<[kind: string, colour: string]> = [
+    ['slice', 'grape'],
+    ['pitch', 'orange'],
+    ['task', 'lime_green'],
+    ['bug', 'berry_red'],
+    ['chore', 'light_blue'],
+    ['todo', 'grey'],
+  ];
+
+  it.each(KIND_PALETTE)(
+    'creates the %s kind label at the %s palette colour (LBL-15)',
+    async (kind, colour) => {
+      const { adapter, transport } = adapterWith([
+        { status: 200, json: [] },
+        {
+          status: 200,
+          json: { id: 'L9', name: `type:${kind}`, color: colour },
+        },
+        { status: 200, json: taskNode() },
+      ]);
+
+      await adapter.applyField(
+        new CanonicalFieldWrite({
+          handle: 'T1',
+          field: 'label',
+          value: JSON.stringify([`type:${kind}`]),
+        }),
+      );
+
+      const create = transport.calls.find(
+        (call) => call.method === 'POST' && call.path === '/labels',
+      );
+      expect(create).toBeDefined();
+      expect(JSON.parse(create!.body)).toMatchObject({
+        name: `type:${kind}`,
+        color: colour,
+      });
+    },
+  );
 });

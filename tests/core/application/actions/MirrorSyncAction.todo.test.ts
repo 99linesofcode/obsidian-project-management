@@ -244,6 +244,9 @@ class RecordingTodoistTransport implements TodoistTransport {
         json: [{ id: 'S1', project_id: 'P1', name: 'Building' }],
       };
     }
+    if (path === '/labels') {
+      return { status: 200, json: [] };
+    }
     return { status: 200, json: this.taskNode() };
   }
 
