@@ -199,6 +199,7 @@ export class MirrorSyncAction {
       projectId,
       connection.slug,
       notePath,
+      task.entityId,
       pendingCreationHandle(notePath),
     );
     const created = await adapter.createTask(
@@ -209,6 +210,7 @@ export class MirrorSyncAction {
       projectId,
       connection.slug,
       notePath,
+      task.entityId,
       created.handle,
     );
     return created.handle;
@@ -233,6 +235,7 @@ export class MirrorSyncAction {
       projectId,
       connection.slug,
       notePath,
+      task.entityId,
       match.handle,
     );
     return match.handle;

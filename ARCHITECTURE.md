@@ -484,7 +484,10 @@ canonical DTOs and the pure core.
     per-project `fullScanPending` marker.
     The project node is keyed by the home note's own uuid, so a folder rename
     (a new name and path) never moves it and strands nothing; the archive
-    baseline is keyed by the same uuid.
+    baseline is keyed by the same uuid. A v3 container is migrated in place —
+    the entities, ports, identities and tombstones survive, and the chain's id
+    migration re-keys a name-keyed project node (and its archive baseline) to
+    the home note's uuid.
     Ports are keyed by the note's connection slug, so a project can hold two
     connections of the same tool; a slug rename re-keys the port in lockstep.
     Written only through `SyncStateAdapter`, behind a serialization mutex it

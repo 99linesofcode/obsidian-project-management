@@ -569,6 +569,12 @@ is loaded read-only: reads serve it, but every mutating port method throws
 `data.json` is quarantined by `loadDataSafely` before the adapter ever sees it.
 The settings save shares this one chain through `mutateRoot`.
 
+The v3→v4 upgrade is migrated, not wiped: a v3 container keeps its projects,
+ports, identities and tombstones, and the chain's id migration re-keys each
+name-keyed project node to the home note's uuid and moves that project's archive
+baseline with it (`rekeyProject`), so an upgraded vault keeps every record and
+its per-side baselines.
+
 The core's own memory lives in a sibling top-level key, written through the
 same storage. The baselines are folded into `SyncStateAdapter`:
 

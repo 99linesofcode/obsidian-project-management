@@ -6,7 +6,6 @@ import type { RegistryPort } from '../../port/RegistryPort.js';
 export interface HandleDeletedNoteInput {
   notePath: string;
   projectId: string;
-  projectName: string;
   connections: readonly ConnectionDataTransferObject[];
 }
 

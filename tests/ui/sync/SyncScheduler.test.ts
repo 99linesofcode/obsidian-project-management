@@ -75,7 +75,6 @@ function projectNote(
   archived: boolean,
 ): ProjectNoteDataTransferObject {
   return {
-    id: projectName,
     path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     connections: [

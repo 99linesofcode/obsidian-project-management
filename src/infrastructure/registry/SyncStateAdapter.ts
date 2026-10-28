@@ -52,6 +52,8 @@ const BACKUP_MIN_INTERVAL_MS = 60_000;
 
 const CORE_BASELINES_KEY = 'coreBaselines';
 
+const LEGACY_PROJECT_KEY_VERSION = 3;
+
 export { SYNC_STATE_KEY } from './syncStateSchema.js';
 
 export class SyncStateAdapter implements RegistryPort {
@@ -114,9 +116,7 @@ export class SyncStateAdapter implements RegistryPort {
         `SyncStateAdapter: registry version ${version} is newer than supported ${VERSION}; leaving it untouched`,
       );
     } else if (version !== VERSION) {
-      for (const key of Object.keys(container)) {
-        delete container[key];
-      }
+      migrateContainer(container, version);
       container.version = VERSION;
       await this.maybeBackup();
       data[SYNC_STATE_KEY] = container;
@@ -377,7 +377,7 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async setMirrorItem(
-    projectName: string,
+    projectId: string,
     portId: string,
     handle: string,
     item: MirrorItem,
@@ -389,7 +389,7 @@ export class SyncStateAdapter implements RegistryPort {
 
       const owner = indexes.byHandle.get(portId)?.get(handle);
       if (owner !== undefined) {
-        if (owner.project !== projectName) {
+        if (owner.project !== projectId) {
           removeItemNode(container, owner.project, portId, handle);
           removeItemRef(indexes, owner.entityId, portId, handle);
         } else if (owner.entityId !== item.entityId) {
@@ -397,7 +397,7 @@ export class SyncStateAdapter implements RegistryPort {
         }
       }
 
-      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const node = ensureProjectNode(ensureProjects(container), projectId);
       const port = ensurePortNode(node, portId);
       if (typeof port.provider !== 'string' || port.provider === '') {
         port.provider = portId;
@@ -411,29 +411,29 @@ export class SyncStateAdapter implements RegistryPort {
         handles = new Map();
         indexes.byHandle.set(portId, handles);
       }
-      handles.set(handle, { project: projectName, entityId: item.entityId });
+      handles.set(handle, { project: projectId, entityId: item.entityId });
 
-      addItemRef(indexes, item.entityId, projectName, portId, handle);
+      addItemRef(indexes, item.entityId, projectId, portId, handle);
       await this.persist();
     });
   }
 
   async removeMirrorItem(
-    projectName: string,
+    projectId: string,
     portId: string,
     handle: string,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       const port = node === null ? null : portNode(node, portId);
       if (port !== null) {
         const raw = itemsMap(port)[handle];
         if (isRecord(raw)) {
           const entityId = stringOrEmpty(raw.entityId);
           dropItem(container, this.indexes!, {
-            project: projectName,
+            project: projectId,
             portId,
             handle,
             entityId,
@@ -446,12 +446,12 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async listMirrorItems(
-    projectName: string,
+    projectId: string,
     portId: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return [];
       }
@@ -501,27 +501,30 @@ export class SyncStateAdapter implements RegistryPort {
     projectId: string,
     connection: string,
     notePath: string,
+    entityId: string,
     handle: string,
   ): Promise<void> {
     const entity = await this.findByNotePath(notePath);
-    const entityId = entity?.id ?? crypto.randomUUID();
+    const ownerId = entity?.id ?? entityId;
     if (entity === null) {
-      await this.setEntity({ id: entityId, notePath, projectId });
+      await this.setEntity({ id: ownerId, notePath, projectId });
     }
-    const existing = await this.findMirrorItemByEntity(connection, entityId);
+    const existing = await this.findMirrorItemByEntity(connection, ownerId);
     if (existing !== null && existing.handle !== handle) {
       await this.removeMirrorItem(projectId, connection, existing.handle);
     }
-    await this.setMirrorItem(projectId, connection, handle, { entityId });
+    await this.setMirrorItem(projectId, connection, handle, {
+      entityId: ownerId,
+    });
   }
 
   async getPortState(
-    projectName: string,
+    projectId: string,
     portId: string,
   ): Promise<PortState | null> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return null;
       }
@@ -531,14 +534,14 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async setPortState(
-    projectName: string,
+    projectId: string,
     portId: string,
     state: PortState,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const node = ensureProjectNode(ensureProjects(container), projectId);
       const port = ensurePortNode(node, portId);
       port.provider = state.provider;
       port.project = state.project;
@@ -549,11 +552,11 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async listPortStates(
-    projectName: string,
+    projectId: string,
   ): Promise<Array<{ slug: string; state: PortState }>> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return [];
       }
@@ -568,7 +571,7 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async rekeyPortState(
-    projectName: string,
+    projectId: string,
     fromSlug: string,
     toSlug: string,
   ): Promise<void> {
@@ -578,7 +581,7 @@ export class SyncStateAdapter implements RegistryPort {
       if (fromSlug === toSlug) {
         return;
       }
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return;
       }
@@ -599,7 +602,7 @@ export class SyncStateAdapter implements RegistryPort {
           indexes.byHandle.set(toSlug, toHandles);
         }
         for (const [handle, owner] of [...fromHandles]) {
-          if (owner.project !== projectName) {
+          if (owner.project !== projectId) {
             continue;
           }
           fromHandles.delete(handle);
@@ -611,12 +614,36 @@ export class SyncStateAdapter implements RegistryPort {
       }
       for (const refs of indexes.itemsByEntity.values()) {
         for (const ref of refs) {
-          if (ref.project === projectName && ref.portId === fromSlug) {
+          if (ref.project === projectId && ref.portId === fromSlug) {
             ref.portId = toSlug;
           }
         }
       }
       await this.persist();
+    });
+  }
+
+  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      this.assertWritable();
+      if (fromProject === toProject) {
+        return;
+      }
+      const projects = readProjectsMap(container);
+      const fromNode = projectNode(projects, fromProject);
+      if (fromNode === null) {
+        return;
+      }
+      const toNode = ensureProjectNode(ensureProjects(container), toProject);
+      mergeProjectNode(toNode, fromNode);
+      delete projects[fromProject];
+      this.indexes = buildIndexes(container);
+      await this.maybeBackup();
+      const data = await this.storage.load();
+      moveBaselineNode(data, fromProject, toProject);
+      data[SYNC_STATE_KEY] = this.container;
+      await this.storage.save(data);
     });
   }
 
@@ -644,26 +671,26 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async setIdentity(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
     identity: ProjectIdentityDataTransferObject,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const node = ensureProjectNode(ensureProjects(container), projectId);
       ensureIdentitiesMap(node)[connectionSlug] = identity;
       await this.persist();
     });
   }
 
   async getIdentity(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
   ): Promise<ProjectIdentityDataTransferObject | null> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       const raw =
         node === null ? undefined : identitiesMap(node)[connectionSlug];
       return isRecord(raw) ? this.mapIdentity(raw) : null;
@@ -720,6 +747,50 @@ export class SyncStateAdapter implements RegistryPort {
         : [],
     });
   }
+}
+
+function migrateContainer(
+  container: Record<string, unknown>,
+  version: unknown,
+): void {
+  if (version === LEGACY_PROJECT_KEY_VERSION) {
+    return;
+  }
+  for (const key of Object.keys(container)) {
+    delete container[key];
+  }
+}
+
+function mergeProjectNode(
+  toNode: Record<string, unknown>,
+  fromNode: Record<string, unknown>,
+): void {
+  for (const [key, value] of Object.entries(fromNode)) {
+    if (isRecord(value)) {
+      const target = isRecord(toNode[key])
+        ? (toNode[key] as Record<string, unknown>)
+        : {};
+      Object.assign(target, value);
+      toNode[key] = target;
+    } else {
+      toNode[key] = value;
+    }
+  }
+}
+
+function moveBaselineNode(
+  data: Record<string, unknown>,
+  fromProject: string,
+  toProject: string,
+): void {
+  const baselines = data[CORE_BASELINES_KEY];
+  if (!isRecord(baselines) || !isRecord(baselines[fromProject])) {
+    return;
+  }
+  const target = isRecord(baselines[toProject]) ? baselines[toProject] : {};
+  Object.assign(target, baselines[fromProject]);
+  baselines[toProject] = target;
+  delete baselines[fromProject];
 }
 
 function readBaselineEntry(

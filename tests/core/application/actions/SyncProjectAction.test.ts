@@ -54,13 +54,13 @@ class FakeVault extends FakeVaultBase {
     readonly { id: string; path: string }[]
   > {
     return this.projectNotes.map((note) => ({
-      id: note.id,
+      id: note.projectName,
       path: note.path,
     }));
   }
   override async listEntities(projectId: string): Promise<readonly string[]> {
     const note = this.projectNotes.find(
-      (candidate) => candidate.id === projectId,
+      (candidate) => candidate.projectName === projectId,
     );
     if (note === undefined) {
       return [];
@@ -121,7 +121,6 @@ function projectNote(
   ],
 ): ProjectNoteDataTransferObject {
   return {
-    id: projectName,
     path: `${archived ? 'Archief' : 'Projecten'}/${projectName}/_home.md`,
     projectName,
     connections,

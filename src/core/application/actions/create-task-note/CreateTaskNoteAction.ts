@@ -1,4 +1,5 @@
 import { freePath } from '../../../domain/paths.js';
+import { stampNoteId } from '../../../domain/noteIdentity.js';
 import { TaskNoteMapper } from './TaskNoteMapper.js';
 import type { VaultPort } from '../../../port/VaultPort.js';
 import type { RegistryPort } from '../../../port/RegistryPort.js';
@@ -54,7 +55,7 @@ export class CreateTaskNoteAction {
     );
     const path = await freePath(this.vault, base);
 
-    await this.vault.createNote(path, content);
+    await this.vault.createNote(path, stampNoteId(content, id));
     await this.syncState.setEntity({
       id,
       notePath: path,

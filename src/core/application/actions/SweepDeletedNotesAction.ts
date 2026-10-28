@@ -136,7 +136,6 @@ export class SweepDeletedNotesAction {
       await this.handleDeletedNote.execute({
         notePath,
         projectId: input.projectId,
-        projectName: input.projectName,
         connections: input.connections,
       });
     } catch (error) {

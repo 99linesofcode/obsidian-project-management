@@ -87,7 +87,6 @@ describe('DEL-2 — a failed mirror delete is reported and retried, never droppe
       .execute({
         notePath,
         projectId: projectName,
-        projectName,
         connections: [...connections],
       })
       .catch(() => undefined);
@@ -104,7 +103,6 @@ describe('DEL-2 — a failed mirror delete is reported and retried, never droppe
       .execute({
         notePath,
         projectId: projectName,
-        projectName,
         connections: [...connections],
       })
       .catch(() => undefined);
@@ -112,7 +110,6 @@ describe('DEL-2 — a failed mirror delete is reported and retried, never droppe
     await h.action.execute({
       notePath,
       projectId: projectName,
-      projectName,
       connections: [...connections],
     });
 

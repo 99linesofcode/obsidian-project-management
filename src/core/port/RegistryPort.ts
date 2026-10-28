@@ -53,6 +53,7 @@ export interface RegistryPort {
     projectId: string,
     connection: string,
     notePath: string,
+    entityId: string,
     handle: string,
   ): Promise<void>;
 
@@ -93,6 +94,7 @@ export interface RegistryPort {
     fromSlug: string,
     toSlug: string,
   ): Promise<void>;
+  rekeyProject(fromProject: string, toProject: string): Promise<void>;
 
   readBaseline(
     entityId: string,

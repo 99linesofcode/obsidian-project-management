@@ -34,7 +34,7 @@ export class RekeyRenamedConnectionsAction {
       if (!matched.has(port.slug)) {
         warnings.push(
           new Error(
-            `connection "${port.slug}" in project "${input.projectId}" no longer has a matching connection; its sync state is left in place`,
+            `connection "${port.slug}" no longer has a matching connection; its sync state is left in place`,
           ),
         );
       }

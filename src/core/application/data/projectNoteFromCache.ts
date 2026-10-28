@@ -25,18 +25,9 @@ export function projectNoteFromCache(
     return null;
   }
   return {
-    id: vaultId(frontmatter.connections),
     path,
     projectName,
     connections,
     connectionErrors: errors,
   };
-}
-
-function vaultId(connections: Record<string, unknown>): string {
-  const vault = connections.vault;
-  if (!isRecord(vault) || typeof vault.id !== 'string') {
-    return '';
-  }
-  return vault.id;
 }

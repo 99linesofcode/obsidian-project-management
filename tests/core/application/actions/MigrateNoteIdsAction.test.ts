@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
+import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
+import { entityRecord } from '../../../helpers/records.js';
 
 // MIG-1: a one-shot, idempotent pass stamps a minted id onto every note that
 // lacks one — the home note included, because a project home note has no ledger
@@ -33,8 +35,9 @@ function harness(notes: Record<string, string>) {
   for (const [path, content] of Object.entries(notes)) {
     vault.notes.set(path, content);
   }
-  const action = new MigrateNoteIdsAction(vault);
-  return { action, vault };
+  const syncState = new FakeSyncState();
+  const action = new MigrateNoteIdsAction(vault, syncState);
+  return { action, vault, syncState };
 }
 
 function note(fields: readonly string[]): string {
@@ -86,5 +89,28 @@ describe('MIG-1 — the id migration is a one-shot, idempotent pass', () => {
     expect(h.vault.writes.length).toBe(writesAfterFirstPass);
     expect(h.vault.notes.get(home)).toBe(homeAfterFirstPass);
     expect(h.vault.notes.get(taken)).toBe(takenAfterFirstPass);
+  });
+
+  it('re-keys a name-keyed project node to the home note id', async () => {
+    const h = harness({
+      [home]: note(['name: Acme Widgets']),
+      [taken]: note(['name: Fix the Bug']),
+    });
+    h.syncState.seed(
+      entityRecord({
+        id: 'entity-1',
+        notePath: taken,
+        projectId: 'Acme Widgets',
+      }),
+    );
+
+    await h.action.execute({ projectName: 'Acme Widgets' });
+
+    const homeId = stampedId(h.vault.notes.get(home) ?? '');
+    expect(homeId).toBeTruthy();
+    expect((await h.syncState.listEntities(homeId!)).map((r) => r.id)).toEqual([
+      'entity-1',
+    ]);
+    expect(await h.syncState.listEntities(home)).toEqual([]);
   });
 });

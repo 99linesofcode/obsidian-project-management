@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
+import { ProjectIdentityDataTransferObject } from '../../../src/core/port/data/ProjectIdentityDataTransferObject.js';
 import {
   SYNC_STATE_KEY,
   SyncStateAdapter,
@@ -684,6 +685,7 @@ describe('SyncStateAdapter — entity to per-connection handle (F02 NWM-2)', () 
       HANDLE_PROJECT,
       'gh-main',
       HANDLE_PATH,
+      'uuid-1',
       'issue-1',
     );
 
@@ -706,6 +708,7 @@ describe('SyncStateAdapter — entity to per-connection handle (F02 NWM-2)', () 
       HANDLE_PROJECT,
       'gh-main',
       HANDLE_PATH,
+      'uuid-1',
       'issue-1',
     );
 
@@ -726,12 +729,14 @@ describe('SyncStateAdapter — entity to per-connection handle (F02 NWM-2)', () 
       HANDLE_PROJECT,
       'gh-main',
       HANDLE_PATH,
+      'uuid-1',
       `pendingCreation:${HANDLE_PATH}`,
     );
     await adapter.recordMirrorHandle(
       HANDLE_PROJECT,
       'gh-main',
       HANDLE_PATH,
+      'uuid-1',
       'issue-1',
     );
 
@@ -824,6 +829,83 @@ describe('SyncStateAdapter — the mirror project handle (F02 NWM-2)', () => {
       lastPoll: '2026-01-01T00:00:00Z',
       lanes: { a: 'x' },
     });
+  });
+});
+
+describe('MIG-1 — the v3 registry survives the version bump', () => {
+  it('keeps the entities, identities and tombstones instead of wiping them', async () => {
+    const v3 = {
+      syncState: {
+        version: 3,
+        projects: {
+          'Acme Widgets': {
+            entities: { 'entity-1': { notePath } },
+            ports: {
+              github: {
+                provider: 'github',
+                project: 'board-1',
+                lastPoll: null,
+                lanes: {},
+                items: { 'issue-1': { entityId: 'entity-1' } },
+              },
+            },
+            identities: { github: identity },
+          },
+        },
+        tombstones: [
+          {
+            entityId: 'gone',
+            notePath: 'Projecten/Acme Widgets/taken/gone.md',
+            deletedAt: '2026-10-13T00:00:00Z',
+            handle: 'issue-9',
+          },
+        ],
+      },
+    };
+    const { storage, snapshot } = fakeStorage(v3);
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.listEntities('Acme Widgets');
+
+    const container = snapshot()['syncState'] as Record<string, unknown>;
+    expect(container['version']).toBe(4);
+    expect(container['projects']).toEqual(v3.syncState.projects);
+    expect(await adapter.findTombstone('issue-9')).not.toBeNull();
+    expect(await adapter.getIdentity('Acme Widgets', 'github')).toEqual(
+      new ProjectIdentityDataTransferObject(identity),
+    );
+  });
+
+  it('re-keys a project node and its archive baseline from a name to the note id', async () => {
+    const { storage, snapshot } = fakeStorage({
+      syncState: {
+        version: 4,
+        projects: {
+          'Acme Widgets': { entities: { 'entity-1': { notePath } } },
+        },
+      },
+      coreBaselines: {
+        'Acme Widgets': {
+          archived: { origin: { value: 'true', completed: false } },
+        },
+      },
+    });
+    const adapter = new SyncStateAdapter(storage);
+
+    await adapter.rekeyProject('Acme Widgets', 'project-uuid-1');
+
+    const projects = container(snapshot())['projects'] as Record<
+      string,
+      unknown
+    >;
+    expect(projects['Acme Widgets']).toBeUndefined();
+    expect(projects['project-uuid-1']).toEqual({
+      entities: { 'entity-1': { notePath } },
+    });
+    expect(
+      (await adapter.readBaseline('project-uuid-1', 'archived', 'origin'))
+        ?.value,
+    ).toBe('true');
   });
 });
 

@@ -178,7 +178,7 @@ export class VaultAdapter implements VaultPort {
     const { note } = read;
     return new CanonicalTask({
       handle,
-      entityId: handle,
+      entityId: read.entityId,
       title: note.title,
       body: note.body,
       status: note.status,
@@ -259,16 +259,21 @@ export class VaultAdapter implements VaultPort {
 
   private async readTaskNote(
     handle: string,
-  ): Promise<{ note: TaskNote; mtime: number } | null> {
+  ): Promise<{ note: TaskNote; mtime: number; entityId: string } | null> {
     const file = this.app.vault.getAbstractFileByPath(handle);
     if (!(file instanceof TFile)) {
       return null;
     }
-    const note = parseTaskNote(await this.app.vault.read(file), handle);
+    const content = await this.app.vault.read(file);
+    const note = parseTaskNote(content, handle);
     if (!hasTypeLabel(note.labels)) {
       return null;
     }
-    return { note, mtime: file.stat.mtime };
+    return {
+      note,
+      mtime: file.stat.mtime,
+      entityId: connectionsOf(content).vault?.id ?? handle,
+    };
   }
 
   private async changeTime(path: string): Promise<string | null> {

@@ -26,7 +26,6 @@ function note(
   path: string,
 ): ProjectNoteDataTransferObject {
   return {
-    id: projectName,
     path,
     projectName,
     connections: [github],
@@ -58,7 +57,10 @@ class RecordingVault extends FakeVaultBase {
   override async readNoteIds(): Promise<
     readonly { id: string; path: string }[]
   > {
-    return this.notes.map((note) => ({ id: note.id, path: note.path }));
+    return this.notes.map((note) => ({
+      id: note.projectName,
+      path: note.path,
+    }));
   }
 }
 

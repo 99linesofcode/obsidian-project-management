@@ -10,6 +10,7 @@ import {
   topLevelFrontmatterField,
   typeFromLabels,
 } from '../../../domain/note.js';
+import { noteId, stampNoteId } from '../../../domain/noteIdentity.js';
 import { effectiveConnectionTarget } from '../../services/connectionTarget.js';
 import type { ProjectReferenceDataTransferObject } from '../../data/ProjectReferenceDataTransferObject.js';
 import type { CreateTaskNoteAction } from '../create-task-note/CreateTaskNoteAction.js';
@@ -30,6 +31,7 @@ interface AdoptTaskInput {
 interface LinkCandidate {
   slug: string;
   path: string;
+  id: string;
 }
 
 interface LinkCandidates {
@@ -160,6 +162,7 @@ export class CaptureTasksAction {
             project.projectId,
             connection.slug,
             note.path,
+            note.id,
             task.handle,
           );
         }
@@ -189,7 +192,11 @@ export class CaptureTasksAction {
       if (declared === null || declared === '') {
         continue;
       }
-      candidates.push({ slug: slugify(declared), path });
+      candidates.push({
+        slug: slugify(declared),
+        path,
+        id: noteId(note.content) ?? path,
+      });
     }
     return candidates;
   }
@@ -233,8 +240,8 @@ export class CaptureTasksAction {
       { syncedAt: input.syncedAt, statusName: input.task.status },
     );
     const path = await freePath(this.vault, rendered.path);
-    await this.vault.createNote(path, rendered.content);
     const id = crypto.randomUUID();
+    await this.vault.createNote(path, stampNoteId(rendered.content, id));
     await this.registry.setEntity({
       id,
       notePath: path,

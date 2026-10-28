@@ -231,7 +231,7 @@ function composePlugin(
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,
     taskFields: core.taskFields,
-    migrateNoteIds: new MigrateNoteIdsAction(vault),
+    migrateNoteIds: new MigrateNoteIdsAction(vault, syncState),
     migrateHomeNote,
     detectNoteRenames,
     syncChecklist,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import { splitFrontmatter } from '../../../../../src/core/domain/note.js';
+import { noteId } from '../../../../../src/core/domain/noteIdentity.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../../helpers/records.js';
 import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';
@@ -90,7 +91,6 @@ describe('LBL-1 — a note filename is a human-readable slug', () => {
     const { path, content } = vault.created[0]!;
     expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
     const fields = splitFrontmatter(content)?.fields;
-    expect(fields?.get('id')).toBeUndefined();
     expect(fields?.get('type')).toBeUndefined();
     expect(fields?.get('labels')).toContain('type:task');
     expect(fields?.get('status')).toBe('Building');
@@ -98,6 +98,7 @@ describe('LBL-1 — a note filename is a human-readable slug', () => {
     expect(syncState.setCalls).toHaveLength(1);
     const record = syncState.setCalls[0]!;
     expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(noteId(content)).toBe(record.id);
     expect(record.notePath).toBe(path);
     expect(syncState.handleOf(record.id, 'github')).toBe(url);
   });

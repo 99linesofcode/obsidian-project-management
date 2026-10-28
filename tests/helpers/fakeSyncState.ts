@@ -273,6 +273,7 @@ export class FakeSyncState implements RegistryPort {
     project: string,
     connection: string,
     notePath: string,
+    entityId: string,
     handle: string,
   ): Promise<void> {
     this.recordCount += 1;
@@ -281,15 +282,17 @@ export class FakeSyncState implements RegistryPort {
     }
     this.recorded.push({ project, connection, notePath, handle });
     const entity = await this.findByNotePath(notePath);
-    const entityId = entity?.id ?? crypto.randomUUID();
+    const ownerId = entity?.id ?? entityId;
     if (entity === null) {
-      await this.setEntity({ id: entityId, notePath, projectId: project });
+      await this.setEntity({ id: ownerId, notePath, projectId: project });
     }
-    const existing = await this.findMirrorItemByEntity(connection, entityId);
+    const existing = await this.findMirrorItemByEntity(connection, ownerId);
     if (existing !== null && existing.handle !== handle) {
       await this.removeMirrorItem(project, connection, existing.handle);
     }
-    await this.setMirrorItem(project, connection, handle, { entityId });
+    await this.setMirrorItem(project, connection, handle, {
+      entityId: ownerId,
+    });
   }
 
   async getPortState(
@@ -365,6 +368,36 @@ export class FakeSyncState implements RegistryPort {
     if (items !== undefined) {
       this.items.delete(fromSlug);
       this.items.set(toSlug, items);
+    }
+  }
+
+  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
+    if (fromProject === toProject) {
+      return;
+    }
+    for (const record of [...this.records.values()]) {
+      if (record.projectId === fromProject) {
+        this.records.set(record.id, { ...record, projectId: toProject });
+      }
+    }
+    for (const [key, state] of [...this.portStates]) {
+      const suffix = key.slice(fromProject.length);
+      if (key.startsWith(`${fromProject}\u0000`)) {
+        this.portStates.delete(key);
+        this.portStates.set(`${toProject}${suffix}`, state);
+      }
+    }
+    for (const [key, identity] of [...this.identitiesBySlug]) {
+      const suffix = key.slice(fromProject.length);
+      if (key.startsWith(`${fromProject}\u0000`)) {
+        this.identitiesBySlug.delete(key);
+        this.identitiesBySlug.set(`${toProject}${suffix}`, identity);
+      }
+    }
+    const identity = this.identities.get(fromProject);
+    if (identity !== undefined) {
+      this.identities.set(toProject, identity);
+      this.identities.delete(fromProject);
     }
   }
 
