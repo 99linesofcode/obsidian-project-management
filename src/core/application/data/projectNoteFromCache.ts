@@ -18,7 +18,7 @@ export function projectNoteFromCache(
   if (folderName === null) {
     return null;
   }
-  const declared = frontmatter.project;
+  const declared = frontmatter.name;
   const projectName =
     typeof declared === 'string' && declared !== '' ? declared : folderName;
   const { connections, errors } = connectionValidator.validate(

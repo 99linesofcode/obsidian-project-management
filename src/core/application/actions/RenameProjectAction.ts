@@ -93,12 +93,12 @@ export class RenameProjectAction {
     folderName: string,
   ): Promise<boolean> {
     const note = await this.vault.getNoteByPath(input.notePath);
-    if (note === null || hasTopLevelFrontmatterField(note.content, 'project')) {
+    if (note === null || hasTopLevelFrontmatterField(note.content, 'name')) {
       return false;
     }
     const adopted = rewriteFrontmatterFields(
       note.content,
-      new Map([['project', folderName]]),
+      new Map([['name', folderName]]),
       true,
     );
     if (adopted === note.content) {
@@ -135,6 +135,6 @@ function folderDriftWarning(
   folderName: string,
 ): Error {
   return new Error(
-    `project "${input.projectName}" was found under the "${folderName}" folder; the folder was renamed back to match its "project" property`,
+    `project "${input.projectName}" was found under the "${folderName}" folder; the folder was renamed back to match its "name" property`,
   );
 }

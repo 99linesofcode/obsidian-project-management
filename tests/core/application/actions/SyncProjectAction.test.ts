@@ -3,6 +3,7 @@ import { SyncProjectAction } from '../../../../src/core/application/actions/Sync
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
+import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
@@ -223,6 +224,7 @@ function harness(options: HarnessOptions = {}) {
     taskLocks,
     taskCapture,
     taskFields,
+    migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames: renames,
@@ -536,6 +538,7 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       taskFields: {
         invoke: async () => {},
       } as unknown as MirrorSyncAction,
+      migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
       renameProject: new RenameProjectAction(vault, syncState),
       detectNoteRenames: {

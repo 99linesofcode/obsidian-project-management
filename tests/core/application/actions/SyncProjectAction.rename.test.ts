@@ -7,6 +7,7 @@ import type { DetectNoteRenamesAction } from '../../../../src/core/application/a
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
 import type { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
+import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { ProjectLifecycleSyncAction } from '../../../../src/core/application/actions/ProjectLifecycleSyncAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
@@ -90,7 +91,7 @@ function note(overrides: {
 function homeNote(name: string): string {
   return [
     '---',
-    `project: ${name}`,
+    `name: ${name}`,
     'connections:',
     '  github:',
     '    tool: github',
@@ -142,6 +143,7 @@ function harness(options: {
     taskLocks,
     taskCapture,
     taskFields,
+    migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames,
@@ -158,7 +160,7 @@ function harness(options: {
 }
 
 // PLC-2 — a rename is a property change. When a tracked project note's
-// `project` value differs from the name the registry recorded (the recorded
+// `name` value differs from the name the registry recorded (the recorded
 // key), the chain renames the home note and its folder — within the project's
 // current root — and re-keys the registry's project node and its
 // per-connection state. The mirror project's display name follows via the
@@ -218,7 +220,7 @@ describe('PLC-2 — a property change renames the project', () => {
 });
 
 // PLC-3 — a direct folder rename is reconciled to the property. When the
-// `project` value still equals the recorded name but the folder differs, the
+// `name` value still equals the recorded name but the folder differs, the
 // folder is renamed back to match the property, and the reconciliation is
 // reported (never done silently). The report surface is the plugin's warning
 // channel (`console.warn`), the same channel the chain's rekey step uses.
@@ -253,11 +255,11 @@ describe('PLC-3 — a direct folder rename is reconciled to the property', () =>
   });
 });
 
-// PLC-4 — adoption. A project note with no `project` property adopts the
+// PLC-4 — adoption. A project note with no `name` property adopts the
 // folder segment as its value, once — a migration. A value that differs from
 // the folder is PLC-2, not adoption.
-describe('PLC-4 — a note with no `project` adopts the folder segment, once', () => {
-  it('writes the folder segment into `project` and never rewrites it', async () => {
+describe('PLC-4 — a note with no `name` adopts the folder segment, once', () => {
+  it('writes the folder segment into `name` and never rewrites it', async () => {
     const path = 'Projecten/Acme Widgets/_Acme Widgets.md';
     const content = [
       '---',
@@ -277,7 +279,7 @@ describe('PLC-4 — a note with no `project` adopts the folder segment, once', (
 
     const adoption = h.vault.writes.find((write) => write.path === path);
     expect(adoption).toBeDefined();
-    expect(adoption?.content ?? '').toContain('project: Acme Widgets');
+    expect(adoption?.content ?? '').toContain('name: Acme Widgets');
 
     const writesAfterFirst = h.vault.writes.length;
     await h.action.execute('Acme Widgets');

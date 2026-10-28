@@ -32,6 +32,7 @@ describe('LBL-1 — a task renders as a note carrying labels', () => {
     expect(content).toBe(
       [
         '---',
+        'name: Fix the Bug!',
         'categories: [taken]',
         'labels: [type:task]',
         'status: Building',
@@ -102,6 +103,7 @@ describe('TaskNoteMapper.render', () => {
         'categories:',
         '  - "[[Tasks.base|Tasks]]"',
         'tags: []',
+        'name: Fix the Bug!',
         '---',
         'The bug happens when the widget is resized.',
       ].join('\n'),
@@ -127,6 +129,7 @@ describe('TaskNoteMapper.render', () => {
         '---',
         'status: Building',
         'created: 2026-09-18',
+        'name: Fix the Bug!',
         'labels: [type:task]',
         'affiliation: ["[[_Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',

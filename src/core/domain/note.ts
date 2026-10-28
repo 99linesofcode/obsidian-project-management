@@ -27,24 +27,31 @@ export function isCompleted(fields: ReadonlyMap<string, string>): boolean {
   return (fields.get('completed') ?? '') !== '';
 }
 
-export function hasTopLevelFrontmatterField(
+export function topLevelFrontmatterField(
   content: string,
   key: string,
-): boolean {
+): string | null {
   const lines = content.split('\n');
   if (lines[0] !== '---') {
-    return false;
+    return null;
   }
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]!;
     if (line === '---') {
-      return false;
+      return null;
     }
     if (line.startsWith(`${key}:`)) {
-      return true;
+      return line.slice(key.length + 1).trim();
     }
   }
-  return false;
+  return null;
+}
+
+export function hasTopLevelFrontmatterField(
+  content: string,
+  key: string,
+): boolean {
+  return topLevelFrontmatterField(content, key) !== null;
 }
 
 export function withBody(content: string, body: string): string {
@@ -93,7 +100,9 @@ export function rewriteFrontmatterFields(
 ): string {
   const lines = content.split('\n');
   let inFrontmatter = false;
+  const removed = new Set<number>();
   let closing = -1;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (i === 0 && line === '---') {
@@ -108,24 +117,34 @@ export function rewriteFrontmatterFields(
       continue;
     }
     for (const [key, value] of values) {
-      if (line.startsWith(`${key}:`)) {
-        lines[i] = value === null ? `${key}:` : `${key}: ${value}`;
-        break;
+      if (!line.startsWith(`${key}:`)) {
+        continue;
       }
+      if (value === null) {
+        removed.add(i);
+      } else {
+        lines[i] = `${key}: ${value}`;
+      }
+      break;
     }
   }
+
   if (appendMissing && closing !== -1) {
-    const missing = [...values.keys()].filter(
-      (key) =>
-        !lines.slice(0, closing).some((line) => line.startsWith(`${key}:`)),
+    const missing = [...values.entries()].filter(
+      ([key, value]) =>
+        value !== null &&
+        !lines.some(
+          (line, index) =>
+            index < closing &&
+            !removed.has(index) &&
+            line.startsWith(`${key}:`),
+        ),
     );
-    const appended = missing.map((key) => {
-      const value = values.get(key) ?? null;
-      return value === null ? `${key}:` : `${key}: ${value}`;
-    });
+    const appended = missing.map(([key, value]) => `${key}: ${value}`);
     lines.splice(closing, 0, ...appended);
   }
-  return lines.join('\n');
+
+  return lines.filter((_, index) => !removed.has(index)).join('\n');
 }
 
 export function replaceTimestampPlaceholders(
@@ -152,7 +171,7 @@ export function stemOf(path: string): string {
 }
 
 export function normalizedStem(path: string): string {
-  return stemOf(path).replace(/^\d+-/, '').toLowerCase();
+  return slugify(stemOf(path).replace(/^\d+-/, ''));
 }
 
 const WORK_ITEM_KINDS = new Set(['slice', 'pitch', 'task', 'chore', 'bug', 'todo']);

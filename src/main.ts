@@ -37,6 +37,7 @@ import type { GithubTransport } from './infrastructure/github/GithubTransport.js
 import { TodoistMirrorAdapter } from './infrastructure/todoist/TodoistMirrorAdapter.js';
 import type { TokenSettingRow } from './ui/settings/TokenSettingRow.js';
 import { ReconcileProjectTaskLocksAction } from './core/application/actions/ReconcileProjectTaskLocksAction.js';
+import { MigrateNameAction } from './core/application/actions/MigrateNameAction.js';
 import { MigrateProjectHomeNoteAction } from './core/application/actions/MigrateProjectHomeNoteAction.js';
 import { RenameProjectAction } from './core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from './core/application/actions/SweepDeletedNotesAction.js';
@@ -237,6 +238,7 @@ function composePlugin(
     taskLocks: core.taskLocks,
     taskCapture: core.taskCapture,
     taskFields: core.taskFields,
+    migrateName: new MigrateNameAction(vault),
     migrateHomeNote,
     renameProject,
     detectNoteRenames,
