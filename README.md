@@ -15,6 +15,15 @@ and issue management) and **Todoist** (for task management). It is built as a
 set of adapters behind a fixed core, so more project- and task-management tools
 can be added without changing how the vault works.
 
+The plugin gets out of your way: it carries your changes faithfully between the
+tools and never invents behaviour to make one tool imitate another. A status is
+a board position and nothing more — reaching a done-looking lane is not
+completing a task. If a task manager completes a parent's subtasks on its own,
+those completions reach the other mirrors as ordinary changes; if a code host
+does not cascade sub-issues, nothing is added to make it. The tools are left to
+behave the way their own users expect, so they converge on the same facts rather
+than behave identically — and that is by design.
+
 ## What it does
 
 - **Projects** — a project note in your vault declares one or more
