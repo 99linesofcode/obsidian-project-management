@@ -24,7 +24,7 @@ const KIND_PALETTE: Readonly<Record<string, string>> = {
   task: 'lime_green',
   bug: 'berry_red',
   chore: 'light_blue',
-  todo: 'grey',
+  todo: 'yellow',
 };
 
 interface RawTask {
