@@ -34,6 +34,7 @@ export class DetectNoteRenamesAction {
         );
       }
       await this.syncState.setEntity({ ...record, notePath: first });
+      await this.syncState.rekeyBaseline(record.notePath, first);
     }
   }
 }

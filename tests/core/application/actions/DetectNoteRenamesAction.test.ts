@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
+import { Baseline } from '../../../../src/core/domain/Baseline.js';
+import { ORIGIN_SIDE } from '../../../../src/core/domain/sides.js';
 import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
@@ -48,6 +50,31 @@ describe('REN-1 — a rename while Obsidian runs keeps identity', () => {
     expect(h.syncState.handleOf('uuid-1', 'github')).toBe(
       'https://github.com/acme/widgets/issues/42',
     );
+  });
+
+  it('moves the entity baselines to the new path with the record', async () => {
+    const h = harness();
+    h.syncState.seed(entityRecord({ id: 'uuid-1', notePath: oldPath }), {
+      github: {
+        handle: 'https://github.com/acme/widgets/issues/42',
+      },
+    });
+    await h.syncState.writeBaseline(
+      oldPath,
+      'title',
+      ORIGIN_SIDE,
+      new Baseline('Fix the bug', false),
+    );
+    h.vault.noteIds = [{ id: 'uuid-1', path: newPath }];
+
+    await h.action.execute({ projectId: 'Acme Widgets', syncedAt });
+
+    expect(
+      await h.syncState.readBaseline(newPath, 'title', ORIGIN_SIDE),
+    ).toEqual(new Baseline('Fix the bug', false));
+    expect(
+      await h.syncState.readBaseline(oldPath, 'title', ORIGIN_SIDE),
+    ).toBeNull();
   });
 
   it('pairs a to-do record whose note was renamed', async () => {
