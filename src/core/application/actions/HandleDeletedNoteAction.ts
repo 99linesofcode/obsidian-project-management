@@ -2,6 +2,7 @@ import { CanonicalFieldWrite } from '../../port/data/CanonicalFieldWrite.js';
 import type { ConnectionDataTransferObject } from '../../port/data/ConnectionDataTransferObject.js';
 import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPort.js';
 import type { RegistryPort } from '../../port/RegistryPort.js';
+import { effectiveConnectionTarget } from '../services/connectionTarget.js';
 
 export interface HandleDeletedNoteInput {
   notePath: string;
@@ -62,9 +63,18 @@ export class HandleDeletedNoteAction {
     connection: HandleDeletedNoteInput['connections'][number],
     handle: string,
   ): Promise<void> {
+    const target = await effectiveConnectionTarget(
+      this.syncState,
+      projectId,
+      connection,
+    );
+    if (target === null) {
+      return;
+    }
+
     const adapter = this.mirrorAdapters.create(
       connection.application,
-      connection.target,
+      target,
       connection.slug,
       projectId,
     );
