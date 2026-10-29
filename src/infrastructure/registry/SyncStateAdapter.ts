@@ -719,12 +719,37 @@ export class SyncStateAdapter implements RegistryPort {
     field: MergedField,
     side: string,
   ): Promise<Baseline | null> {
-    const data = await this.storage.load();
-    const entry = readBaselineEntry(data, entityId, field, side);
-    if (!isRecord(entry)) {
-      return null;
-    }
-    return new Baseline(stringOrNull(entry.value), entry.completed === true);
+    return this.queue(async () => {
+      const data = await this.storage.load();
+      const entry = readBaselineEntry(data, entityId, field, side);
+      if (!isRecord(entry)) {
+        return null;
+      }
+      return new Baseline(stringOrNull(entry.value), entry.completed === true);
+    });
+  }
+
+  async writeBaselines(
+    entityId: string,
+    field: MergedField,
+    sides: readonly string[],
+    baseline: Baseline,
+  ): Promise<void> {
+    return this.queue(async () => {
+      await this.loadContainer();
+      this.assertWritable();
+      const data = await this.storage.load();
+      const baselines = ensureRecord(data, CORE_BASELINES_KEY);
+      const entity = ensureRecord(baselines, entityId);
+      const fieldNode = ensureRecord(entity, field);
+      for (const side of sides) {
+        fieldNode[side] = {
+          value: baseline.value,
+          completed: baseline.completed,
+        };
+      }
+      await this.storage.save(data);
+    });
   }
 
   async writeBaseline(
@@ -733,12 +758,7 @@ export class SyncStateAdapter implements RegistryPort {
     side: string,
     baseline: Baseline,
   ): Promise<void> {
-    const data = await this.storage.load();
-    const baselines = ensureRecord(data, CORE_BASELINES_KEY);
-    const entity = ensureRecord(baselines, entityId);
-    const fieldNode = ensureRecord(entity, field);
-    fieldNode[side] = { value: baseline.value, completed: baseline.completed };
-    await this.storage.save(data);
+    return this.writeBaselines(entityId, field, [side], baseline);
   }
 
   private mapIdentity(

@@ -136,14 +136,15 @@ export class MergePassService {
     result: MergeResult,
     plan: MergePlan,
   ): Promise<void> {
-    for (const side of advanced) {
-      await this.registry.writeBaseline(
-        entityKey,
-        field,
-        side,
-        plan.baselineFor(result),
-      );
+    if (advanced.length === 0) {
+      return;
     }
+    await this.registry.writeBaselines(
+      entityKey,
+      field,
+      advanced,
+      plan.baselineFor(result),
+    );
   }
 }
 

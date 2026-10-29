@@ -102,6 +102,12 @@ export interface RegistryPort {
     field: MergedField,
     side: string,
   ): Promise<Baseline | null>;
+  writeBaselines(
+    entityId: string,
+    field: MergedField,
+    sides: readonly string[],
+    baseline: Baseline,
+  ): Promise<void>;
   writeBaseline(
     entityId: string,
     field: MergedField,

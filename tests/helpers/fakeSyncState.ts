@@ -454,13 +454,24 @@ export class FakeSyncState implements RegistryPort {
     return this.baselines.get(`${entityId}\u0000${field}\u0000${side}`) ?? null;
   }
 
+  async writeBaselines(
+    entityId: string,
+    field: MergedField,
+    sides: readonly string[],
+    baseline: Baseline,
+  ): Promise<void> {
+    for (const side of sides) {
+      this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
+    }
+  }
+
   async writeBaseline(
     entityId: string,
     field: MergedField,
     side: string,
     baseline: Baseline,
   ): Promise<void> {
-    this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
+    return this.writeBaselines(entityId, field, [side], baseline);
   }
 
   async rekeyBaseline(fromKey: string, toKey: string): Promise<void> {
