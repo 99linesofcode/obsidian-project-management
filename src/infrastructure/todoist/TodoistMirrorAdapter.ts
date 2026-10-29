@@ -15,8 +15,8 @@ const COMPLETED_SINCE = '1970-01-01T00:00:00Z';
 const KIND_PALETTE: Readonly<Record<string, string>> = {
   slice: 'grape',
   pitch: 'orange',
-  task: 'lime_green',
-  bug: 'berry_red',
+  task: 'olive_green',
+  bug: 'salmon',
   chore: 'light_blue',
   todo: 'yellow',
 };
