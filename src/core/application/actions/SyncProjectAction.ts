@@ -65,6 +65,9 @@ export class SyncProjectAction {
       return this.stepErrors;
     }
     const projectId = await this.resolveProjectId(note.path);
+    if (projectId === null) {
+      return this.stepErrors;
+    }
 
     await this.migrateHomeNote(note);
     await this.rekey(projectId, note.connections);
@@ -167,7 +170,9 @@ export class SyncProjectAction {
     projectName: string,
     syncedAt: string,
   ): Promise<void> {
-    for (const notePath of await this.listNotes(projectId)) {
+    const notePaths = await this.listNotes(projectId);
+
+    for (const notePath of notePaths) {
       await this.step(`checklist ${notePath}`, () =>
         this.deps.syncChecklist.execute({
           notePath,
@@ -177,7 +182,7 @@ export class SyncProjectAction {
       );
     }
 
-    for (const todoPath of await this.listNotes(projectId)) {
+    for (const todoPath of notePaths) {
       await this.step(`mirror ${todoPath}`, () =>
         this.deps.mirrorTodoStatus.execute({ todoPath, syncedAt }),
       );
@@ -213,9 +218,19 @@ export class SyncProjectAction {
     return candidates.find((note) => note.path === homePath) ?? null;
   }
 
-  private async resolveProjectId(notePath: string): Promise<string> {
+  private async resolveProjectId(notePath: string): Promise<string | null> {
     const ids = await this.deps.vault.readNoteIds();
-    return ids.find((note) => note.path === notePath)?.id ?? '';
+    const id = ids.find((note) => note.path === notePath)?.id;
+    if (id === undefined || id === '') {
+      console.error(
+        `SyncProjectAction: the home note ${notePath} carries no id; aborting the pass`,
+      );
+      this.stepErrors.push(
+        new Error(`SyncProjectAction: the home note ${notePath} carries no id`),
+      );
+      return null;
+    }
+    return id;
   }
 
   private async reconcileLifecycle(
