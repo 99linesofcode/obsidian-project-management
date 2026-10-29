@@ -6,9 +6,7 @@ import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 
 // S31 IDN-3: a rename is detected by the note's own id, and REN-1's same-stem
 // guess retires. A move between project folders — or into `Archief/` — is a
-// rename, not a deletion, so the record keeps its note and its mirrors. The
-// fake vault exposes the pinned `readNoteIds()` surface; the current detector
-// pairs by stem inside one project folder and so cannot find either move.
+// rename, not a deletion, so the record keeps its note and its mirrors.
 class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();

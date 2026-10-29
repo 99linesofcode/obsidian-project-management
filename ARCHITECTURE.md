@@ -136,6 +136,7 @@ sequenceDiagram
   Sched->>Q: enqueue(project) per project note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes (no-op when missing)
+  SP->>SP: migrate note ids, migrate note filenames
   SP->>SP: migrate home note, rekey connections, resolve-or-create connections
   SP->>Life: invoke(project)
   alt project folder gone

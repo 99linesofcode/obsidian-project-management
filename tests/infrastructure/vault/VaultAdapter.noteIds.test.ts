@@ -22,11 +22,9 @@ import type { App } from 'obsidian';
 import { connectionsOf } from '../../../src/infrastructure/vault/connectionsOf.js';
 import { vaultAdapter } from '../../helpers/vaultAdapter.js';
 
-// IDN-3's mechanism is the pinned port method `readNoteIds()`: it enumerates
-// every note under `Projecten/` and `Archief/` and returns each note's own id
-// with its path. The method is pinned by the delta but not yet on the port, so
-// the assertion is written against the pinned shape; until the implementation
-// lands this test fails because the surface does not exist yet.
+// IDN-3's mechanism is the port method `readNoteIds()`: it enumerates every
+// note under `Projecten/` and `Archief/` and returns each note's own id with
+// its path.
 interface NoteIdsReader {
   readNoteIds(): Promise<readonly { id: string; path: string }[]>;
 }

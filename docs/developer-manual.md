@@ -924,9 +924,14 @@ from the home note rather than the first project-root note (the same predicate
 the id migration uses), and the retirement of `RenameProjectAction` and the
 `name:`-property identity (PLC-1..4).
 
-No discrepancy is known. The scheduler's pre-tick project capture was the last
-fully-recorded discrepancy; it is deleted with the origination model, so the
-scheduler is pure delivery mechanics again.
+The S32 "filename is the title" rule was the last recorded discrepancy: the
+spec's planned P7 rendered illegal characters as a dash, while the shipped
+renderer uses a single space — a colon becomes a space, never a dash. The spec
+now records the rule as FN-1, matching the code.
+
+The scheduler's pre-tick project capture was the discrepancy before it; it is
+deleted with the origination model, so the scheduler is pure delivery mechanics
+again.
 
 ---
 

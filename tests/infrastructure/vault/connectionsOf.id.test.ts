@@ -4,9 +4,7 @@ import { connectionsOf } from '../../../src/infrastructure/vault/connectionsOf.j
 // IDN-1 pins the note's own identity: `connections.vault: { tool: vault, id:
 // <uuid> }`. The raw reader (`connectionsOf`) is the `connections` reader that
 // survives the reconciliation of discovery's validated read with the chain's
-// raw read, so it is where a note's id must read back. The entry shape is
-// asserted through a structural cast because the interface gains `id` only with
-// the implementation; the assertion itself is the pinned contract.
+// raw read, so it is where a note's id must read back.
 interface NoteIdEntry {
   tool?: string;
   id?: string;
