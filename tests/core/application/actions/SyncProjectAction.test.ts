@@ -3,6 +3,7 @@ import { SyncProjectAction } from '../../../../src/core/application/actions/Sync
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
+import type { MigrateNoteFilenamesAction } from '../../../../src/core/application/actions/MigrateNoteFilenamesAction.js';
 import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
@@ -260,6 +261,9 @@ function harness(options: HarnessOptions = {}) {
     migrateNoteIds: {
       execute: async () => {},
     } as unknown as MigrateNoteIdsAction,
+    migrateNoteFilenames: {
+      execute: async () => {},
+    } as unknown as MigrateNoteFilenamesAction,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
     detectNoteRenames: renames,
     syncChecklist: checklist,
@@ -597,6 +601,9 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       migrateNoteIds: {
         execute: async () => {},
       } as unknown as MigrateNoteIdsAction,
+      migrateNoteFilenames: {
+        execute: async () => {},
+      } as unknown as MigrateNoteFilenamesAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
       detectNoteRenames: {
         execute: async () => {},

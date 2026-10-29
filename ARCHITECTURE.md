@@ -384,15 +384,20 @@ canonical DTOs and the pure core.
   explicit type label is kept, and an unlabelled one takes the kind its position
   implies — a root item is a `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
-  (note-id migration, home-note migration, connection re-keying,
-  connection origination, rename recovery, vault consistency and the deletion
-  sweep) and the core actions
+  (note-id migration, note-filename migration, home-note migration, connection
+  re-keying, connection origination, rename recovery, vault consistency and the
+  deletion sweep) and the core actions
   directly (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
   every step wrapped so one failure logs and skips that step. `MigrateNoteIdsAction`
   runs first: a one-shot, idempotent pass that stamps a minted id on every note
   lacking one (the home note included) at `connections.vault.id`, so a note's
-  own identity always exists before any step reads it. The chain then resolves
+  own identity always exists before any step reads it. `MigrateNoteFilenamesAction`
+  then runs a one-shot, idempotent pass over every taken note: it reads the title
+  from the ledger's baseline — the last-known value, no remote read — renames the
+  file to `renderFilename(title)`, and leaves and reports a note whose baseline
+  holds no title; the rename re-keys the note's record and its baseline, so the
+  id and the mirrors are untouched. The chain then resolves
   the home note — its `_<name>` stem, else a legacy `_home.md`/`<name>.md`, else
   the only note at the project root — reads its id from `connections`, and
   threads the work item `{ projectId, projectName }` to every step: the registry

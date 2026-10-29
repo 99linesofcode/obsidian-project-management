@@ -95,6 +95,7 @@ export interface RegistryPort {
     toSlug: string,
   ): Promise<void>;
   rekeyProject(fromKey: string, toKey: string): Promise<void>;
+  rekeyBaseline(fromKey: string, toKey: string): Promise<void>;
 
   readBaseline(
     entityId: string,

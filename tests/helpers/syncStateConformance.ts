@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Baseline } from '../../src/core/domain/Baseline.js';
 import type { EntityRecord } from '../../src/core/port/data/EntityRecord.js';
 import type { RegistryPort } from '../../src/core/port/RegistryPort.js';
 import { projectFromNotePath } from '../../src/core/domain/paths.js';
@@ -151,6 +152,42 @@ export function runSyncStateConformance(
         expect((await port.listEntities(PROJECT_B)).map((r) => r.id)).toEqual([
           'e1',
         ]);
+      });
+    });
+
+    describe('baseline re-key', () => {
+      it('moves an entity baselines from one key to another', async () => {
+        const port = harness.create();
+        await port.writeBaseline(
+          PATH_A,
+          'title',
+          'origin',
+          new Baseline('Fix the Bug', false),
+        );
+        await port.writeBaseline(
+          PATH_A,
+          'body',
+          'origin',
+          new Baseline('Body text', false),
+        );
+
+        await port.rekeyBaseline(PATH_A, PATH_A2);
+
+        expect(await port.readBaseline(PATH_A, 'title', 'origin')).toBeNull();
+        expect(await port.readBaseline(PATH_A2, 'title', 'origin')).toEqual(
+          new Baseline('Fix the Bug', false),
+        );
+        expect(await port.readBaseline(PATH_A2, 'body', 'origin')).toEqual(
+          new Baseline('Body text', false),
+        );
+      });
+
+      it('is a no-op when the source key holds no baseline', async () => {
+        const port = harness.create();
+
+        await port.rekeyBaseline(PATH_A, PATH_A2);
+
+        expect(await port.readBaseline(PATH_A2, 'title', 'origin')).toBeNull();
       });
     });
 

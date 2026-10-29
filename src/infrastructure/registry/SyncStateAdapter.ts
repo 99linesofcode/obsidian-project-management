@@ -647,6 +647,23 @@ export class SyncStateAdapter implements RegistryPort {
     });
   }
 
+  async rekeyBaseline(fromKey: string, toKey: string): Promise<void> {
+    return this.queue(async () => {
+      await this.loadContainer();
+      this.assertWritable();
+      if (fromKey === toKey) {
+        return;
+      }
+      const data = await this.storage.load();
+      const baselines = data[CORE_BASELINES_KEY];
+      if (!isRecord(baselines) || !isRecord(baselines[fromKey])) {
+        return;
+      }
+      moveBaselineNode(data, fromKey, toKey);
+      await this.storage.save(data);
+    });
+  }
+
   async resolveMirrorProject(
     project: string,
     connection: string,

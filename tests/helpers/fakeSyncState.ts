@@ -462,4 +462,17 @@ export class FakeSyncState implements RegistryPort {
   ): Promise<void> {
     this.baselines.set(`${entityId}\u0000${field}\u0000${side}`, baseline);
   }
+
+  async rekeyBaseline(fromKey: string, toKey: string): Promise<void> {
+    if (fromKey === toKey) {
+      return;
+    }
+    const prefix = `${fromKey}\u0000`;
+    for (const [key, baseline] of [...this.baselines]) {
+      if (key.startsWith(prefix)) {
+        this.baselines.delete(key);
+        this.baselines.set(`${toKey}${key.slice(fromKey.length)}`, baseline);
+      }
+    }
+  }
 }

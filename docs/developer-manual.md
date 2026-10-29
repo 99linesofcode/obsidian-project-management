@@ -178,7 +178,8 @@ one-paragraph summary precedes each.
 `SyncScheduler.tick` enumerates the vault's project notes and enqueues each
 project folder; `SyncQueue` runs them one
 at a time. `SyncProjectAction.execute` stamps a note id on every note that lacks
-one (the one-shot, idempotent id migration), resolves the home note — the
+one and renames every taken note to the title its baseline holds (two one-shot,
+idempotent migrations), resolves the home note — the
 `_<name>` stem, else a legacy `_home.md`/`<name>.md`, else the only note at the
 project root — reads its id from `connections` and threads the work item
 `{ projectId, projectName }` to every step (a stale work item no-ops). It migrates
@@ -213,6 +214,7 @@ sequenceDiagram
   participant Lock as ReconcileProjectTaskLocksAction
 
   SP->>SP: migrate note ids (connections.vault.id)
+  SP->>SP: migrate note filenames (baseline title)
   SP->>SP: resolve the home note (no-op when missing)
   SP->>SP: read the project id from connections
   SP->>SP: migrate / rekey / ensureBoards

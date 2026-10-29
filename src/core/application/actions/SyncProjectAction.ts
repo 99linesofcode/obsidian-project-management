@@ -10,6 +10,7 @@ import type { MirrorAdapterFactoryPort } from '../../port/MirrorAdapterFactoryPo
 import type { CaptureTasksAction } from './capture-tasks/CaptureTasksAction.js';
 import type { DetectNoteRenamesAction } from './DetectNoteRenamesAction.js';
 import type { EnsureProjectBoardAction } from './EnsureProjectBoardAction.js';
+import type { MigrateNoteFilenamesAction } from './MigrateNoteFilenamesAction.js';
 import type { MigrateNoteIdsAction } from './MigrateNoteIdsAction.js';
 import type { MigrateProjectHomeNoteAction } from './MigrateProjectHomeNoteAction.js';
 import type { MirrorSyncAction } from './MirrorSyncAction.js';
@@ -28,6 +29,7 @@ export interface SyncProjectDependencies {
   taskCapture: CaptureTasksAction;
   taskFields: MirrorSyncAction;
   migrateNoteIds: MigrateNoteIdsAction;
+  migrateNoteFilenames: MigrateNoteFilenamesAction;
   migrateHomeNote: MigrateProjectHomeNoteAction;
   detectNoteRenames: DetectNoteRenamesAction;
   syncChecklist: SyncChecklistAction;
@@ -52,6 +54,10 @@ export class SyncProjectAction {
 
     await this.step('migrate note ids', () =>
       this.deps.migrateNoteIds.execute({ projectName }),
+    );
+
+    await this.step('migrate note filenames', () =>
+      this.deps.migrateNoteFilenames.execute({ projectName }),
     );
 
     const note = await this.resolveProject(folderPath, projectName);

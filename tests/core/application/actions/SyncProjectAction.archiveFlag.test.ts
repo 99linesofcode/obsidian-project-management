@@ -8,6 +8,7 @@ import type { ProjectLifecycleSyncAction } from '../../../../src/core/applicatio
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
+import type { MigrateNoteFilenamesAction } from '../../../../src/core/application/actions/MigrateNoteFilenamesAction.js';
 import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
@@ -92,6 +93,9 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
     migrateNoteIds: {
       execute: async () => {},
     } as unknown as MigrateNoteIdsAction,
+    migrateNoteFilenames: {
+      execute: async () => {},
+    } as unknown as MigrateNoteFilenamesAction,
     migrateHomeNote: migrate,
     detectNoteRenames: {
       execute: async () => {},
