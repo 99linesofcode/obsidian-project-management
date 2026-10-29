@@ -371,8 +371,8 @@ canonical DTOs and the pure core.
   with a tombstone is skipped too, so a deleted note's mirror is never re-adopted
   (DEL-2, I16). Each remaining task is then matched against the project's notes
   by the **comparison form** of the note's filename — case-folded,
-  whitespace-collapsed, a leading ordinal and a trailing collision suffix
-  stripped (CAP-4): exactly one matching note → the task is **linked** to
+  whitespace-collapsed and a trailing collision suffix stripped (CAP-4):
+  exactly one matching note → the task is **linked** to
   it, recording the handle on the existing note and writing no note; no match →
   the task is adopted as a new note; more than one match → nothing is written
   and the task is logged, so neither a duplicate nor a wrong link is made and the

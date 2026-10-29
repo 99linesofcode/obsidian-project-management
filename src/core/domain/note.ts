@@ -142,7 +142,6 @@ const ILLEGAL_FILENAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/g;
 const WHITESPACE_RUN = /\s+/g;
 const ALL_DOTS = /^\.+$/;
 const MARKDOWN_EXTENSION = /\.md$/;
-const LEADING_ORDINAL = /^\d+-/;
 const TRAILING_COLLISION_SUFFIX = /-\d+$/;
 const MAX_FILENAME_STEM_BYTES = 255;
 
@@ -161,7 +160,6 @@ export function comparisonForm(value: string): string {
     .replace(MARKDOWN_EXTENSION, '')
     .toLowerCase()
     .replace(WHITESPACE_RUN, ' ')
-    .replace(LEADING_ORDINAL, '')
     .replace(TRAILING_COLLISION_SUFFIX, '');
 }
 

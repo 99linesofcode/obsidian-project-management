@@ -89,7 +89,7 @@ export function folderOf(path: string): string | null {
 
 function titleFromPath(handle: string): string {
   const basename = handle.split('/').pop() ?? '';
-  return basename.replace(/\.md$/, '').replace(/^\d+-/, '');
+  return basename.replace(/\.md$/, '');
 }
 
 function parentFromAffiliation(

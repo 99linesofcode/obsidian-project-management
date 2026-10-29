@@ -13,9 +13,10 @@ import { entityRecord } from '../../../../helpers/records.js';
 
 // CAP-4 / OQ-5 — capture's link key is the comparison form of the note's
 // filename, not the note's declared `name:`. A remote task whose title matches
-// exactly one existing note up to case, whitespace, a leading ordinal and a
-// trailing collision suffix is linked to that note, and no second note is
-// written. The filename is the title, so the link key reads the filename.
+// exactly one existing note up to case, whitespace and a trailing collision
+// suffix is linked to that note, and no second note is written. The filename is
+// the title, so the link key reads the filename — a leading ordinal is part of
+// the title and does not match.
 
 const SYNCED_AT = '2026-10-08T12:00:00Z';
 const PROJECT = 'Acme';
@@ -180,7 +181,7 @@ describe('CAP-4 / OQ-5 — capture links on the comparison form of the filename'
     expect(h.syncState.handleOf('entity-existing', 'td')).toBe('td-1');
   });
 
-  it('links despite a leading ordinal on the filename', async () => {
+  it('does not link when the filename differs by a leading ordinal — the ordinal is part of the title', async () => {
     const h = harness([task('td-1', 'fix the bug')]);
     seedNote(h, `Projecten/${PROJECT}/taken/61-fix the bug.md`);
 
@@ -189,8 +190,10 @@ describe('CAP-4 / OQ-5 — capture links on the comparison form of the filename'
       SYNCED_AT,
     );
 
-    expect(h.vault.created).toEqual([]);
-    expect(h.syncState.handleOf('entity-existing', 'td')).toBe('td-1');
+    expect(h.syncState.handleOf('entity-existing', 'td')).toBeNull();
+    expect(h.vault.created.map((note) => note.path)).toEqual([
+      `Projecten/${PROJECT}/taken/fix the bug.md`,
+    ]);
   });
 
   it('links despite a trailing collision suffix on the filename', async () => {

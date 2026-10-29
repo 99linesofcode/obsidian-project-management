@@ -91,14 +91,17 @@ describe('FN-1 — the comparison form is lossy; the renderer is not', () => {
     expect(comparisonForm('Fix  the  Bug')).toBe('fix the bug');
   });
 
-  it('strips a leading ordinal and a trailing collision suffix', () => {
-    expect(comparisonForm('61-fix the bug')).toBe('fix the bug');
+  it('strips a trailing collision suffix and the markdown extension', () => {
     expect(comparisonForm('fix the bug-2')).toBe('fix the bug');
-    expect(comparisonForm('61-fix the bug.md')).toBe('fix the bug');
+    expect(comparisonForm('fix the bug.md')).toBe('fix the bug');
   });
 
-  it('matches two notes differing in case, whitespace and ordinal where the renderer does not', () => {
-    expect(comparisonForm('61-Fix  the Bug')).toBe(
+  it('keeps a leading ordinal — the ordinal is part of the title', () => {
+    expect(comparisonForm('61-fix the bug')).toBe('61-fix the bug');
+  });
+
+  it('matches two notes differing in case and whitespace where the renderer does not', () => {
+    expect(comparisonForm('Fix  the  Bug')).toBe(
       comparisonForm('fix the bug'),
     );
     expect(renderFilename('Fix the Bug')).not.toBe(

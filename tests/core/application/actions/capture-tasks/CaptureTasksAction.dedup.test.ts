@@ -162,7 +162,7 @@ describe('CaptureTasksAction — capture links a task whose title already exists
   it('writes nothing and logs when more than one note shares the title (CAP-4, I16)', async () => {
     const h = harness([task('td-1', 'fix the bug')]);
     h.vault.seed(EXISTING, TYPED_NOTE);
-    h.vault.seed(`Projecten/${PROJECT}/taken/42-fix the bug.md`, TYPED_NOTE);
+    h.vault.seed(`Projecten/${PROJECT}/taken/Fix  the  bug.md`, TYPED_NOTE);
 
     const result = await h.action.invoke(
       { projectId: PROJECT, projectName: PROJECT },

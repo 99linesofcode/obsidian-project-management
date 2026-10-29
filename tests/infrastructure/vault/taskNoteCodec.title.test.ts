@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { parseTaskNote } from '../../../src/infrastructure/vault/taskNoteCodec.js';
 
-// NWM-28 — the canonical title reads the filename. It is the file's stem with a
-// leading `NN-` ordinal removed, and otherwise verbatim. Nothing de-slugs it:
-// a dash in the filename is a dash in the title.
+// NWM-28 — the canonical title reads the filename. It is the file's stem,
+// verbatim: nothing is stripped and nothing de-slugs it, so a leading ordinal
+// and a dash are both part of the title.
 
 const CONTENT = '---\nlabels: [type:task]\n---\n';
 
@@ -26,9 +26,9 @@ describe('NWM-28 — the title is the filename, verbatim', () => {
     expect(titleOf('Projecten/A/taken/fix-a-twin.md')).toBe('fix-a-twin');
   });
 
-  it('strips a leading ordinal and keeps the rest verbatim', () => {
+  it('keeps a leading ordinal verbatim, it does not strip it', () => {
     expect(titleOf('Projecten/A/taken/61-fix-a-to-do-twin.md')).toBe(
-      'fix-a-to-do-twin',
+      '61-fix-a-to-do-twin',
     );
   });
 });
