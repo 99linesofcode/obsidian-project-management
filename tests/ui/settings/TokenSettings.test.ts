@@ -3,7 +3,6 @@ import { TokenSettings } from '../../../src/ui/settings/TokenSettings.js';
 import { FakeSecretStore } from '../../helpers/fakeSecretStore.js';
 
 const GITHUB_TOKEN_KEY = 'github-token';
-const TODOIST_TOKEN_KEY = 'todoist-token';
 
 describe('TokenSettings', () => {
   it('reports a stored token', () => {
@@ -42,16 +41,5 @@ describe('TokenSettings', () => {
     new TokenSettings(secrets).clear(GITHUB_TOKEN_KEY);
 
     expect(secrets.load(GITHUB_TOKEN_KEY)).toBeNull();
-  });
-
-  it('loads a stored token, empty when unset', () => {
-    const stored = new TokenSettings(
-      new FakeSecretStore({ [TODOIST_TOKEN_KEY]: 'td_y' }),
-    );
-
-    expect(stored.load(TODOIST_TOKEN_KEY)).toBe('td_y');
-    expect(
-      new TokenSettings(new FakeSecretStore()).load(TODOIST_TOKEN_KEY),
-    ).toBe('');
   });
 });

@@ -48,7 +48,7 @@ const IDENTITY_CODEC: FieldCodec = {
   mirrorValue: async (_slug, identity) => identity,
 };
 
-export interface MirrorFieldOutcome {
+interface MirrorFieldOutcome {
   field: CanonicalField;
   result: MergeResult;
   written: readonly string[];

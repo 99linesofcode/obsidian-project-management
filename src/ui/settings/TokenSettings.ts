@@ -7,10 +7,6 @@ export class TokenSettings {
     return this.secrets.load(key) !== null;
   }
 
-  load(key: string): string {
-    return this.secrets.load(key) ?? '';
-  }
-
   set(key: string, value: string): void {
     const trimmed = value.trim();
     if (trimmed.length === 0) return;

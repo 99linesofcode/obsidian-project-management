@@ -1,5 +1,5 @@
 import { isRecord } from '../../core/domain/isRecord.js';
-import { stringOrEmpty } from '../../core/domain/strings.js';
+import { stringOrEmpty, stringOrNull } from '../../core/domain/strings.js';
 import type { MirrorItem } from '../../core/port/data/MirrorItem.js';
 import type { PortState } from '../../core/port/data/PortState.js';
 import type { TombstoneRecord } from '../../core/port/data/TombstoneRecord.js';
@@ -14,10 +14,6 @@ export const PORTS_KEY = 'ports';
 export const ITEMS_KEY = 'items';
 export const IDENTITIES_KEY = 'identities';
 export const TOMBSTONES_KEY = 'tombstones';
-
-export function stringOrNull(value: unknown): string | null {
-  return value === null || typeof value === 'string' ? value : null;
-}
 
 export function readProjectsMap(
   container: Record<string, unknown>,
