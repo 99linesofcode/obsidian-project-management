@@ -56,14 +56,12 @@ class FakeVault extends FakeVaultBase {
     readonly { id: string; path: string }[]
   > {
     return this.projectNotes.map((note) => ({
-      id: this.noteIds.get(note.path) ?? note.projectName,
+      id: this.idOf(note),
       path: note.path,
     }));
   }
   override async listEntities(projectId: string): Promise<readonly string[]> {
-    const note = this.projectNotes.find(
-      (candidate) => candidate.projectName === projectId,
-    );
+    const note = this.noteFor(projectId);
     if (note === undefined) {
       return [];
     }
@@ -83,15 +81,10 @@ class FakeVault extends FakeVaultBase {
   override async readConnections(
     project: string,
   ): Promise<readonly ConnectionDataTransferObject[]> {
-    return (
-      this.projectNotes.find((note) => note.projectName === project)
-        ?.connections ?? []
-    );
+    return this.noteFor(project)?.connections ?? [];
   }
   override async observeProject(project: string): Promise<OriginObservation> {
-    const note = this.projectNotes.find(
-      (candidate) => candidate.projectName === project,
-    );
+    const note = this.noteFor(project);
     return new OriginObservation({
       current:
         note !== undefined && note.path.startsWith('Archief/')
@@ -107,6 +100,16 @@ class FakeVault extends FakeVaultBase {
     archived: boolean,
   ): Promise<void> {
     this.appliedArchived.push({ project, archived });
+  }
+
+  private noteFor(
+    projectId: string,
+  ): ProjectNoteDataTransferObject | undefined {
+    return this.projectNotes.find((note) => this.idOf(note) === projectId);
+  }
+
+  private idOf(note: ProjectNoteDataTransferObject): string {
+    return this.noteIds.get(note.path) ?? `home-${note.projectName}`;
   }
 }
 
@@ -130,8 +133,10 @@ function projectNote(
   };
 }
 
+const PROJECT_ID = 'home-Acme Widgets';
+
 function status(notePath: string): EntityRecord {
-  return entityRecord({ id: 'entity-42', notePath });
+  return entityRecord({ id: 'entity-42', notePath, projectId: PROJECT_ID });
 }
 
 function projectNoteAt(path: string): ProjectNoteDataTransferObject {
@@ -299,7 +304,7 @@ describe('the multi-adapter pass', () => {
       `checklist:${todo}`,
       `mirror:${todo}`,
       'capture:Acme Widgets',
-      'reconcile:Acme Widgets',
+      'reconcile:home-Acme Widgets',
     ]);
   });
 
@@ -320,7 +325,7 @@ describe('the multi-adapter pass', () => {
       'lifecycle',
       'taskLocks:false:false',
       'capture:Acme Widgets',
-      'reconcile:Acme Widgets',
+      'reconcile:home-Acme Widgets',
     ]);
   });
 
@@ -540,7 +545,7 @@ describe('SHELL-2 — the chain runs its origination step before reconciliation'
       'taskLocks:false:false',
       'renames',
       'capture:Acme Widgets',
-      'reconcile:Acme Widgets',
+      'reconcile:home-Acme Widgets',
     ]);
   });
 });
@@ -567,13 +572,13 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
     ];
     const syncState = new FakeSyncState();
     await syncState.writeBaseline(
-      'Acme Widgets',
+      'home-Acme Widgets',
       'archived',
       'origin',
       new Baseline('true', false),
     );
     await syncState.writeBaseline(
-      'Acme Widgets',
+      'home-Acme Widgets',
       'archived',
       'mirror:todoist',
       new Baseline('true', false),
@@ -623,10 +628,10 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
     await action.execute('Archief/Acme Widgets');
 
     expect(
-      await syncState.getIdentity('Acme Widgets', 'todoist'),
+      await syncState.getIdentity('home-Acme Widgets', 'todoist'),
     ).not.toBeNull();
     expect(vault.appliedArchived).toEqual([
-      { project: 'Acme Widgets', archived: false },
+      { project: 'home-Acme Widgets', archived: false },
     ]);
   });
 });
