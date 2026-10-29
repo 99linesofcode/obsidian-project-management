@@ -13,8 +13,8 @@ import { entityRecord } from '../../../../helpers/records.js';
 
 const SYNCED_AT = '2026-10-08T12:00:00Z';
 const PROJECT = 'Acme';
-const EXISTING = `Projecten/${PROJECT}/taken/fix-the-bug.md`;
-const TYPED_NOTE = '---\nlabels: [type:task]\n---\n';
+const EXISTING = `Projecten/${PROJECT}/taken/fix the bug.md`;
+const TYPED_NOTE = '---\nname: Fix the Bug\nlabels: [type:task]\n---\n';
 
 class FakeVault extends FakeVaultBase {
   readonly created: Array<{ path: string; content: string }> = [];
@@ -131,9 +131,14 @@ describe('CaptureTasksAction — capture links a task whose title already exists
   it('links a remote task to the one existing note with that title, writing no note (CAP-4, I16)', async () => {
     const h = harness([task('td-1', 'fix the bug')]);
     h.vault.seed(EXISTING, TYPED_NOTE);
-    h.syncState.seed(entityRecord({ id: 'entity-existing', notePath: EXISTING }));
+    h.syncState.seed(
+      entityRecord({ id: 'entity-existing', notePath: EXISTING }),
+    );
 
-    await h.action.invoke(PROJECT, SYNCED_AT);
+    await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(h.vault.created).toEqual([]);
     expect(h.syncState.handleOf('entity-existing', 'td')).toBe('td-1');
@@ -143,33 +148,45 @@ describe('CaptureTasksAction — capture links a task whose title already exists
     const h = harness([task('td-1', 'buy milk')]);
     h.vault.seed(`Projecten/${PROJECT}/taken/other.md`, TYPED_NOTE);
 
-    const result = await h.action.invoke(PROJECT, SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(result.captured).toEqual(['td-1']);
     expect(h.vault.created.map((note) => note.path)).toEqual([
-      `Projecten/${PROJECT}/taken/buy-milk.md`,
+      `Projecten/${PROJECT}/taken/buy milk.md`,
     ]);
   });
 
   it('writes nothing and logs when more than one note shares the title (CAP-4, I16)', async () => {
     const h = harness([task('td-1', 'fix the bug')]);
     h.vault.seed(EXISTING, TYPED_NOTE);
-    h.vault.seed(`Projecten/${PROJECT}/taken/42-fix-the-bug.md`, TYPED_NOTE);
+    h.vault.seed(`Projecten/${PROJECT}/taken/Fix  the  bug.md`, TYPED_NOTE);
 
-    const result = await h.action.invoke(PROJECT, SYNCED_AT);
+    const result = await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(h.vault.created).toEqual([]);
     expect(result.captured).toEqual([]);
     expect(result.errors).toHaveLength(1);
   });
 
-  it('links a remote task whose normalised title matches one existing note, despite casing and punctuation (CAP-4, I16)', async () => {
-    const notePath = `Projecten/${PROJECT}/taken/fix-the-login-bug.md`;
+  it('links a remote task whose title matches one existing note, despite casing (CAP-4, I16)', async () => {
+    const notePath = `Projecten/${PROJECT}/taken/Fix the Login Bug!.md`;
     const h = harness([task('td-1', 'Fix the Login Bug!')]);
-    h.vault.seed(notePath, TYPED_NOTE);
+    h.vault.seed(
+      notePath,
+      '---\nname: Fix the Login Bug!\nlabels: [type:task]\n---\n',
+    );
     h.syncState.seed(entityRecord({ id: 'entity-login', notePath }));
 
-    await h.action.invoke(PROJECT, SYNCED_AT);
+    await h.action.invoke(
+      { projectId: PROJECT, projectName: PROJECT },
+      SYNCED_AT,
+    );
 
     expect(h.vault.created).toEqual([]);
     expect(h.syncState.handleOf('entity-login', 'td')).toBe('td-1');

@@ -14,16 +14,16 @@ export function projectNoteFromCache(
   if (Object.keys(frontmatter.connections).length === 0) {
     return null;
   }
-  const folderName = projectNameFromPath(path);
-  if (folderName === null) {
+  const projectName = projectNameFromPath(path);
+  if (projectName === null) {
     return null;
   }
-  const declared = frontmatter.name;
-  const projectName =
-    typeof declared === 'string' && declared !== '' ? declared : folderName;
   const { connections, errors } = connectionValidator.validate(
     frontmatter.connections,
   );
+  if (connections.length === 0) {
+    return null;
+  }
   return {
     path,
     projectName,

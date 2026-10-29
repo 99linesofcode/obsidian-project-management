@@ -1,4 +1,5 @@
 export interface FrontmatterConnection {
   tool: string;
-  project: string;
+  project?: string;
+  id?: string;
 }

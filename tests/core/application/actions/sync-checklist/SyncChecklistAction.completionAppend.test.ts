@@ -58,7 +58,7 @@ class FakeVault extends FakeVaultBase {
 const projectName = 'Acme Widgets';
 const taskPath = `Projecten/${projectName}/taken/42-fix-the-bug.md`;
 const taskLink = '42-fix-the-bug';
-const todoPath = `Projecten/${projectName}/taken/fix-the-bug.md`;
+const todoPath = `Projecten/${projectName}/taken/Fix the bug.md`;
 const syncedAt = '2026-09-18T12:00:00Z';
 
 function taskNote(body: string): string {

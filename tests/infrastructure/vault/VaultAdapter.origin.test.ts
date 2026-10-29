@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../src/core/domain/paths.js';
 import { describe, expect, it, vi } from 'vitest';
 
 const { TFile } = vi.hoisted(() => {
@@ -35,6 +36,9 @@ const HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  conformance:',
   '    tool: conformance',
   '    project: board-1',
@@ -200,7 +204,11 @@ async function seedOrigin(
     type: 'project',
     connections: { conformance: { tool: 'conformance', project: 'board-1' } },
   });
-  await registry.setEntity({ id: NOTE_PATH, notePath: NOTE_PATH });
+  await registry.setEntity({
+    id: NOTE_PATH,
+    notePath: NOTE_PATH,
+    projectId: projectFromNotePath(NOTE_PATH),
+  });
   await registry.setMirrorItem('Acme', 'conformance', NOTE_PATH, {
     entityId: NOTE_PATH,
   });
@@ -243,7 +251,7 @@ describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
     const parent = await adapter.observe(NOTE_PATH, 'subtasks');
     const label = await adapter.observe(NOTE_PATH, 'label');
 
-    expect(title.current).toBe('fix the bug');
+    expect(title.current).toBe('fix-the-bug');
     expect(status.current).toBe('Building');
     expect(body.current).toBe('Body text');
     expect(completion.current).toBe('true');
@@ -286,7 +294,7 @@ describe('VaultAdapter origin — the origin read (F02 NWM-28)', () => {
       new CanonicalTask({
         handle: NOTE_PATH,
         entityId: NOTE_PATH,
-        title: 'fix the bug',
+        title: 'fix-the-bug',
         body: 'Body text',
         status: 'Building',
         completed: true,
@@ -520,7 +528,7 @@ describe('VaultAdapter origin — the origin rename (F02 NWM-3)', () => {
     );
 
     expect(vault.has(NOTE_PATH)).toBe(false);
-    expect(vault.has('Projecten/Acme/taken/fix-it-now.md')).toBe(true);
+    expect(vault.has('Projecten/Acme/taken/Fix it now.md')).toBe(true);
   });
 
   it('renames a root-level note without dropping its last character', async () => {
@@ -536,10 +544,10 @@ describe('VaultAdapter origin — the origin rename (F02 NWM-3)', () => {
     );
 
     expect(vault.has('fix-the-bug.md')).toBe(false);
-    expect(vault.has('fix-it-now.md')).toBe(true);
+    expect(vault.has('Fix it now.md')).toBe(true);
   });
 
-  it('refuses to rename a note to an empty slug', async () => {
+  it('refuses to rename a note to an unrenderable title', async () => {
     const { vault, adapter } = setup();
     vault.seed(NOTE_PATH, NOTE, MTIME);
 
@@ -548,7 +556,7 @@ describe('VaultAdapter origin — the origin rename (F02 NWM-3)', () => {
         new CanonicalFieldWrite({
           handle: NOTE_PATH,
           field: 'title',
-          value: '!!!',
+          value: '...',
         }),
       ),
     ).rejects.toThrow();

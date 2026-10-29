@@ -71,7 +71,7 @@ describe('DEL-1 — a deleted vault note is a tracked change', () => {
 
     await action.execute({
       notePath,
-      projectName,
+      projectId: projectName,
       connections: [{ slug: 'github', application, target }],
     });
 
@@ -89,7 +89,7 @@ describe('DEL-1 — a deleted vault note is a tracked change', () => {
 
     await action.execute({
       notePath,
-      projectName,
+      projectId: projectName,
       connections: [{ slug: 'github', application, target }],
     });
 
@@ -104,7 +104,7 @@ describe('DEL-1 — a deleted vault note is a tracked change', () => {
 
     await action.execute({
       notePath,
-      projectName,
+      projectId: projectName,
       connections: [
         { slug: 'github', application, target },
         { slug: 'todoist', application: 'todoist', target: todoistTarget },
@@ -126,7 +126,7 @@ describe('DEL-1 — a deleted vault note is a tracked change', () => {
 
     await action.execute({
       notePath: 'Projecten/Acme Widgets/taken/99-untracked.md',
-      projectName,
+      projectId: projectName,
       connections: [{ slug: 'github', application, target }],
     });
 
@@ -159,7 +159,7 @@ describe('SHELL-3 — every connection mirror is deleted before the record is pr
 
       await action.execute({
         notePath,
-        projectName,
+        projectId: projectName,
         connections: order.map((slug) => bySlug[slug]),
       });
 

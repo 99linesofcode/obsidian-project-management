@@ -48,7 +48,7 @@ const IDENTITY_CODEC: FieldCodec = {
   mirrorValue: async (_slug, identity) => identity,
 };
 
-export interface MirrorFieldOutcome {
+interface MirrorFieldOutcome {
   field: CanonicalField;
   result: MergeResult;
   written: readonly string[];
@@ -67,14 +67,14 @@ export class MirrorSyncAction {
     this.mergePass = new MergePassService(registry, mirrorAdapters);
   }
 
-  async invoke(project: string): Promise<MirrorFieldOutcome[]> {
-    const connections = await this.vault.readConnections(project);
-    const notePaths = await this.vault.listEntities(project);
-    const scoped = await this.scopeMirrors(connections, project);
+  async invoke(projectId: string): Promise<MirrorFieldOutcome[]> {
+    const connections = await this.vault.readConnections(projectId);
+    const notePaths = await this.vault.listEntities(projectId);
+    const scoped = await this.scopeMirrors(connections, projectId);
 
     const outcomes: MirrorFieldOutcome[] = [];
     for (const notePath of notePaths) {
-      outcomes.push(...(await this.syncEntity(notePath, scoped, project)));
+      outcomes.push(...(await this.syncEntity(notePath, scoped, projectId)));
     }
     return outcomes;
   }
@@ -82,23 +82,26 @@ export class MirrorSyncAction {
   private async syncEntity(
     notePath: string,
     scoped: readonly ScopedMirror[],
-    project: string,
+    projectId: string,
   ): Promise<MirrorFieldOutcome[]> {
-    const mirrors = await this.resolveMirrors(scoped, notePath, project);
+    const mirrors = await this.resolveMirrors(scoped, notePath, projectId);
     const outcomes: MirrorFieldOutcome[] = [];
     for (const field of MERGED_FIELDS) {
-      outcomes.push(await this.syncField(notePath, field, mirrors, project));
+      outcomes.push(await this.syncField(notePath, field, mirrors, projectId));
     }
     return outcomes;
   }
 
   private async scopeMirrors(
     connections: readonly ConnectionDataTransferObject[],
-    project: string,
+    projectId: string,
   ): Promise<ScopedMirror[]> {
     const scoped: ScopedMirror[] = [];
     for (const connection of connections) {
-      const mirror = await this.mergePass.scopeConnection(project, connection);
+      const mirror = await this.mergePass.scopeConnection(
+        projectId,
+        connection,
+      );
       if (mirror !== null) {
         scoped.push(mirror);
       }
@@ -109,7 +112,7 @@ export class MirrorSyncAction {
   private async resolveMirrors(
     scoped: readonly ScopedMirror[],
     notePath: string,
-    project: string,
+    projectId: string,
   ): Promise<ResolvedMirror[]> {
     const mirrors: ResolvedMirror[] = [];
     for (const { connection, target, adapter } of scoped) {
@@ -118,7 +121,7 @@ export class MirrorSyncAction {
         target,
         adapter,
         notePath,
-        project,
+        projectId,
       );
       if (handle !== null) {
         mirrors.push({
@@ -137,7 +140,7 @@ export class MirrorSyncAction {
     target: string,
     adapter: MirrorPort,
     notePath: string,
-    project: string,
+    projectId: string,
   ): Promise<string | null> {
     const handle = await this.registry.resolveMirrorHandle(
       connection.slug,
@@ -152,7 +155,7 @@ export class MirrorSyncAction {
         target,
         adapter,
         notePath,
-        project,
+        projectId,
         handle,
       );
     } catch (error) {
@@ -169,7 +172,7 @@ export class MirrorSyncAction {
     target: string,
     adapter: MirrorPort,
     notePath: string,
-    project: string,
+    projectId: string,
     pending: string | null,
   ): Promise<string | null> {
     const task = await this.vault.readTask(notePath);
@@ -185,7 +188,7 @@ export class MirrorSyncAction {
         target,
         adapter,
         notePath,
-        project,
+        projectId,
         task,
       );
       if (adopted !== null) {
@@ -193,19 +196,21 @@ export class MirrorSyncAction {
       }
     }
     await this.registry.recordMirrorHandle(
-      project,
+      projectId,
       connection.slug,
       notePath,
+      task.entityId,
       pendingCreationHandle(notePath),
     );
     const created = await adapter.createTask(
       target,
-      await this.withMirrorParent(task, connection, project),
+      await this.withMirrorParent(task, connection, projectId),
     );
     await this.registry.recordMirrorHandle(
-      project,
+      projectId,
       connection.slug,
       notePath,
+      task.entityId,
       created.handle,
     );
     return created.handle;
@@ -216,7 +221,7 @@ export class MirrorSyncAction {
     target: string,
     adapter: MirrorPort,
     notePath: string,
-    project: string,
+    projectId: string,
     task: CanonicalTask,
   ): Promise<string | null> {
     const candidates = await adapter.readTasks(target);
@@ -227,9 +232,10 @@ export class MirrorSyncAction {
       return null;
     }
     await this.registry.recordMirrorHandle(
-      project,
+      projectId,
       connection.slug,
       notePath,
+      task.entityId,
       match.handle,
     );
     return match.handle;
@@ -239,10 +245,10 @@ export class MirrorSyncAction {
     notePath: string,
     field: CanonicalField,
     mirrors: readonly ResolvedMirror[],
-    project: string,
+    projectId: string,
   ): Promise<MirrorFieldOutcome> {
     const codec =
-      field === 'subtasks' ? this.parentCodec(project) : IDENTITY_CODEC;
+      field === 'subtasks' ? this.parentCodec(projectId) : IDENTITY_CODEC;
     const observed = await this.vault.observe(notePath, field);
     const originCurrent = await codec.originCurrent(observed.current);
     const origin = originSideObservation(
@@ -289,9 +295,9 @@ export class MirrorSyncAction {
     };
   }
 
-  private parentCodec(project: string): FieldCodec {
+  private parentCodec(projectId: string): FieldCodec {
     return {
-      originCurrent: (raw) => this.originParentIdentity(project, raw),
+      originCurrent: (raw) => this.originParentIdentity(projectId, raw),
       mirrorCurrent: (slug, raw) => this.mirrorParentIdentity(slug, raw),
       originValue: (identity) => (identity === null ? null : stemOf(identity)),
       mirrorValue: (slug, identity) => this.renderMirrorParent(slug, identity),
@@ -315,12 +321,12 @@ export class MirrorSyncAction {
   private async withMirrorParent(
     task: CanonicalTask,
     connection: ConnectionDataTransferObject,
-    project: string,
+    projectId: string,
   ): Promise<CanonicalTask> {
     if (task.parent === null) {
       return task;
     }
-    const identity = await this.originParentIdentity(project, task.parent);
+    const identity = await this.originParentIdentity(projectId, task.parent);
     if (identity === null) {
       return task;
     }
@@ -344,13 +350,13 @@ export class MirrorSyncAction {
   }
 
   private async originParentIdentity(
-    project: string,
+    projectId: string,
     raw: string | null,
   ): Promise<string | null> {
     if (raw === null) {
       return null;
     }
-    const entities = await this.registry.listEntities(project);
+    const entities = await this.registry.listEntities(projectId);
     const parent = entities.find((entity) => stemOf(entity.notePath) === raw);
     return parent?.notePath ?? null;
   }

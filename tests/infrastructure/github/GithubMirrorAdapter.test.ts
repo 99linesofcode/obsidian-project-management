@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
@@ -665,7 +666,7 @@ describe('LBL-10 — the label crosses to the code host verbatim', () => {
   });
 });
 
-describe('GithubMirrorAdapter — the archive fact\'s decisive time (ADP-3)', () => {
+describe("GithubMirrorAdapter — the archive fact's decisive time (ADP-3)", () => {
   it('reports the board ProjectV2.closedAt as the archive decisive time', async () => {
     const { adapter } = adapterWith([
       {
@@ -706,20 +707,16 @@ describe('GithubMirrorAdapter — the board is derived from the repository (F02 
     const transport = new FakeTransport([
       boardResponse([issueNode()], [cardNode()]),
     ]);
-    const adapter = new GithubMirrorAdapter(
-      transport,
-      target(),
-      async () => ({
-        target: target(),
-        targetHandle: 'R_kgDOAAAA',
-        projectHandle: 'PVT_123',
-        statusFieldHandle: 'PVTF_456',
-        statusOptions: [
-          { id: 'PVTSSF_1', name: 'Unshaped' },
-          { id: 'PVTSSF_2', name: 'Done' },
-        ],
-      }),
-    );
+    const adapter = new GithubMirrorAdapter(transport, target(), async () => ({
+      target: target(),
+      targetHandle: 'R_kgDOAAAA',
+      projectHandle: 'PVT_123',
+      statusFieldHandle: 'PVTF_456',
+      statusOptions: [
+        { id: 'PVTSSF_1', name: 'Unshaped' },
+        { id: 'PVTSSF_2', name: 'Done' },
+      ],
+    }));
 
     const task = await adapter.readTask(ISSUE_URL);
 
@@ -906,9 +903,11 @@ describe('GithubMirrorAdapter — onboarding a missing board (F02 NWM-2)', () =>
     );
     const adapter = new GithubMirrorAdapter(transport, target());
 
-    const addressing = await adapter.resolveOrCreateProject(target(), 'widgets', [
-      'Unshaped',
-    ]);
+    const addressing = await adapter.resolveOrCreateProject(
+      target(),
+      'widgets',
+      ['Unshaped'],
+    );
 
     expect(transport.bodies.some((body) => body.includes('CreateBoard'))).toBe(
       false,
@@ -947,7 +946,11 @@ describe('MirrorSyncAction drives the code host through the ports (F02 NWM-3)', 
         data = next as Record<string, unknown>;
       },
     });
-    await registry.setEntity({ id: entityPath, notePath: entityPath });
+    await registry.setEntity({
+      id: entityPath,
+      notePath: entityPath,
+      projectId: projectFromNotePath(entityPath),
+    });
     await registry.setMirrorItem('Acme', 'gh', ISSUE_URL, {
       entityId: entityPath,
     });
@@ -1074,7 +1077,11 @@ describe('MirrorSyncAction drives the code host through a resolved handle (F02 N
         new Baseline(value, false),
       );
     }
-    await registry.setEntity({ id: entityId, notePath: entityId });
+    await registry.setEntity({
+      id: entityId,
+      notePath: entityId,
+      projectId: projectFromNotePath(entityId),
+    });
     await registry.setMirrorItem('Acme', 'gh', ISSUE_URL, { entityId });
     const mirrorAdapters: MirrorAdapterFactoryPort = {
       create: (application): MirrorPort | null =>

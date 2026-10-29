@@ -31,7 +31,9 @@ class FakeVault extends FakeVaultBase {
   renamed: Array<{ oldPath: string; newPath: string }> = [];
   trashed: string[] = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -100,8 +102,8 @@ class FakeVault extends FakeVaultBase {
 const projectName = 'Acme Widgets';
 const parentPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const parentLink = '42-fix-the-bug';
-const todoPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
-const linkedTaskPath = 'Projecten/Acme Widgets/taken/7-ship-it.md';
+const todoPath = 'Projecten/Acme Widgets/taken/Fix the bug.md';
+const linkedTaskPath = 'Projecten/Acme Widgets/taken/7 ship it.md';
 const syncedAt = '2026-09-18T12:00:00Z';
 const earlier = '2026-09-01T09:00:00Z';
 
@@ -139,10 +141,7 @@ function todoNote(
 
 // A task note: a lane holder with no type:todo label. This is the case the
 // cascade/box write conflated today.
-function linkedTaskNote(
-  status: string,
-  completed: string | null,
-): string {
+function linkedTaskNote(status: string, completed: string | null): string {
   return [
     '---',
     'url: https://github.com/acme/widgets/issues/7',
@@ -251,9 +250,9 @@ describe('ST-1 — the drift rename is unchanged by this slice', () => {
     expect(vault.renamed).toEqual([{ oldPath: stalePath, newPath: todoPath }]);
     expect(vault.notes.has(stalePath)).toBe(false);
     expect(vault.notes.has(todoPath)).toBe(true);
-    expect(
-      parseTaskNote(vault.notes.get(todoPath)!, todoPath).status,
-    ).toBe('Building');
+    expect(parseTaskNote(vault.notes.get(todoPath)!, todoPath).status).toBe(
+      'Building',
+    );
     expect(bodyOf(vault.notes.get(parentPath)!)).toBe(
       `- [ ] [[${todoPath}|Fix the bug]]`,
     );

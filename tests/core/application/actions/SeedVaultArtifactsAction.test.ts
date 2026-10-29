@@ -10,7 +10,9 @@ class FakeVault extends FakeVaultBase {
   folders = new Set<string>();
   created: Array<{ path: string; content: string }> = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -59,7 +61,6 @@ function settings(
 
 const TASK_TEMPLATE = [
   '---',
-  'name: {{title}}',
   'affiliation: []',
   'status:',
   'synced:',
@@ -73,7 +74,6 @@ const TASK_TEMPLATE = [
 
 const PROJECT_TEMPLATE = [
   '---',
-  'name: {{title}}',
   'affiliation: []',
   'created: {{date}}',
   'categories:',

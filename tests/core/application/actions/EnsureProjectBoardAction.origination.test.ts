@@ -93,6 +93,7 @@ describe('ORG-2 — an empty target resolves by the vault project name; a non-em
     h.setup.remote.set('Acme Widgets', addressing('PVT_by_name'));
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: '',
@@ -110,6 +111,7 @@ describe('ORG-2 — an empty target resolves by the vault project name; a non-em
     h.setup.remote.set(repoUrl, addressing('PVT_by_target'));
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: repoUrl,
@@ -128,6 +130,7 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
     const h = harness('Acme Widgets', identity());
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: repoUrl,
@@ -144,12 +147,14 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
     const h = harness('Acme Widgets', identity());
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: repoUrl,
       setup: h.setup,
     });
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: repoUrl,
@@ -170,6 +175,7 @@ describe('ORG-3 — a declared connection resolves-or-creates its remote project
     );
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: repoUrl,
@@ -190,12 +196,10 @@ describe('I14 — a project whose remote project still exists is left alone', ()
       statusFieldHandle: 'PVTF_existing',
     });
     const h = harness('Acme Widgets', existing);
-    h.setup.remote.set(
-      repoUrl,
-      addressing('PVT_existing', 'PVTF_existing'),
-    );
+    h.setup.remote.set(repoUrl, addressing('PVT_existing', 'PVTF_existing'));
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connectionSlug: SLUG,
       target: repoUrl,

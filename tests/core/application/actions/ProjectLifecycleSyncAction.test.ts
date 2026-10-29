@@ -37,6 +37,9 @@ const HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  a:',
   '    tool: conformance',
   '    project: board-a',
@@ -50,6 +53,9 @@ const ONBOARD_HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  a:',
   '    tool: conformance',
   '    project: board-new',
@@ -164,7 +170,11 @@ async function setup(options: SetupOptions) {
     options.homePath ?? (options.vaultArchived ? ARCHIVED_HOME : ACTIVE_HOME);
   appVault.seed(homePath, HOME, MTIME);
   const registry = new SyncStateAdapter(memoryStorage());
-  await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
+  await registry.setEntity({
+    id: 'e1',
+    notePath: TASK_PATH,
+    projectId: PROJECT,
+  });
 
   const app = {
     vault: appVault,
@@ -220,7 +230,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     });
     await seedBaselines(registry, false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
@@ -240,7 +253,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     });
     await seedBaselines(registry, false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
@@ -256,7 +272,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     });
     await seedBaselines(registry, true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(false);
     expect(vault.has(ACTIVE_HOME)).toBe(true);
@@ -273,7 +292,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     });
     await seedBaselines(registry, false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     for (const side of ['origin', 'mirror:a', 'mirror:b']) {
       const baseline = await registry.readBaseline(PROJECT, 'archived', side);
@@ -288,9 +307,12 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
       mirrorB: false,
     });
     await seedBaselines(registry, false);
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
-    const second = await action.invoke(PROJECT);
+    const second = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(second.written).toEqual([]);
     expect(second.advanced).toEqual([]);
@@ -307,7 +329,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     });
     await seedBaselines(registry, false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(false);
     expect(vault.has('Projecten/Acme/home.md')).toBe(true);
@@ -327,7 +352,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     mirror.setProjectTime('board-a', '2026-10-08T11:00:00Z');
     mirror.setProjectTime('board-b', '2026-10-08T09:00:00Z');
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
@@ -345,7 +373,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     await seedBaseline(registry, 'mirror:a', true);
     await seedBaseline(registry, 'mirror:b', true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(mirror.createCalls).toEqual([]);
     expect(await registry.resolveMirrorProject(PROJECT, 'b')).toBeNull();
@@ -364,7 +395,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     await seedBaseline(registry, 'mirror:a', false);
     await seedBaseline(registry, 'mirror:b', true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.result.outcome).toBe('unchanged');
     expect(record.written).toContain('mirror:b');
@@ -381,7 +415,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     mirror.seedThrowingProject('board-a');
     await seedBaselines(registry, false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(mirror.createCalls).not.toContain('board-a');
     expect(record.frozen).toBe(true);
@@ -400,7 +437,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     await seedBaseline(registry, 'mirror:a', false);
     await seedBaseline(registry, 'mirror:b', true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(false);
     expect(vault.has(ACTIVE_HOME)).toBe(true);
@@ -431,7 +471,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
       mirrorAdapters,
     );
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(mirror.createCalls).toEqual([]);
     expect(await registry.resolveMirrorProject(PROJECT, 'a')).toBeNull();
@@ -448,7 +491,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     await registry.recordMirrorProject(PROJECT, 'b', 'conformance', 'board-b');
     await seedBaselines(registry, false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     expect(mirror.createCalls).toEqual([]);
   });
@@ -462,7 +505,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     mirror.seedProjectName('board-a', 'Old Name');
     await seedBaselines(registry, false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
   });
@@ -475,10 +518,10 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     });
     mirror.seedProjectName('board-a', PROJECT);
     await seedBaselines(registry, false);
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     mirror.seedProjectName('board-a', 'Drifted Name');
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
   });
@@ -492,7 +535,7 @@ describe('ProjectLifecycleSyncAction — N-way lifecycle (F02 NWM-15)', () => {
     mirror.seedProjectName('board-a', PROJECT);
     await seedBaselines(registry, false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     expect(mirror.currentProject('board-a')?.name).toBe(PROJECT);
   });

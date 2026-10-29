@@ -27,33 +27,6 @@ export function isCompleted(fields: ReadonlyMap<string, string>): boolean {
   return (fields.get('completed') ?? '') !== '';
 }
 
-export function topLevelFrontmatterField(
-  content: string,
-  key: string,
-): string | null {
-  const lines = content.split('\n');
-  if (lines[0] !== '---') {
-    return null;
-  }
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]!;
-    if (line === '---') {
-      return null;
-    }
-    if (line.startsWith(`${key}:`)) {
-      return line.slice(key.length + 1).trim();
-    }
-  }
-  return null;
-}
-
-export function hasTopLevelFrontmatterField(
-  content: string,
-  key: string,
-): boolean {
-  return topLevelFrontmatterField(content, key) !== null;
-}
-
 export function withBody(content: string, body: string): string {
   const lines = content.split('\n');
   if (lines[0] !== '---') {
@@ -165,16 +138,88 @@ export function slugify(title: string): string {
     .replace(/^-|-$/g, '');
 }
 
+const ILLEGAL_FILENAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/g;
+const WHITESPACE_RUN = /\s+/g;
+const ALL_DOTS = /^\.+$/;
+const MARKDOWN_EXTENSION = /\.md$/;
+const TRAILING_COLLISION_SUFFIX = /-\d+$/;
+const MAX_FILENAME_STEM_BYTES = 255;
+
+export function renderFilename(title: string): string {
+  const stem = title
+    .replace(ILLEGAL_FILENAME_CHARACTERS, ' ')
+    .replace(WHITESPACE_RUN, ' ');
+
+  refuseUnrenderableTitle(stem, title);
+
+  return `${capFilenameStem(stem)}.md`;
+}
+
+export function comparisonForm(value: string): string {
+  return value
+    .replace(MARKDOWN_EXTENSION, '')
+    .toLowerCase()
+    .replace(WHITESPACE_RUN, ' ')
+    .replace(TRAILING_COLLISION_SUFFIX, '');
+}
+
+function refuseUnrenderableTitle(stem: string, title: string): void {
+  const unrenderable =
+    stem.trim() === '' ||
+    ALL_DOTS.test(stem) ||
+    stem.endsWith('.') ||
+    stem.endsWith(' ');
+  if (unrenderable) {
+    throw new Error(
+      `cannot render a filename from the title "${title.trim()}"`,
+    );
+  }
+}
+
+function capFilenameStem(stem: string): string {
+  if (utf8ByteLength(stem) <= MAX_FILENAME_STEM_BYTES) {
+    return stem;
+  }
+  const truncated = truncateToBytes(stem, MAX_FILENAME_STEM_BYTES);
+  const boundary = truncated.lastIndexOf(' ');
+  const capped = boundary > 0 ? truncated.slice(0, boundary) : truncated;
+  console.warn(
+    `filename truncated to ${utf8ByteLength(capped)} bytes from title: ${stem}`,
+  );
+  return capped;
+}
+
+function truncateToBytes(value: string, maxBytes: number): string {
+  let result = '';
+  let bytes = 0;
+  for (const character of value) {
+    const size = utf8ByteLength(character);
+    if (bytes + size > maxBytes) {
+      break;
+    }
+    result += character;
+    bytes += size;
+  }
+  return result;
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 export function stemOf(path: string): string {
   const basename = path.split('/').pop() ?? '';
   return basename.replace(/\.md$/, '');
 }
 
-export function normalizedStem(path: string): string {
-  return slugify(stemOf(path).replace(/^\d+-/, ''));
-}
-
-const WORK_ITEM_KINDS = new Set(['slice', 'pitch', 'task', 'chore', 'bug', 'todo']);
+const WORK_ITEM_KINDS = new Set([
+  'slice',
+  'pitch',
+  'task',
+  'chore',
+  'bug',
+  'todo',
+]);
 
 export function hasTypeLabel(labels: readonly string[]): boolean {
   return typeFromLabels(labels) !== '';

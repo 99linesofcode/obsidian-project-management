@@ -38,7 +38,10 @@ export function parseTaskNote(content: string, handle: string): TaskNote {
   };
 }
 
-export function fieldValue(note: TaskNote, field: CanonicalField): string | null {
+export function fieldValue(
+  note: TaskNote,
+  field: CanonicalField,
+): string | null {
   switch (field) {
     case 'title':
       return note.title;
@@ -86,8 +89,7 @@ export function folderOf(path: string): string | null {
 
 function titleFromPath(handle: string): string {
   const basename = handle.split('/').pop() ?? '';
-  const stem = basename.replace(/\.md$/, '').replace(/^\d+-/, '');
-  return stem.replace(/-/g, ' ');
+  return basename.replace(/\.md$/, '');
 }
 
 function parentFromAffiliation(
@@ -142,10 +144,7 @@ function withLabels(content: string, value: string | null): string {
     return lines.join('\n');
   }
   let removed = 1;
-  while (
-    index + removed < closing &&
-    /^\s*-\s/.test(lines[index + removed]!)
-  ) {
+  while (index + removed < closing && /^\s*-\s/.test(lines[index + removed]!)) {
     removed++;
   }
   lines.splice(index, removed, renderLine('labels', value));

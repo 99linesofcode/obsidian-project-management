@@ -97,6 +97,7 @@ async function runBothSites(): Promise<OriginationProbe> {
   const probe = new OriginationProbe();
 
   await new EnsureProjectBoardAction(registry, []).execute({
+    projectId: PROJECT,
     projectName: PROJECT,
     connectionSlug: 'todoist',
     target: TARGET,
@@ -104,7 +105,7 @@ async function runBothSites(): Promise<OriginationProbe> {
   });
   await new ProjectLifecycleSyncAction(new ProbeVault(), registry, {
     create: () => probe,
-  }).invoke(PROJECT);
+  }).invoke({ projectId: PROJECT, projectName: PROJECT });
 
   return probe;
 }

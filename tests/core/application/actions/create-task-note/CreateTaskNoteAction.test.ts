@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CreateTaskNoteAction } from '../../../../../src/core/application/actions/create-task-note/CreateTaskNoteAction.js';
 import { splitFrontmatter } from '../../../../../src/core/domain/note.js';
+import { noteId } from '../../../../../src/core/domain/noteIdentity.js';
 import { FakeVault as FakeVaultBase } from '../../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../../helpers/records.js';
 import { FakeSyncState } from '../../../../helpers/fakeSyncState.js';
@@ -14,7 +15,9 @@ class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   created: Array<{ path: string; content: string }> = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -69,14 +72,15 @@ function input() {
     body: 'The bug happens when the widget is resized.',
     type: 'task',
     projectName: 'Acme Widgets',
+    projectId: 'Acme Widgets',
     connectionSlug: 'github',
     syncedAt: '2026-09-18T12:00:00Z',
     statusName: 'Building',
   };
 }
 
-describe('LBL-1 — a note filename is a human-readable slug', () => {
-  it('creates a slug-named note carrying the kind label and status, no url', async () => {
+describe('LBL-1 — a note filename is the rendered title', () => {
+  it('creates a title-named note carrying the kind label and status, no url', async () => {
     const vault = new FakeVault();
     const syncState = new FakeSyncState();
     const action = new CreateTaskNoteAction(vault, syncState, templatePath);
@@ -85,9 +89,8 @@ describe('LBL-1 — a note filename is a human-readable slug', () => {
 
     expect(vault.created).toHaveLength(1);
     const { path, content } = vault.created[0]!;
-    expect(path).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
+    expect(path).toBe('Projecten/Acme Widgets/taken/Fix the Bug!.md');
     const fields = splitFrontmatter(content)?.fields;
-    expect(fields?.get('id')).toBeUndefined();
     expect(fields?.get('type')).toBeUndefined();
     expect(fields?.get('labels')).toContain('type:task');
     expect(fields?.get('status')).toBe('Building');
@@ -95,6 +98,7 @@ describe('LBL-1 — a note filename is a human-readable slug', () => {
     expect(syncState.setCalls).toHaveLength(1);
     const record = syncState.setCalls[0]!;
     expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(noteId(content)).toBe(record.id);
     expect(record.notePath).toBe(path);
     expect(syncState.handleOf(record.id, 'github')).toBe(url);
   });

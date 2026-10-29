@@ -28,9 +28,9 @@ is a note under its `taken/` folder; a to-do is a task note under `taken/`
 carrying the `type:todo` label. GitHub (a repository plus a Projects v2 board)
 and Todoist are
 **mirrors**: they hold copies of the vault's title, body, status and completion,
-and the plugin keeps them honest. Identity is a vault-owned uuid held in the
-registry (`data.json`'s `syncState` container); filenames and frontmatter carry
-no machine id.
+and the plugin keeps them honest. Identity is the note's own uuid, carried in
+its `connections` map at `connections.vault.id`; the registry keys the same
+uuid, and a project's name is the folder segment it was created under.
 
 ### The five core promises
 
@@ -128,7 +128,7 @@ namespace per application.**
 **The driving side and the pass.**
 
 - **`SyncScheduler`** — delivery mechanics only. A poll interval and vault
-  change/delete/rename events enqueue project names; renames bypass the
+  change/delete/rename events enqueue project folders; renames bypass the
   debounce. It makes no business decisions.
 - **`SyncQueue`** — one serialized promise chain for the whole plugin. Runs one
   project at a time, coalesces duplicates, swallows a failed run so the queue
@@ -176,11 +176,15 @@ one-paragraph summary precedes each.
 ### 2.1 The pass
 
 `SyncScheduler.tick` enumerates the vault's project notes and enqueues each
-project name; `SyncQueue` runs them one
-at a time. `SyncProjectAction.execute` re-resolves the project (a stale work
-item no-ops), then drives every step in order. It migrates a legacy home note,
-re-keys a renamed connection, and resolves-or-creates each declared connection's
-remote project; the core actions
+project folder; `SyncQueue` runs them one
+at a time. `SyncProjectAction.execute` stamps a note id on every note that lacks
+one and renames every taken note to the title its baseline holds (two one-shot,
+idempotent migrations), resolves the home note — the
+`_<name>` stem, else a legacy `_home.md`/`<name>.md`, else the only note at the
+project root — reads its id from `connections` and threads the work item
+`{ projectId, projectName }` to every step (a stale work item no-ops). It migrates
+a legacy home note, re-keys a renamed connection, and resolves-or-creates each
+declared connection's remote project; the core actions
 reconcile the lifecycle into one freeze verdict, and
 reconcile task locks on the transition; then it recovers renames, runs the
 vault-consistency step, and — when not frozen — runs the task capture and the
@@ -209,11 +213,14 @@ sequenceDiagram
   participant Life as ProjectLifecycleSyncAction
   participant Lock as ReconcileProjectTaskLocksAction
 
-  SP->>SP: resolveProject (no-op when missing)
+  SP->>SP: migrate note ids (connections.vault.id)
+  SP->>SP: migrate note filenames (baseline title)
+  SP->>SP: resolve the home note (no-op when missing)
+  SP->>SP: read the project id from connections
   SP->>SP: migrate / rekey / ensureBoards
-  SP->>Life: invoke(project)
+  SP->>Life: invoke({ projectId, projectName })
   Life-->>SP: { frozen, wasFrozen }
-  SP->>Lock: invoke({ project, frozen, wasFrozen })
+  SP->>Lock: invoke({ projectId, frozen, wasFrozen })
   SP->>SP: renames
 ```
 
@@ -228,7 +235,7 @@ sequenceDiagram
   participant TF as MirrorSyncAction
   participant Sweep as SweepDeletedNotesAction
 
-  SP->>SP: vaultConsistency(project, syncedAt)
+  SP->>SP: vaultConsistency(projectId, projectName, syncedAt)
   loop each taken note
     SP->>Chk: execute(notePath, projectName, syncedAt)
   end
@@ -236,11 +243,11 @@ sequenceDiagram
     SP->>Mir: execute(todoPath, syncedAt)
   end
   alt not frozen
-    SP->>TC: invoke(project, syncedAt)
-    SP->>TF: invoke(project)
+    SP->>TC: invoke({ projectId, projectName }, syncedAt)
+    SP->>TF: invoke(projectId)
   end
-  SP->>SP: deletions(project, connections)
-  SP->>Sweep: execute({ projectName, connections })
+  SP->>SP: deletions(projectId, projectName, connections)
+  SP->>Sweep: execute({ projectId, projectName, connections })
 ```
 
 `SyncProjectAction` holds one instance of each core action, built by the
@@ -551,11 +558,12 @@ sequenceDiagram
 `SyncStateAdapter` is the single writer of the `syncState` container. Every port
 method funnels through a promise-chain mutex, so a command racing a sync pass
 cannot interleave a load-modify-save. The first load reads the `syncState`
-container, builds the in-memory indexes, and caches it. Ports are keyed by the
+container, builds the in-memory indexes, and caches it. The project node is keyed
+by the home note's own uuid, so a folder rename never moves it; Ports are keyed by the
 note's connection slug (not the provider name), so a project can hold two
 connections of the same tool; discovery re-keys a renamed connection's port in
 lockstep (`rekeyPortState`). Identities are keyed per connection
-(`projects.<name>.identities.<connectionSlug>`), so two code-host connections
+(`projects.<projectId>.identities.<connectionSlug>`), so two code-host connections
 address their own repositories and boards. Every write persists through a
 fresh read of the `data.json` root (so settings keys survive) after asking for a
 throttled rolling backup. A container whose version is NEWER than this plugin's
@@ -563,6 +571,12 @@ is loaded read-only: reads serve it, but every mutating port method throws
 ("registry written by a newer plugin version — refusing to mutate"). A corrupt
 `data.json` is quarantined by `loadDataSafely` before the adapter ever sees it.
 The settings save shares this one chain through `mutateRoot`.
+
+The v3→v4 upgrade is migrated, not wiped: a v3 container keeps its projects,
+ports, identities and tombstones, and the chain's id migration re-keys each
+name-keyed project node to the home note's uuid and moves that project's archive
+baseline with it (`rekeyProject`), so an upgraded vault keeps every record and
+its per-side baselines.
 
 The core's own memory lives in a sibling top-level key, written through the
 same storage. The baselines are folded into `SyncStateAdapter`:
@@ -698,8 +712,11 @@ sequenceDiagram
 ### 2.14 Deletion propagation (a delete is a tracked change)
 
 A delete is a change like any other. `SweepDeletedNotesAction` enumerates the
-project's tracked entities; for each whose note file is gone (and not under
-`Archief/`) it records a **tombstone** — the entity id, the note path, the
+project's tracked entities; a record is proved gone only when no note carries its
+id (IDN-5) — a record whose note path is gone but whose id lives at another path
+has merely moved, and a note whose id is back at its path clears its own
+tombstone (DEL-1). For each proven-gone note (and not under `Archief/`) the sweep
+records a **tombstone** — the entity id, the note path, the
 delete time and the mirror handle the note still owed a delete to — and hands
 the delete to `HandleDeletedNoteAction`. That action finds the registry record
 by note path, resolves each connection's mirror item through `RegistryPort`,
@@ -709,7 +726,9 @@ builds the connection's adapter through `MirrorAdapterFactoryPort`, applies
 issue itself**, so nothing survives for capture to re-adopt. The completion write
 precedes the delete because the item is gone afterwards (a post-delete write
 would 404 and the delete would never settle); the action then drops the settled
-mirror item. It keeps the registry record: the tombstone and the record are
+mirror item. A failed mirror delete is reported and the remaining connections'
+deletes still run, so the failed one is retried on a later pass (DEL-2). It keeps
+the registry record: the tombstone and the record are
 pruned only once every connection's mirror item is gone, on a later sweep pass.
 
 The tombstone stops resurrection: capture skips a handle it finds tombstoned, so
@@ -750,11 +769,13 @@ tick.
 
 A live rename event bypasses the debounce and enqueues the project immediately,
 but the recovery itself is the same as an offline rename:
-`DetectNoteRenamesAction` lists the current notes and the records, groups the
-untracked notes by a recovery stem (the filename stem with a legacy ordinal
-prefix stripped and lowercased, via `normalizedStem`), and moves each vanished
-record's `notePath` to the same-stem note. The uuid and the mirrors are
-untouched.
+`DetectNoteRenamesAction` reads every note's own id (`VaultPort.readNoteIds`)
+across `Projecten/` and `Archief/`, and moves each vanished record's `notePath`
+to the note carrying the same id (IDN-3). A move between project folders — or
+into `Archief/` — is a rename, not a deletion, so the record keeps its note and
+its mirrors. Two notes carrying one id are a data fault: the first wins and the
+other is reported through the sync's warning channel (DUP-1). The uuid and the
+mirrors are untouched.
 
 ```mermaid
 sequenceDiagram
@@ -771,13 +792,13 @@ sequenceDiagram
   else offline rename
     Note over Sched: next tick
   end
-  Q->>SP: execute(project)
-  SP->>Ren: execute({ projectName, syncedAt })
-  Ren->>V: listNotesInFolder(taken)
-  Ren->>SS: listEntities(project)
-  Ren->>Ren: untracked notes grouped by normalizedStem
+  Q->>SP: execute(folder)
+  SP->>Ren: execute({ projectId, syncedAt })
+  Ren->>V: readNoteIds() (all of Projecten/ and Archief/)
+  Ren->>SS: listEntities(projectId)
+  Ren->>Ren: note ids grouped by id
   loop record whose note is gone
-    Ren->>SS: setEntity(record with the same-stem note path)
+    Ren->>SS: setEntity(record with the id-matched note path)
   end
 ```
 
@@ -892,9 +913,25 @@ lane can no longer revert a completion.
 
 ## 5. Code-vs-brief discrepancies
 
-None currently. The scheduler's pre-tick project capture was the last recorded
-discrepancy; it is deleted with the origination model, so the scheduler is pure
-delivery mechanics again.
+The S31 note-identity delta's full _Project identity_ re-key is
+delivered: the note's own id at `connections.vault.id`, `readNoteIds`, id-based
+rename detection (IDN-3) and deletion proof (IDN-5, DEL-1), duplicate-id
+reporting (DUP-1), the id migration (MIG-1), the failed-delete report/retry
+(DEL-2), `EntityRecord.projectId`, the registry keyed by the project id, the
+project's name as the folder segment, the work item carrying `{ projectId,
+projectName }`, the vault resolving id → folder, the chain resolving the project
+from the home note rather than the first project-root note (the same predicate
+the id migration uses), and the retirement of `RenameProjectAction` and the
+`name:`-property identity (PLC-1..4).
+
+The S32 "filename is the title" rule was the last recorded discrepancy: the
+spec's planned P7 rendered illegal characters as a dash, while the shipped
+renderer uses a single space — a colon becomes a space, never a dash. The spec
+now records the rule as FN-1, matching the code.
+
+The scheduler's pre-tick project capture was the discrepancy before it; it is
+deleted with the origination model, so the scheduler is pure delivery mechanics
+again.
 
 ---
 

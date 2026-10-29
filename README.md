@@ -95,7 +95,7 @@ for example `Projecten/My Project/taken/Write the README.md`:
 categories: [taken]
 labels: [type:task]
 status: Backlog
-affiliation: '[[My Project]]'
+affiliation: '[[_My Project]]'
 created: 2026-10-06
 synced: 2026-10-06T09:30:00
 ```
@@ -150,10 +150,10 @@ The plugin is a small hexagonal system, applied where it earns its keep:
 - **Ports & adapters** — the vault is the origin. Each external tool sits
   behind one port the core owns, `MirrorPort`, and GitHub and Todoist are
   adapters implementing it. The core reaches the vault and the registry through
-  one collaborator port each (`VaultPort`, `RegistryPort`), plus the two
-  factory seams that build a mirror adapter and reach a tool's project-setup
-  surface. Adding a tool means writing one adapter and adding one entry to the
-  composition root's provider table — the core is not edited.
+  one collaborator port each (`VaultPort`, `RegistryPort`), plus the factory
+  seam that builds a mirror adapter. Adding a tool means writing one adapter and
+  adding one entry to the composition root's provider table — the core is not
+  edited.
 - **Module-first layout** — the repository is the module; its interior is the
   layers: `ui/` (driving: the scheduler, the queue, the settings tab),
   `core/` (the hexagon: the `application/` actions, the `domain/` pure

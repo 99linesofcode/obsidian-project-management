@@ -5,6 +5,7 @@ import type { EntityRecord } from '../../port/data/EntityRecord.js';
 import type { HandleDeletedNoteAction } from './HandleDeletedNoteAction.js';
 
 export interface SweepDeletedNotesInput {
+  projectId: string;
   projectName: string;
   connections: readonly ConnectionDataTransferObject[];
 }
@@ -18,11 +19,19 @@ export class SweepDeletedNotesAction {
 
   async execute(input: SweepDeletedNotesInput): Promise<void> {
     const prefix = `Projecten/${input.projectName}/`;
-    for (const record of await this.syncState.listEntities(input.projectName)) {
+    let noteIds: readonly { id: string; path: string }[] | null = null;
+
+    for (const record of await this.syncState.listEntities(input.projectId)) {
       if (!record.notePath.startsWith(prefix)) {
         continue;
       }
       if ((await this.vault.getNoteByPath(record.notePath)) !== null) {
+        await this.clearTombstone(record.notePath);
+        continue;
+      }
+      noteIds ??= await this.vault.readNoteIds();
+      if (noteIds.some((note) => note.id === record.id)) {
+        await this.clearTombstone(record.notePath);
         continue;
       }
       if (await this.isSettled(record, input.connections)) {
@@ -34,6 +43,13 @@ export class SweepDeletedNotesAction {
       }
       await this.handToHandler(record.notePath, input);
     }
+  }
+
+  private async clearTombstone(notePath: string): Promise<void> {
+    if ((await this.syncState.findTombstoneByNotePath(notePath)) === null) {
+      return;
+    }
+    await this.syncState.removeTombstone(notePath);
   }
 
   private async isSettled(
@@ -119,7 +135,7 @@ export class SweepDeletedNotesAction {
     try {
       await this.handleDeletedNote.execute({
         notePath,
-        projectName: input.projectName,
+        projectId: input.projectId,
         connections: input.connections,
       });
     } catch (error) {

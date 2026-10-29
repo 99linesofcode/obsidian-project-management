@@ -24,6 +24,11 @@ class GoneNoteVault extends FakeVaultBase {
   override async getNoteByPath(): Promise<null> {
     return null;
   }
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return [];
+  }
 }
 
 // A mirror that hard-deletes the item: a completion write after the delete hits
@@ -71,7 +76,7 @@ describe('a delete settles (NEW-1) — the completion write precedes the delete'
       handleDeleted,
     );
 
-    await sweep.execute({ projectName, connections });
+    await sweep.execute({ projectId: projectName, projectName, connections });
 
     expect(surface.deletedHandles).toEqual([url]);
     expect(surface.writes).toHaveLength(1);
@@ -80,12 +85,12 @@ describe('a delete settles (NEW-1) — the completion write precedes the delete'
     ).toBeNull();
     expect(await syncState.findTombstoneByNotePath(notePath)).not.toBeNull();
 
-    await sweep.execute({ projectName, connections });
+    await sweep.execute({ projectId: projectName, projectName, connections });
 
     expect(await syncState.findTombstoneByNotePath(notePath)).toBeNull();
     expect(await syncState.findByNotePath(notePath)).toBeNull();
 
-    await sweep.execute({ projectName, connections });
+    await sweep.execute({ projectId: projectName, projectName, connections });
 
     expect(surface.deletedHandles).toEqual([url]);
     expect(surface.writes).toHaveLength(1);
@@ -101,7 +106,7 @@ describe('a delete settles (NEW-1) — the completion write precedes the delete'
         disk = structuredClone(next) as Record<string, unknown>;
       },
     });
-    await registry.setEntity({ id: 'e1', notePath });
+    await registry.setEntity({ id: 'e1', notePath, projectId: projectName });
     await registry.setMirrorItem(projectName, 'github', url, {
       entityId: 'e1',
     });
@@ -116,14 +121,14 @@ describe('a delete settles (NEW-1) — the completion write precedes the delete'
       new HandleDeletedNoteAction(registry, factory),
     );
 
-    await sweep.execute({ projectName, connections });
+    await sweep.execute({ projectId: projectName, projectName, connections });
 
     expect(transport.calls).toEqual(['complete', 'deleteCard', 'deleteIssue']);
     expect(await registry.findMirrorItemByEntity('github', 'e1')).toBeNull();
     expect(await registry.findTombstoneByNotePath(notePath)).not.toBeNull();
 
-    await sweep.execute({ projectName, connections });
-    await sweep.execute({ projectName, connections });
+    await sweep.execute({ projectId: projectName, projectName, connections });
+    await sweep.execute({ projectId: projectName, projectName, connections });
 
     expect(await registry.getEntity('e1')).toBeNull();
     expect(await registry.findTombstone(url)).toBeNull();

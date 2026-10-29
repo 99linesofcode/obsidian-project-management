@@ -19,12 +19,19 @@ const todoistConnection = {
 
 class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
+  noteIds: ReadonlyArray<{ id: string; path: string }> = [];
 
   override async getNoteByPath(
     path: string,
   ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
+  }
+
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return this.noteIds;
   }
 }
 
@@ -71,6 +78,7 @@ describe('DEL-4 — the sweep records a tombstone for a gone tracked note', () =
     });
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
@@ -91,6 +99,7 @@ describe('DEL-4 — the sweep records a tombstone for a gone tracked note', () =
     h.vault.notes.set(notePath, 'content');
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
@@ -107,6 +116,7 @@ describe('DEL-4 — the sweep records a tombstone for a gone tracked note', () =
     });
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });
@@ -129,6 +139,7 @@ describe('DEL-4 — the sweep records a tombstone for a gone tracked note', () =
 
     await expect(
       h.action.execute({
+        projectId: 'Acme Widgets',
         projectName: 'Acme Widgets',
         connections: [githubConnection],
       }),
@@ -146,7 +157,11 @@ describe('DEL-4 — the sweep records a tombstone for a gone tracked note', () =
     });
     const connections = [todoistConnection, githubConnection];
 
-    await h.action.execute({ projectName: 'Acme Widgets', connections });
+    await h.action.execute({
+      projectId: 'Acme Widgets',
+      projectName: 'Acme Widgets',
+      connections,
+    });
 
     expect(h.calls).toEqual([{ notePath, connections }]);
   });
@@ -168,6 +183,7 @@ describe('DEL-2 — the tombstone and record are pruned once every side has sett
     });
 
     await h.action.execute({
+      projectId: 'Acme Widgets',
       projectName: 'Acme Widgets',
       connections: [githubConnection],
     });

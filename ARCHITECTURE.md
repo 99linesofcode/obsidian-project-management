@@ -136,7 +136,8 @@ sequenceDiagram
   Sched->>Q: enqueue(project) per project note
   Q->>SP: execute(project)
   SP->>V: findProjectNotes (no-op when missing)
-  SP->>SP: migrate home note, rename project, rekey, resolve-or-create connections
+  SP->>SP: migrate note ids, migrate note filenames
+  SP->>SP: migrate home note, rekey connections, resolve-or-create connections
   SP->>Life: invoke(project)
   alt project folder gone
     Life->>M: delete the remote project on every connection
@@ -164,11 +165,11 @@ sequenceDiagram
 
 ## 3. Core Components
 
-| Component             | Responsibility                                                                                                                                                                                                                                | Technology                   | Target         |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
-| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring and the per-pass connection origination                                                                                                                             | host plugin API              | the vault      |
-| `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                                 | host plugin API, `Component` | the vault      |
-| `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), and the neutral note arithmetic                                                                                          | TypeScript                   | in-process     |
+| Component             | Responsibility                                                                                                                                                                                                                | Technology                   | Target         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------- |
+| `src/main.ts`         | The composition root: plugin lifecycle, settings load, wiring and the per-pass connection origination                                                                                                                         | host plugin API              | the vault      |
+| `src/ui/`             | Driving side: `SyncScheduler` (delivery mechanics), `SyncQueue` (one serialized chain), the settings tab and schema, the SecretStorage-backed token store, and the vault-artifact seed action                                 | host plugin API, `Component` | the vault      |
+| `src/core/`           | The module's hexagon: the ports, the canonical DTOs, the pure `mergeField` N-way merge, every use case (`actions/`), and the neutral note arithmetic                                                                          | TypeScript                   | in-process     |
 | `src/infrastructure/` | Driven adapters, one namespace per vendor — the single vault adapter and note codecs, the GitHub and Todoist mirror adapters, the registry (`SyncStateAdapter` and the baseline store), and the in-memory conformance adapter | TypeScript, GraphQL, REST v1 | external tools |
 
 ### Ports & adapters
@@ -201,7 +202,8 @@ its own module; the composition root wires it.
   task, capture, timestamp, locking and origination surfaces were separate
   facet ports; the tool is one collaborator, so it is one port.
 - **The vault port.** **`VaultPort`** — the vault as one collaborator: read a
-  note by path, create/write/rename/trash a note, list a folder's notes and
+  note by path, create/write/rename/trash a note, list a folder's notes, read
+  every note's own id (`readNoteIds`, across `Projecten/` and `Archief/`), and
   enumerate the project notes, subscribe to note change/delete/rename events;
   observe a task note's field as a canonical value plus its edit time (trusted
   by default), read the whole task, apply a canonical field write; read a
@@ -224,8 +226,8 @@ their mirror items, the note-path↔handle and mirror-project mappings, the
 per-connection identity and port state, the deleted-note tombstones, and the
 side baselines. Implementer:
 `SyncStateAdapter`, which also composes the handle and mirror-project
-resolution. Its records `EntityRecord`, `MirrorItem`, `PortState` and
-`TombstoneRecord` live in
+resolution. Its records `EntityRecord` (which carries the owning project's
+`projectId`), `MirrorItem`, `PortState` and `TombstoneRecord` live in
 `src/core/port/data/`; the baselines stay in the `coreBaselines` store.
 The baseline store, mirror handle, mirror project, identity store, tracked
 entity and connection state were separate facet ports served by thin wrapper
@@ -369,8 +371,9 @@ canonical DTOs and the pure core.
   mirror items are skipped, so the pass is idempotent without a cursor; a handle
   with a tombstone is skipped too, so a deleted note's mirror is never re-adopted
   (DEL-2, I16). Each remaining task is then matched against the project's notes
-  by its **normalised** title — the slug the vault derives a note's title and
-  filename from (CAP-4): exactly one matching note → the task is **linked** to
+  by the **comparison form** of the note's filename — case-folded,
+  whitespace-collapsed and a trailing collision suffix stripped (CAP-4):
+  exactly one matching note → the task is **linked** to
   it, recording the handle on the existing note and writing no note; no match →
   the task is adopted as a new note; more than one match → nothing is written
   and the task is logged, so neither a duplicate nor a wrong link is made and the
@@ -382,32 +385,47 @@ canonical DTOs and the pure core.
   explicit type label is kept, and an unlabelled one takes the kind its position
   implies — a root item is a `slice`, a subtask a `task`.
 - **The cutover.** `SyncProjectAction` drives the vault-maintenance steps
-  (home-note migration, project-name reconciliation, connection re-keying,
-  connection origination, rename recovery, vault consistency and the deletion
-  sweep) and the core actions
+  (note-id migration, note-filename migration, home-note migration, connection
+  re-keying, connection origination, rename recovery, vault consistency and the
+  deletion sweep) and the core actions
   directly (`ProjectLifecycleSyncAction`,
   `ReconcileProjectTaskLocksAction`, `CaptureTasksAction`, `MirrorSyncAction`),
-  every step wrapped so one failure logs and skips that step. It runs the
+  every step wrapped so one failure logs and skips that step. `MigrateNoteIdsAction`
+  runs first: a one-shot, idempotent pass that stamps a minted id on every note
+  lacking one (the home note included) at `connections.vault.id`, so a note's
+  own identity always exists before any step reads it. `MigrateNoteFilenamesAction`
+  then runs a one-shot, idempotent pass over every taken note: it reads the title
+  from the ledger's baseline — the last-known value, no remote read — renames the
+  file to `renderFilename(title)`, and leaves and reports a note whose baseline
+  holds no title; the rename re-keys the note's record and its baseline, so the
+  id and the mirrors are untouched. The chain then resolves
+  the home note — its `_<name>` stem, else a legacy `_home.md`/`<name>.md`, else
+  the only note at the project root — reads its id from `connections`, and
+  threads the work item `{ projectId, projectName }` to every step: the registry
+  keys by the id and the vault resolves id → folder from the note's stored path,
+  so `Projecten/` and `Archief/` are both reachable. It runs the
   lifecycle pass for the freeze verdict, the task-lock
   action on the freeze/unfreeze transition, the task capture for tracked tasks,
-  and the mirror-sync pass for task-field reconciliation. The sweep enumerates
-  the project's connections directly, records a tombstone for each tracked note
-  whose file is gone (not under `Archief/`), hands the delete to
-  `HandleDeletedNoteAction`, and prunes the tombstone and the record once every
+  and the mirror-sync pass for task-field reconciliation. The sweep proves a
+  record gone by its id — a record whose note path is gone but whose id lives at
+  another path is a rename, and a note whose id reappears clears its tombstone
+  (DEL-1) — records a tombstone for each proven-gone note (not under
+  `Archief/`), hands the delete to
+  `HandleDeletedNoteAction` (a failed mirror delete is reported and retried,
+  DEL-2), and prunes the tombstone and the record once every
   side has settled.
-- **The project rename** (`RenameProjectAction` + `RegistryPort.rekeyProject`).
-  A project note names itself from a top-level `project:` frontmatter key; the
-  folder segment and the home-note filename (`_<name>.md`) derive from it. The
-  chain runs the reconcile step after the home-note migration and before
-  origination, so every downstream step addresses the project by its current
-  name. A note with no property adopts the folder segment once; a folder that
-  disagrees with the property is renamed to match — the home note and the rest of
-  the folder within the project's current root — and the registry's project node
-  (entities, ports, identities and the project's archive baseline) is re-keyed
-  to the new name. A folder renamed directly, where the registry already files
-  the declared name, is renamed back and reported on the chain's warning
-  channel. The mirror project's display name follows through the lifecycle
-  pass's drifted-name rename (NWM-31).
+- **The project identity.** A project is a record with an id, a name and a path,
+  the same kind of record a task is. The **id** is the home note's own uuid at
+  `connections.vault.id`; the **name** is the folder segment it was created
+  under; the **path** is where the home note currently lives, an attribute and
+  not the identity. The registry keys the project by its id, and the vault
+  resolves the id to the home note (and so to the folder) through `readNoteIds`.
+  A folder rename therefore changes the name and the path and never the id, so
+  nothing is stranded; there is no rename reconciliation to perform — the
+  retired `RenameProjectAction`, the folder-drift warning and the property
+  comparison are gone. The name is what origination titles the remote project
+  with and what the mirror rename compares against (NWM-31); the note's
+  filename is its title and nothing else.
 - **The infrastructure adapters.** `infrastructure/` is the driven-adapter
   block: one namespace per application (`infrastructure/<vendor>/`), each
   carrying the provider's own vocabulary, its transport boundary and its opaque
@@ -456,22 +474,30 @@ canonical DTOs and the pure core.
 
 - **The vault** — the system of record; markdown notes, not a database.
   Project notes live under `Projecten/<name>/` (or `Archief/` when archived),
-  declare their connections in a non-empty `connections` map, and carry their
-  name in a top-level `project:` property; every task
+  declare their connections in a non-empty `connections` map, and take their
+  name from the folder segment; every task
   note lives under `taken/`, a to-do among them carrying the `type:todo`
-  label. Identity is a vault-owned uuid held in the registry — filenames and
-  frontmatter carry no machine id.
+  label. Every note carries its own id in its `connections` map at
+  `connections.vault.id` (`{ tool: vault, id: <uuid> }`); the registry keys the
+  same uuid. The vault's own entry never makes a note a project — discovery
+  ignores it, and a note is a project only when it carries a registered mirror
+  connection (ORG-1, DISC-1, DISC-4). The note's filename is its title and
+  carries no identity weight.
 - **`data.json`** — the plugin's data file. It holds three containers:
-  - **`syncState`** (schema version 3) — the per-mirror registry: `projects.<name>.entities`
-    (uuid → note path), `projects.<name>.ports.<connectionSlug>.items.<handle>`
+  - **`syncState`** (schema version 4) — the per-mirror registry: `projects.<projectId>.entities`
+    (uuid → note path), `projects.<projectId>.ports.<connectionSlug>.items.<handle>`
     (each mirror handle's entity id), the port bookkeeping
     (`provider`, `project`, `lastPoll`, `lanes`), per-connection identities
-    (`projects.<name>.identities.<connectionSlug>`), and the
+    (`projects.<projectId>.identities.<connectionSlug>`), and the
     per-project `fullScanPending` marker.
+    The project node is keyed by the home note's own uuid, so a folder rename
+    (a new name and path) never moves it and strands nothing; the archive
+    baseline is keyed by the same uuid. A v3 container is migrated in place —
+    the entities, ports, identities and tombstones survive, and the chain's id
+    migration re-keys a name-keyed project node (and its archive baseline) to
+    the home note's uuid.
     Ports are keyed by the note's connection slug, so a project can hold two
     connections of the same tool; a slug rename re-keys the port in lockstep.
-    A project rename re-keys the project node — entities, ports, identities and
-    the project's archive baseline — to the note's declared name.
     Written only through `SyncStateAdapter`, behind a serialization mutex it
     shares with the settings save.
   - **`coreBaselines`** — the core's per-entity, per-field (a canonical field or
@@ -598,13 +624,13 @@ over HTTPS.
   pruned once every side has settled. The vault note itself is trashed, never
   destroyed.
 
-**Known debt / open items:** A project's name is the `project` property on its
-note (S17c); the folder segment and the home-note filename derive from it, so a
-folder rename is a rename — the registry re-keys to the declared name — not a
-delete. The project-level delete is still deferred (`DEL-3`): projects are never
+**Known debt / open items:** A project is keyed by the home note's own uuid
+(S31); its name is the folder segment, and a folder rename changes the name and
+the path and never the id, so nothing is re-keyed and nothing is stranded. The
+project-level delete is still deferred (`DEL-3`): projects are never
 captured, so nothing resurrects — a gone folder leaves the remote project in
-place, and the positive "gone, not renamed" verdict the property makes possible
-is decided separately. The vault-maintenance shell has been
+place, and the positive "gone, not renamed" verdict is decided separately. The
+vault-maintenance shell has been
 retired — the chain drives its steps directly (ADR 003).
 
 The multi-adapter core (`core/` + `infrastructure/`) is wired end to end: the
@@ -678,18 +704,21 @@ Date of Last Update: 2026-10-13
 - **Capture** — adopting remote-born **tasks** into the vault. It enumerates the
   remote's tracked tasks and handles each the vault does not already hold by its
   mirror handle, so the first run adopts the back-catalogue and a second pass is
-  idempotent. A task whose **normalised** title (the slug the vault derives a
-  note's title and filename from) matches exactly one existing note is **linked**
-  to that note — its handle recorded, no note written; no match adopts a new
-  note; more than one match writes nothing and is logged, retried next pass. A
+  idempotent. A task whose title matches the **comparison form** of exactly one
+  existing note's filename is **linked** to that note — its handle recorded, no
+  note written; no match adopts a new note; more than one match writes nothing
+  and is logged, retried next pass. A
   project is never captured — it is declared (origination). A captured
   task-manager task carries a kind — an explicit type label kept, else `slice`
   for a root item and `task` for a subtask.
-- **Project rename** — reconciling a project note's declared name with the
-  folder it sits in. The name is a top-level `project:` property; the folder and
-  the home-note filename derive from it. A note with no property adopts the
-  folder segment once; a property change renames the folder and re-keys the
-  registry; a directly-renamed folder is renamed back and reported.
+- **Project identity** — the record that makes a project a project: an id (the
+  home note's own uuid at `connections.vault.id`), a name (the folder segment it
+  was created under) and a path (where the home note lives). The home note is
+  the project-root note whose stem is `_<name>`, else a legacy `_home.md` or
+  `<name>.md`, else the only note at the project root. The registry keys
+  the project by its id; the vault resolves id → folder from the note's stored
+  path. A folder rename changes the name and the path and never the id, so no
+  reconciliation is needed.
 
 ## 12. Conventions & Boundaries
 

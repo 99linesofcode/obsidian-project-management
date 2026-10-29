@@ -12,6 +12,7 @@ export interface VaultPort {
   renameNote(oldPath: string, newPath: string): Promise<void>;
   trashNote(path: string): Promise<void>;
   listNotesInFolder(folder: string): Promise<string[]>;
+  readNoteIds(): Promise<readonly { id: string; path: string }[]>;
   findProjectNotes(): Promise<ProjectNoteDataTransferObject[]>;
 
   onNoteChanged(cb: (path: string) => void): void;
@@ -23,10 +24,10 @@ export interface VaultPort {
   applyField(write: CanonicalFieldWrite): Promise<void>;
 
   readConnections(
-    project: string,
+    projectId: string,
   ): Promise<readonly ConnectionDataTransferObject[]>;
-  listEntities(project: string): Promise<readonly string[]>;
+  listEntities(projectId: string): Promise<readonly string[]>;
 
-  observeProject(project: string): Promise<OriginObservation>;
-  applyProjectArchived(project: string, archived: boolean): Promise<void>;
+  observeProject(projectId: string): Promise<OriginObservation>;
+  applyProjectArchived(projectId: string, archived: boolean): Promise<void>;
 }

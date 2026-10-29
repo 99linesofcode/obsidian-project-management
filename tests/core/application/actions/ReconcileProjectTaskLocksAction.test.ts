@@ -71,7 +71,7 @@ async function seedHandles(
   entries: Array<{ handle: string; notePath: string }>,
 ): Promise<void> {
   for (const { handle, notePath } of entries) {
-    await registry.setEntity({ id: notePath, notePath });
+    await registry.setEntity({ id: notePath, notePath, projectId: PROJECT });
     await registry.setMirrorItem(project, connection, handle, {
       entityId: notePath,
     });
@@ -122,7 +122,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
     vault.tasks.set(FIX, task(FIX, 'Building'));
     vault.tasks.set(SHIP, task(SHIP, DONE));
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
+    await action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: false });
 
     expect([...mirror.lockedHandles]).toEqual(['issue-1']);
   });
@@ -134,7 +134,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
     await mirror.lockTask('issue-1');
     await mirror.lockTask('issue-2');
 
-    await action.invoke({ project: PROJECT, frozen: false, wasFrozen: true });
+    await action.invoke({ projectId: PROJECT, frozen: false, wasFrozen: true });
 
     expect([...mirror.lockedHandles]).toEqual([]);
   });
@@ -146,7 +146,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
     await mirror.lockTask('issue-2');
     mirror.seedThrowingLock('issue-1');
 
-    await action.invoke({ project: PROJECT, frozen: false, wasFrozen: true });
+    await action.invoke({ projectId: PROJECT, frozen: false, wasFrozen: true });
 
     expect([...mirror.lockedHandles]).toEqual(['issue-1']);
   });
@@ -155,8 +155,12 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
     const { action, mirror, vault } = await setup();
     vault.tasks.set(FIX, task(FIX, 'Building'));
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: true });
-    await action.invoke({ project: PROJECT, frozen: false, wasFrozen: false });
+    await action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: true });
+    await action.invoke({
+      projectId: PROJECT,
+      frozen: false,
+      wasFrozen: false,
+    });
 
     expect([...mirror.lockedHandles]).toEqual([]);
   });
@@ -184,7 +188,7 @@ describe("ReconcileProjectTaskLocksAction — lock a frozen project's task conve
     );
 
     await expect(
-      action.invoke({ project: PROJECT, frozen: true, wasFrozen: false }),
+      action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: false }),
     ).resolves.toBeUndefined();
   });
 });
@@ -201,7 +205,7 @@ describe("ORG-2 — the locks action addresses the connection's effective target
     ];
     vault.tasks.set(FIX, task(FIX, 'Building'));
     const registry = new SyncStateAdapter(memoryStorage());
-    await registry.setEntity({ id: FIX, notePath: FIX });
+    await registry.setEntity({ id: FIX, notePath: FIX, projectId: PROJECT });
     await registry.setMirrorItem(PROJECT, 'a', 'issue-1', { entityId: FIX });
     await registry.setIdentity(
       PROJECT,
@@ -229,7 +233,7 @@ describe("ORG-2 — the locks action addresses the connection's effective target
       DONE,
     );
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
+    await action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: false });
 
     expect(createdTargets).toEqual(['board-a']);
   });

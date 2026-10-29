@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it, vi } from 'vitest';
 
 const { TFile } = vi.hoisted(() => {
@@ -36,12 +37,17 @@ import { vaultAdapter } from '../../../helpers/vaultAdapter.js';
 const PROJECT = 'Acme';
 const HOME_PATH = 'Projecten/Acme/_Acme.md';
 const TASK_PATH = 'Projecten/Acme/taken/fix-the-bug.md';
+const ENTITY_ID = 'entity-uuid';
+const MIRROR_HANDLE = 'handle-1';
 const MTIME = Date.parse('2026-10-08T10:00:00Z');
 
 const HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  conformance:',
   '    tool: conformance',
   '    project: board-1',
@@ -144,8 +150,8 @@ function fakeStorage() {
 
 function mirrorTask(status: string, body: string): CanonicalTask {
   return new CanonicalTask({
-    handle: TASK_PATH,
-    entityId: TASK_PATH,
+    handle: MIRROR_HANDLE,
+    entityId: ENTITY_ID,
     title: 'fix the bug',
     body,
     status,
@@ -169,11 +175,13 @@ async function setup() {
     metadataCache: vault.metadataCache,
   } as unknown as App;
 
-  const vaultPort = vaultAdapter(app);
+  const vaultPort = vaultAdapter(app, {
+    registeredApplications: new Set(['conformance']),
+  });
 
   const mirror = new ConformanceMirrorAdapter();
   mirror.seed(mirrorTask('Building', 'Mirror body'));
-  mirror.setFieldTime(TASK_PATH, 'body', '2026-10-08T11:00:00Z');
+  mirror.setFieldTime(MIRROR_HANDLE, 'body', '2026-10-08T11:00:00Z');
   const mirrorAdapters: MirrorAdapterFactoryPort = {
     create: (application): MirrorPort | null =>
       application === 'conformance' ? mirror : null,
@@ -181,9 +189,13 @@ async function setup() {
 
   const { storage, snapshot } = fakeStorage();
   const registry = new SyncStateAdapter(storage);
-  await registry.setEntity({ id: TASK_PATH, notePath: TASK_PATH });
-  await registry.setMirrorItem(PROJECT, 'conformance', TASK_PATH, {
-    entityId: TASK_PATH,
+  await registry.setEntity({
+    id: ENTITY_ID,
+    notePath: TASK_PATH,
+    projectId: projectFromNotePath(TASK_PATH),
+  });
+  await registry.setMirrorItem(PROJECT, 'conformance', MIRROR_HANDLE, {
+    entityId: ENTITY_ID,
   });
   const action = new MirrorSyncAction(vaultPort, registry, mirrorAdapters);
 
@@ -198,14 +210,14 @@ describe('MirrorSyncAction — a project pass end to end (F02 NWM-1, NWM-3)', ()
     const mergedValue = (field: string) =>
       records.find((record) => record.field === field)!.result.value;
 
-    expect(mergedValue('title')).toBe('fix the bug');
+    expect(mergedValue('title')).toBe('fix-the-bug');
     expect(mergedValue('body')).toBe('Mirror body');
     expect(mergedValue('subtasks')).toBeNull();
     expect(mergedValue('completion')).toBe('false');
     expect(mergedValue('Status')).toBe('Done');
     expect(mergedValue('label')).toBe('["type:task","alpha","beta"]');
 
-    expect(mirror.currentTask(TASK_PATH)?.status).toBe('Done');
+    expect(mirror.currentTask(MIRROR_HANDLE)?.status).toBe('Done');
     expect(vault.content(TASK_PATH)).toContain('Mirror body');
   });
 
@@ -238,7 +250,7 @@ describe('MirrorSyncAction — a project pass end to end (F02 NWM-1, NWM-3)', ()
 
     expect(second.every((record) => record.written.length === 0)).toBe(true);
     expect(second.every((record) => record.advanced.length === 0)).toBe(true);
-    expect(mirror.currentTask(TASK_PATH)?.status).toBe('Done');
+    expect(mirror.currentTask(MIRROR_HANDLE)?.status).toBe('Done');
   });
 });
 
@@ -314,8 +326,8 @@ function connection(
 
 function seededTask(status: string): CanonicalTask {
   return new CanonicalTask({
-    handle: ENTITY,
-    entityId: ENTITY,
+    handle: MIRROR_HANDLE,
+    entityId: ENTITY_ID,
     title: 'Task',
     body: '',
     status,
@@ -354,8 +366,8 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
     alpha.seed(seededTask('Review'));
     beta.seed(seededTask('Todo'));
     gamma.seed(seededTask('Building'));
-    alpha.setFieldTime(ENTITY, 'Status', '2026-10-08T11:00:00Z');
-    beta.setFieldTime(ENTITY, 'Status', '2026-10-08T10:00:00Z');
+    alpha.setFieldTime(MIRROR_HANDLE, 'Status', '2026-10-08T11:00:00Z');
+    beta.setFieldTime(MIRROR_HANDLE, 'Status', '2026-10-08T10:00:00Z');
 
     const vault = new FieldVault();
     vault.connections = [
@@ -367,9 +379,15 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
       vault.values.set(field, value);
     }
     const registry = new SyncStateAdapter(fakeStorage().storage);
-    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setEntity({
+      id: ENTITY_ID,
+      notePath: ENTITY,
+      projectId: projectFromNotePath(ENTITY),
+    });
     for (const slug of ['alpha', 'beta', 'gamma']) {
-      await registry.setMirrorItem(PROJECT, slug, ENTITY, { entityId: ENTITY });
+      await registry.setMirrorItem(PROJECT, slug, MIRROR_HANDLE, {
+        entityId: ENTITY_ID,
+      });
     }
     await seedBaselines(
       registry,
@@ -390,9 +408,9 @@ describe('MirrorSyncAction — the Status field at N=3 (F02 NWM-1, NWM-6)', () =
 
     expect(status.result.rung).toBe(1);
     expect(status.result.winner).toBe('mirror:alpha');
-    expect(alpha.currentTask(ENTITY)?.status).toBe('Review');
-    expect(beta.currentTask(ENTITY)?.status).toBe('Review');
-    expect(gamma.currentTask(ENTITY)?.status).toBe('Review');
+    expect(alpha.currentTask(MIRROR_HANDLE)?.status).toBe('Review');
+    expect(beta.currentTask(MIRROR_HANDLE)?.status).toBe('Review');
+    expect(gamma.currentTask(MIRROR_HANDLE)?.status).toBe('Review');
   });
 });
 
@@ -418,9 +436,15 @@ describe('MirrorSyncAction — a failed mirror write (F02)', () => {
       vault.values.set(field, field === 'Status' ? 'Done' : value);
     }
     const registry = new SyncStateAdapter(fakeStorage().storage);
-    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setEntity({
+      id: ENTITY_ID,
+      notePath: ENTITY,
+      projectId: projectFromNotePath(ENTITY),
+    });
     for (const slug of ['boom', 'alpha']) {
-      await registry.setMirrorItem(PROJECT, slug, ENTITY, { entityId: ENTITY });
+      await registry.setMirrorItem(PROJECT, slug, MIRROR_HANDLE, {
+        entityId: ENTITY_ID,
+      });
     }
     await seedBaselines(
       registry,
@@ -441,6 +465,6 @@ describe('MirrorSyncAction — a failed mirror write (F02)', () => {
     expect(status.failed).toEqual(['mirror:boom']);
     expect(status.written).toEqual(['mirror:alpha']);
     expect(status.advanced).toEqual(['mirror:alpha', 'origin']);
-    expect(alpha.currentTask(ENTITY)?.status).toBe('Done');
+    expect(alpha.currentTask(MIRROR_HANDLE)?.status).toBe('Done');
   });
 });

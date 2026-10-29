@@ -1,5 +1,5 @@
 import { projectAffiliationLink } from '../../../domain/affiliation.js';
-import { slugify } from '../../../domain/note.js';
+import { renderFilename } from '../../../domain/note.js';
 
 export interface CapturedTaskNoteInput {
   title: string;
@@ -38,7 +38,7 @@ export const CapturedTaskNoteMapper = {
 };
 
 function capturedTaskNotePath(input: CapturedTaskNoteInput): string {
-  return `Projecten/${input.projectName}/taken/${slugify(input.title)}.md`;
+  return `Projecten/${input.projectName}/taken/${renderFilename(input.title)}`;
 }
 
 function affiliationValue(input: CapturedTaskNoteInput): string {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  chooseHomeNotePath,
   folderChainForPath,
   freePath,
+  projectFolderFromNotePath,
   projectFromNotePath,
   projectHomePath,
   projectHomeStem,
-  projectPathWithName,
+  projectNameFromFolder,
 } from '../../../src/core/domain/paths.js';
 import { FakeVault as FakeVaultBase } from '../../helpers/fakeVault.js';
 
@@ -102,33 +102,6 @@ describe('DISC-2 — the home note path follows the convention', () => {
   });
 });
 
-describe('DISC-2 — home note discovery prefers the convention', () => {
-  it('prefers the conventional home note when a legacy one lingers beside it', () => {
-    const chosen = chooseHomeNotePath(
-      [
-        'Projecten/Acme Widgets/_home.md',
-        'Projecten/Acme Widgets/_Acme Widgets.md',
-      ],
-      'Acme Widgets',
-    );
-
-    expect(chosen).toBe('Projecten/Acme Widgets/_Acme Widgets.md');
-  });
-
-  it('falls back to the only candidate when no conventional note exists', () => {
-    const chosen = chooseHomeNotePath(
-      ['Projecten/Acme Widgets/_home.md'],
-      'Acme Widgets',
-    );
-
-    expect(chosen).toBe('Projecten/Acme Widgets/_home.md');
-  });
-
-  it('returns null when the project has no home note', () => {
-    expect(chooseHomeNotePath([], 'Acme Widgets')).toBeNull();
-  });
-});
-
 // The pure decision behind VaultAdapter.createNote: given a note path, the
 // ordered list of folder paths that must exist for it, from the vault root
 // down. Obsidian's createFolder only makes one level, so the adapter walks
@@ -207,31 +180,29 @@ describe('MAT-5 — a taken slug gains an ordinal', () => {
   });
 });
 
-// PLC-1 — the folder and the home-note filename derive from the project's name,
-// so renaming a project rewrites the note path's project segment and leaves
-// every other segment — the derived home note included — intact.
-describe('PLC-1 — a note path is re-derived under a renamed project', () => {
-  it('derives the home note under the new project name', () => {
+// S31 — the project is addressed by its folder, and the name is the folder
+// segment. Both roots are addressable, so an archived project resolves the
+// same way an active one does.
+describe('S31 — a project folder names the project', () => {
+  it('derives the folder from a note path under either root', () => {
     expect(
-      projectPathWithName('Projecten/Old Name/_Old Name.md', 'New Name'),
-    ).toBe('Projecten/New Name/_Old Name.md');
+      projectFolderFromNotePath('Projecten/Acme Widgets/taken/42-fix.md'),
+    ).toBe('Projecten/Acme Widgets');
+    expect(
+      projectFolderFromNotePath('Archief/Acme Widgets/_Acme Widgets.md'),
+    ).toBe('Archief/Acme Widgets');
   });
 
-  it('rewrites the segment for a taken note and for an archived root', () => {
-    expect(
-      projectPathWithName(
-        'Projecten/Old Name/taken/42-fix-the-bug.md',
-        'New Name',
-      ),
-    ).toBe('Projecten/New Name/taken/42-fix-the-bug.md');
-    expect(
-      projectPathWithName('Archief/Old Name/_Old Name.md', 'New Name'),
-    ).toBe('Archief/New Name/_Old Name.md');
+  it('returns null for a path outside the two project roots', () => {
+    expect(projectFolderFromNotePath('Notes/Other.md')).toBeNull();
+    expect(projectFolderFromNotePath('Projecten')).toBeNull();
   });
 
-  it('leaves a path outside the two project roots alone', () => {
-    expect(projectPathWithName('Notes/Other.md', 'New Name')).toBe(
-      'Notes/Other.md',
+  it('reads the name from the folder segment', () => {
+    expect(projectNameFromFolder('Projecten/Acme Widgets')).toBe(
+      'Acme Widgets',
     );
+    expect(projectNameFromFolder('Archief/Acme Widgets')).toBe('Acme Widgets');
+    expect(projectNameFromFolder('Notes/Other')).toBeNull();
   });
 });

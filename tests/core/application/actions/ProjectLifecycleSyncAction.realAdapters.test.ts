@@ -51,7 +51,14 @@ const TODOIST_TARGET = 'proj-1';
 const ISSUE_URL = 'https://github.com/acme/widgets/issues/42';
 
 function home(connections: ReadonlyArray<[string, string, string]>): string {
-  const lines = ['---', 'type: project', 'connections:'];
+  const lines = [
+    '---',
+    'type: project',
+    'connections:',
+    '  vault:',
+    '    tool: vault',
+    `    id: ${PROJECT}`,
+  ];
   for (const [slug, tool, project] of connections) {
     lines.push(`  ${slug}:`, `    tool: ${tool}`, `    project: ${project}`);
   }
@@ -551,7 +558,11 @@ async function setupLifecycle(options: {
     MTIME,
   );
   const registry = new SyncStateAdapter(memoryStorage());
-  await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
+  await registry.setEntity({
+    id: 'e1',
+    notePath: TASK_PATH,
+    projectId: PROJECT,
+  });
 
   const vault = vaultAdapter(appFor(appVault), {
     registeredApplications: new Set(['github', 'todoist']),
@@ -611,7 +622,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('archives the vault and the other real mirror when a mirror starts the archive', async () => {
     const codeHost = new StatefulGithub({ archived: true });
     const taskManager = new StatefulTodoist({ archived: false });
-    const { vault, registry, action, taskManager: tm } = await setupLifecycle({
+    const {
+      vault,
+      registry,
+      action,
+      taskManager: tm,
+    } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
       codeHost,
@@ -619,7 +635,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
@@ -630,16 +649,23 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('archives both real mirrors when the vault starts the archive', async () => {
     const codeHost = new StatefulGithub({ archived: false });
     const taskManager = new StatefulTodoist({ archived: false });
-    const { registry, action, codeHost: ch, taskManager: tm } =
-      await setupLifecycle({
-        vaultArchived: true,
-        home: MIXED_HOME,
-        codeHost,
-        taskManager,
-      });
+    const {
+      registry,
+      action,
+      codeHost: ch,
+      taskManager: tm,
+    } = await setupLifecycle({
+      vaultArchived: true,
+      home: MIXED_HOME,
+      codeHost,
+      taskManager,
+    });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(ch.board?.closed).toBe(true);
@@ -649,16 +675,24 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('restores the vault and the other real mirror when a mirror un-archives', async () => {
     const codeHost = new StatefulGithub({ archived: false });
     const taskManager = new StatefulTodoist({ archived: true });
-    const { vault, registry, action, codeHost: ch, taskManager: tm } =
-      await setupLifecycle({
-        vaultArchived: true,
-        home: MIXED_HOME,
-        codeHost,
-        taskManager,
-      });
+    const {
+      vault,
+      registry,
+      action,
+      codeHost: ch,
+      taskManager: tm,
+    } = await setupLifecycle({
+      vaultArchived: true,
+      home: MIXED_HOME,
+      codeHost,
+      taskManager,
+    });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(false);
     expect(vault.has(ACTIVE_HOME)).toBe(true);
@@ -668,7 +702,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
 
   it('lets a real code-host board win the archive rung on its closedAt when the mirror archived (NWM-6, ADP-3)', async () => {
     const codeHost = new StatefulGithub({ archived: true });
-    const { vault, registry, action, codeHost: ch } = await setupLifecycle({
+    const {
+      vault,
+      registry,
+      action,
+      codeHost: ch,
+    } = await setupLifecycle({
       vaultArchived: false,
       home: GITHUB_ONLY_HOME,
       codeHost,
@@ -676,7 +715,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     await seedBaseline(registry, 'origin', true);
     await seedBaseline(registry, 'mirror:a', false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(ch.board?.closed).toBe(true);
@@ -688,7 +730,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
       archived: false,
       updatedAt: '2026-10-08T12:00:00Z',
     });
-    const { vault, registry, action, codeHost: ch } = await setupLifecycle({
+    const {
+      vault,
+      registry,
+      action,
+      codeHost: ch,
+    } = await setupLifecycle({
       vaultArchived: true,
       home: GITHUB_ONLY_HOME,
       codeHost,
@@ -696,7 +743,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     await seedBaseline(registry, 'origin', false);
     await seedBaseline(registry, 'mirror:a', true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(true);
     expect(vault.has(ARCHIVED_HOME)).toBe(true);
@@ -706,18 +756,26 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('falls to the vault tie-break when two mirrors disagree without a decisive timestamp (NWM-12)', async () => {
     const codeHost = new StatefulGithub({ archived: true });
     const taskManager = new StatefulTodoist({ archived: false });
-    const { vault, registry, action, codeHost: ch, taskManager: tm } =
-      await setupLifecycle({
-        vaultArchived: false,
-        home: MIXED_HOME,
-        codeHost,
-        taskManager,
-      });
+    const {
+      vault,
+      registry,
+      action,
+      codeHost: ch,
+      taskManager: tm,
+    } = await setupLifecycle({
+      vaultArchived: false,
+      home: MIXED_HOME,
+      codeHost,
+      taskManager,
+    });
     await seedBaseline(registry, 'origin', false);
     await seedBaseline(registry, 'mirror:a', false);
     await seedBaseline(registry, 'mirror:b', true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(false);
     expect(vault.has(ACTIVE_HOME)).toBe(true);
@@ -730,7 +788,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
       id: 'unrelated',
       name: 'Unrelated',
     });
-    const { vault, registry, action, taskManager: tm } = await setupLifecycle({
+    const {
+      vault,
+      registry,
+      action,
+      taskManager: tm,
+    } = await setupLifecycle({
       vaultArchived: true,
       home: TODOIST_MISSING_HOME,
       taskManager,
@@ -738,7 +801,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     await seedBaseline(registry, 'origin', true);
     await seedBaseline(registry, 'mirror:b', true);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(tm.projects.size).toBe(1);
     expect(record.frozen).toBe(true);
@@ -749,7 +815,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('records a failed mirror write and still archives the rest (NWM-2)', async () => {
     const codeHost = new StatefulGithub({ archived: true });
     const taskManager = new StatefulTodoist({ archived: false });
-    const { vault, registry, action, taskManager: tm } = await setupLifecycle({
+    const {
+      vault,
+      registry,
+      action,
+      taskManager: tm,
+    } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
       codeHost,
@@ -758,7 +829,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     tm.failArchiveFor.add(TODOIST_TARGET);
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.failed).toContain('mirror:b');
     expect(record.written).not.toContain('mirror:b');
@@ -770,7 +844,11 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('re-drives a stranded mirror on the next pass once its transport recovers (NWM-32)', async () => {
     const codeHost = new StatefulGithub({ archived: true });
     const taskManager = new StatefulTodoist({ archived: false });
-    const { registry, action, taskManager: tm } = await setupLifecycle({
+    const {
+      registry,
+      action,
+      taskManager: tm,
+    } = await setupLifecycle({
       vaultArchived: false,
       home: MIXED_HOME,
       codeHost,
@@ -778,10 +856,13 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     });
     tm.failArchiveFor.add(TODOIST_TARGET);
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     tm.failArchiveFor.clear();
-    const second = await action.invoke(PROJECT);
+    const second = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(second.written).toContain('mirror:b');
     expect(second.advanced).toContain('mirror:b');
@@ -790,7 +871,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
 
   it('excludes a vanished mirror project without a tombstone or a vault change (NWM-15)', async () => {
     const codeHost = new StatefulGithub({ board: 'absent' });
-    const { vault, registry, action, codeHost: ch } = await setupLifecycle({
+    const {
+      vault,
+      registry,
+      action,
+      codeHost: ch,
+    } = await setupLifecycle({
       vaultArchived: false,
       home: GITHUB_ONLY_HOME,
       codeHost,
@@ -798,7 +884,10 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     await registry.recordMirrorProject(PROJECT, 'a', 'github', GITHUB_TARGET);
     await seedBaseline(registry, 'origin', false);
 
-    const record = await action.invoke(PROJECT);
+    const record = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(record.frozen).toBe(false);
     expect(record.written).toEqual([]);
@@ -812,16 +901,21 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
       archived: true,
     });
     const taskManager = new StatefulTodoist({ archived: false });
-    const { vault, registry, action, codeHost: ch, taskManager: tm } =
-      await setupLifecycle({
-        vaultArchived: false,
-        home: MIXED_HOME,
-        codeHost,
-        taskManager,
-      });
+    const {
+      vault,
+      registry,
+      action,
+      codeHost: ch,
+      taskManager: tm,
+    } = await setupLifecycle({
+      vaultArchived: false,
+      home: MIXED_HOME,
+      codeHost,
+      taskManager,
+    });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     expect(ch.board?.title).toBe(PROJECT);
     expect(ch.board?.closed).toBe(true);
@@ -839,9 +933,12 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
       taskManager,
     });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
-    const second = await action.invoke(PROJECT);
+    const second = await action.invoke({
+      projectId: PROJECT,
+      projectName: PROJECT,
+    });
 
     expect(second.written).toEqual([]);
     expect(second.advanced).toEqual([]);
@@ -850,16 +947,20 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
   it('renames a drifted code-host board and a drifted task-manager project (NWM-31)', async () => {
     const codeHost = new StatefulGithub({ boardTitle: 'Old Name' });
     const taskManager = new StatefulTodoist({ name: 'Old Name' });
-    const { registry, action, codeHost: ch, taskManager: tm } =
-      await setupLifecycle({
-        vaultArchived: false,
-        home: MIXED_HOME,
-        codeHost,
-        taskManager,
-      });
+    const {
+      registry,
+      action,
+      codeHost: ch,
+      taskManager: tm,
+    } = await setupLifecycle({
+      vaultArchived: false,
+      home: MIXED_HOME,
+      codeHost,
+      taskManager,
+    });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
 
     expect(ch.board?.title).toBe(PROJECT);
     expect(tm.projects.get(TODOIST_TARGET)?.name).toBe(PROJECT);
@@ -876,7 +977,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     });
     await seedBaselines(registry, ['origin', 'mirror:a', 'mirror:b'], false);
 
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
     expect((await registry.getEntity('e1'))?.notePath).toBe(
       'Archief/Acme/taken/fix-the-bug.md',
     );
@@ -884,7 +985,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
     codeHost.board!.closed = false;
     codeHost.board!.closedAt = null;
     await seedBaseline(registry, 'mirror:a', true);
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
     expect((await registry.getEntity('e1'))?.notePath).toBe(TASK_PATH);
   });
 
@@ -896,7 +997,7 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
       codeHost,
     });
     await seedBaselines(registry, ['origin', 'mirror:a'], false);
-    await action.invoke(PROJECT);
+    await action.invoke({ projectId: PROJECT, projectName: PROJECT });
     expect(vault.has(ACTIVE_HOME)).toBe(false);
 
     const handleDeleted = new HandleDeletedNoteAction(
@@ -912,7 +1013,11 @@ describe('ProjectLifecycleSyncAction — archive and restore against the real ad
       }),
     ];
 
-    await sweep.execute({ projectName: PROJECT, connections });
+    await sweep.execute({
+      projectId: PROJECT,
+      projectName: PROJECT,
+      connections,
+    });
 
     expect(
       await registry.findTombstoneByNotePath(
@@ -939,7 +1044,11 @@ async function setupLocks(options: {
   appVault.seed(ACTIVE_HOME, GITHUB_ONLY_HOME, MTIME);
   appVault.seed(TASK_PATH, taskNote(options.status), MTIME);
   const registry = new SyncStateAdapter(memoryStorage());
-  await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
+  await registry.setEntity({
+    id: 'e1',
+    notePath: TASK_PATH,
+    projectId: PROJECT,
+  });
   const codeHost = new StatefulGithub();
   const issue = codeHost.addIssue({
     url: ISSUE_URL,
@@ -956,6 +1065,7 @@ async function setupLocks(options: {
     await registry.setEntity({
       id: 'e2',
       notePath: 'Projecten/Acme/taken/other.md',
+      projectId: PROJECT,
     });
     await registry.setMirrorItem(PROJECT, 'a', second.url, { entityId: 'e2' });
   }
@@ -975,7 +1085,7 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
   it('locks a tracked issue that is not in the done lane', async () => {
     const { action, codeHost, issue } = await setupLocks({ status: 'Todo' });
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
+    await action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: false });
 
     expect(issue.locked).toBe(true);
     expect(codeHost.calls).toContain('lock');
@@ -984,7 +1094,7 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
   it('does not lock a tracked issue in the done lane', async () => {
     const { action, codeHost, issue } = await setupLocks({ status: 'Done' });
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
+    await action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: false });
 
     expect(issue.locked).toBe(false);
     expect(codeHost.calls).not.toContain('lock');
@@ -993,7 +1103,7 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
   it('unlocks every tracked issue on restore (done lane included)', async () => {
     const { action, codeHost, issue } = await setupLocks({ status: 'Done' });
 
-    await action.invoke({ project: PROJECT, frozen: false, wasFrozen: true });
+    await action.invoke({ projectId: PROJECT, frozen: false, wasFrozen: true });
 
     expect(issue.locked).toBe(false);
     expect(codeHost.calls).toContain('unlock');
@@ -1004,7 +1114,11 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
     appVault.seed(ARCHIVED_HOME, TODOIST_ONLY_HOME, MTIME);
     appVault.seed(TASK_PATH, taskNote('Todo'), MTIME);
     const registry = new SyncStateAdapter(memoryStorage());
-    await registry.setEntity({ id: 'e1', notePath: TASK_PATH });
+    await registry.setEntity({
+      id: 'e1',
+      notePath: TASK_PATH,
+      projectId: PROJECT,
+    });
     await registry.setMirrorItem(PROJECT, 'b', 'task-1', { entityId: 'e1' });
     const taskManager = new StatefulTodoist();
     const vault = vaultAdapter(appFor(appVault), {
@@ -1017,7 +1131,7 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
       'Done',
     );
 
-    await action.invoke({ project: PROJECT, frozen: true, wasFrozen: false });
+    await action.invoke({ projectId: PROJECT, frozen: true, wasFrozen: false });
 
     expect(taskManager.calls).toEqual([]);
   });
@@ -1027,13 +1141,17 @@ describe('ReconcileProjectTaskLocksAction — issue locking against the real cod
       status: 'Todo',
       extraIssue: true,
     });
-    const first = [...codeHost.issues.values()].find((i) => i.nodeId === 'I_42');
-    const second = [...codeHost.issues.values()].find((i) => i.nodeId === 'I_43');
+    const first = [...codeHost.issues.values()].find(
+      (i) => i.nodeId === 'I_42',
+    );
+    const second = [...codeHost.issues.values()].find(
+      (i) => i.nodeId === 'I_43',
+    );
     if (first !== undefined) first.locked = true;
     if (second !== undefined) second.locked = true;
     codeHost.failLockFor.add('I_42');
 
-    await action.invoke({ project: PROJECT, frozen: false, wasFrozen: true });
+    await action.invoke({ projectId: PROJECT, frozen: false, wasFrozen: true });
 
     expect(first?.locked).toBe(true);
     expect(second?.locked).toBe(false);

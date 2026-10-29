@@ -14,7 +14,7 @@ function registryWithIdentity(
   } as unknown as RegistryPort;
 }
 
-describe("effectiveConnectionTarget — a non-empty declared target wins over the recorded identity (ORG-2)", () => {
+describe('effectiveConnectionTarget — a non-empty declared target wins over the recorded identity (ORG-2)', () => {
   it('addresses by the declared target when it is non-empty and the recorded identity differs (ORG-2)', async () => {
     const connection = new ConnectionDataTransferObject({
       slug: 'a',

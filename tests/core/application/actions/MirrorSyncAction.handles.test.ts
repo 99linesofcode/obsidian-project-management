@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
@@ -129,7 +130,11 @@ describe('MirrorSyncAction — entity to per-connection handle (F02 NWM-2)', () 
       ]),
     );
     const registry = new SyncStateAdapter(memoryStorage());
-    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setEntity({
+      id: ENTITY,
+      notePath: ENTITY,
+      projectId: projectFromNotePath(ENTITY),
+    });
     await registry.setMirrorItem('Acme', 'gh-main', 'handle-a', {
       entityId: ENTITY,
     });

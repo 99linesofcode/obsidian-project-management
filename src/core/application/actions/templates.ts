@@ -15,10 +15,7 @@ export type SeedPathKey =
   | 'tasksBasePath';
 
 export type SeedArtifactKey =
-  | 'projectTemplate'
-  | 'taskTemplate'
-  | 'projectsBase'
-  | 'tasksBase';
+  'projectTemplate' | 'taskTemplate' | 'projectsBase' | 'tasksBase';
 
 export interface SeedArtifact {
   key: SeedArtifactKey;
@@ -29,7 +26,6 @@ export interface SeedArtifact {
 }
 
 const TASK_TEMPLATE = `---
-name: {{title}}
 affiliation: []
 status:
 synced:
@@ -41,7 +37,6 @@ tags: []
 `;
 
 const PROJECT_TEMPLATE = `---
-name: {{title}}
 affiliation: []
 created: {{date}}
 categories:

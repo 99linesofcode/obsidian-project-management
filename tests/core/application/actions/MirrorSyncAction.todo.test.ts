@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { OriginObservation } from '../../../../src/core/domain/OriginObservation.js';
@@ -292,7 +293,11 @@ async function registerParent(
   notePath: string,
   handle: string,
 ): Promise<void> {
-  await registry.setEntity({ id: notePath, notePath });
+  await registry.setEntity({
+    id: notePath,
+    notePath,
+    projectId: projectFromNotePath(notePath),
+  });
   await registry.setMirrorItem(PROJECT, 'todoist-main', handle, {
     entityId: notePath,
   });
@@ -345,7 +350,11 @@ describe('SUB-3 — the parent relation is identity, not text', () => {
       connection('todoist-main', 'todoist', 'P1'),
     ]);
     const registry = new FakeSyncState();
-    await registry.setEntity({ id: CHILD, notePath: CHILD });
+    await registry.setEntity({
+      id: CHILD,
+      notePath: CHILD,
+      projectId: projectFromNotePath(CHILD),
+    });
     await registry.setMirrorItem(PROJECT, 'todoist-main', CHILD_HANDLE, {
       entityId: CHILD,
     });
@@ -369,7 +378,11 @@ describe('SUB-3 — the parent relation is identity, not text', () => {
       connection('todoist-main', 'todoist', 'P1'),
     ]);
     const registry = new FakeSyncState();
-    await registry.setEntity({ id: CHILD, notePath: CHILD });
+    await registry.setEntity({
+      id: CHILD,
+      notePath: CHILD,
+      projectId: projectFromNotePath(CHILD),
+    });
     await registry.setMirrorItem(PROJECT, 'todoist-main', CHILD_HANDLE, {
       entityId: CHILD,
     });

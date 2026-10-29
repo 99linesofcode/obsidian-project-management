@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import { Baseline } from '../../../src/core/domain/Baseline.js';
 import { CanonicalFieldWrite } from '../../../src/core/port/data/CanonicalFieldWrite.js';
@@ -297,9 +298,7 @@ describe('TodoistMirrorAdapter — the canonical writes (F01 ACM-5)', () => {
     );
 
     const write = transport.calls.find((call) => call.path === '/tasks/T1')!;
-    expect(write.body).toBe(
-      JSON.stringify({ labels: ['type: task', 'bug'] }),
-    );
+    expect(write.body).toBe(JSON.stringify({ labels: ['type: task', 'bug'] }));
   });
 });
 
@@ -525,7 +524,11 @@ describe('MirrorSyncAction drives the task manager through the ports (F02 NWM-3)
     vault.values.set('Status', 'Done');
     vault.values.set('label', '["type: task"]');
     const registry = new SyncStateAdapter(memoryStorage());
-    await registry.setEntity({ id: ENTITY, notePath: ENTITY });
+    await registry.setEntity({
+      id: ENTITY,
+      notePath: ENTITY,
+      projectId: projectFromNotePath(ENTITY),
+    });
     await registry.setMirrorItem('Acme', 'todoist', 'T1', { entityId: ENTITY });
     for (const field of ['title', 'body', 'completion', 'label'] as const) {
       const value = vault.values.get(field)!;
@@ -665,7 +668,7 @@ describe('TodoistMirrorAdapter — createTask', () => {
     ]);
     expect(JSON.parse(transport.calls[2]!.body)).toMatchObject({
       name: 'type: task',
-      color: 'lime_green',
+      color: 'olive_green',
     });
     expect(created.handle).toBe('T9');
     expect(created.entityId).toBe('uuid-1');
@@ -730,7 +733,7 @@ describe('TodoistMirrorAdapter — label provisioning (LBL-14, LBL-15)', () => {
   ): Record<string, unknown> => ({
     id: 'L1',
     name: 'type:task',
-    color: 'lime_green',
+    color: 'olive_green',
     ...overrides,
   });
 
@@ -754,7 +757,7 @@ describe('TodoistMirrorAdapter — label provisioning (LBL-14, LBL-15)', () => {
     ).toEqual(['GET /labels', 'POST /labels', 'POST /tasks/T1']);
     expect(JSON.parse(transport.calls[1]!.body)).toMatchObject({
       name: 'type:task',
-      color: 'lime_green',
+      color: 'olive_green',
     });
   });
 
@@ -810,7 +813,7 @@ describe('TodoistMirrorAdapter — label provisioning (LBL-14, LBL-15)', () => {
       'POST /tasks/T1',
     ]);
     expect(JSON.parse(transport.calls[2]!.body)).toMatchObject({
-      color: 'lime_green',
+      color: 'olive_green',
     });
   });
 
@@ -892,15 +895,15 @@ describe('TodoistMirrorAdapter — label provisioning (LBL-14, LBL-15)', () => {
       'POST /tasks/T1',
     ]);
     expect(JSON.parse(transport.calls[2]!.body)).toMatchObject({
-      color: 'lime_green',
+      color: 'olive_green',
     });
   });
 
   const KIND_PALETTE: Array<[kind: string, colour: string]> = [
     ['slice', 'grape'],
     ['pitch', 'orange'],
-    ['task', 'lime_green'],
-    ['bug', 'berry_red'],
+    ['task', 'olive_green'],
+    ['bug', 'salmon'],
     ['chore', 'light_blue'],
     ['todo', 'yellow'],
   ];

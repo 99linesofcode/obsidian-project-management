@@ -1,10 +1,6 @@
 import { Baseline } from '../../core/domain/Baseline.js';
 import { isRecord } from '../../core/domain/isRecord.js';
 import type { MergedField } from '../../core/domain/canonicalField.js';
-import {
-  projectFromNotePath,
-  projectPathWithName,
-} from '../../core/domain/paths.js';
 import { stringOrEmpty, stringOrNull } from '../../core/domain/strings.js';
 import { ProjectIdentityDataTransferObject } from '../../core/port/data/ProjectIdentityDataTransferObject.js';
 import type { EntityRecord } from '../../core/port/data/EntityRecord.js';
@@ -55,6 +51,8 @@ export interface SyncStateStorage {
 const BACKUP_MIN_INTERVAL_MS = 60_000;
 
 const CORE_BASELINES_KEY = 'coreBaselines';
+
+const LEGACY_PROJECT_KEY_VERSION = 3;
 
 export { SYNC_STATE_KEY } from './syncStateSchema.js';
 
@@ -118,9 +116,7 @@ export class SyncStateAdapter implements RegistryPort {
         `SyncStateAdapter: registry version ${version} is newer than supported ${VERSION}; leaving it untouched`,
       );
     } else if (version !== VERSION) {
-      for (const key of Object.keys(container)) {
-        delete container[key];
-      }
+      migrateContainer(container, version);
       container.version = VERSION;
       await this.maybeBackup();
       data[SYNC_STATE_KEY] = container;
@@ -167,7 +163,9 @@ export class SyncStateAdapter implements RegistryPort {
       return null;
     }
     const raw = entityMap(node)[id];
-    return isRecord(raw) ? { id, notePath: stringOrEmpty(raw.notePath) } : null;
+    return isRecord(raw)
+      ? { id, notePath: stringOrEmpty(raw.notePath), projectId: project }
+      : null;
   }
 
   async findByNotePath(notePath: string): Promise<EntityRecord | null> {
@@ -183,7 +181,7 @@ export class SyncStateAdapter implements RegistryPort {
       const container = await this.loadContainer();
       this.assertWritable();
       const indexes = this.indexes!;
-      const project = projectFromNotePath(record.notePath);
+      const project = record.projectId;
       const previousProject = indexes.byEntityProject.get(record.id);
       const previousPath = indexes.byEntityPath.get(record.id);
 
@@ -231,10 +229,10 @@ export class SyncStateAdapter implements RegistryPort {
     });
   }
 
-  async listEntities(projectName: string): Promise<EntityRecord[]> {
+  async listEntities(projectId: string): Promise<EntityRecord[]> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return [];
       }
@@ -243,46 +241,8 @@ export class SyncStateAdapter implements RegistryPort {
         .map(([id, raw]) => ({
           id,
           notePath: stringOrEmpty((raw as Record<string, unknown>).notePath),
+          projectId,
         }));
-    });
-  }
-
-  async rekeyProject(fromProject: string, toProject: string): Promise<void> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      this.assertWritable();
-      if (fromProject === toProject) {
-        return;
-      }
-      const projects = readProjectsMap(container);
-      const fromNode = projectNode(projects, fromProject);
-      if (fromNode === null) {
-        return;
-      }
-      const toNode = ensureProjectNode(ensureProjects(container), toProject);
-      mergeProjectNode(toNode, fromNode);
-      rekeyEntityPaths(toNode, toProject);
-      delete projects[fromProject];
-      this.indexes = buildIndexes(container);
-      await this.maybeBackup();
-      const data = await this.storage.load();
-      moveProjectBaseline(data, fromProject, toProject);
-      data[SYNC_STATE_KEY] = this.container;
-      await this.storage.save(data);
-    });
-  }
-
-  async hasProject(projectName: string): Promise<boolean> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      return projectNode(readProjectsMap(container), projectName) !== null;
-    });
-  }
-
-  async listProjects(): Promise<string[]> {
-    return this.queue(async () => {
-      const container = await this.loadContainer();
-      return Object.keys(readProjectsMap(container)).sort();
     });
   }
 
@@ -318,6 +278,25 @@ export class SyncStateAdapter implements RegistryPort {
         tombstones[index] = stored;
       }
       await this.persist();
+    });
+  }
+
+  async removeTombstone(notePath: string): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      this.assertWritable();
+      const tombstones = ensureTombstonesList(container);
+      let removed = false;
+      for (let i = tombstones.length - 1; i >= 0; i--) {
+        const tombstone = mapTombstone(tombstones[i]!);
+        if (tombstone !== null && tombstone.notePath === notePath) {
+          tombstones.splice(i, 1);
+          removed = true;
+        }
+      }
+      if (removed) {
+        await this.persist();
+      }
     });
   }
 
@@ -398,7 +377,7 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async setMirrorItem(
-    projectName: string,
+    projectId: string,
     portId: string,
     handle: string,
     item: MirrorItem,
@@ -410,7 +389,7 @@ export class SyncStateAdapter implements RegistryPort {
 
       const owner = indexes.byHandle.get(portId)?.get(handle);
       if (owner !== undefined) {
-        if (owner.project !== projectName) {
+        if (owner.project !== projectId) {
           removeItemNode(container, owner.project, portId, handle);
           removeItemRef(indexes, owner.entityId, portId, handle);
         } else if (owner.entityId !== item.entityId) {
@@ -418,7 +397,7 @@ export class SyncStateAdapter implements RegistryPort {
         }
       }
 
-      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const node = ensureProjectNode(ensureProjects(container), projectId);
       const port = ensurePortNode(node, portId);
       if (typeof port.provider !== 'string' || port.provider === '') {
         port.provider = portId;
@@ -432,29 +411,29 @@ export class SyncStateAdapter implements RegistryPort {
         handles = new Map();
         indexes.byHandle.set(portId, handles);
       }
-      handles.set(handle, { project: projectName, entityId: item.entityId });
+      handles.set(handle, { project: projectId, entityId: item.entityId });
 
-      addItemRef(indexes, item.entityId, projectName, portId, handle);
+      addItemRef(indexes, item.entityId, projectId, portId, handle);
       await this.persist();
     });
   }
 
   async removeMirrorItem(
-    projectName: string,
+    projectId: string,
     portId: string,
     handle: string,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       const port = node === null ? null : portNode(node, portId);
       if (port !== null) {
         const raw = itemsMap(port)[handle];
         if (isRecord(raw)) {
           const entityId = stringOrEmpty(raw.entityId);
           dropItem(container, this.indexes!, {
-            project: projectName,
+            project: projectId,
             portId,
             handle,
             entityId,
@@ -467,12 +446,12 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async listMirrorItems(
-    projectName: string,
+    projectId: string,
     portId: string,
   ): Promise<Array<{ handle: string; item: MirrorItem }>> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return [];
       }
@@ -519,30 +498,33 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async recordMirrorHandle(
-    project: string,
+    projectId: string,
     connection: string,
     notePath: string,
+    entityId: string,
     handle: string,
   ): Promise<void> {
     const entity = await this.findByNotePath(notePath);
-    const entityId = entity?.id ?? crypto.randomUUID();
+    const ownerId = entity?.id ?? entityId;
     if (entity === null) {
-      await this.setEntity({ id: entityId, notePath });
+      await this.setEntity({ id: ownerId, notePath, projectId });
     }
-    const existing = await this.findMirrorItemByEntity(connection, entityId);
+    const existing = await this.findMirrorItemByEntity(connection, ownerId);
     if (existing !== null && existing.handle !== handle) {
-      await this.removeMirrorItem(project, connection, existing.handle);
+      await this.removeMirrorItem(projectId, connection, existing.handle);
     }
-    await this.setMirrorItem(project, connection, handle, { entityId });
+    await this.setMirrorItem(projectId, connection, handle, {
+      entityId: ownerId,
+    });
   }
 
   async getPortState(
-    projectName: string,
+    projectId: string,
     portId: string,
   ): Promise<PortState | null> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return null;
       }
@@ -552,14 +534,14 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async setPortState(
-    projectName: string,
+    projectId: string,
     portId: string,
     state: PortState,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const node = ensureProjectNode(ensureProjects(container), projectId);
       const port = ensurePortNode(node, portId);
       port.provider = state.provider;
       port.project = state.project;
@@ -570,11 +552,11 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async listPortStates(
-    projectName: string,
+    projectId: string,
   ): Promise<Array<{ slug: string; state: PortState }>> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return [];
       }
@@ -589,7 +571,7 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async rekeyPortState(
-    projectName: string,
+    projectId: string,
     fromSlug: string,
     toSlug: string,
   ): Promise<void> {
@@ -599,7 +581,7 @@ export class SyncStateAdapter implements RegistryPort {
       if (fromSlug === toSlug) {
         return;
       }
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       if (node === null) {
         return;
       }
@@ -620,7 +602,7 @@ export class SyncStateAdapter implements RegistryPort {
           indexes.byHandle.set(toSlug, toHandles);
         }
         for (const [handle, owner] of [...fromHandles]) {
-          if (owner.project !== projectName) {
+          if (owner.project !== projectId) {
             continue;
           }
           fromHandles.delete(handle);
@@ -632,12 +614,53 @@ export class SyncStateAdapter implements RegistryPort {
       }
       for (const refs of indexes.itemsByEntity.values()) {
         for (const ref of refs) {
-          if (ref.project === projectName && ref.portId === fromSlug) {
+          if (ref.project === projectId && ref.portId === fromSlug) {
             ref.portId = toSlug;
           }
         }
       }
       await this.persist();
+    });
+  }
+
+  async rekeyProject(fromKey: string, toKey: string): Promise<void> {
+    return this.queue(async () => {
+      const container = await this.loadContainer();
+      this.assertWritable();
+      if (fromKey === toKey) {
+        return;
+      }
+      const projects = readProjectsMap(container);
+      const fromNode = projectNode(projects, fromKey);
+      if (fromNode === null) {
+        return;
+      }
+      const toNode = ensureProjectNode(ensureProjects(container), toKey);
+      mergeProjectNode(toNode, fromNode);
+      delete projects[fromKey];
+      this.indexes = buildIndexes(container);
+      await this.maybeBackup();
+      const data = await this.storage.load();
+      moveBaselineNode(data, fromKey, toKey);
+      data[SYNC_STATE_KEY] = this.container;
+      await this.storage.save(data);
+    });
+  }
+
+  async rekeyBaseline(fromKey: string, toKey: string): Promise<void> {
+    return this.queue(async () => {
+      await this.loadContainer();
+      this.assertWritable();
+      if (fromKey === toKey) {
+        return;
+      }
+      const data = await this.storage.load();
+      const baselines = data[CORE_BASELINES_KEY];
+      if (!isRecord(baselines) || !isRecord(baselines[fromKey])) {
+        return;
+      }
+      moveBaselineNode(data, fromKey, toKey);
+      await this.storage.save(data);
     });
   }
 
@@ -665,26 +688,26 @@ export class SyncStateAdapter implements RegistryPort {
   }
 
   async setIdentity(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
     identity: ProjectIdentityDataTransferObject,
   ): Promise<void> {
     return this.queue(async () => {
       const container = await this.loadContainer();
       this.assertWritable();
-      const node = ensureProjectNode(ensureProjects(container), projectName);
+      const node = ensureProjectNode(ensureProjects(container), projectId);
       ensureIdentitiesMap(node)[connectionSlug] = identity;
       await this.persist();
     });
   }
 
   async getIdentity(
-    projectName: string,
+    projectId: string,
     connectionSlug: string,
   ): Promise<ProjectIdentityDataTransferObject | null> {
     return this.queue(async () => {
       const container = await this.loadContainer();
-      const node = projectNode(readProjectsMap(container), projectName);
+      const node = projectNode(readProjectsMap(container), projectId);
       const raw =
         node === null ? undefined : identitiesMap(node)[connectionSlug];
       return isRecord(raw) ? this.mapIdentity(raw) : null;
@@ -696,12 +719,37 @@ export class SyncStateAdapter implements RegistryPort {
     field: MergedField,
     side: string,
   ): Promise<Baseline | null> {
-    const data = await this.storage.load();
-    const entry = readBaselineEntry(data, entityId, field, side);
-    if (!isRecord(entry)) {
-      return null;
-    }
-    return new Baseline(stringOrNull(entry.value), entry.completed === true);
+    return this.queue(async () => {
+      const data = await this.storage.load();
+      const entry = readBaselineEntry(data, entityId, field, side);
+      if (!isRecord(entry)) {
+        return null;
+      }
+      return new Baseline(stringOrNull(entry.value), entry.completed === true);
+    });
+  }
+
+  async writeBaselines(
+    entityId: string,
+    field: MergedField,
+    sides: readonly string[],
+    baseline: Baseline,
+  ): Promise<void> {
+    return this.queue(async () => {
+      await this.loadContainer();
+      this.assertWritable();
+      const data = await this.storage.load();
+      const baselines = ensureRecord(data, CORE_BASELINES_KEY);
+      const entity = ensureRecord(baselines, entityId);
+      const fieldNode = ensureRecord(entity, field);
+      for (const side of sides) {
+        fieldNode[side] = {
+          value: baseline.value,
+          completed: baseline.completed,
+        };
+      }
+      await this.storage.save(data);
+    });
   }
 
   async writeBaseline(
@@ -710,12 +758,7 @@ export class SyncStateAdapter implements RegistryPort {
     side: string,
     baseline: Baseline,
   ): Promise<void> {
-    const data = await this.storage.load();
-    const baselines = ensureRecord(data, CORE_BASELINES_KEY);
-    const entity = ensureRecord(baselines, entityId);
-    const fieldNode = ensureRecord(entity, field);
-    fieldNode[side] = { value: baseline.value, completed: baseline.completed };
-    await this.storage.save(data);
+    return this.writeBaselines(entityId, field, [side], baseline);
   }
 
   private mapIdentity(
@@ -743,6 +786,18 @@ export class SyncStateAdapter implements RegistryPort {
   }
 }
 
+function migrateContainer(
+  container: Record<string, unknown>,
+  version: unknown,
+): void {
+  if (version === LEGACY_PROJECT_KEY_VERSION) {
+    return;
+  }
+  for (const key of Object.keys(container)) {
+    delete container[key];
+  }
+}
+
 function mergeProjectNode(
   toNode: Record<string, unknown>,
   fromNode: Record<string, unknown>,
@@ -760,28 +815,19 @@ function mergeProjectNode(
   }
 }
 
-function rekeyEntityPaths(
-  node: Record<string, unknown>,
-  toProject: string,
-): void {
-  for (const raw of Object.values(entityMap(node))) {
-    if (isRecord(raw) && typeof raw.notePath === 'string') {
-      raw.notePath = projectPathWithName(raw.notePath, toProject);
-    }
-  }
-}
-
-function moveProjectBaseline(
+function moveBaselineNode(
   data: Record<string, unknown>,
-  fromProject: string,
-  toProject: string,
+  fromKey: string,
+  toKey: string,
 ): void {
   const baselines = data[CORE_BASELINES_KEY];
-  if (!isRecord(baselines) || !isRecord(baselines[fromProject])) {
+  if (!isRecord(baselines) || !isRecord(baselines[fromKey])) {
     return;
   }
-  baselines[toProject] = baselines[fromProject];
-  delete baselines[fromProject];
+  const target = isRecord(baselines[toKey]) ? baselines[toKey] : {};
+  Object.assign(target, baselines[fromKey]);
+  baselines[toKey] = target;
+  delete baselines[fromKey];
 }
 
 function readBaselineEntry(

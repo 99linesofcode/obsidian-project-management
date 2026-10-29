@@ -1,3 +1,5 @@
+import { stemOf } from './note.js';
+
 export function projectFromNotePath(path: string): string {
   const segments = path.split('/');
   if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
@@ -17,20 +19,27 @@ export function projectNameFromPath(path: string): string | null {
   return segments[1] ?? null;
 }
 
-export function archivedFromPath(path: string): boolean {
-  return path.startsWith('Archief/');
+export function projectNameFromFolder(folder: string): string | null {
+  const segments = folder.split('/');
+  if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
+    return null;
+  }
+  return segments[1] ?? null;
 }
 
-export function projectPathWithName(path: string, projectName: string): string {
+export function projectFolderFromNotePath(path: string): string | null {
   const segments = path.split('/');
   if (segments[0] !== 'Projecten' && segments[0] !== 'Archief') {
-    return path;
+    return null;
   }
-  if (segments.length < 2) {
-    return path;
+  if (segments.length < 2 || segments[1] === '') {
+    return null;
   }
-  segments[1] = projectName;
-  return segments.join('/');
+  return `${segments[0]}/${segments[1]}`;
+}
+
+export function archivedFromPath(path: string): boolean {
+  return path.startsWith('Archief/');
 }
 
 export function projectHomeStem(projectName: string): string {
@@ -45,15 +54,34 @@ export function projectHomePath(
   return `${root}/${projectName}/${projectHomeStem(projectName)}.md`;
 }
 
-export function chooseHomeNotePath(
+const LEGACY_HOME_STEM = '_home';
+
+export function resolveHomeNotePath(
   paths: readonly string[],
   projectName: string,
 ): string | null {
-  const conventionalStem = `${projectHomeStem(projectName)}.md`;
-  const conventional = paths.find(
-    (path) => path.split('/').pop() === conventionalStem,
+  const candidates = paths.filter(
+    (path) => projectNameFromPath(path) === projectName,
   );
-  return conventional ?? paths[0] ?? null;
+
+  const conventional = candidates.find(
+    (path) => stemOf(path) === projectHomeStem(projectName),
+  );
+  if (conventional !== undefined) {
+    return conventional;
+  }
+
+  const legacy = candidates.find((path) => isLegacyHomeNote(path, projectName));
+  if (legacy !== undefined) {
+    return legacy;
+  }
+
+  return candidates.length === 1 ? candidates[0]! : null;
+}
+
+function isLegacyHomeNote(path: string, projectName: string): boolean {
+  const stem = stemOf(path);
+  return stem === LEGACY_HOME_STEM || stem === projectName;
 }
 
 export function folderChainForPath(path: string): string[] {

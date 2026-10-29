@@ -6,7 +6,9 @@ class FakeVault extends FakeVaultBase {
   notes = new Map<string, string>();
   renameCalls: Array<{ from: string; to: string }> = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }

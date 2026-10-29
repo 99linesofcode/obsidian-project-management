@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it } from 'vitest';
 import { MirrorSyncAction } from '../../../../src/core/application/actions/MirrorSyncAction.js';
 import { CanonicalTask } from '../../../../src/core/port/data/CanonicalTask.js';
@@ -165,7 +166,7 @@ describe('MirrorSyncAction — outward materialization (F02 NWM-2)', () => {
       }),
     );
     registry.seed(
-      { id: ENTITY, notePath: ENTITY },
+      { id: ENTITY, notePath: ENTITY, projectId: projectFromNotePath(ENTITY) },
       { 'gh-main': { handle: 'issue-1' } },
     );
 

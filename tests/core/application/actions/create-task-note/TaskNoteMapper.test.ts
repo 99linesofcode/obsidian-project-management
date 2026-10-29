@@ -16,14 +16,13 @@ const context = {
 };
 
 describe('LBL-1 — a task renders as a note carrying labels', () => {
-  it('maps a task to a slug-named note under the project taken folder', () => {
+  it('maps a task to a title-named note under the project taken folder', () => {
     expect(TaskNoteMapper.map(task, context).path).toBe(
-      'Projecten/Acme Widgets/taken/fix-the-bug.md',
+      'Projecten/Acme Widgets/taken/Fix the Bug!.md',
     );
-    expect(
-      TaskNoteMapper.map({ ...task, title: '  Fix the Bug!!!  ' }, context)
-        .path,
-    ).toBe('Projecten/Acme Widgets/taken/fix-the-bug.md');
+    expect(() =>
+      TaskNoteMapper.map({ ...task, title: '  Fix the Bug!!!  ' }, context),
+    ).toThrow();
   });
 
   it('writes the kind as a labels sequence and no type scalar', () => {
@@ -32,7 +31,6 @@ describe('LBL-1 — a task renders as a note carrying labels', () => {
     expect(content).toBe(
       [
         '---',
-        'name: Fix the Bug!',
         'categories: [taken]',
         'labels: [type:task]',
         'status: Building',
@@ -69,7 +67,7 @@ describe('TDO-2 — every task note lives under taken/ regardless of kind', () =
   it('renders a todo kind under taken/ like any other kind', () => {
     for (const type of ['task', 'todo', 'bug']) {
       expect(TaskNoteMapper.map({ ...task, type }, context).path).toBe(
-        'Projecten/Acme Widgets/taken/fix-the-bug.md',
+        'Projecten/Acme Widgets/taken/Fix the Bug!.md',
       );
     }
   });
@@ -103,7 +101,6 @@ describe('TaskNoteMapper.render', () => {
         'categories:',
         '  - "[[Tasks.base|Tasks]]"',
         'tags: []',
-        'name: Fix the Bug!',
         '---',
         'The bug happens when the widget is resized.',
       ].join('\n'),
@@ -129,7 +126,6 @@ describe('TaskNoteMapper.render', () => {
         '---',
         'status: Building',
         'created: 2026-09-18',
-        'name: Fix the Bug!',
         'labels: [type:task]',
         'affiliation: ["[[_Acme Widgets]]"]',
         'synced: 2026-09-18T12:00:00Z',

@@ -60,6 +60,9 @@ export class FakeVault implements VaultPort {
   async listEntities(_project: string): Promise<readonly string[]> {
     return notStubbed('listEntities');
   }
+  async readNoteIds(): Promise<readonly { id: string; path: string }[]> {
+    return notStubbed('readNoteIds');
+  }
   async observeProject(_project: string): Promise<OriginObservation> {
     return notStubbed('observeProject');
   }

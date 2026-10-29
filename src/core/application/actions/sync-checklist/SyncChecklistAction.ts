@@ -2,12 +2,13 @@ import { parseChecklist, renderChecklist } from '../../../domain/checklist.js';
 import type { ChecklistItem } from '../../../domain/ChecklistItem.js';
 import { freePath } from '../../../domain/paths.js';
 import {
+  renderFilename,
   rewriteFrontmatterFields,
-  slugify,
   splitFrontmatter,
   stemOf,
   withBody,
 } from '../../../domain/note.js';
+import { stampNoteId } from '../../../domain/noteIdentity.js';
 import { taskLinkFromAffiliation } from '../../../domain/affiliation.js';
 import { TaskNoteMapper } from '../create-task-note/TaskNoteMapper.js';
 import { isToDoNote, ToDoNoteParser } from '../../../domain/ToDoNoteParser.js';
@@ -108,7 +109,8 @@ export class SyncChecklistAction {
       return false;
     }
 
-    const note = await this.vault.getNoteByPath(item.linkPath);
+    let relinked = false;
+    let note = await this.vault.getNoteByPath(item.linkPath);
 
     if (!note) {
       const existing = await this.findTodoForMissingLink(
@@ -116,31 +118,35 @@ export class SyncChecklistAction {
         item,
         item.linkPath,
       );
-      if (existing !== null) {
-        item.linkPath = existing;
-        return true;
-      }
-      const path = await this.createTodo(
-        input,
-        item,
-        item.linkPath,
-        template,
-        taskLink,
-      );
-      if (path !== item.linkPath) {
+      if (existing === null) {
+        const path = await this.createTodo(
+          input,
+          item,
+          item.linkPath,
+          template,
+          taskLink,
+        );
+        if (path === item.linkPath) {
+          return false;
+        }
         item.linkPath = path;
         return true;
       }
-      return false;
+      item.linkPath = existing;
+      note = await this.vault.getNoteByPath(existing);
+      relinked = true;
+    }
+
+    if (note === null) {
+      return relinked;
     }
 
     const parsed = ToDoNoteParser.parse(note.content);
     if (!parsed) {
-      return false;
+      return relinked;
     }
 
-    let relinked = false;
-    if (isDrifted(slugify(item.text), stemOf(item.linkPath))) {
+    if (isDrifted(renderedStem(item.text), stemOf(item.linkPath))) {
       const newPath = await freePath(
         this.vault,
         todoPath(input.projectName, item.text),
@@ -171,12 +177,12 @@ export class SyncChecklistAction {
     linkPath: string,
   ): Promise<string | null> {
     const linkStem = stemOf(linkPath);
-    const textSlug = slugify(item.text);
+    const textStem = renderedStem(item.text);
     for (const path of await this.vault.listNotesInFolder(
       takenFolder(input.projectName),
     )) {
       const stem = stemOf(path);
-      if (stem === linkStem || stem === textSlug) {
+      if (stem === linkStem || stem === textStem) {
         return path;
       }
     }
@@ -204,7 +210,10 @@ export class SyncChecklistAction {
         parentLink: taskLink,
       },
     );
-    await this.vault.createNote(path, note.content);
+    await this.vault.createNote(
+      path,
+      stampNoteId(note.content, crypto.randomUUID()),
+    );
     return path;
   }
 
@@ -244,8 +253,12 @@ export class SyncChecklistAction {
   }
 }
 
-function isDrifted(slug: string, stem: string): boolean {
-  return slug !== stem && slug !== stem.replace(/-\d+$/, '');
+function renderedStem(title: string): string {
+  return renderFilename(title).replace(/\.md$/, '');
+}
+
+function isDrifted(rendered: string, stem: string): boolean {
+  return rendered !== stem && rendered !== stem.replace(/-\d+$/, '');
 }
 
 function withCompletion(content: string, completedAt: string | null): string {
@@ -265,5 +278,5 @@ function isInTakenFolder(projectName: string, path: string): boolean {
 }
 
 function todoPath(projectName: string, title: string): string {
-  return `${takenFolder(projectName)}/${slugify(title)}.md`;
+  return `${takenFolder(projectName)}/${renderFilename(title)}`;
 }

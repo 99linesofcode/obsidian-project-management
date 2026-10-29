@@ -4,6 +4,7 @@ import {
   splitFrontmatter,
   typeFromLabels,
 } from '../../../../../src/core/domain/note.js';
+import { noteId } from '../../../../../src/core/domain/noteIdentity.js';
 import { ToDoNoteParser } from '../../../../../src/core/domain/ToDoNoteParser.js';
 import { CanonicalTask } from '../../../../../src/core/port/data/CanonicalTask.js';
 import { parseTaskNote } from '../../../../../src/infrastructure/vault/taskNoteCodec.js';
@@ -21,7 +22,9 @@ class FakeVault extends FakeVaultBase {
   renamed: Array<{ oldPath: string; newPath: string }> = [];
   trashed: string[] = [];
 
-  override async getNoteByPath(path: string): Promise<{ content: string } | null> {
+  override async getNoteByPath(
+    path: string,
+  ): Promise<{ content: string } | null> {
     const content = this.notes.get(path);
     return content === undefined ? null : { content };
   }
@@ -90,13 +93,28 @@ class FakeVault extends FakeVaultBase {
 const projectName = 'Acme Widgets';
 const taskPath = 'Projecten/Acme Widgets/taken/42-fix-the-bug.md';
 const taskLink = '42-fix-the-bug';
-const todoPath = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
+const todoPath = 'Projecten/Acme Widgets/taken/Fix the bug.md';
 const syncedAt = '2026-09-18T12:00:00Z';
 
 function taskNote(body: string): string {
   return [
     '---',
     'url: https://github.com/acme/widgets/issues/42',
+    'status: Building',
+    'affiliation: ["[[Acme Widgets]]"]',
+    `synced: ${syncedAt}`,
+    '---',
+    body,
+  ].join('\n');
+}
+
+function taskNoteWithId(id: string, body: string): string {
+  return [
+    '---',
+    'connections:',
+    '  vault:',
+    '    tool: vault',
+    `    id: ${id}`,
     'status: Building',
     'affiliation: ["[[Acme Widgets]]"]',
     `synced: ${syncedAt}`,
@@ -185,6 +203,19 @@ describe('TDO-3 — an unlinked checklist line promotes a ToDo under taken/', ()
     expect(vault.written.map((entry) => entry.path)).toEqual([taskPath]);
   });
 
+  it('stamps the created ToDo with its own id, distinct from the parent note id', async () => {
+    const parentId = '8f14e45f-ceea-4f6f-9c1e-2b3a4d5e6f70';
+    vault.notes.set(taskPath, taskNoteWithId(parentId, '- [ ] Fix the bug'));
+
+    await action.execute({ notePath: taskPath, projectName, syncedAt });
+
+    const id = noteId(vault.notes.get(todoPath) ?? '');
+    expect(id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(id).not.toBe(parentId);
+  });
+
   it('suffixes the slug until the taken/ path is free', async () => {
     vault.notes.set(taskPath, taskNote('- [ ] Fix the bug'));
     vault.notes.set(todoPath, 'already here');
@@ -192,10 +223,10 @@ describe('TDO-3 — an unlinked checklist line promotes a ToDo under taken/', ()
     await action.execute({ notePath: taskPath, projectName, syncedAt });
 
     expect(vault.created.map((entry) => entry.path)).toEqual([
-      'Projecten/Acme Widgets/taken/fix-the-bug-2.md',
+      'Projecten/Acme Widgets/taken/Fix the bug-2.md',
     ]);
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
-      '- [ ] [[Projecten/Acme Widgets/taken/fix-the-bug-2.md|Fix the bug]]',
+      '- [ ] [[Projecten/Acme Widgets/taken/Fix the bug-2.md|Fix the bug]]',
     );
   });
 
@@ -356,7 +387,7 @@ describe('TDO-3 — checklist state mirrors to the ToDo', () => {
 
     await action.execute({ notePath: taskPath, projectName, syncedAt });
 
-    const suffixed = 'Projecten/Acme Widgets/taken/fix-the-bug-2.md';
+    const suffixed = 'Projecten/Acme Widgets/taken/Fix the bug-2.md';
     expect(vault.renamed).toEqual([{ oldPath: stalePath, newPath: suffixed }]);
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
       `- [ ] [[${suffixed}|Fix the bug]]`,
@@ -381,7 +412,7 @@ describe('TDO-3 — checklist state mirrors to the ToDo', () => {
     expect(parentWrites).toHaveLength(1);
     expect(bodyOf(vault.notes.get(taskPath)!)).toBe(
       [
-        '- [ ] [[Projecten/Acme Widgets/taken/new-item.md|New item]]',
+        '- [ ] [[Projecten/Acme Widgets/taken/New item.md|New item]]',
         `- [ ] [[${todoPath}|Fix the bug]]`,
       ].join('\n'),
     );

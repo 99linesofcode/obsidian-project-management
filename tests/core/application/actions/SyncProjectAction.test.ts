@@ -3,7 +3,8 @@ import { SyncProjectAction } from '../../../../src/core/application/actions/Sync
 import type { DetectNoteRenamesAction } from '../../../../src/core/application/actions/DetectNoteRenamesAction.js';
 import { EnsureProjectBoardAction } from '../../../../src/core/application/actions/EnsureProjectBoardAction.js';
 import type { HandleDeletedNoteAction } from '../../../../src/core/application/actions/HandleDeletedNoteAction.js';
-import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
+import type { MigrateNoteFilenamesAction } from '../../../../src/core/application/actions/MigrateNoteFilenamesAction.js';
+import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { MirrorTodoStatusAction } from '../../../../src/core/application/actions/MirrorTodoStatusAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { CaptureTasksAction } from '../../../../src/core/application/actions/capture-tasks/CaptureTasksAction.js';
@@ -22,7 +23,6 @@ import { FakeVault as FakeVaultBase } from '../../../helpers/fakeVault.js';
 import { entityRecord } from '../../../helpers/records.js';
 import { FakeSyncState } from '../../../helpers/fakeSyncState.js';
 import { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
-import { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
 import { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 
 class FakeVault extends FakeVaultBase {
@@ -32,6 +32,7 @@ class FakeVault extends FakeVaultBase {
     return this.modifiedTimes.get(path) ?? null;
   }
   projectNotes: ProjectNoteDataTransferObject[] = [];
+  noteIds = new Map<string, string>();
   notes = new Map<string, string>();
   folders = new Map<string, string[]>();
   renames: Array<{ from: string; to: string }> = [];
@@ -51,6 +52,22 @@ class FakeVault extends FakeVaultBase {
   override async listNotesInFolder(folder: string): Promise<string[]> {
     return this.folders.get(folder) ?? [];
   }
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return this.projectNotes.map((note) => ({
+      id: this.idOf(note),
+      path: note.path,
+    }));
+  }
+  override async listEntities(projectId: string): Promise<readonly string[]> {
+    const note = this.noteFor(projectId);
+    if (note === undefined) {
+      return [];
+    }
+    const folder = note.path.split('/').slice(0, 2).join('/');
+    return this.folders.get(`${folder}/taken`) ?? [];
+  }
   override async trashNote(): Promise<void> {}
   override async findProjectNotes(): Promise<ProjectNoteDataTransferObject[]> {
     return this.projectNotes;
@@ -64,15 +81,10 @@ class FakeVault extends FakeVaultBase {
   override async readConnections(
     project: string,
   ): Promise<readonly ConnectionDataTransferObject[]> {
-    return (
-      this.projectNotes.find((note) => note.projectName === project)
-        ?.connections ?? []
-    );
+    return this.noteFor(project)?.connections ?? [];
   }
   override async observeProject(project: string): Promise<OriginObservation> {
-    const note = this.projectNotes.find(
-      (candidate) => candidate.projectName === project,
-    );
+    const note = this.noteFor(project);
     return new OriginObservation({
       current:
         note !== undefined && note.path.startsWith('Archief/')
@@ -88,6 +100,16 @@ class FakeVault extends FakeVaultBase {
     archived: boolean,
   ): Promise<void> {
     this.appliedArchived.push({ project, archived });
+  }
+
+  private noteFor(
+    projectId: string,
+  ): ProjectNoteDataTransferObject | undefined {
+    return this.projectNotes.find((note) => this.idOf(note) === projectId);
+  }
+
+  private idOf(note: ProjectNoteDataTransferObject): string {
+    return this.noteIds.get(note.path) ?? `home-${note.projectName}`;
   }
 }
 
@@ -111,8 +133,25 @@ function projectNote(
   };
 }
 
+const PROJECT_ID = 'home-Acme Widgets';
+
 function status(notePath: string): EntityRecord {
-  return entityRecord({ id: 'entity-42', notePath });
+  return entityRecord({ id: 'entity-42', notePath, projectId: PROJECT_ID });
+}
+
+function projectNoteAt(path: string): ProjectNoteDataTransferObject {
+  return {
+    path,
+    projectName: 'Acme Widgets',
+    connections: [
+      {
+        slug: 'github',
+        application: 'github',
+        target: 'https://github.com/acme/widgets',
+      },
+    ],
+    connectionErrors: [],
+  };
 }
 
 interface HarnessOptions {
@@ -207,8 +246,8 @@ function harness(options: HarnessOptions = {}) {
     },
   } as unknown as ReconcileProjectTaskLocksAction;
   const taskCapture = {
-    invoke: async (project: string) => {
-      events.push(`capture:${project}`);
+    invoke: async (project: { projectName: string }) => {
+      events.push(`capture:${project.projectName}`);
     },
   } as unknown as CaptureTasksAction;
   const taskFields = {
@@ -224,9 +263,13 @@ function harness(options: HarnessOptions = {}) {
     taskLocks,
     taskCapture,
     taskFields,
-    migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
+    migrateNoteIds: {
+      execute: async () => {},
+    } as unknown as MigrateNoteIdsAction,
+    migrateNoteFilenames: {
+      execute: async () => {},
+    } as unknown as MigrateNoteFilenamesAction,
     migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
-    renameProject: new RenameProjectAction(vault, syncState),
     detectNoteRenames: renames,
     syncChecklist: checklist,
     mirrorTodoStatus: mirrorStatus,
@@ -252,7 +295,7 @@ describe('the multi-adapter pass', () => {
     const todo = 'Projecten/Acme Widgets/taken/fix-the-bug.md';
     const h = harness({ taken: [todo] });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([
       'lifecycle',
@@ -261,14 +304,14 @@ describe('the multi-adapter pass', () => {
       `checklist:${todo}`,
       `mirror:${todo}`,
       'capture:Acme Widgets',
-      'reconcile:Acme Widgets',
+      'reconcile:home-Acme Widgets',
     ]);
   });
 
   it('no-ops a stale work item whose pm-note is gone', async () => {
     const h = harness({ projectNotes: [] });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([]);
   });
@@ -276,24 +319,27 @@ describe('the multi-adapter pass', () => {
   it('isolates a failing step: a failing step never starves the rest', async () => {
     const h = harness({ failRenames: true });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([
       'lifecycle',
       'taskLocks:false:false',
       'capture:Acme Widgets',
-      'reconcile:Acme Widgets',
+      'reconcile:home-Acme Widgets',
     ]);
   });
 
   it('freezes a project when the folder is archived or the lifecycle pass reports it frozen', async () => {
     for (const options of [
-      { projectNotes: [projectNote('Acme Widgets', true)] },
-      { frozen: true },
+      {
+        folder: 'Archief/Acme Widgets',
+        projectNotes: [projectNote('Acme Widgets', true)],
+      },
+      { folder: 'Projecten/Acme Widgets', frozen: true },
     ]) {
       const h = harness(options);
 
-      await h.action.execute('Acme Widgets');
+      await h.action.execute(options.folder);
 
       expect(h.events).toEqual([
         'lifecycle',
@@ -306,7 +352,7 @@ describe('the multi-adapter pass', () => {
   it('ensures the board for an active project before reconciliation', async () => {
     const h = harness({ ensureBoard: true });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events.slice(0, 2)).toEqual([
       'ensureBoard:Acme Widgets/github',
@@ -325,7 +371,7 @@ describe('the multi-adapter pass', () => {
       ensureBoard: true,
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Archief/Acme Widgets');
 
     expect(h.events).toContain('ensureBoard:Acme Widgets/todoist');
   });
@@ -333,7 +379,7 @@ describe('the multi-adapter pass', () => {
   it('migrates a legacy-named home note', async () => {
     const h = harness();
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.vault.renames).toEqual([
       {
@@ -341,6 +387,23 @@ describe('the multi-adapter pass', () => {
         to: 'Projecten/Acme Widgets/_Acme Widgets.md',
       },
     ]);
+  });
+});
+
+describe('I6 — the project is keyed by the home note, not a stray root note', () => {
+  it('keys the project to the home note id when a stray note enumerates first', async () => {
+    const stray = 'Projecten/Acme Widgets/AAA-stray.md';
+    const home = 'Projecten/Acme Widgets/_Acme Widgets.md';
+    const h = harness({
+      projectNotes: [projectNoteAt(stray), projectNoteAt(home)],
+    });
+    h.vault.noteIds.set(stray, 'stray-id');
+    h.vault.noteIds.set(home, 'home-id');
+
+    await h.action.execute('Projecten/Acme Widgets');
+
+    expect(h.events).toContain('reconcile:home-id');
+    expect(h.events).not.toContain('reconcile:stray-id');
   });
 });
 
@@ -355,7 +418,9 @@ describe('the lifecycle fallback', () => {
         failLifecycle: true,
       });
 
-      await h.action.execute('Acme Widgets');
+      await h.action.execute(
+        archived ? 'Archief/Acme Widgets' : 'Projecten/Acme Widgets',
+      );
 
       expect(h.events).toContain(verdict);
     }
@@ -368,7 +433,7 @@ describe('the deletion sweep', () => {
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toContain(
       'delete:Projecten/Acme Widgets/taken/42-gone.md',
@@ -384,7 +449,7 @@ describe('the deletion sweep', () => {
       'content',
     );
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).not.toContain(
       'delete:Projecten/Acme Widgets/taken/42-fix-the-bug.md',
@@ -396,7 +461,7 @@ describe('the deletion sweep', () => {
       statuses: [status('Archief/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).not.toContain(
       'delete:Archief/Acme Widgets/taken/42-gone.md',
@@ -408,7 +473,7 @@ describe('the deletion sweep', () => {
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.deletedConnections).toEqual(['github', 'todoist']);
   });
@@ -431,7 +496,7 @@ describe('SHELL-2 — every declared connection is resolved-or-created', () => {
       ensureBoard: true,
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toContain('ensureBoard:Acme Widgets/github');
     expect(h.events).toContain('ensureBoard:Acme Widgets/linear');
@@ -450,7 +515,7 @@ describe('SHELL-3 — the deletion sweep covers every connection', () => {
       statuses: [status('Projecten/Acme Widgets/taken/42-gone.md')],
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toContain(
       'delete:Projecten/Acme Widgets/taken/42-gone.md',
@@ -472,7 +537,7 @@ describe('SHELL-2 — the chain runs its origination step before reconciliation'
       ensureBoard: true,
     });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events).toEqual([
       'ensureBoard:Acme Widgets/github',
@@ -480,7 +545,7 @@ describe('SHELL-2 — the chain runs its origination step before reconciliation'
       'taskLocks:false:false',
       'renames',
       'capture:Acme Widgets',
-      'reconcile:Acme Widgets',
+      'reconcile:home-Acme Widgets',
     ]);
   });
 });
@@ -489,7 +554,7 @@ describe('ORG-4 — no declared connection, no fan-out', () => {
   it('fans out nothing when the project declares no connections', async () => {
     const h = harness({ connections: [], ensureBoard: true });
 
-    await h.action.execute('Acme Widgets');
+    await h.action.execute('Projecten/Acme Widgets');
 
     expect(h.events.filter((event) => event.startsWith('ensureBoard'))).toEqual(
       [],
@@ -507,13 +572,13 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
     ];
     const syncState = new FakeSyncState();
     await syncState.writeBaseline(
-      'Acme Widgets',
+      'home-Acme Widgets',
       'archived',
       'origin',
       new Baseline('true', false),
     );
     await syncState.writeBaseline(
-      'Acme Widgets',
+      'home-Acme Widgets',
       'archived',
       'mirror:todoist',
       new Baseline('true', false),
@@ -538,9 +603,13 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       taskFields: {
         invoke: async () => {},
       } as unknown as MirrorSyncAction,
-      migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
+      migrateNoteIds: {
+        execute: async () => {},
+      } as unknown as MigrateNoteIdsAction,
+      migrateNoteFilenames: {
+        execute: async () => {},
+      } as unknown as MigrateNoteFilenamesAction,
       migrateHomeNote: new MigrateProjectHomeNoteAction(vault),
-      renameProject: new RenameProjectAction(vault, syncState),
       detectNoteRenames: {
         execute: async () => {},
       } as unknown as DetectNoteRenamesAction,
@@ -556,13 +625,13 @@ describe('ORG-2, ORG-3 — an archived project originates its empty-target conne
       ensureProjectBoard: new EnsureProjectBoardAction(syncState, []),
     });
 
-    await action.execute('Acme Widgets');
+    await action.execute('Archief/Acme Widgets');
 
     expect(
-      await syncState.getIdentity('Acme Widgets', 'todoist'),
+      await syncState.getIdentity('home-Acme Widgets', 'todoist'),
     ).not.toBeNull();
     expect(vault.appliedArchived).toEqual([
-      { project: 'Acme Widgets', archived: false },
+      { project: 'home-Acme Widgets', archived: false },
     ]);
   });
 });

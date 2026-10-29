@@ -1,3 +1,4 @@
+import { projectFromNotePath } from '../../../../src/core/domain/paths.js';
 import { describe, expect, it, vi } from 'vitest';
 
 const { TFile } = vi.hoisted(() => {
@@ -34,6 +35,9 @@ const HOME = [
   '---',
   'type: project',
   'connections:',
+  '  vault:',
+  '    tool: vault',
+  '    id: Acme',
   '  conformance:',
   '    tool: conformance',
   '    project: board-1',
@@ -50,7 +54,10 @@ const NOTE = [
 ].join('\n');
 
 class FakeVault {
-  private readonly notes = new Map<string, { content: string; mtime: number }>();
+  private readonly notes = new Map<
+    string,
+    { content: string; mtime: number }
+  >();
   readonly frontmatter = new Map<string, Record<string, unknown>>();
 
   readonly metadataCache = {
@@ -115,7 +122,12 @@ function setup(): { vault: FakeVault; adapter: VaultAdapter } {
     vault,
     metadataCache: vault.metadataCache,
   } as unknown as App;
-  return { vault, adapter: vaultAdapter(app) };
+  return {
+    vault,
+    adapter: vaultAdapter(app, {
+      registeredApplications: new Set(['conformance']),
+    }),
+  };
 }
 
 function mirrorTask(labels: readonly string[]): CanonicalTask {
@@ -135,7 +147,11 @@ async function seedRegistry(
   registry: SyncStateAdapter,
   labels: readonly string[],
 ): Promise<void> {
-  await registry.setEntity({ id: NOTE_PATH, notePath: NOTE_PATH });
+  await registry.setEntity({
+    id: NOTE_PATH,
+    notePath: NOTE_PATH,
+    projectId: projectFromNotePath(NOTE_PATH),
+  });
   await registry.setMirrorItem('Acme', 'conformance', NOTE_PATH, {
     entityId: NOTE_PATH,
   });

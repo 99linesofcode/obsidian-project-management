@@ -8,8 +8,8 @@ import type { ProjectLifecycleSyncAction } from '../../../../src/core/applicatio
 import type { ReconcileProjectTaskLocksAction } from '../../../../src/core/application/actions/ReconcileProjectTaskLocksAction.js';
 import type { SyncChecklistAction } from '../../../../src/core/application/actions/sync-checklist/SyncChecklistAction.js';
 import type { MigrateProjectHomeNoteAction } from '../../../../src/core/application/actions/MigrateProjectHomeNoteAction.js';
-import type { MigrateNameAction } from '../../../../src/core/application/actions/MigrateNameAction.js';
-import type { RenameProjectAction } from '../../../../src/core/application/actions/RenameProjectAction.js';
+import type { MigrateNoteFilenamesAction } from '../../../../src/core/application/actions/MigrateNoteFilenamesAction.js';
+import type { MigrateNoteIdsAction } from '../../../../src/core/application/actions/MigrateNoteIdsAction.js';
 import type { SweepDeletedNotesAction } from '../../../../src/core/application/actions/SweepDeletedNotesAction.js';
 import type { ConnectionDataTransferObject } from '../../../../src/core/port/data/ConnectionDataTransferObject.js';
 import type { ProjectNoteDataTransferObject } from '../../../../src/core/port/data/ProjectNoteDataTransferObject.js';
@@ -22,9 +22,6 @@ const github: ConnectionDataTransferObject = {
   target: 'https://github.com/acme/widgets',
 };
 
-// A note as it appears after S22: the folder is the archived state, and there
-// is no archive flag on the DTO. Cast so the literal compiles before the field
-// is removed.
 function note(
   projectName: string,
   path: string,
@@ -34,16 +31,15 @@ function note(
     projectName,
     connections: [github],
     connectionErrors: [],
-  } as unknown as ProjectNoteDataTransferObject;
+  };
 }
 
 interface Captured {
   migrate: Array<{ notePath: string; locationArchived: boolean }>;
-  rename: Array<{ notePath: string; locationArchived: boolean }>;
 }
 
 class RecordingVault extends FakeVaultBase {
-  readonly captured: Captured = { migrate: [], rename: [] };
+  readonly captured: Captured = { migrate: [] };
   readonly notes: ProjectNoteDataTransferObject[];
 
   constructor(notes: ProjectNoteDataTransferObject[]) {
@@ -58,6 +54,15 @@ class RecordingVault extends FakeVaultBase {
   override async listNotesInFolder(): Promise<string[]> {
     return [];
   }
+
+  override async readNoteIds(): Promise<
+    readonly { id: string; path: string }[]
+  > {
+    return this.notes.map((note) => ({
+      id: note.projectName,
+      path: note.path,
+    }));
+  }
 }
 
 function harness(projectNote: ProjectNoteDataTransferObject): {
@@ -68,21 +73,11 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
   const captured = vault.captured;
 
   const migrate = {
-    execute: async (input: {
-      notePath: string;
-      locationArchived: boolean;
-    }) => {
+    execute: async (input: { notePath: string; locationArchived: boolean }) => {
       captured.migrate.push(input);
       return input.notePath;
     },
   } as unknown as MigrateProjectHomeNoteAction;
-
-  const rename = {
-    execute: async (input: { notePath: string; locationArchived: boolean }) => {
-      captured.rename.push(input);
-      return [];
-    },
-  } as unknown as RenameProjectAction;
 
   const action = new SyncProjectAction({
     vault,
@@ -90,12 +85,18 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
     lifecycle: {
       invoke: async () => ({ frozen: false, wasFrozen: false }),
     } as unknown as ProjectLifecycleSyncAction,
-    taskLocks: { invoke: async () => {} } as unknown as ReconcileProjectTaskLocksAction,
+    taskLocks: {
+      invoke: async () => {},
+    } as unknown as ReconcileProjectTaskLocksAction,
     taskCapture: { invoke: async () => {} } as unknown as CaptureTasksAction,
     taskFields: { invoke: async () => {} } as unknown as MirrorSyncAction,
-    migrateName: { execute: async () => {} } as unknown as MigrateNameAction,
+    migrateNoteIds: {
+      execute: async () => {},
+    } as unknown as MigrateNoteIdsAction,
+    migrateNoteFilenames: {
+      execute: async () => {},
+    } as unknown as MigrateNoteFilenamesAction,
     migrateHomeNote: migrate,
-    renameProject: rename,
     detectNoteRenames: {
       execute: async () => {},
     } as unknown as DetectNoteRenamesAction,
@@ -113,17 +114,19 @@ function harness(projectNote: ProjectNoteDataTransferObject): {
   return { action, captured };
 }
 
-describe('S22 — the note-flag consumers read the folder instead', () => {
-  it('derives the archived location from the note path for the migrate and rename steps', async () => {
-    const active = harness(note('Acme Widgets', 'Projecten/Acme Widgets/_home.md'));
-    await active.action.execute('Acme Widgets');
+describe('S22 — the note-flag consumer reads the folder instead', () => {
+  it('derives the archived location from the note path for the migrate step', async () => {
+    const active = harness(
+      note('Acme Widgets', 'Projecten/Acme Widgets/_home.md'),
+    );
+    await active.action.execute('Projecten/Acme Widgets');
 
-    const archived = harness(note('Acme Widgets', 'Archief/Acme Widgets/_home.md'));
-    await archived.action.execute('Acme Widgets');
+    const archived = harness(
+      note('Acme Widgets', 'Archief/Acme Widgets/_home.md'),
+    );
+    await archived.action.execute('Archief/Acme Widgets');
 
     expect(active.captured.migrate[0]?.locationArchived).toBe(false);
-    expect(active.captured.rename[0]?.locationArchived).toBe(false);
     expect(archived.captured.migrate[0]?.locationArchived).toBe(true);
-    expect(archived.captured.rename[0]?.locationArchived).toBe(true);
   });
 });
