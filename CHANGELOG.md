@@ -1,3 +1,12 @@
+# [0.35.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.34.0...0.35.0) (2026-10-29)
+
+
+### Features
+
+* **identity:** the note carries its own id, and the filename is the title ([#208](https://github.com/99linesofcode/obsidian-project-management/issues/208)) ([c71910d](https://github.com/99linesofcode/obsidian-project-management/commit/c71910d4d993d6857803b0fbfc5fdcfac32e7a37))
+
+
+
 # [0.34.0](https://github.com/99linesofcode/obsidian-project-management/compare/0.33.1...0.34.0) (2026-10-28)
 
 
@@ -31,15 +40,6 @@
 ### Reverts
 
 * **labels:** drop the type-label warning, keep the rule as an expectation ([#202](https://github.com/99linesofcode/obsidian-project-management/issues/202)) ([93b24d9](https://github.com/99linesofcode/obsidian-project-management/commit/93b24d90dd3e92a1e0ecbfc2d82c24ec3ed6964b))
-
-
-
-## [0.32.3](https://github.com/99linesofcode/obsidian-project-management/compare/0.32.2...0.32.3) (2026-10-28)
-
-
-### Bug Fixes
-
-* **labels:** check the type-label invariant at every mirror, not only the vault ([#201](https://github.com/99linesofcode/obsidian-project-management/issues/201)) ([d688449](https://github.com/99linesofcode/obsidian-project-management/commit/d6884490add0fc40b516d2d3ad0e315214fcb783))
 
 
 
